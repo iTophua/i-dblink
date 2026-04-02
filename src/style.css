@@ -1,0 +1,565 @@
+/**
+ * i-dblink 全局样式文件
+ * 
+ * 包含 CSS 变量定义、样式重置、基础样式和暗黑模式支持
+ */
+
+/* ==================== CSS 变量定义 ==================== */
+:root {
+  /* 主题色 */
+  --color-primary: #1890ff;
+  --color-primary-hover: #40a9ff;
+  --color-primary-active: #096dd9;
+  
+  --color-success: #52c41a;
+  --color-warning: #faad14;
+  --color-error: #ff4d4f;
+  --color-info: #1890ff;
+  
+  /* 数据库类型色 */
+  --db-color-mysql: #1890ff;
+  --db-color-postgresql: #52c41a;
+  --db-color-sqlite: #faad14;
+  --db-color-sqlserver: #eb2f96;
+  --db-color-oracle: #fa8c16;
+  --db-color-mariadb: #13c2c2;
+  --db-color-dameng: #722ed1;
+  
+  /* 中性色 - 浅色模式 */
+  --text-primary: #0f0f0f;
+  --text-secondary: #595959;
+  --text-tertiary: #8c8c8c;
+  --text-disabled: #bfbfbf;
+  
+  --border-color: #d9d9d9;
+  --border-color-light: #e8e8e8;
+  --border-color-dark: #bfbfbf;
+  
+  --background: #f6f6f6;
+  --background-card: #ffffff;
+  --background-toolbar: #fafafa;
+  --background-hover: #f5f5f5;
+  --background-active: #e6f7ff;
+  
+  /* 字体 */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-code: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
+  
+  /* 字号 */
+  --font-size-base: 14px;
+  --font-size-sm: 12px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  
+  /* 行高 */
+  --line-height-base: 1.57;
+  --line-height-heading: 1.4;
+  
+  /* 字重 */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  /* 间距 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-xxl: 32px;
+  
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.15);
+  
+  /* 过渡 */
+  --transition-fast: 0.1s;
+  --transition-normal: 0.2s;
+  --transition-slow: 0.3s;
+  --transition-ease: cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+
+/* 深色模式 */
+[data-theme='dark'] {
+  /* 中性色 - 深色模式 */
+  --text-primary: #f6f6f6;
+  --text-secondary: #bfbfbf;
+  --text-tertiary: #595959;
+  --text-disabled: #434343;
+  
+  --border-color: #434343;
+  --border-color-light: #303030;
+  --border-color-dark: #595959;
+  
+  --background: #2f2f2f;
+  --background-card: #1f1f1f;
+  --background-toolbar: #141414;
+  --background-hover: #1f1f1f;
+  --background-active: #111d2c;
+  
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+/* 系统级暗色模式支持 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --text-primary: #f6f6f6;
+    --text-secondary: #bfbfbf;
+    --text-tertiary: #595959;
+    --text-disabled: #434343;
+    
+    --border-color: #434343;
+    --border-color-light: #303030;
+    --border-color-dark: #595959;
+    
+    --background: #2f2f2f;
+    --background-card: #1f1f1f;
+    --background-toolbar: #141414;
+    --background-hover: #1f1f1f;
+    --background-active: #111d2c;
+    
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ==================== 样式重置 ==================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-primary);
+  background-color: var(--background);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* 移除默认链接样式 */
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-normal) ease;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* 移除按钮默认样式 */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  outline: none;
+}
+
+/* 输入框样式重置 */
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--text-primary);
+  background-color: var(--background-card);
+  transition: border-color var(--transition-normal) ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* 禁用状态 */
+input:disabled,
+textarea:disabled,
+select:disabled,
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ==================== 滚动条样式 ==================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-toolbar);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color-dark);
+  border-radius: var(--radius-md);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* 深色模式滚动条 */
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: var(--text-disabled);
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* ==================== 文本样式 ==================== */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+h1 { font-size: var(--font-size-xl); }
+h2 { font-size: var(--font-size-lg); }
+h3 { font-size: var(--font-size-base); }
+h4 { font-size: var(--font-size-base); font-weight: var(--font-weight-medium); }
+h5 { font-size: var(--font-size-base); font-weight: var(--font-weight-normal); }
+h6 { font-size: var(--font-size-sm); }
+
+p {
+  margin: 0;
+  line-height: var(--line-height-base);
+}
+
+strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+code {
+  font-family: var(--font-family-code);
+  font-size: 0.9em;
+  padding: 2px 6px;
+  background-color: var(--background-hover);
+  border-radius: var(--radius-sm);
+  color: var(--color-error);
+}
+
+pre {
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-sm);
+  background-color: var(--background-toolbar);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  border: 1px solid var(--border-color-light);
+}
+
+/* ==================== 布局工具类 ==================== */
+.container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-sm {
+  gap: var(--spacing-sm);
+}
+
+.gap-md {
+  gap: var(--spacing-md);
+}
+
+.gap-lg {
+  gap: var(--spacing-lg);
+}
+
+.gap-xl {
+  gap: var(--spacing-xl);
+}
+
+/* ==================== 卡片样式 ==================== */
+.card {
+  background-color: var(--background-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--border-color-light);
+  transition: box-shadow var(--transition-normal) ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* ==================== 工具栏样式 ==================== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--background-toolbar);
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+/* ==================== 侧边栏样式 ==================== */
+.sidebar {
+  background-color: var(--background-card);
+  border-right: 1px solid var(--border-color-light);
+  width: 280px;
+  min-width: 280px;
+  transition: width var(--transition-normal) var(--transition-ease);
+}
+
+.sidebar.collapsed {
+  width: 80px;
+  min-width: 80px;
+}
+
+/* ==================== 表格样式 ==================== */
+.table-container {
+  background-color: var(--background-card);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-color-light);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead th {
+  background-color: var(--background-toolbar);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+tbody td {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color-light);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+}
+
+tbody tr:hover {
+  background-color: var(--background-hover);
+}
+
+/* ==================== 状态标签 ==================== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-xl);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.badge-primary {
+  background-color: rgba(24, 144, 255, 0.1);
+  color: var(--color-primary);
+}
+
+.badge-success {
+  background-color: rgba(82, 196, 26, 0.1);
+  color: var(--color-success);
+}
+
+.badge-warning {
+  background-color: rgba(250, 173, 20, 0.1);
+  color: var(--color-warning);
+}
+
+.badge-error {
+  background-color: rgba(255, 77, 79, 0.1);
+  color: var(--color-error);
+}
+
+/* ==================== 空状态 ==================== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xxl);
+  color: var(--text-tertiary);
+}
+
+.empty-state-icon {
+  font-size: 64px;
+  margin-bottom: var(--spacing-lg);
+  opacity: 0.3;
+}
+
+.empty-state-text {
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+/* ==================== 加载状态 ==================== */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xxl);
+  color: var(--text-tertiary);
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==================== 分割线 ==================== */
+.divider {
+  height: 1px;
+  background-color: var(--border-color-light);
+  margin: var(--spacing-lg) 0;
+}
+
+.divider.vertical {
+  width: 1px;
+  height: auto;
+  margin: 0 var(--spacing-lg);
+}
+
+/* ==================== 工具类 - 显示/隐藏 ==================== */
+.hidden {
+  display: none !important;
+}
+
+.visible {
+  visibility: visible;
+}
+
+.invisible {
+  visibility: hidden;
+}
+
+/* ==================== 工具类 - 间距 ==================== */
+.mt-sm { margin-top: var(--spacing-sm); }
+.mt-md { margin-top: var(--spacing-md); }
+.mt-lg { margin-top: var(--spacing-lg); }
+.mt-xl { margin-top: var(--spacing-xl); }
+
+.mb-sm { margin-bottom: var(--spacing-sm); }
+.mb-md { margin-bottom: var(--spacing-md); }
+.mb-lg { margin-bottom: var(--spacing-lg); }
+.mb-xl { margin-bottom: var(--spacing-xl); }
+
+.p-sm { padding: var(--spacing-sm); }
+.p-md { padding: var(--spacing-md); }
+.p-lg { padding: var(--spacing-lg); }
+.p-xl { padding: var(--spacing-xl); }
+
+/* ==================== 工具类 - 文本对齐 ==================== */
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-muted { color: var(--text-tertiary); }
+.text-primary { color: var(--color-primary); }
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-error { color: var(--color-error); }
+
+/* ==================== 工具类 - 尺寸 ==================== */
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.flex-1 { flex: 1; }
+
+/* ==================== 焦点样式 ==================== */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ==================== 选择样式 ==================== */
+::selection {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+/* ==================== 打印样式 ==================== */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}
