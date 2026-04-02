@@ -1,0 +1,4 @@
+warns = [
+  "clippy::all",
+  "clippy::pedantic",
+]
