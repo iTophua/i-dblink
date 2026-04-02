@@ -19,7 +19,7 @@ export function StatusBar({ isDarkMode, selectedConnectionId, connections, selec
       style={{
         height: 28,
         lineHeight: '28px',
-        padding: '0 16px',
+        padding: '0 8px',
         background: isDarkMode ? '#141414' : '#fafafa',
         borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
         display: 'flex',

@@ -58,7 +58,7 @@ export function TableList({ connectionId, onTableSelect }: TableListProps) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: isDarkMode ? '#1f1f1f' : '#fff' }}>
       <div style={{
-        padding: '8px 16px',
+        padding: '4px 8px',
         borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
         display: 'flex',
         justifyContent: 'space-between',
@@ -70,7 +70,7 @@ export function TableList({ connectionId, onTableSelect }: TableListProps) {
           <Button icon={<ReloadOutlined />} size="small" onClick={loadTables} loading={loading}>
             刷新
           </Button>
-          <div style={{ width: 1, height: 20, background: isDarkMode ? '#434343' : '#d9d9d9', margin: '0 4px' }} />
+          <div style={{ width: 1, height: 16, background: isDarkMode ? '#434343' : '#d9d9d9', margin: '0 4px' }} />
           <Input
             placeholder="搜索表名或注释..."
             prefix={<SearchOutlined style={{ color: '#999' }} />}
@@ -78,7 +78,7 @@ export function TableList({ connectionId, onTableSelect }: TableListProps) {
             onChange={(e) => setSearchText(e.target.value)}
             allowClear
             size="small"
-            style={{ width: 200 }}
+            style={{ width: 160 }}
           />
         </Space>
 

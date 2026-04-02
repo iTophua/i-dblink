@@ -113,7 +113,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           collapsible
           collapsed={collapsed}
           onCollapse={(value) => setCollapsed(value)}
-          width={320}
+          width={260}
           trigger={null}
           style={{
             background: isDarkMode ? '#1f1f1f' : '#fff',
@@ -124,16 +124,16 @@ export function MainLayout({ children }: MainLayoutProps) {
         >
           <div
             style={{
-              height: 40,
-              margin: collapsed ? '8px 12px' : '8px 16px',
+              height: 32,
+              margin: collapsed ? '4px 8px' : '4px 8px',
               background: isDarkMode ? 'rgba(24, 144, 255, 0.1)' : 'rgba(24, 144, 255, 0.05)',
-              borderRadius: 8,
+              borderRadius: 4,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 'bold',
               color: token.colorPrimary,
-              fontSize: 16,
+              fontSize: 14,
               border: `1px solid ${isDarkMode ? 'rgba(24, 144, 255, 0.3)' : 'rgba(24, 144, 255, 0.2)'}`,
               transition: 'all 0.3s ease',
               flexShrink: 0,
@@ -143,15 +143,16 @@ export function MainLayout({ children }: MainLayoutProps) {
           </div>
 
           {!collapsed && (
-            <div style={{ padding: '0 12px', marginBottom: 8, flexShrink: 0 }}>
+            <div style={{ padding: '0 8px', marginBottom: 4, flexShrink: 0 }}>
               <Search
-                placeholder="搜索连接或对象..."
+                placeholder="搜索..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 style={{
-                  borderRadius: 6,
+                  borderRadius: 4,
                   background: isDarkMode ? '#141414' : '#fafafa',
                 }}
+                size="small"
                 allowClear
               />
             </div>
@@ -179,7 +180,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           <div
             onClick={() => setCollapsed(!collapsed)}
             style={{
-              height: 40,
+              height: 28,
               flexShrink: 0,
               background: isDarkMode ? '#141414' : '#fafafa',
               borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
@@ -198,7 +199,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           >
             <span style={{
               color: isDarkMode ? '#bfbfbf' : '#595959',
-              fontSize: 12,
+              fontSize: 11,
               display: 'flex',
               alignItems: 'center',
               gap: 4,
@@ -212,14 +213,13 @@ export function MainLayout({ children }: MainLayoutProps) {
           style={{
             flex: 1,
             background: isDarkMode ? '#1f1f1f' : '#fff',
-            margin: 8,
+            margin: 0,
             marginLeft: 0,
             padding: 0,
-            borderRadius: 8,
+            borderRadius: 0,
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: isDarkMode ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.08)',
           }}
         >
           <TabPanel

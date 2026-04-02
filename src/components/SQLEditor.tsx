@@ -253,15 +253,14 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       background: isDarkMode ? '#1f1f1f' : '#fff'
     }}>
       <div style={{ 
-        padding: '12px 16px', 
+        padding: '4px 8px', 
         borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         background: isDarkMode ? '#141414' : '#fafafa',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
       }}>
-        <Space size="middle">
+        <Space size="small">
           <Button 
             type="primary" 
             icon={<PlayCircleOutlined />} 
@@ -269,34 +268,36 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
             loading={loading}
             disabled={!connectionId}
             style={{ 
-              borderRadius: 6,
-              boxShadow: '0 2px 4px rgba(24, 144, 255, 0.3)',
+              borderRadius: 4,
               fontWeight: 500
             }}
+            size="small"
           >
-            执行 (Ctrl+Enter)
+            执行
           </Button>
           <Button 
             icon={<StopOutlined />} 
             onClick={stopQuery}
             disabled={!loading}
             danger
-            style={{ borderRadius: 6 }}
+            style={{ borderRadius: 4 }}
+            size="small"
           >
             停止
           </Button>
           
           <div style={{ 
             width: 1, 
-            height: 24, 
+            height: 16, 
             background: isDarkMode ? '#434343' : '#d9d9d9',
-            margin: '0 8px'
+            margin: '0 4px'
           }} />
           
           <Button 
             icon={<FormatPainterOutlined />} 
             onClick={formatSQL}
-            style={{ borderRadius: 6 }}
+            style={{ borderRadius: 4 }}
+            size="small"
           >
             格式化
           </Button>
@@ -304,7 +305,8 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
             icon={<LineChartOutlined />} 
             onClick={showExplainPlan}
             disabled={!connectionId}
-            style={{ borderRadius: 6 }}
+            style={{ borderRadius: 4 }}
+            size="small"
           >
             执行计划
           </Button>
@@ -327,7 +329,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
               }
             }}
           >
-            <Button icon={<FileTextOutlined />} style={{ borderRadius: 6 }}>
+            <Button icon={<FileTextOutlined />} style={{ borderRadius: 4 }} size="small">
               更多
             </Button>
           </Dropdown>
@@ -359,9 +361,8 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       <div style={{ 
         flex: '2 1 0',
         minHeight: 150,
-        borderBottom: `4px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
         overflow: 'hidden',
-        boxShadow: 'inset 0 -2px 4px rgba(0,0,0,0.05)',
         display: 'flex',
         flexDirection: 'column',
       }}>
@@ -374,7 +375,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
           onMount={handleEditorMount}
           options={{
             minimap: { enabled: false },
-            fontSize: 14,
+            fontSize: 13,
             lineNumbers: 'on',
             roundedSelection: false,
             scrollBeyondLastLine: false,
@@ -403,7 +404,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
           size="small"
           style={{ 
             background: isDarkMode ? '#1f1f1f' : '#fff',
-            padding: '0 16px'
+            padding: '0 8px'
           }}
           items={[
             {
@@ -448,7 +449,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                     <table style={{ 
                       width: '100%', 
                       borderCollapse: 'collapse',
-                      fontSize: 13,
+                      fontSize: 12,
                     }}>
                       <thead>
                         <tr style={{ 
@@ -461,7 +462,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                             <th 
                               key={i}
                               style={{ 
-                                padding: '8px 12px', 
+                                padding: '4px 8px', 
                                 textAlign: 'left',
                                 borderBottom: `2px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
                                 fontWeight: 600,
@@ -487,7 +488,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                               <td 
                                 key={j}
                                 style={{ 
-                                  padding: '6px 12px',
+                                  padding: '3px 8px',
                                   borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
                                   color: isDarkMode ? '#bfbfbf' : '#595959',
                                 }}
@@ -571,7 +572,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                     <table style={{ 
                       width: '100%', 
                       borderCollapse: 'collapse',
-                      fontSize: 13,
+                      fontSize: 12,
                     }}>
                       <thead>
                         <tr style={{ 
@@ -583,7 +584,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                             <th 
                               key={i}
                               style={{ 
-                                padding: '8px 12px', 
+                                padding: '4px 8px', 
                                 textAlign: 'left',
                                 borderBottom: `2px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
                                 fontWeight: 600,
@@ -608,7 +609,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                               <td 
                                 key={j}
                                 style={{ 
-                                  padding: '6px 12px',
+                                  padding: '3px 8px',
                                   borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
                                 }}
                               >

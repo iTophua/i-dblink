@@ -294,7 +294,7 @@ export function ConnectionTree({
             }
           }}
           treeData={buildTreeData() as any}
-          style={{ background: 'transparent', padding: '0 12px', fontSize: 13 }}
+          style={{ background: 'transparent', padding: '0 4px', fontSize: 12 }}
         />
       )}
     </Spin>

@@ -56,15 +56,15 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
 
   return (
     <div style={{
-      height: 180,
+      height: 130,
       borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
       display: 'flex',
       flexDirection: 'column',
     }}>
       <div style={{
-        height: 32,
+        height: 28,
         borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-        padding: '0 12px',
+        padding: '0 8px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -90,18 +90,18 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
       </div>
       <div style={{
         flex: 1,
-        padding: '4px 12px',
+        padding: '2px 8px',
         overflow: 'auto',
-        fontSize: 12,
+        fontSize: 11,
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
       }}>
         {filteredLogs.length === 0 ? (
-          <div style={{ color: isDarkMode ? '#595959' : '#bfbfbf', padding: '16px 0', textAlign: 'center' }}>
+          <div style={{ color: isDarkMode ? '#595959' : '#bfbfbf', padding: '8px 0', textAlign: 'center' }}>
             暂无日志
           </div>
         ) : (
           filteredLogs.map(log => (
-            <div key={log.id} style={{ padding: '2px 0', color: levelColor(log.level) }}>
+            <div key={log.id} style={{ padding: '1px 0', color: levelColor(log.level) }}>
               <span style={{ opacity: 0.6 }}>[{log.timestamp}]</span>{' '}
               <span style={{ fontWeight: 500 }}>[{log.level}]</span>{' '}
               {log.connection && <span style={{ opacity: 0.8 }}>[{log.connection}]</span>}{' '}

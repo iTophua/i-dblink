@@ -82,7 +82,7 @@ export function DataTable({ connectionId, tableName }: DataTableProps) {
         sortable: true,
         filter: true,
         resizable: true,
-        minWidth: 120,
+        minWidth: 80,
         editable: true,
         headerTooltip: `${col.data_type}${col.is_nullable ? ' | NULL' : ' | NOT NULL'}${col.comment ? ` | ${col.comment}` : ''}`,
         cellRenderer: (params: ICellRendererParams) => {
@@ -342,7 +342,7 @@ export function DataTable({ connectionId, tableName }: DataTableProps) {
       background: isDarkMode ? '#1f1f1f' : '#fff'
     }}>
       <div style={{
-        padding: '8px 16px',
+        padding: '4px 8px',
         borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
         display: 'flex',
         justifyContent: 'space-between',
@@ -365,15 +365,15 @@ export function DataTable({ connectionId, tableName }: DataTableProps) {
             </Button>
           </Popconfirm>
 
-          <div style={{ width: 1, height: 20, background: isDarkMode ? '#434343' : '#d9d9d9', margin: '0 4px' }} />
+          <div style={{ width: 1, height: 16, background: isDarkMode ? '#434343' : '#d9d9d9', margin: '0 4px' }} />
 
           <Button icon={<DownloadOutlined />} onClick={exportToCSV} disabled={rowData.length === 0} size="small">导出</Button>
         </Space>
 
-        <Space>
-          <Tag color="blue">{tableName}</Tag>
-          <Tag color="green">{totalCount.toLocaleString()} 行</Tag>
-          {selectedRows.length > 0 && <Tag color="orange">已选 {selectedRows.length} 行</Tag>}
+        <Space size="small">
+          <Tag color="blue" style={{ margin: 0 }}>{tableName}</Tag>
+          <Tag color="green" style={{ margin: 0 }}>{totalCount.toLocaleString()} 行</Tag>
+          {selectedRows.length > 0 && <Tag color="orange" style={{ margin: 0 }}>已选 {selectedRows.length} 行</Tag>}
         </Space>
       </div>
 
@@ -408,8 +408,8 @@ export function DataTable({ connectionId, tableName }: DataTableProps) {
               suppressPaginationPanel={true}
               enableRangeSelection={true}
               animateRows={true}
-              headerHeight={36}
-              rowHeight={30}
+              headerHeight={28}
+              rowHeight={26}
             />
           </div>
         )}
@@ -418,12 +418,12 @@ export function DataTable({ connectionId, tableName }: DataTableProps) {
       <div style={{
         borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
         background: isDarkMode ? '#141414' : '#fafafa',
-        padding: '6px 12px',
+        padding: '4px 8px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexShrink: 0,
-        gap: 12,
+        gap: 8,
       }}>
         <Space size="small">
           <Button icon={<PlusOutlined />} size="small" onClick={handleAddRow}>

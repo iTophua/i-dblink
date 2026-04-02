@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Tabs } from 'antd';
-import { DatabaseOutlined, TableOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { DatabaseOutlined, TableOutlined } from '@ant-design/icons';
 import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
 import { TableList } from '../TableList';
@@ -53,34 +53,10 @@ export function TabPanel({
 
   const tabItems = [
     {
-      key: 'objects',
-      label: (
-        <span>
-          <AppstoreOutlined style={{ marginRight: 4 }} />
-          对象
-        </span>
-      ),
-      children: (
-        <div style={{ height: '100%', overflow: 'auto' }}>
-          {selectedConnectionId ? (
-            <TableList
-              connectionId={selectedConnectionId}
-              onTableSelect={onTableOpen}
-            />
-          ) : (
-            <div style={{ padding: 24, textAlign: 'center', color: '#999' }}>
-              请先选择一个数据库连接
-            </div>
-          )}
-        </div>
-      ),
-      closable: false,
-    },
-    {
       key: 'sql',
       label: (
-        <span>
-          <DatabaseOutlined style={{ marginRight: 4 }} />
+        <span style={{ fontSize: 12 }}>
+          <DatabaseOutlined style={{ marginRight: 2 }} />
           SQL 查询
         </span>
       ),
@@ -94,8 +70,8 @@ export function TabPanel({
     ...openedTables.map(table => ({
       key: table.name,
       label: (
-        <span>
-          <TableOutlined style={{ marginRight: 4 }} />
+        <span style={{ fontSize: 12 }}>
+          <TableOutlined style={{ marginRight: 2 }} />
           {table.name}
         </span>
       ),
@@ -116,7 +92,8 @@ export function TabPanel({
         onChange={setActiveKey}
         hideAdd
         style={{ height: '100%', background: isDarkMode ? '#1f1f1f' : '#fff', display: 'flex', flexDirection: 'column' }}
-        tabBarStyle={{ margin: 0, paddingTop: 8, paddingLeft: 8, paddingBottom: 0, background: 'transparent', flex: '0 0 auto' }}
+        tabBarStyle={{ margin: 0, paddingTop: 2, paddingLeft: 4, paddingBottom: 0, background: 'transparent', flex: '0 0 auto' }}
+        tabBarGutter={2}
         items={tabItems}
         onEdit={handleTabEdit}
       />

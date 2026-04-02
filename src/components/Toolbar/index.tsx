@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
-import { Layout, Menu, Space, Button, Divider } from 'antd';
+import { Layout, Menu, Space, Button } from 'antd';
 import {
-  DatabaseOutlined,
+  PlusOutlined,
   FolderOpenOutlined,
   SaveOutlined,
   UploadOutlined,
@@ -16,12 +16,7 @@ import {
   SettingOutlined,
   SunOutlined,
   MoonOutlined,
-  EyeOutlined,
-  EyeInvisibleOutlined,
-  CheckCircleOutlined,
-  PlusOutlined,
   DeleteOutlined,
-  LinkOutlined,
 } from '@ant-design/icons';
 import { theme } from 'antd';
 
@@ -47,11 +42,11 @@ export function Toolbar(): JSX.Element {
 
   
   const headerStyle: HeaderStyle = {
-    height: 32,
-    lineHeight: '32px',
+    height: 28,
+    lineHeight: '28px',
     background: isDarkMode ? '#141414' : '#f0f0f0',
     borderBottom: `1px solid ${isDarkMode ? '#434343' : '#d9d9d9'}`,
-    padding: '0 16px',
+    padding: '0 8px',
     display: 'flex',
     alignItems: 'center',
   };
@@ -60,15 +55,15 @@ export function Toolbar(): JSX.Element {
     flex: 1,
     borderBottom: 'none',
     background: 'transparent',
+    fontSize: 12,
   };
 
-  
-  const secondaryBar: React.CSSProperties = {
-    height: 40,
-    lineHeight: '40px',
+  const compactBar: React.CSSProperties = {
+    height: 28,
+    lineHeight: '28px',
     background: isDarkMode ? '#1f1f1f' : '#fff',
     borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-    padding: '0 16px',
+    padding: '0 8px',
     display: 'flex',
     alignItems: 'center',
   };
@@ -81,7 +76,7 @@ export function Toolbar(): JSX.Element {
             mode="horizontal"
             style={menuStyle}
             items={[
-              { key: 'file', label: '文件 (F)', children: [
+              { key: 'file', label: '文件', children: [
                 { key: 'new-connection', label: '新建连接 (N)', icon: <PlusOutlined /> },
                 { key: 'open-connection', label: '打开连接 (O)', icon: <FolderOpenOutlined /> },
                 { type: 'divider' },
@@ -93,7 +88,7 @@ export function Toolbar(): JSX.Element {
                 { type: 'divider' },
                 { key: 'exit', label: '退出 (X)' },
               ]},
-              { key: 'edit', label: '编辑 (E)', children: [
+              { key: 'edit', label: '编辑', children: [
                 { key: 'undo', label: '撤销 (U)', icon: <UndoOutlined /> },
                 { key: 'redo', label: '重做 (R)', icon: <RedoOutlined /> },
                 { type: 'divider' },
@@ -105,7 +100,7 @@ export function Toolbar(): JSX.Element {
                 { key: 'select-all', label: '全选 (A)' },
                 { key: 'find', label: '查找/替换... (F)', icon: <SearchOutlined /> },
               ]},
-              { key: 'view', label: '查看 (V)', children: [
+              { key: 'view', label: '查看', children: [
                 { key: 'refresh', label: '刷新 (R)', icon: <ReloadOutlined /> },
                 { type: 'divider' },
                 { key: 'zoom-in', label: '放大 (I)' },
@@ -114,7 +109,7 @@ export function Toolbar(): JSX.Element {
                 { type: 'divider' },
                 { key: 'fullscreen', label: '全屏切换 (B)' },
               ]},
-              { key: 'connection', label: '连接 (C)', children: [
+              { key: 'connection', label: '连接', children: [
                 { key: 'connect-selected', label: '连接所选 (C)' },
                 { key: 'disconnect', label: '断开连接 (D)' },
                 { type: 'divider' },
@@ -123,7 +118,7 @@ export function Toolbar(): JSX.Element {
                 { type: 'divider' },
                 { key: 'close-all', label: '关闭所有连接 (L)' },
               ]},
-              { key: 'tools', label: '工具 (T)', children: [
+              { key: 'tools', label: '工具', children: [
                 { key: 'options', label: '选项/设置... (O)', icon: <SettingOutlined /> },
                 { type: 'divider' },
                 { key: 'data-sync', label: '数据同步... (S)' },
@@ -132,14 +127,14 @@ export function Toolbar(): JSX.Element {
                 { type: 'divider' },
                 { key: 'model-designer', label: '模型设计器... (M)' },
               ]},
-              { key: 'window', label: '窗口 (W)', children: [
+              { key: 'window', label: '窗口', children: [
                 { key: 'new-tab', label: '新建标签页 (N)' },
                 { key: 'close-tab', label: '关闭标签页 (C)' },
                 { type: 'divider' },
                 { key: 'next-tab', label: '切换到下一个标签页' },
                 { key: 'prev-tab', label: '切换到上一个标签页' },
               ]},
-              { key: 'help', label: '帮助 (H)', children: [
+              { key: 'help', label: '帮助', children: [
                 { key: 'documentation', label: '文档 (D)' },
                 { key: 'search', label: '搜索... (S)' },
                 { type: 'divider' },
@@ -152,47 +147,23 @@ export function Toolbar(): JSX.Element {
         </Header>
       )}
 
-      <div style={secondaryBar}>
-        <Space size="small" split={<Divider type="vertical" />}>
+      {!showAppMenu && (
+        <div style={compactBar}>
           <Space size="small">
-            <Button icon={<PlusOutlined />} size="small" type="primary" onClick={() => handleMenuAction('new-connection')}>新建</Button>
-            <Button icon={<FolderOpenOutlined />} size="small" onClick={() => handleMenuAction('open-connection')}>打开</Button>
-            <Button icon={<SaveOutlined />} size="small" onClick={() => handleMenuAction('save')}>保存</Button>
-          </Space>
-
-          <Space size="small">
-            <Button icon={<ScissorOutlined />} size="small" onClick={() => handleMenuAction('cut')} />
-            <Button icon={<CopyOutlined />} size="small" onClick={() => handleMenuAction('copy')} />
-            <Button icon={<PushpinOutlined />} size="small" onClick={() => handleMenuAction('paste')} />
-          </Space>
-
-          <Space size="small">
-            <Button icon={<UndoOutlined />} size="small" onClick={() => handleMenuAction('undo')} />
-            <Button icon={<RedoOutlined />} size="small" onClick={() => handleMenuAction('redo')} />
-          </Space>
-
-          <Space size="small">
-            <Button icon={<ReloadOutlined />} size="small" onClick={() => handleMenuAction('refresh')}>刷新</Button>
-          </Space>
-
-          <Space size="small">
-            <Button icon={<UploadOutlined />} size="small" onClick={() => handleMenuAction('import')}>导入</Button>
-            <Button icon={<DownloadOutlined />} size="small" onClick={() => handleMenuAction('export')}>导出</Button>
-          </Space>
-
-          <Space size="small" style={{ marginLeft: 'auto' }}>
-            <Button icon={<SearchOutlined />} size="small" onClick={() => handleMenuAction('find')}>搜索</Button>
+            <Button icon={<PlusOutlined />} size="small" type="primary" onClick={() => handleMenuAction('new-connection')} />
+            <Button icon={<ReloadOutlined />} size="small" onClick={() => handleMenuAction('refresh')} />
+            <Button icon={<UploadOutlined />} size="small" onClick={() => handleMenuAction('import')} />
+            <Button icon={<DownloadOutlined />} size="small" onClick={() => handleMenuAction('export')} />
+            <div style={{ width: 1, height: 16, background: isDarkMode ? '#434343' : '#d9d9d9' }} />
             <Button 
               icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />} 
               size="small"
               onClick={handleToggleTheme}
-            >
-              {isDarkMode ? '浅色' : '深色'}
-            </Button>
-            <Button icon={<SettingOutlined />} size="small" onClick={() => handleMenuAction('options')}>设置</Button>
+            />
+            <Button icon={<SettingOutlined />} size="small" onClick={() => handleMenuAction('options')} />
           </Space>
-        </Space>
-      </div>
+        </div>
+      )}
     </>
   );
 }

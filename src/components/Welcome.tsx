@@ -147,8 +147,8 @@ export function Welcome() {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto' }}>
-      <Title level={2} style={{ marginBottom: '1.5rem' }}>
+    <div style={{ padding: '24px', maxWidth: '1000px', margin: '0 auto' }}>
+      <Title level={3} style={{ marginBottom: '1rem' }}>
         <DatabaseOutlined style={{ marginRight: '0.5rem', color: '#1890ff' }} />
         iDBLink - 数据库管理工具
       </Title>
@@ -171,7 +171,7 @@ export function Welcome() {
             </Button>
           </Empty>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
             {connections.map((conn) => (
               <Card
                 key={conn.id}
