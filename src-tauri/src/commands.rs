@@ -1,11 +1,12 @@
 use crate::db::{ConnectionGroup, DbConnection};
 use crate::drivers::db_pool::DbPool;
 use crate::drivers::{
-    connect_by_type, execute_query_by_type, get_columns_by_type, get_tables_by_type,
+    connect_by_type, execute_query_by_type, get_columns_by_type, get_databases_by_type,
+    get_foreign_keys_by_type, get_indexes_by_type, get_tables_by_type,
 };
-use crate::security::PasswordManager;
 use crate::storage::Storage;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tauri::State;
 use tokio::sync::Mutex;
 
@@ -94,8 +95,14 @@ impl From<ConnectionGroup> for GroupOutput {
 pub struct TableInfo {
     pub table_name: String,
     pub table_type: String,
-    pub row_count: Option<i64>,
+    pub row_count: Option<u64>,
     pub comment: Option<String>,
+    pub engine: Option<String>,
+    pub data_size: Option<String>,
+    pub index_size: Option<String>,
+    pub create_time: Option<String>,
+    pub update_time: Option<String>,
+    pub collation: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,37 +116,86 @@ pub struct ColumnInfo {
     pub comment: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexInfo {
+    pub index_name: String,
+    pub column_name: String,
+    pub is_unique: bool,
+    pub is_primary: bool,
+    pub seq_in_index: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForeignKeyInfo {
+    pub constraint_name: String,
+    pub column_name: String,
+    pub referenced_table: String,
+    pub referenced_column: String,
+}
+
 /// 表信息
 #[tauri::command]
 pub async fn get_tables(
     connection_id: String,
+    database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, Mutex<ActiveConnections>>,
 ) -> Result<Vec<TableInfo>, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
 
-    // 获取连接配置（含密码）
-    let (conn_config, _) = storage
+    let (conn_config, password_opt) = storage
         .get_connection_with_password(&connection_id)
         .await
         .map_err(|e| format!("Failed to get connection: {}", e))?
         .ok_or_else(|| "Connection not found".to_string())?;
 
-    println!(
-        "Getting tables from {}:{}:{}",
-        conn_config.db_type, conn_config.host, conn_config.port
-    );
+    let password = password_opt.unwrap_or_default();
 
-    // 使用统一驱动接口创建连接池并获取表信息
-    let password = PasswordManager::get_password(&conn_config.id)
-        .unwrap_or_default()
-        .unwrap_or_else(|| "".to_string());
+    let pool = {
+        let conns = connections.lock().await;
+        if let Some(pool) = conns.get(&connection_id) {
+            pool.clone_ref()
+        } else {
+            drop(conns);
+            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
+        }
+    };
 
-    let pool = connect_by_type(&conn_config.db_type, &conn_config, &password)
-        .await
-        .map_err(|e| e)?;
-    let tables = get_tables_by_type(&conn_config.db_type, &pool).await?;
+    let tables = get_tables_by_type(&conn_config.db_type, &pool, database.as_deref()).await?;
     Ok(tables)
+}
+
+/// 获取数据库列表
+#[tauri::command]
+pub async fn get_databases(
+    connection_id: String,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, Mutex<ActiveConnections>>,
+) -> Result<Vec<String>, String> {
+    let guard = state.lock().await;
+    let storage = guard.as_ref().unwrap();
+
+    let (conn_config, password_opt) = storage
+        .get_connection_with_password(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to get connection: {}", e))?
+        .ok_or_else(|| "Connection not found".to_string())?;
+
+    let password = password_opt.unwrap_or_default();
+
+    let pool = {
+        let conns = connections.lock().await;
+        if let Some(pool) = conns.get(&connection_id) {
+            pool.clone_ref()
+        } else {
+            drop(conns);
+            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
+        }
+    };
+
+    let databases = get_databases_by_type(&conn_config.db_type, &pool).await?;
+    Ok(databases)
 }
 
 /// 获取列信息
@@ -147,37 +203,107 @@ pub async fn get_tables(
 pub async fn get_columns(
     connection_id: String,
     table_name: String,
+    database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, Mutex<ActiveConnections>>,
 ) -> Result<Vec<ColumnInfo>, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
 
-    // 获取连接配置（含密码）
-    let (conn_config, _) = storage
+    let (conn_config, password_opt) = storage
         .get_connection_with_password(&connection_id)
         .await
         .map_err(|e| format!("Failed to get connection: {}", e))?
         .ok_or_else(|| "Connection not found".to_string())?;
 
-    println!(
-        "Getting columns for {}.{} from {}:{}:{}",
-        conn_config.database.as_deref().unwrap_or("main"),
-        table_name,
-        conn_config.db_type,
-        conn_config.host,
-        conn_config.port
-    );
+    let password = password_opt.unwrap_or_default();
 
-    let password = PasswordManager::get_password(&conn_config.id)
-        .unwrap_or_default()
-        .unwrap_or_else(|| "".to_string());
+    let pool = {
+        let conns = connections.lock().await;
+        if let Some(pool) = conns.get(&connection_id) {
+            pool.clone_ref()
+        } else {
+            drop(conns);
+            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
+        }
+    };
 
-    let pool = connect_by_type(&conn_config.db_type, &conn_config, &password)
-        .await
-        .map_err(|e| e)?;
-
-    let cols = get_columns_by_type(&conn_config.db_type, &pool, &table_name).await?;
+    let cols = get_columns_by_type(
+        &conn_config.db_type,
+        &pool,
+        &table_name,
+        database.as_deref(),
+    )
+    .await?;
     Ok(cols)
+}
+
+/// 获取索引信息
+#[tauri::command]
+pub async fn get_indexes(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, Mutex<ActiveConnections>>,
+) -> Result<Vec<IndexInfo>, String> {
+    let guard = state.lock().await;
+    let storage = guard.as_ref().unwrap();
+
+    let (conn_config, password_opt) = storage
+        .get_connection_with_password(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to get connection: {}", e))?
+        .ok_or_else(|| "Connection not found".to_string())?;
+
+    let password = password_opt.unwrap_or_default();
+
+    let pool = {
+        let conns = connections.lock().await;
+        if let Some(pool) = conns.get(&connection_id) {
+            pool.clone_ref()
+        } else {
+            drop(conns);
+            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
+        }
+    };
+
+    let indexes = get_indexes_by_type(&conn_config.db_type, &pool, &table_name).await?;
+    Ok(indexes)
+}
+
+/// 获取外键信息
+#[tauri::command]
+pub async fn get_foreign_keys(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, Mutex<ActiveConnections>>,
+) -> Result<Vec<ForeignKeyInfo>, String> {
+    let guard = state.lock().await;
+    let storage = guard.as_ref().unwrap();
+
+    let (conn_config, password_opt) = storage
+        .get_connection_with_password(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to get connection: {}", e))?
+        .ok_or_else(|| "Connection not found".to_string())?;
+
+    let password = password_opt.unwrap_or_default();
+
+    let pool = {
+        let conns = connections.lock().await;
+        if let Some(pool) = conns.get(&connection_id) {
+            pool.clone_ref()
+        } else {
+            drop(conns);
+            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
+        }
+    };
+
+    let fks = get_foreign_keys_by_type(&conn_config.db_type, &pool, &table_name).await?;
+    Ok(fks)
 }
 
 /// 执行 SQL 查询
@@ -185,30 +311,30 @@ pub async fn get_columns(
 pub async fn execute_query(
     connection_id: String,
     sql: String,
+    database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, Mutex<ActiveConnections>>,
 ) -> Result<QueryResult, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
 
-    // 获取连接配置（含密码）
-    let (conn_config, _) = storage
+    let (conn_config, password_opt) = storage
         .get_connection_with_password(&connection_id)
         .await
         .map_err(|e| format!("Failed to get connection: {}", e))?
         .ok_or_else(|| "Connection not found".to_string())?;
 
-    println!(
-        "Executing query on {}:{}:{} - {}",
-        conn_config.db_type, conn_config.host, conn_config.port, sql
-    );
+    let password = password_opt.unwrap_or_default();
 
-    let password = PasswordManager::get_password(&conn_config.id)
-        .unwrap_or_default()
-        .unwrap_or_else(|| "".to_string());
-
-    let pool = connect_by_type(&conn_config.db_type, &conn_config, &password)
-        .await
-        .map_err(|e| e)?;
+    let pool = {
+        let conns = connections.lock().await;
+        if let Some(pool) = conns.get(&connection_id) {
+            pool.clone_ref()
+        } else {
+            drop(conns);
+            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
+        }
+    };
 
     let result = execute_query_by_type(&conn_config.db_type, &pool, &sql).await?;
     Ok(result)
@@ -230,14 +356,182 @@ pub async fn test_connection(
     host: &str,
     port: u16,
     username: &str,
-    _password: &str,
+    password: &str,
+    database: Option<&str>,
 ) -> Result<bool, String> {
     println!(
         "Testing connection to {}:{}:{} as {}",
         db_type, host, port, username
     );
-    // TODO: 实现实际的连接测试逻辑
+
+    // 构造临时配置用于测试连接
+    let config = DbConnection::new(
+        "test".to_string(),
+        db_type.to_string(),
+        host.to_string(),
+        port as i32,
+        username.to_string(),
+        database.map(|s| s.to_string()),
+        None,
+    );
+
+    // 尝试创建连接池（验证连接是否可用）
+    let pool = connect_by_type(db_type, &config, password).await?;
+
+    // 验证连接池是否真正可用（执行简单查询）
+    match db_type {
+        "mysql" => {
+            if let DbPool::MySql(pool) = pool {
+                sqlx::query("SELECT 1")
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| format!("Connection test failed: {}", e))?;
+            }
+        }
+        "postgresql" => {
+            if let DbPool::Postgres(pool) = pool {
+                sqlx::query("SELECT 1")
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| format!("Connection test failed: {}", e))?;
+            }
+        }
+        "sqlite" => {
+            if let DbPool::Sqlite(pool) = pool {
+                sqlx::query("SELECT 1")
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| format!("Connection test failed: {}", e))?;
+            }
+        }
+        _ => return Err(format!("Unsupported database type: {}", db_type)),
+    }
+
+    println!("Connection test successful");
     Ok(true)
+}
+
+/// 活跃连接池（内存中管理）
+pub struct ActiveConnections {
+    pools: HashMap<String, DbPool>,
+}
+
+impl ActiveConnections {
+    pub fn new() -> Self {
+        Self {
+            pools: HashMap::new(),
+        }
+    }
+
+    pub fn add(&mut self, connection_id: String, pool: DbPool) {
+        self.pools.insert(connection_id, pool);
+    }
+
+    pub fn get(&self, connection_id: &str) -> Option<&DbPool> {
+        self.pools.get(connection_id)
+    }
+
+    pub fn remove(&mut self, connection_id: &str) -> Option<DbPool> {
+        self.pools.remove(connection_id)
+    }
+
+    pub fn contains(&self, connection_id: &str) -> bool {
+        self.pools.contains_key(connection_id)
+    }
+}
+
+/// 连接到数据库（建立并保持连接池）
+#[tauri::command]
+pub async fn connect_database(
+    connection_id: String,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, Mutex<ActiveConnections>>,
+) -> Result<bool, String> {
+    let guard = state.lock().await;
+    let storage = guard.as_ref().unwrap();
+
+    // 检查是否已经连接
+    {
+        let conns = connections.lock().await;
+        if conns.contains(&connection_id) {
+            return Ok(true);
+        }
+    }
+
+    // 获取连接配置（含密码）
+    let (conn_config, password_opt) = storage
+        .get_connection_with_password(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to get connection: {}", e))?
+        .ok_or_else(|| "Connection not found".to_string())?;
+
+    println!(
+        "Connecting to {}:{}:{} as {}",
+        conn_config.db_type, conn_config.host, conn_config.port, conn_config.username
+    );
+
+    let password = password_opt.unwrap_or_default();
+
+    // 创建连接池并保持
+    let pool = connect_by_type(&conn_config.db_type, &conn_config, &password).await?;
+
+    // 验证连接可用性
+    match &conn_config.db_type {
+        db_type if db_type == "mysql" => {
+            if let DbPool::MySql(pool) = &pool {
+                sqlx::query("SELECT 1")
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| format!("Connection failed: {}", e))?;
+            }
+        }
+        db_type if db_type == "postgresql" => {
+            if let DbPool::Postgres(pool) = &pool {
+                sqlx::query("SELECT 1")
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| format!("Connection failed: {}", e))?;
+            }
+        }
+        db_type if db_type == "sqlite" => {
+            if let DbPool::Sqlite(pool) = &pool {
+                sqlx::query("SELECT 1")
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| format!("Connection failed: {}", e))?;
+            }
+        }
+        _ => {
+            return Err(format!(
+                "Unsupported database type: {}",
+                conn_config.db_type
+            ))
+        }
+    }
+
+    let mut conns = connections.lock().await;
+    conns.add(connection_id, pool);
+
+    println!("Connected successfully");
+    Ok(true)
+}
+
+/// 断开数据库连接（释放连接池）
+#[tauri::command]
+pub async fn disconnect_database(
+    connection_id: String,
+    connections: State<'_, Mutex<ActiveConnections>>,
+) -> Result<bool, String> {
+    let mut conns = connections.lock().await;
+    if conns.remove(&connection_id).is_some() {
+        println!("Disconnected from {}", connection_id);
+        Ok(true)
+    } else {
+        Err(format!(
+            "Connection {} not found or already disconnected",
+            connection_id
+        ))
+    }
 }
 
 /// 获取所有连接

@@ -42,7 +42,7 @@ export function StatusBar({ isDarkMode, selectedConnectionId, connections, selec
         </Text>
         {selectedTable && <Text>表：{selectedTable}</Text>}
       </Space>
-      <Space split={<Divider type="vertical" />}>
+      <Space separator={<Divider orientation="vertical" style={{ margin: '0 8px' }} />}>
         <Text>UTF-8</Text>
         <Text>v1.0.0</Text>
       </Space>

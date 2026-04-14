@@ -5,3 +5,20 @@
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafb);
 }
+
+/* Fix Ant Design Tabs content holder height issue */
+.ant-tabs-content-holder {
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Fix Ant Design Tabs tab pane to fill available space */
+.ant-tabs-content {
+  height: 100% !important;
+}
+
+.ant-tabs-tabpane {
+  height: 100% !important;
+  overflow: hidden !important;
+}

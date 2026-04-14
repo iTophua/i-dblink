@@ -16,23 +16,21 @@ impl ConnectionRepository {
 
     /// 获取所有连接
     pub async fn get_all(&self) -> Result<Vec<DbConnection>, sqlx::Error> {
-        let connections = sqlx::query_as::<_, DbConnection>(
-            "SELECT * FROM connections ORDER BY name"
-        )
-        .fetch_all(self.pool.inner())
-        .await?;
+        let connections =
+            sqlx::query_as::<_, DbConnection>("SELECT * FROM connections ORDER BY name")
+                .fetch_all(self.pool.inner())
+                .await?;
 
         Ok(connections)
     }
 
     /// 根据 ID 获取连接
     pub async fn get_by_id(&self, id: &str) -> Result<Option<DbConnection>, sqlx::Error> {
-        let connection = sqlx::query_as::<_, DbConnection>(
-            "SELECT * FROM connections WHERE id = ?"
-        )
-        .bind(id)
-        .fetch_optional(self.pool.inner())
-        .await?;
+        let connection =
+            sqlx::query_as::<_, DbConnection>("SELECT * FROM connections WHERE id = ?")
+                .bind(id)
+                .fetch_optional(self.pool.inner())
+                .await?;
 
         Ok(connection)
     }
@@ -40,7 +38,7 @@ impl ConnectionRepository {
     /// 根据分组 ID 获取连接
     pub async fn get_by_group(&self, group_id: &str) -> Result<Vec<DbConnection>, sqlx::Error> {
         let connections = sqlx::query_as::<_, DbConnection>(
-            "SELECT * FROM connections WHERE group_id = ? ORDER BY name"
+            "SELECT * FROM connections WHERE group_id = ? ORDER BY name",
         )
         .bind(group_id)
         .fetch_all(self.pool.inner())
@@ -153,7 +151,7 @@ impl GroupRepository {
     /// 获取所有分组
     pub async fn get_all(&self) -> Result<Vec<ConnectionGroup>, sqlx::Error> {
         let groups = sqlx::query_as::<_, ConnectionGroup>(
-            "SELECT * FROM connection_groups ORDER BY sort_order, name"
+            "SELECT * FROM connection_groups ORDER BY sort_order, name",
         )
         .fetch_all(self.pool.inner())
         .await?;
@@ -163,12 +161,11 @@ impl GroupRepository {
 
     /// 根据 ID 获取分组
     pub async fn get_by_id(&self, id: &str) -> Result<Option<ConnectionGroup>, sqlx::Error> {
-        let group = sqlx::query_as::<_, ConnectionGroup>(
-            "SELECT * FROM connection_groups WHERE id = ?"
-        )
-        .bind(id)
-        .fetch_optional(self.pool.inner())
-        .await?;
+        let group =
+            sqlx::query_as::<_, ConnectionGroup>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind(id)
+                .fetch_optional(self.pool.inner())
+                .await?;
 
         Ok(group)
     }

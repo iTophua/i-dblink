@@ -1,4 +1,4 @@
-use crate::commands::{ColumnInfo, QueryResult, TableInfo};
+use crate::commands::{ColumnInfo, ForeignKeyInfo, IndexInfo, QueryResult, TableInfo};
 use crate::db::DbConnection;
 use crate::drivers::db_pool::DbPool;
 use sqlx::{Column, Row};
@@ -28,7 +28,7 @@ impl SqliteDriver {
         };
 
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
+            .max_connections(5)
             .acquire_timeout(Duration::from_secs(10))
             .connect(&uri)
             .await
@@ -37,30 +37,45 @@ impl SqliteDriver {
         Ok(DbPool::Sqlite(pool))
     }
 
-    pub async fn get_tables(pool: &DbPool) -> Result<Vec<TableInfo>, String> {
+    pub async fn get_tables(
+        pool: &DbPool,
+        _database: Option<&str>,
+    ) -> Result<Vec<TableInfo>, String> {
         if let DbPool::Sqlite(pool) = pool {
             let query = r#"
                 SELECT name AS table_name,
                        'BASE TABLE' AS table_type,
                        NULL AS row_count,
-                       NULL AS comment
+                       NULL AS comment,
+                       NULL AS engine,
+                       NULL AS data_size,
+                       NULL AS index_size,
+                       NULL AS create_time,
+                       NULL AS update_time,
+                       NULL AS collation
                 FROM sqlite_master
                 WHERE type = 'table'
                   AND name NOT LIKE 'sqlite_%'
                 ORDER BY name
             "#;
-            let rows = sqlx::query_as::<_, (String, String, Option<i64>, Option<String>)>(query)
+            let rows = sqlx::query_as::<_, (String, String, Option<i64>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(query)
                 .fetch_all(pool)
                 .await
                 .map_err(|e| format!("Failed to query tables: {}", e))?;
 
             let tables = rows
                 .into_iter()
-                .map(|(table_name, table_type, row_count, comment)| TableInfo {
+                .map(|(table_name, table_type, row_count, comment, engine, data_size, index_size, create_time, update_time, collation)| TableInfo {
                     table_name,
                     table_type,
-                    row_count,
+                    row_count: row_count.map(|v| v as u64),
                     comment,
+                    engine,
+                    data_size,
+                    index_size,
+                    create_time,
+                    update_time,
+                    collation,
                 })
                 .collect();
             Ok(tables)
@@ -69,7 +84,15 @@ impl SqliteDriver {
         }
     }
 
-    pub async fn get_columns(pool: &DbPool, table_name: &str) -> Result<Vec<ColumnInfo>, String> {
+    pub async fn get_databases(_pool: &DbPool) -> Result<Vec<String>, String> {
+        Ok(vec!["main".to_string()])
+    }
+
+    pub async fn get_columns(
+        pool: &DbPool,
+        table_name: &str,
+        _database: Option<&str>,
+    ) -> Result<Vec<ColumnInfo>, String> {
         if let DbPool::Sqlite(pool) = pool {
             let query = format!("PRAGMA table_info(\"{}\")", table_name);
             let rows =
@@ -157,5 +180,70 @@ impl SqliteDriver {
             return serde_json::Value::String(v);
         }
         serde_json::Value::Null
+    }
+
+    pub async fn get_indexes(pool: &DbPool, table_name: &str) -> Result<Vec<IndexInfo>, String> {
+        if let DbPool::Sqlite(pool) = pool {
+            let query = format!("PRAGMA index_list(\"{}\")", table_name);
+            let indexes = sqlx::query_as::<_, (String, bool, String, String)>(&query)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| format!("Failed to query index list: {}", e))?;
+
+            let mut result = Vec::new();
+            for (index_name, is_unique, _origin, _partial) in indexes {
+                let detail_query = format!("PRAGMA index_info(\"{}\")", index_name);
+                let details = sqlx::query_as::<_, (i64, i64, String)>(&detail_query)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|e| format!("Failed to query index info: {}", e))?;
+
+                for (seq, _cid, col_name) in details {
+                    result.push(IndexInfo {
+                        index_name: index_name.clone(),
+                        column_name: col_name,
+                        is_unique,
+                        is_primary: index_name.starts_with("sqlite_autoindex"),
+                        seq_in_index: seq + 1,
+                    });
+                }
+            }
+
+            Ok(result)
+        } else {
+            Err("Pool type mismatch for SQLite".to_string())
+        }
+    }
+
+    pub async fn get_foreign_keys(
+        pool: &DbPool,
+        table_name: &str,
+    ) -> Result<Vec<ForeignKeyInfo>, String> {
+        if let DbPool::Sqlite(pool) = pool {
+            let query = format!("PRAGMA foreign_key_list(\"{}\")", table_name);
+            let rows = sqlx::query_as::<
+                _,
+                (i64, i64, String, String, String, String, String, String),
+            >(&query)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("Failed to query foreign keys: {}", e))?;
+
+            Ok(rows
+                .into_iter()
+                .map(
+                    |(_id, seq, ref_table, from, to, _on_update, _on_delete, _match)| {
+                        ForeignKeyInfo {
+                            constraint_name: format!("fk_{}_{}", table_name, seq),
+                            column_name: from,
+                            referenced_table: ref_table,
+                            referenced_column: to,
+                        }
+                    },
+                )
+                .collect())
+        } else {
+            Err("Pool type mismatch for SQLite".to_string())
+        }
     }
 }

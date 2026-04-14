@@ -19,9 +19,9 @@ impl DbPool {
             // ?cache=shared 允许多个连接共享缓存
             format!("file:{}?mode=rwc&cache=shared", db_path)
         };
-        
+
         println!("Creating SQLite pool with URI: {}", uri);
-        
+
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
             .min_connections(1)

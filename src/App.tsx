@@ -1,10 +1,11 @@
 import { Welcome } from './components/Welcome';
 import { MainLayout } from './components/MainLayout';
-import { ConfigProvider, theme } from 'antd';
+import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { useEffect, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import './style.css';
+import './App.css';
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -13,16 +14,16 @@ function App() {
   useEffect(() => {
     const unlisten = listen<string>('menu-action', (event) => {
       console.log('Menu action received:', event.payload);
-      
+
       // 处理主题切换命令
       if (event.payload === 'toggle-theme') {
         setIsDarkMode(prev => !prev);
         return;
       }
-      
+
       // 触发自定义事件，让组件处理
-      window.dispatchEvent(new CustomEvent('menu-action', { 
-        detail: { action: event.payload } 
+      window.dispatchEvent(new CustomEvent('menu-action', {
+        detail: { action: event.payload }
       }));
     });
 
@@ -37,7 +38,7 @@ function App() {
   }, [isDarkMode]);
 
   return (
-    <ConfigProvider 
+    <ConfigProvider
       locale={zhCN}
       theme={{
         algorithm: isDarkMode ? theme.darkAlgorithm : theme.defaultAlgorithm,
@@ -62,9 +63,11 @@ function App() {
         },
       }}
     >
-      <MainLayout>
-        <Welcome />
-      </MainLayout>
+      <AntdApp>
+        <MainLayout>
+          <Welcome />
+        </MainLayout>
+      </AntdApp>
     </ConfigProvider>
   );
 }

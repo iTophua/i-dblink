@@ -47,6 +47,12 @@ export interface TableInfo {
   table_type: string;
   row_count?: number;
   comment?: string;
+  engine?: string;
+  data_size?: string;
+  index_size?: string;
+  create_time?: string;
+  update_time?: string;
+  collation?: string;
 }
 
 export interface ColumnInfo {
@@ -57,6 +63,21 @@ export interface ColumnInfo {
   column_default?: string;
   extra?: string;
   comment?: string;
+}
+
+export interface IndexInfo {
+  index_name: string;
+  column_name: string;
+  is_unique: boolean;
+  is_primary: boolean;
+  seq_in_index: number;
+}
+
+export interface ForeignKeyInfo {
+  constraint_name: string;
+  column_name: string;
+  referenced_table: string;
+  referenced_column: string;
 }
 
 export interface QueryResult {

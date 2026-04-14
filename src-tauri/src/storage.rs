@@ -16,12 +16,11 @@ fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
             .parent() // 从 src-tauri 回到项目根目录
             .unwrap_or(&PathBuf::from("."))
             .join(".dev-data");
-        
+
         if !dev_data_dir.exists() {
-            std::fs::create_dir_all(&dev_data_dir)
-                .expect("Failed to create dev data directory");
+            std::fs::create_dir_all(&dev_data_dir).expect("Failed to create dev data directory");
         }
-        
+
         println!("Using development data directory: {:?}", dev_data_dir);
         dev_data_dir
     }
@@ -36,10 +35,9 @@ fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
 
         let data_dir = app_data.join("data");
         if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)
-                .expect("Failed to create production data directory");
+            std::fs::create_dir_all(&data_dir).expect("Failed to create production data directory");
         }
-        
+
         println!("Using production data directory: {:?}", data_dir);
         data_dir
     }
@@ -53,14 +51,14 @@ fn get_db_path(app_handle: &AppHandle) -> PathBuf {
 /// 初始化存储系统
 pub async fn init_storage(app_handle: &AppHandle) -> Result<Storage, anyhow::Error> {
     let db_path = get_db_path(app_handle);
-    
+
     // 确保父目录存在
     if let Some(parent) = db_path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent)?;
         }
     }
-    
+
     let db_path_str = db_path.to_string_lossy().to_string();
 
     println!("Initializing database at: {}", db_path_str);
@@ -103,7 +101,7 @@ impl Storage {
     ) -> Result<Option<(DbConnection, Option<String>)>, anyhow::Error> {
         let conn = self.connection_repo.get_by_id(id).await?;
         if let Some(connection) = conn {
-            let password = PasswordManager::get_password(id)?;
+            let password = PasswordManager::get_password(self._pool.inner(), id).await?;
             Ok(Some((connection, password)))
         } else {
             Ok(None)
@@ -119,9 +117,9 @@ impl Storage {
         // 保存连接配置
         self.connection_repo.save(&conn).await?;
 
-        // 保存密码到密钥环
+        // 保存密码到数据库
         if let Some(pwd) = password {
-            PasswordManager::save_password(&conn.id, pwd)?;
+            PasswordManager::save_password(self._pool.inner(), &conn.id, pwd).await?;
         }
 
         Ok(())
@@ -136,7 +134,7 @@ impl Storage {
     ) -> Result<(), anyhow::Error> {
         // 如果提供了新密码则更新，否则保留原密码
         if let Some(pwd) = new_password {
-            PasswordManager::save_password(id, pwd)?;
+            PasswordManager::save_password(self._pool.inner(), id, pwd).await?;
         }
 
         // 更新连接配置
@@ -148,7 +146,7 @@ impl Storage {
     /// 删除连接
     pub async fn delete_connection(&self, id: &str) -> Result<(), anyhow::Error> {
         // 删除密码
-        PasswordManager::delete_password(id)?;
+        PasswordManager::delete_password(self._pool.inner(), id).await?;
 
         // 删除连接配置
         self.connection_repo.delete(id).await?;

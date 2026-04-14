@@ -18,10 +18,9 @@
   
   /* 数据库类型色 */
   --db-color-mysql: #1890ff;
-  --db-color-postgresql: #52c41a;
-  --db-color-sqlite: #faad14;
-  --db-color-sqlserver: #eb2f96;
-  --db-color-oracle: #fa8c16;
+  --db-color-postgresql: #336791;
+  --db-color-sqlite: #003b57;
+
   --db-color-mariadb: #13c2c2;
   --db-color-dameng: #722ed1;
   
@@ -558,8 +557,58 @@ tbody tr:hover {
     background: white;
     color: black;
   }
-  
+
   .no-print {
     display: none !important;
   }
+}
+
+/* ==================== ConnectionTree Tree 组件样式 ==================== */
+.connection-tree.ant-tree {
+  /* 减少展开图标和节点内容之间的间距 */
+  --ant-tree-node-content-unit-height: 24px;
+}
+
+.connection-tree.ant-tree .ant-tree-switcher {
+  /* 减小 switcher 宽度 */
+  width: 18px !important;
+  margin-right: 2px !important;
+}
+
+.connection-tree.ant-tree .ant-tree-node-content-wrapper {
+  /* 减少节点内容左侧间距 */
+  padding-left: 2px !important;
+}
+
+.connection-tree.ant-tree .ant-tree-indent-unit {
+  /* 减少缩进单元宽度 */
+  width: 16px !important;
+}
+
+.connection-tree.ant-tree .ant-tree-indent {
+  /* 减少整体缩进 */
+  margin-right: 2px !important;
+}
+
+/* ==================== TableList 样式 ==================== */
+/* 禁用表格行动画，防止逐行跳出 */
+.table-list-row {
+  animation: none !important;
+  transition: none !important;
+}
+
+.ant-table-tbody > tr {
+  animation: none !important;
+}
+
+/* ==================== AG Grid NULL 单元格样式 ==================== */
+.null-cell {
+  color: #999 !important;
+  font-style: italic !important;
+}
+
+.ag-theme-alpine-dark .null-cell,
+.ag-theme-alpine .null-cell {
+  color: #888 !important;
+  font-style: italic !important;
 }

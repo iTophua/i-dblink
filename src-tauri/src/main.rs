@@ -9,22 +9,49 @@ mod drivers;
 mod security;
 mod storage;
 
-use tokio::sync::Mutex;
-use tauri::{Manager, Emitter};
+use commands::ActiveConnections;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{Emitter, Manager};
+use tokio::sync::Mutex;
 
 // 创建文件菜单
-fn create_file_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Submenu<R>, tauri::Error> {
+fn create_file_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Submenu<R>, tauri::Error> {
     Submenu::with_items(
         app,
         "File",
         true,
         &[
-            &MenuItem::with_id(app, "new-connection", "New Connection", true, Some("CmdOrCtrl+N"))?,
-            &MenuItem::with_id(app, "open-connection", "Open Connection", true, Some("CmdOrCtrl+O"))?,
+            &MenuItem::with_id(
+                app,
+                "new-connection",
+                "New Connection",
+                true,
+                Some("CmdOrCtrl+N"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "open-connection",
+                "Open Connection",
+                true,
+                Some("CmdOrCtrl+O"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "save-connection", "Save Connection", true, Some("CmdOrCtrl+S"))?,
-            &MenuItem::with_id(app, "save-as", "Save As...", true, Some("CmdOrCtrl+Shift+S"))?,
+            &MenuItem::with_id(
+                app,
+                "save-connection",
+                "Save Connection",
+                true,
+                Some("CmdOrCtrl+S"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "save-as",
+                "Save As...",
+                true,
+                Some("CmdOrCtrl+Shift+S"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "import", "Import", true, Some("CmdOrCtrl+I"))?,
             &MenuItem::with_id(app, "export", "Export", true, Some("CmdOrCtrl+E"))?,
@@ -35,7 +62,9 @@ fn create_file_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Subm
 }
 
 // 创建编辑菜单
-fn create_edit_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Submenu<R>, tauri::Error> {
+fn create_edit_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Submenu<R>, tauri::Error> {
     Submenu::with_items(
         app,
         "Edit",
@@ -50,13 +79,21 @@ fn create_edit_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Subm
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::select_all(app, None)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "find-replace", "Find & Replace...", true, Some("CmdOrCtrl+F"))?,
+            &MenuItem::with_id(
+                app,
+                "find-replace",
+                "Find & Replace...",
+                true,
+                Some("CmdOrCtrl+F"),
+            )?,
         ],
     )
 }
 
 // 创建视图菜单
-fn create_view_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Submenu<R>, tauri::Error> {
+fn create_view_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Submenu<R>, tauri::Error> {
     Submenu::with_items(
         app,
         "View",
@@ -68,31 +105,59 @@ fn create_view_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Subm
             &MenuItem::with_id(app, "zoom-out", "Zoom Out", true, Some("CmdOrCtrl+-"))?,
             &MenuItem::with_id(app, "zoom-reset", "Reset Zoom", true, Some("CmdOrCtrl+0"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "toggle-fullscreen", "Toggle Fullscreen", true, Some("F11"))?,
+            &MenuItem::with_id(
+                app,
+                "toggle-fullscreen",
+                "Toggle Fullscreen",
+                true,
+                Some("F11"),
+            )?,
         ],
     )
 }
 
 // 创建连接菜单
-fn create_connection_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Submenu<R>, tauri::Error> {
+fn create_connection_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Submenu<R>, tauri::Error> {
     Submenu::with_items(
         app,
         "Connection",
         true,
         &[
-            &MenuItem::with_id(app, "connect-selected", "Connect Selected", true, Some("CmdOrCtrl+Shift+C"))?,
+            &MenuItem::with_id(
+                app,
+                "connect-selected",
+                "Connect Selected",
+                true,
+                Some("CmdOrCtrl+Shift+C"),
+            )?,
             &MenuItem::with_id(app, "disconnect", "Disconnect", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "new-query", "New Query", true, Some("CmdOrCtrl+Q"))?,
-            &MenuItem::with_id(app, "execute-query", "Execute Query", true, Some("CmdOrCtrl+Enter"))?,
+            &MenuItem::with_id(
+                app,
+                "execute-query",
+                "Execute Query",
+                true,
+                Some("CmdOrCtrl+Enter"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "close-all", "Close All Connections", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app,
+                "close-all",
+                "Close All Connections",
+                true,
+                None::<&str>,
+            )?,
         ],
     )
 }
 
 // 创建工具菜单
-fn create_tools_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Submenu<R>, tauri::Error> {
+fn create_tools_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Submenu<R>, tauri::Error> {
     Submenu::with_items(
         app,
         "Tools",
@@ -104,13 +169,21 @@ fn create_tools_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Sub
             &MenuItem::with_id(app, "backup", "Backup Database...", true, None::<&str>)?,
             &MenuItem::with_id(app, "restore", "Restore Database...", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "model-designer", "Model Designer...", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app,
+                "model-designer",
+                "Model Designer...",
+                true,
+                None::<&str>,
+            )?,
         ],
     )
 }
 
 // 创建窗口菜单
-fn create_window_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Submenu<R>, tauri::Error> {
+fn create_window_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Submenu<R>, tauri::Error> {
     Submenu::with_items(
         app,
         "Window",
@@ -120,17 +193,37 @@ fn create_window_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Su
             &MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("CmdOrCtrl+W"))?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "next-tab", "Next Tab", true, Some("CmdOrCtrl+Tab"))?,
-            &MenuItem::with_id(app, "previous-tab", "Previous Tab", true, Some("CmdOrCtrl+Shift+Tab"))?,
+            &MenuItem::with_id(
+                app,
+                "previous-tab",
+                "Previous Tab",
+                true,
+                Some("CmdOrCtrl+Shift+Tab"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "cascade", "Cascade", true, None::<&str>)?,
-            &MenuItem::with_id(app, "tile-horizontally", "Tile Horizontally", true, None::<&str>)?,
-            &MenuItem::with_id(app, "tile-vertically", "Tile Vertically", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app,
+                "tile-horizontally",
+                "Tile Horizontally",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app,
+                "tile-vertically",
+                "Tile Vertically",
+                true,
+                None::<&str>,
+            )?,
         ],
     )
 }
 
 // 创建帮助菜单
-fn create_help_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Submenu<R>, tauri::Error> {
+fn create_help_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Submenu<R>, tauri::Error> {
     Submenu::with_items(
         app,
         "Help",
@@ -139,7 +232,13 @@ fn create_help_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Subm
             &MenuItem::with_id(app, "contents", "Contents", true, Some("F1"))?,
             &MenuItem::with_id(app, "search-help", "Search Help...", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "check-updates", "Check for Updates...", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app,
+                "check-updates",
+                "Check for Updates...",
+                true,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "About iDBlink", "About iDBlink", true, None::<&str>)?,
         ],
@@ -148,7 +247,9 @@ fn create_help_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Subm
 
 // 创建 macOS 应用菜单
 #[cfg(target_os = "macos")]
-fn create_app_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Submenu<R>, tauri::Error> {
+fn create_app_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Submenu<R>, tauri::Error> {
     Submenu::with_items(
         app,
         "iDBlink",
@@ -170,12 +271,12 @@ fn create_app_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Subme
 // 创建完整菜单
 fn create_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Menu<R>, tauri::Error> {
     let menu = Menu::new(app)?;
-    
+
     #[cfg(target_os = "macos")]
     {
         menu.append(&create_app_menu(app)?)?;
     }
-    
+
     menu.append(&create_file_menu(app)?)?;
     menu.append(&create_edit_menu(app)?)?;
     menu.append(&create_view_menu(app)?)?;
@@ -183,7 +284,7 @@ fn create_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Menu<R>, 
     menu.append(&create_tools_menu(app)?)?;
     menu.append(&create_window_menu(app)?)?;
     menu.append(&create_help_menu(app)?)?;
-    
+
     Ok(menu)
 }
 
@@ -193,7 +294,7 @@ fn main() {
             // 创建并设置菜单
             let menu = create_menu(&app.handle())?;
             app.set_menu(menu)?;
-            
+
             // 在 setup 中同步初始化存储
             let app_handle = app.handle().clone();
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -204,7 +305,8 @@ fn main() {
             });
 
             app.manage(Mutex::new(Some(storage)));
-            
+            app.manage(Mutex::new(ActiveConnections::new()));
+
             println!("Storage and menu initialized successfully");
             Ok(())
         })
@@ -237,6 +339,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::greet,
             commands::test_connection,
+            commands::connect_database,
+            commands::disconnect_database,
             commands::get_connections,
             commands::save_connection,
             commands::delete_connection,
@@ -244,7 +348,10 @@ fn main() {
             commands::save_group,
             commands::delete_group,
             commands::get_tables,
+            commands::get_databases,
             commands::get_columns,
+            commands::get_indexes,
+            commands::get_foreign_keys,
             commands::execute_query
         ])
         .run(tauri::generate_context!())

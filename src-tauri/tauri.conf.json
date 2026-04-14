@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5100",
     "frontendDist": "../dist"
   },
   "app": {
@@ -14,12 +14,12 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 700,
+        "height": 900,
         "resizable": true,
         "title": "iDBLink",
-        "width": 1200,
-        "minWidth": 800,
-        "minHeight": 600
+        "width": 1600,
+        "minWidth": 1000,
+        "minHeight": 700
       }
     ],
     "security": {

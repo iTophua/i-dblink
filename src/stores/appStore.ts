@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ConnectionOutput, GroupOutput } from '../types/api';
+import type { ConnectionOutput, GroupOutput, TableInfo } from '../types/api';
 
 export interface Connection extends ConnectionOutput {
   tables?: string[];
@@ -11,6 +11,14 @@ export interface ConnectionGroup extends GroupOutput {
   children?: ConnectionGroup[];
 }
 
+// Table data cache structure
+interface TableDataCache {
+  tables: TableInfo[];
+  loaded: boolean;
+  loading: boolean;
+  lastUpdated?: number;
+}
+
 interface AppState {
   connections: Connection[];
   activeConnectionId: string | null;
@@ -18,70 +26,122 @@ interface AppState {
   isLoading: boolean;
   error: string | null;
   
+  // Table data cache: key = `${connectionId}::${database}`
+  tableDataCache: Record<string, TableDataCache>;
+
   addConnection: (connection: Connection) => void;
   updateConnection: (id: string, connection: Partial<Connection>) => void;
   deleteConnection: (id: string) => void;
   setConnections: (connections: Connection[]) => void;
   setActiveConnection: (id: string | null) => void;
-  
+
   addGroup: (group: ConnectionGroup) => void;
   updateGroup: (id: string, group: Partial<ConnectionGroup>) => void;
   deleteGroup: (id: string) => void;
   setGroups: (groups: ConnectionGroup[]) => void;
-  
+
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  
+  // Table data cache methods
+  setTableData: (key: string, tables: TableInfo[]) => void;
+  setTableDataLoading: (key: string, loading: boolean) => void;
+  getTableData: (key: string) => TableDataCache | undefined;
+  clearTableData: (connectionId?: string) => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   connections: [],
   activeConnectionId: null,
   groups: [
-    { 
-      id: 'default', 
-      name: '默认分组', 
-      icon: '📁', 
+    {
+      id: 'default',
+      name: '默认分组',
+      icon: '📁',
       color: '#6d6d6d',
-      parent_id: undefined 
+      parent_id: undefined
     }
   ],
   isLoading: false,
   error: null,
-  
+  tableDataCache: {},
+
   addConnection: (connection) => set((state) => ({
     connections: [...state.connections, connection]
   })),
-  
+
   setConnections: (connections) => set({ connections }),
-  
+
   updateConnection: (id, updated) => set((state) => ({
-    connections: state.connections.map(conn => 
+    connections: state.connections.map(conn =>
       conn.id === id ? { ...conn, ...updated } : conn
     )
   })),
-  
+
   deleteConnection: (id) => set((state) => ({
     connections: state.connections.filter(conn => conn.id !== id),
     activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId
   })),
-  
+
   setActiveConnection: (id) => set({ activeConnectionId: id }),
-  
+
   addGroup: (group) => set((state) => ({
     groups: [...state.groups, group]
   })),
-  
+
   setGroups: (groups) => set({ groups }),
-  
+
   updateGroup: (id, updated) => set((state) => ({
     groups: state.groups.map(g => g.id === id ? { ...g, ...updated } : g)
   })),
-  
+
   deleteGroup: (id) => set((state) => ({
     groups: state.groups.filter(g => g.id !== id)
   })),
-  
+
   setLoading: (loading) => set({ isLoading: loading }),
+
+  setError: (error) => set({ error }),
   
-  setError: (error) => set({ error })
+  // Table data cache methods
+  setTableData: (key, tables) => set((state) => ({
+    tableDataCache: {
+      ...state.tableDataCache,
+      [key]: {
+        tables,
+        loaded: true,
+        loading: false,
+        lastUpdated: Date.now(),
+      }
+    }
+  })),
+  
+  setTableDataLoading: (key, loading) => set((state) => ({
+    tableDataCache: {
+      ...state.tableDataCache,
+      [key]: {
+        ...(state.tableDataCache[key] || { tables: [], loaded: false }),
+        loading,
+      }
+    }
+  })),
+  
+  getTableData: (key) => {
+    const state = get();
+    return state.tableDataCache[key];
+  },
+  
+  clearTableData: (connectionId) => set((state) => {
+    if (connectionId) {
+      // Clear cache for specific connection
+      const newCache = { ...state.tableDataCache };
+      Object.keys(newCache).forEach(key => {
+        if (key.startsWith(`${connectionId}::`)) {
+          delete newCache[key];
+        }
+      });
+      return { tableDataCache: newCache };
+    }
+    return { tableDataCache: {} };
+  }),
 }));

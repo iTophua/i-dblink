@@ -1,7 +1,6 @@
-use crate::commands::{ColumnInfo, QueryResult, TableInfo};
+use crate::commands::{ColumnInfo, ForeignKeyInfo, IndexInfo, QueryResult, TableInfo};
 use crate::db::DbConnection;
 use crate::drivers::db_pool::DbPool;
-use crate::security::PasswordManager;
 use sqlx::{Column, Row};
 use std::time::Duration;
 use urlencoding;
@@ -10,15 +9,10 @@ pub struct PgDriver;
 
 impl PgDriver {
     pub async fn connect(config: &DbConnection, password: &str) -> Result<DbPool, String> {
-        let pwd = PasswordManager::get_password(&config.id)
-            .unwrap_or_default()
-            .unwrap_or_else(|| password.to_string());
-        let password = pwd;
-
         let db_url = format!(
             "postgres://{}:{}@{}:{}/{}?sslmode={}",
             config.username,
-            urlencoding::encode(&password),
+            urlencoding::encode(password),
             config.host,
             config.port,
             config
@@ -32,9 +26,8 @@ impl PgDriver {
             }
         );
 
-        // 简化处理；使用同一超时设置
         let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(1)
+            .max_connections(10)
             .acquire_timeout(Duration::from_secs(10))
             .connect(&db_url)
             .await
@@ -43,7 +36,10 @@ impl PgDriver {
         Ok(DbPool::Postgres(pool))
     }
 
-    pub async fn get_tables(pool: &DbPool) -> Result<Vec<TableInfo>, String> {
+    pub async fn get_tables(
+        pool: &DbPool,
+        _database: Option<&str>,
+    ) -> Result<Vec<TableInfo>, String> {
         if let DbPool::Postgres(pool) = pool {
             let query = r#"
                 SELECT c.relname AS table_name,
@@ -54,7 +50,13 @@ impl PgDriver {
                            ELSE 'OTHER'
                        END AS table_type,
                        NULL::bigint AS row_count,
-                       COALESCE(d.description, '') AS comment
+                       COALESCE(d.description, '') AS comment,
+                       NULL AS engine,
+                       NULL AS data_size,
+                       NULL AS index_size,
+                       NULL AS create_time,
+                       NULL AS update_time,
+                       NULL AS collation
                 FROM pg_catalog.pg_class c
                 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                 LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
@@ -63,22 +65,28 @@ impl PgDriver {
                   AND n.nspname NOT LIKE 'pg_toast%'
                 ORDER BY c.relname
             "#;
-            let rows = sqlx::query_as::<_, (String, String, Option<i64>, String)>(query)
+            let rows = sqlx::query_as::<_, (String, String, Option<i64>, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(query)
                 .fetch_all(pool)
                 .await
                 .map_err(|e| format!("Failed to query tables: {}", e))?;
 
             let tables = rows
                 .into_iter()
-                .map(|(table_name, table_type, row_count, comment)| TableInfo {
+                .map(|(table_name, table_type, row_count, comment, engine, data_size, index_size, create_time, update_time, collation)| TableInfo {
                     table_name,
                     table_type,
-                    row_count,
+                    row_count: row_count.map(|v| v as u64),
                     comment: if comment.is_empty() {
                         None
                     } else {
                         Some(comment)
                     },
+                    engine,
+                    data_size,
+                    index_size,
+                    create_time,
+                    update_time,
+                    collation,
                 })
                 .collect();
             Ok(tables)
@@ -87,7 +95,11 @@ impl PgDriver {
         }
     }
 
-    pub async fn get_columns(pool: &DbPool, table_name: &str) -> Result<Vec<ColumnInfo>, String> {
+    pub async fn get_columns(
+        pool: &DbPool,
+        table_name: &str,
+        _database: Option<&str>,
+    ) -> Result<Vec<ColumnInfo>, String> {
         if let DbPool::Postgres(pool) = pool {
             let query = r#"
                 SELECT a.attname AS column_name,
@@ -153,6 +165,21 @@ impl PgDriver {
                 )
                 .collect();
             Ok(columns)
+        } else {
+            Err("Pool type mismatch for PostgreSQL".to_string())
+        }
+    }
+
+    pub async fn get_databases(pool: &DbPool) -> Result<Vec<String>, String> {
+        if let DbPool::Postgres(pool) = pool {
+            let rows = sqlx::query_as::<_, (String,)>(
+                "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres', 'template0', 'template1') ORDER BY datname"
+            )
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("Failed to query databases: {}", e))?;
+
+            Ok(rows.into_iter().map(|(name,)| name).collect())
         } else {
             Err("Pool type mismatch for PostgreSQL".to_string())
         }
@@ -227,11 +254,119 @@ impl PgDriver {
                 Some(v) => serde_json::Value::Bool(v),
                 None => serde_json::Value::Null,
             }
-        } else {
-            match row.get::<Option<String>, _>(idx) {
-                Some(v) => serde_json::Value::String(v),
-                None => serde_json::Value::Null,
+        } else if type_name.contains("timestamp")
+            || type_name.contains("date")
+            || type_name.contains("time")
+            || type_name.contains("interval")
+        {
+            // 处理时间类型
+            match row.try_get::<Option<String>, _>(idx) {
+                Ok(Some(v)) => serde_json::Value::String(v),
+                Ok(None) => serde_json::Value::Null,
+                Err(_) => serde_json::Value::Null,
             }
+        } else if type_name.contains("json") || type_name.contains("jsonb") {
+            // 处理 JSON 类型
+            match row.try_get::<Option<serde_json::Value>, _>(idx) {
+                Ok(Some(v)) => v,
+                Ok(None) => serde_json::Value::Null,
+                Err(_) => serde_json::Value::Null,
+            }
+        } else if type_name.contains("bytea") || type_name.contains("blob") {
+            // 处理二进制类型
+            match row.try_get::<Option<Vec<u8>>, _>(idx) {
+                Ok(Some(v)) => serde_json::Value::String(format!("[BLOB: {} bytes]", v.len())),
+                Ok(None) => serde_json::Value::Null,
+                Err(_) => serde_json::Value::Null,
+            }
+        } else {
+            // 其他类型尝试作为字符串处理
+            match row.try_get::<Option<String>, _>(idx) {
+                Ok(Some(v)) => serde_json::Value::String(v),
+                Ok(None) => serde_json::Value::Null,
+                Err(_) => serde_json::Value::Null,
+            }
+        }
+    }
+
+    pub async fn get_indexes(pool: &DbPool, table_name: &str) -> Result<Vec<IndexInfo>, String> {
+        if let DbPool::Postgres(pool) = pool {
+            let query = r#"
+                SELECT i.relname AS index_name,
+                       a.attname AS column_name,
+                       ix.indisunique AS is_unique,
+                       ix.indisprimary AS is_primary,
+                       (information_schema.columns.ordinal_position) AS seq_in_index
+                FROM pg_index ix
+                JOIN pg_class t ON t.oid = ix.indrelid
+                JOIN pg_class i ON i.oid = ix.indexrelid
+                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+                WHERE t.relname = $1
+                ORDER BY i.relname, a.attnum
+            "#;
+            let rows = sqlx::query_as::<_, (String, String, bool, bool, i64)>(query)
+                .bind(table_name)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| format!("Failed to query indexes: {}", e))?;
+
+            Ok(rows
+                .into_iter()
+                .map(
+                    |(index_name, column_name, is_unique, is_primary, seq_in_index)| IndexInfo {
+                        index_name,
+                        column_name,
+                        is_unique,
+                        is_primary,
+                        seq_in_index,
+                    },
+                )
+                .collect())
+        } else {
+            Err("Pool type mismatch for PostgreSQL".to_string())
+        }
+    }
+
+    pub async fn get_foreign_keys(
+        pool: &DbPool,
+        table_name: &str,
+    ) -> Result<Vec<ForeignKeyInfo>, String> {
+        if let DbPool::Postgres(pool) = pool {
+            let query = r#"
+                SELECT tc.constraint_name,
+                       kcu.column_name,
+                       ccu.table_name AS referenced_table,
+                       ccu.column_name AS referenced_column
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                JOIN information_schema.constraint_column_usage ccu
+                    ON tc.constraint_name = ccu.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                  AND tc.table_name = $1
+                ORDER BY tc.constraint_name, kcu.ordinal_position
+            "#;
+            let rows = sqlx::query_as::<_, (String, String, String, String)>(query)
+                .bind(table_name)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| format!("Failed to query foreign keys: {}", e))?;
+
+            Ok(rows
+                .into_iter()
+                .map(
+                    |(constraint_name, column_name, referenced_table, referenced_column)| {
+                        ForeignKeyInfo {
+                            constraint_name,
+                            column_name,
+                            referenced_table,
+                            referenced_column,
+                        }
+                    },
+                )
+                .collect())
+        } else {
+            Err("Pool type mismatch for PostgreSQL".to_string())
         }
     }
 }

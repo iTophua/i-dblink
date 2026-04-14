@@ -1,9 +1,18 @@
-import { useState } from 'react';
-import { Modal, Form, Input, InputNumber, Select, message, Space, Tabs, Switch, Upload, Button as AntButton } from 'antd';
-import { UploadOutlined, PlusOutlined } from '@ant-design/icons';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Modal,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  message,
+  Space,
+  Tabs,
+  Switch,
+  Button as AntButton,
+} from 'antd';
+import { UploadOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
-
-const { Option } = Select;
 
 export interface ConnectionFormData {
   id?: string;
@@ -34,68 +43,110 @@ const DB_TYPE_PORTS: Record<string, number> = {
   dameng: 5236,
 };
 
-export function ConnectionDialog({
-  open,
-  editingData,
-  onCancel,
-  onSave,
-}: ConnectionDialogProps) {
+export function ConnectionDialog({ open, editingData, onCancel, onSave }: ConnectionDialogProps) {
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
-  const [dbType, setDbType] = useState<'mysql' | 'postgresql' | 'sqlite' | 'sqlserver' | 'oracle' | 'mariadb' | 'dameng'>(editingData?.dbType || 'mysql');
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [dbType, setDbType] = useState<
+    'mysql' | 'postgresql' | 'sqlite' | 'sqlserver' | 'oracle' | 'mariadb' | 'dameng'
+  >(editingData?.dbType || 'mysql');
+  const testCancelledRef = useRef(false);
 
-  // 当数据库类型改变时，自动更新默认端口
-  const handleDbTypeChange = (value: any) => {
-    setDbType(value);
-    const defaultPort = DB_TYPE_PORTS[value];
-    if (defaultPort && !editingData) {
-      form.setFieldsValue({ port: defaultPort });
+  useEffect(() => {
+    if (open) {
+      const currentDbType = editingData?.dbType || 'mysql';
+      setDbType(currentDbType);
+      form.setFieldsValue({
+        name: editingData?.name,
+        db_type: currentDbType,
+        host: editingData?.host || 'localhost',
+        port: editingData?.port || DB_TYPE_PORTS[currentDbType],
+        username: editingData?.username,
+        password: editingData?.password,
+        database: editingData?.database,
+      });
+    } else {
+      form.resetFields();
     }
-  };
+  }, [open, editingData, form]);
 
-  const handleOk = async () => {
+  const handleDbTypeChange = useCallback(
+    (value: string) => {
+      setDbType(value as typeof dbType);
+      const defaultPort = DB_TYPE_PORTS[value];
+      if (defaultPort && !editingData) {
+        form.setFieldsValue({ port: defaultPort });
+      }
+    },
+    [editingData, form]
+  );
+
+  const handleTestConnection = useCallback(async () => {
     try {
-      const values = await form.validateFields();
-      setLoading(true);
+      const values = await form.validateFields(['db_type', 'host', 'port', 'username', 'password']);
+      setTesting(true);
+      testCancelledRef.current = false;
 
-      // 先测试连接
-      const testResult = await invoke<boolean>('test_connection', {
+      const isSqlite = values.db_type === 'sqlite';
+      const result = await invoke<boolean>('test_connection', {
         dbType: values.db_type,
-        host: values.host,
-        port: values.port,
-        username: values.username,
+        host: isSqlite ? '' : values.host,
+        port: isSqlite ? 0 : values.port,
+        username: isSqlite ? '' : values.username,
         password: values.password || '',
+        database: isSqlite ? values.host : values.database,
       });
 
-      if (testResult) {
-        // 连接测试成功，保存连接
-        await onSave({
-          id: editingData?.id,
-          name: values.name,
-          dbType: values.db_type,
-          host: values.host,
-          port: values.port,
-          username: values.username,
-          password: values.password,
-          database: values.database,
-          group_id: editingData?.group_id,
-        });
-        message.success('连接已保存');
-        form.resetFields();
-      } else {
-        message.error('连接测试失败');
+      if (testCancelledRef.current) return;
+
+      if (result) {
+        message.success('连接测试成功');
       }
     } catch (error: any) {
+      if (testCancelledRef.current) return;
+      if (error.errorFields) return;
+      message.error(`连接测试失败：${error}`);
+    } finally {
+      setTesting(false);
+    }
+  }, [form]);
+
+  const handleCancelTest = useCallback(() => {
+    testCancelledRef.current = true;
+    setTesting(false);
+  }, []);
+
+  const handleOk = useCallback(async () => {
+    try {
+      const values = await form.validateFields();
+      setSaving(true);
+
+      const isSqlite = values.db_type === 'sqlite';
+      await onSave({
+        id: editingData?.id,
+        name: values.name,
+        dbType: values.db_type,
+        host: isSqlite ? '' : values.host,
+        port: isSqlite ? 0 : values.port,
+        username: isSqlite ? '' : values.username,
+        password: values.password,
+        database: isSqlite ? values.host : values.database,
+        group_id: editingData?.group_id,
+      });
+    } catch (error: any) {
+      if (error.errorFields) return;
       message.error(`操作失败：${error}`);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
-  };
+  }, [form, editingData, onSave]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     form.resetFields();
     onCancel();
-  };
+  }, [form, onCancel]);
+
+  const compactFormItemStyle = { marginBottom: 12 };
 
   return (
     <Modal
@@ -103,10 +154,40 @@ export function ConnectionDialog({
       open={open}
       onOk={handleOk}
       onCancel={handleCancel}
-      confirmLoading={loading}
-      width={700}
+      confirmLoading={saving}
+      width={600}
+      styles={{ body: { padding: '12px 16px' } }}
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            {testing ? (
+              <Space>
+                <AntButton loading size="small">
+                  测试中...
+                </AntButton>
+                <AntButton onClick={handleCancelTest} size="small">
+                  取消
+                </AntButton>
+              </Space>
+            ) : (
+              <AntButton icon={<ThunderboltOutlined />} onClick={handleTestConnection} size="small">
+                测试连接
+              </AntButton>
+            )}
+          </div>
+          <Space>
+            <AntButton onClick={handleCancel} size="small">
+              取消
+            </AntButton>
+            <AntButton type="primary" onClick={handleOk} loading={saving} size="small">
+              {editingData ? '保存' : '创建'}
+            </AntButton>
+          </Space>
+        </div>
+      }
     >
       <Tabs
+        size="small"
         items={[
           {
             key: 'basic',
@@ -115,6 +196,7 @@ export function ConnectionDialog({
               <Form
                 form={form}
                 layout="vertical"
+                size="small"
                 initialValues={{
                   name: editingData?.name,
                   db_type: editingData?.dbType || 'mysql',
@@ -131,6 +213,7 @@ export function ConnectionDialog({
                   name="name"
                   label="连接名称"
                   rules={[{ required: true, message: '请输入连接名称' }]}
+                  style={compactFormItemStyle}
                 >
                   <Input placeholder="例如：我的 MySQL 数据库" />
                 </Form.Item>
@@ -139,6 +222,7 @@ export function ConnectionDialog({
                   name="db_type"
                   label="数据库类型"
                   rules={[{ required: true, message: '请选择数据库类型' }]}
+                  style={compactFormItemStyle}
                 >
                   <Select onChange={handleDbTypeChange}>
                     <Option value="mysql">MySQL</Option>
@@ -157,6 +241,7 @@ export function ConnectionDialog({
                       name="host"
                       label="主机地址"
                       rules={[{ required: true, message: '请输入主机地址' }]}
+                      style={compactFormItemStyle}
                     >
                       <Input placeholder="例如：localhost 或 192.168.1.100" />
                     </Form.Item>
@@ -165,6 +250,7 @@ export function ConnectionDialog({
                       name="port"
                       label="端口"
                       rules={[{ required: true, message: '请输入端口' }]}
+                      style={compactFormItemStyle}
                     >
                       <InputNumber min={1} max={65535} style={{ width: '100%' }} />
                     </Form.Item>
@@ -176,6 +262,7 @@ export function ConnectionDialog({
                     name="host"
                     label="数据库文件路径"
                     rules={[{ required: true, message: '请输入数据库文件路径' }]}
+                    style={compactFormItemStyle}
                   >
                     <Input placeholder="例如：/path/to/database.db" />
                   </Form.Item>
@@ -185,6 +272,7 @@ export function ConnectionDialog({
                   name="username"
                   label="用户名"
                   rules={[{ required: dbType !== 'sqlite', message: '请输入用户名' }]}
+                  style={compactFormItemStyle}
                 >
                   <Input placeholder="例如：root" />
                 </Form.Item>
@@ -193,6 +281,7 @@ export function ConnectionDialog({
                   name="password"
                   label="密码"
                   rules={[{ required: !editingData && dbType !== 'sqlite', message: '请输入密码' }]}
+                  style={compactFormItemStyle}
                 >
                   <Input.Password
                     placeholder={editingData ? '留空则保持密码不变' : '请输入密码'}
@@ -200,7 +289,7 @@ export function ConnectionDialog({
                   />
                 </Form.Item>
 
-                <Form.Item name="database" label="数据库名">
+                <Form.Item name="database" label="数据库名" style={compactFormItemStyle}>
                   <Input placeholder="例如：mydb（可选）" />
                 </Form.Item>
               </Form>
@@ -210,29 +299,54 @@ export function ConnectionDialog({
             key: 'ssl',
             label: 'SSL/TLS',
             children: (
-              <Form layout="vertical">
-                <Form.Item name="use_ssl" label="使用 SSL/TLS 加密连接" valuePropName="checked">
-                  <Switch />
+              <Form layout="vertical" size="small">
+                <Form.Item
+                  name="use_ssl"
+                  label="使用 SSL/TLS 加密连接"
+                  valuePropName="checked"
+                  style={compactFormItemStyle}
+                >
+                  <Switch size="small" />
                 </Form.Item>
 
-                <Form.Item name="ssl_ca_cert" label="CA 证书文件">
+                <Form.Item name="ssl_ca_cert" label="CA 证书文件" style={compactFormItemStyle}>
                   <Space.Compact style={{ width: '100%' }}>
                     <Input placeholder="选择 CA 证书文件路径" readOnly />
-                    <AntButton icon={<UploadOutlined />} onClick={() => message.info('文件选择功能待实现')} />
+                    <AntButton
+                      icon={<UploadOutlined />}
+                      size="small"
+                      onClick={() => message.info('文件选择功能待实现')}
+                    />
                   </Space.Compact>
                 </Form.Item>
 
-                <Form.Item name="ssl_client_cert" label="客户端证书文件">
+                <Form.Item
+                  name="ssl_client_cert"
+                  label="客户端证书文件"
+                  style={compactFormItemStyle}
+                >
                   <Space.Compact style={{ width: '100%' }}>
                     <Input placeholder="选择客户端证书文件路径" readOnly />
-                    <AntButton icon={<UploadOutlined />} onClick={() => message.info('文件选择功能待实现')} />
+                    <AntButton
+                      icon={<UploadOutlined />}
+                      size="small"
+                      onClick={() => message.info('文件选择功能待实现')}
+                    />
                   </Space.Compact>
                 </Form.Item>
 
-                <Form.Item name="ssl_client_key" label="客户端私钥文件">
+                <Form.Item
+                  name="ssl_client_key"
+                  label="客户端私钥文件"
+                  style={compactFormItemStyle}
+                >
                   <Space.Compact style={{ width: '100%' }}>
                     <Input placeholder="选择客户端私钥文件路径" readOnly />
-                    <AntButton icon={<UploadOutlined />} onClick={() => message.info('文件选择功能待实现')} />
+                    <AntButton
+                      icon={<UploadOutlined />}
+                      size="small"
+                      onClick={() => message.info('文件选择功能待实现')}
+                    />
                   </Space.Compact>
                 </Form.Item>
 
@@ -246,31 +360,49 @@ export function ConnectionDialog({
             key: 'ssh',
             label: 'SSH 隧道',
             children: (
-              <Form layout="vertical">
-                <Form.Item name="use_ssh" label="使用 SSH 隧道" valuePropName="checked">
-                  <Switch />
+              <Form layout="vertical" size="small">
+                <Form.Item
+                  name="use_ssh"
+                  label="使用 SSH 隧道"
+                  valuePropName="checked"
+                  style={compactFormItemStyle}
+                >
+                  <Switch size="small" />
                 </Form.Item>
 
-                <Form.Item name="ssh_host" label="SSH 主机地址">
+                <Form.Item name="ssh_host" label="SSH 主机地址" style={compactFormItemStyle}>
                   <Input placeholder="例如：192.168.1.100" />
                 </Form.Item>
 
-                <Form.Item name="ssh_port" label="SSH 端口" initialValue={22}>
+                <Form.Item
+                  name="ssh_port"
+                  label="SSH 端口"
+                  initialValue={22}
+                  style={compactFormItemStyle}
+                >
                   <InputNumber min={1} max={65535} style={{ width: '100%' }} />
                 </Form.Item>
 
-                <Form.Item name="ssh_username" label="SSH 用户名">
+                <Form.Item name="ssh_username" label="SSH 用户名" style={compactFormItemStyle}>
                   <Input placeholder="例如：root" />
                 </Form.Item>
 
-                <Form.Item name="ssh_password" label="SSH 密码">
+                <Form.Item name="ssh_password" label="SSH 密码" style={compactFormItemStyle}>
                   <Input.Password placeholder="请输入 SSH 密码" autoComplete="new-password" />
                 </Form.Item>
 
-                <Form.Item name="ssh_key_path" label="SSH 私钥文件路径">
+                <Form.Item
+                  name="ssh_key_path"
+                  label="SSH 私钥文件路径"
+                  style={compactFormItemStyle}
+                >
                   <Space.Compact style={{ width: '100%' }}>
                     <Input placeholder="选择私钥文件路径" readOnly />
-                    <AntButton icon={<UploadOutlined />} onClick={() => message.info('文件选择功能待实现')} />
+                    <AntButton
+                      icon={<UploadOutlined />}
+                      size="small"
+                      onClick={() => message.info('文件选择功能待实现')}
+                    />
                   </Space.Compact>
                 </Form.Item>
 
@@ -284,16 +416,31 @@ export function ConnectionDialog({
             key: 'advanced',
             label: '高级',
             children: (
-              <Form layout="vertical">
-                <Form.Item name="connect_timeout" label="连接超时（秒）" initialValue={30}>
+              <Form layout="vertical" size="small">
+                <Form.Item
+                  name="connect_timeout"
+                  label="连接超时（秒）"
+                  initialValue={30}
+                  style={compactFormItemStyle}
+                >
                   <InputNumber min={1} max={300} style={{ width: '100%' }} />
                 </Form.Item>
 
-                <Form.Item name="query_timeout" label="查询超时（秒）" initialValue={300}>
+                <Form.Item
+                  name="query_timeout"
+                  label="查询超时（秒）"
+                  initialValue={300}
+                  style={compactFormItemStyle}
+                >
                   <InputNumber min={1} max={3600} style={{ width: '100%' }} />
                 </Form.Item>
 
-                <Form.Item name="charset" label="字符集" initialValue="utf8mb4">
+                <Form.Item
+                  name="charset"
+                  label="字符集"
+                  initialValue="utf8mb4"
+                  style={compactFormItemStyle}
+                >
                   <Select>
                     <Option value="utf8mb4">utf8mb4</Option>
                     <Option value="utf8">utf8</Option>
@@ -302,7 +449,7 @@ export function ConnectionDialog({
                   </Select>
                 </Form.Item>
 
-                <Space direction="vertical" style={{ color: '#999', fontSize: 12, marginTop: 16 }}>
+                <Space direction="vertical" style={{ color: '#999', fontSize: 12, marginTop: 8 }}>
                   <span>💡 高级配置用于优化连接性能和字符编码</span>
                 </Space>
               </Form>
@@ -310,10 +457,6 @@ export function ConnectionDialog({
           },
         ]}
       />
-
-      <Space style={{ marginTop: 16, color: '#999', fontSize: 12 }}>
-        <span>💡 提示：点击确定会先测试连接，成功后才会保存</span>
-      </Space>
     </Modal>
   );
 }

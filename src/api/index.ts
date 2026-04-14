@@ -15,7 +15,8 @@ export const api = {
     host: string,
     port: number,
     username: string,
-    password: string
+    password: string,
+    database?: string
   ): Promise<boolean> {
     return await invoke('test_connection', {
       dbType,
@@ -23,7 +24,16 @@ export const api = {
       port,
       username,
       password,
+      database,
     });
+  },
+
+  async connectConnection(connectionId: string): Promise<boolean> {
+    return await invoke('connect_database', { connectionId });
+  },
+
+  async disconnectConnection(connectionId: string): Promise<boolean> {
+    return await invoke('disconnect_database', { connectionId });
   },
 
   async getConnections(): Promise<ConnectionOutput[]> {
@@ -50,15 +60,27 @@ export const api = {
     return await invoke('delete_group', { id });
   },
 
-  async getTables(connectionId: string): Promise<TableInfo[]> {
-    return await invoke('get_tables', { connectionId });
+  async getDatabases(connectionId: string): Promise<string[]> {
+    return await invoke('get_databases', { connectionId });
   },
 
-  async getColumns(connectionId: string, tableName: string): Promise<ColumnInfo[]> {
-    return await invoke('get_columns', { connectionId, tableName });
+  async getTables(connectionId: string, database?: string): Promise<TableInfo[]> {
+    return await invoke('get_tables', { connectionId, database });
   },
 
-  async executeQuery(connectionId: string, sql: string): Promise<QueryResult> {
-    return await invoke('execute_query', { connectionId, sql });
+  async getColumns(connectionId: string, tableName: string, database?: string): Promise<ColumnInfo[]> {
+    return await invoke('get_columns', { connectionId, tableName, database });
+  },
+
+  async getIndexes(connectionId: string, tableName: string, database?: string): Promise<import('../types/api').IndexInfo[]> {
+    return await invoke('get_indexes', { connectionId, tableName, database });
+  },
+
+  async getForeignKeys(connectionId: string, tableName: string, database?: string): Promise<import('../types/api').ForeignKeyInfo[]> {
+    return await invoke('get_foreign_keys', { connectionId, tableName, database });
+  },
+
+  async executeQuery(connectionId: string, sql: string, database?: string): Promise<QueryResult> {
+    return await invoke('execute_query', { connectionId, sql, database });
   },
 };

@@ -70,14 +70,29 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 创建连接密码表
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS connection_passwords (
+            connection_id TEXT PRIMARY KEY,
+            password TEXT NOT NULL,
+            FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     // 创建索引
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_connections_group_id ON connections(group_id)")
         .execute(pool)
         .await?;
 
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_history_connection_id ON connection_history(connection_id)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_history_connection_id ON connection_history(connection_id)",
+    )
+    .execute(pool)
+    .await?;
 
     // 插入默认分组（如果不存在）
     sqlx::query(

@@ -1,206 +1,393 @@
-import { useState, useMemo, useEffect } from 'react';
-import { List, Input, Tag, Typography, Spin, Empty, Button, Space, message } from 'antd';
-import { TableOutlined, SearchOutlined, ReloadOutlined, AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons';
-import { invoke } from '@tauri-apps/api/core';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { Tag, Typography, Spin, Empty, Button, Space, message, Input, Tooltip } from 'antd';
+import { TableOutlined, EyeOutlined, SearchOutlined, ReloadOutlined, AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { theme } from 'antd';
+import { useAppStore } from '../stores/appStore';
+import { useDatabase } from '../hooks/useApi';
 
 const { Text } = Typography;
+
+// View mode storage key
+const VIEW_MODE_STORAGE_KEY = 'tablelist-viewmode';
+
+// Helper to get saved view mode
+function getInitialViewMode(): 'list' | 'grid' {
+  try {
+    const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    if (saved === 'list' || saved === 'grid') {
+      return saved;
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  return 'list'; // Default to list view
+}
 
 export interface TableData {
   table_name: string;
   table_type: string;
   row_count?: number;
   comment?: string;
+  engine?: string;
+  data_size?: string;
+  index_size?: string;
+  create_time?: string;
+  update_time?: string;
+  collation?: string;
 }
 
-interface TableListProps {
+export interface TableListProps {
   connectionId: string;
-  onTableSelect?: (tableName: string) => void;
+  database?: string;
+  onTableSelect?: (tableName: string, database?: string) => void;
+  onTableOpen?: (tableName: string, database?: string) => void;
 }
 
-export function TableList({ connectionId, onTableSelect }: TableListProps) {
-  const [loading, setLoading] = useState(false);
+// Navicat-style grid card component
+function TableGridCard({ table, onClick, isDarkMode }: { table: TableData; onClick: () => void; isDarkMode: boolean }) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '3px 6px',
+        cursor: 'pointer',
+        borderRadius: 3,
+        background: hovered ? (isDarkMode ? '#1a1a1a' : '#f5f5f5') : 'transparent',
+        transition: 'background 0.15s',
+      }}
+    >
+      {table.table_type === 'VIEW' ? (
+        <EyeOutlined style={{ fontSize: 14, color: '#722ed1', flexShrink: 0 }} />
+      ) : (
+        <TableOutlined style={{ fontSize: 14, color: '#52c41a', flexShrink: 0 }} />
+      )}
+      <Tooltip title={table.table_name}>
+        <Text
+          ellipsis
+          style={{
+            fontSize: 12,
+            margin: 0,
+          }}
+        >
+          {table.table_name}
+        </Text>
+      </Tooltip>
+    </div>
+  );
+}
+
+// List view row component
+function TableRow({ table, selected, onClick, isDarkMode }: {
+  table: TableData;
+  selected: boolean;
+  onClick: () => void;
+  isDarkMode: boolean;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '180px 1fr 80px 80px 70px 130px 130px',
+        padding: '4px 12px',
+        alignItems: 'center',
+        cursor: 'pointer',
+        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
+        background: selected
+          ? (isDarkMode ? 'rgba(24,144,255,0.2)' : 'rgba(24,144,255,0.1)')
+          : 'transparent',
+        transition: 'background 0.2s',
+      }}
+      onMouseEnter={(e) => {
+        if (!selected) {
+          e.currentTarget.style.background = isDarkMode ? '#1f1f1f' : '#f5f5f5';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!selected) {
+          e.currentTarget.style.background = 'transparent';
+        }
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <TableOutlined style={{ color: '#52c41a', flexShrink: 0, fontSize: 12 }} />
+        <Text ellipsis style={{ fontSize: 12 }}>{table.table_name}</Text>
+      </div>
+      <div style={{ minWidth: 0, paddingRight: 8 }}>
+        <Tooltip title={table.comment}>
+          <span style={{ fontSize: 11, color: table.comment ? '#999' : '#ccc' }}>
+            {table.comment || '-'}
+          </span>
+        </Tooltip>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <span style={{ fontSize: 11, color: '#999' }}>
+          {table.row_count != null ? table.row_count.toLocaleString() : '-'}
+        </span>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <span style={{ fontSize: 11, color: '#999' }}>
+          {table.data_size || '-'}
+        </span>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <span style={{ fontSize: 10, color: '#666' }}>
+          {table.engine || '-'}
+        </span>
+      </div>
+      <div>
+        <Tooltip title={table.create_time}>
+          <span style={{ fontSize: 10, color: '#999' }}>
+            {table.create_time ? new Date(table.create_time).toLocaleDateString() : '-'}
+          </span>
+        </Tooltip>
+      </div>
+      <div>
+        <Tooltip title={table.update_time}>
+          <span style={{ fontSize: 10, color: '#999' }}>
+            {table.update_time ? new Date(table.update_time).toLocaleDateString() : '-'}
+          </span>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+// List header component
+function ListHeader({ isDarkMode }: { isDarkMode: boolean }) {
+  const headerBg = isDarkMode ? '#1a1a1a' : '#fafafa';
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '180px 1fr 80px 80px 70px 130px 130px',
+        padding: '6px 12px',
+        background: headerBg,
+        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+        fontWeight: 500,
+        fontSize: 11,
+        color: isDarkMode ? '#999' : '#666',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
+      }}
+    >
+      <span>表名</span>
+      <span>注释</span>
+      <span style={{ textAlign: 'right' }}>行数</span>
+      <span style={{ textAlign: 'right' }}>数据大小</span>
+      <span style={{ textAlign: 'center' }}>引擎</span>
+      <span>创建时间</span>
+      <span>更新时间</span>
+    </div>
+  );
+}
+
+export function TableList({ connectionId, database, onTableSelect, onTableOpen }: TableListProps) {
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
-  const [tables, setTables] = useState<TableData[]>([]);
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(getInitialViewMode);
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
 
-  const loadTables = async () => {
+  // Use the shared store and hook
+  const { getTableData } = useAppStore();
+  const { getTables } = useDatabase();
+
+  const cacheKey = `${connectionId}::${database || ''}`;
+  const cacheData = getTableData(cacheKey);
+
+  // Derive loading state and tables from cache
+  const loading = cacheData?.loading || false;
+  const tables = cacheData?.tables || [];
+
+  // Save view mode to localStorage when it changes
+  useEffect(() => {
     try {
-      setLoading(true);
-      const result = await invoke<TableData[]>('get_tables', { connectionId });
-      setTables(result);
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [viewMode]);
+
+  // Load tables only if not already loaded or loading
+  useEffect(() => {
+    if (!cacheData || (!cacheData.loaded && !cacheData.loading)) {
+      getTables(connectionId, database);
+    }
+  }, [connectionId, database, cacheData]);
+
+  const handleTableClick = useCallback(
+    (tableName: string) => {
+      setSelectedRow(tableName);
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+        // Double click
+        onTableOpen?.(tableName, database);
+      } else {
+        clickTimerRef.current = setTimeout(() => {
+          clickTimerRef.current = null;
+          // Single click
+          onTableSelect?.(tableName, database);
+        }, 250);
+      }
+    },
+    [database, onTableSelect, onTableOpen]
+  );
+
+  const refreshTables = async () => {
+    try {
+      await getTables(connectionId, database, true);
     } catch (error: any) {
-      console.error('Failed to load tables:', error);
-      message.error(`加载表列表失败：${error}`);
-    } finally {
-      setLoading(false);
+      console.error('Failed to refresh tables:', error);
+      message.error(`刷新表列表失败：${error}`);
     }
   };
 
-  useEffect(() => {
-    loadTables();
-  }, [connectionId]);
-
   const filteredTables = useMemo(() => {
-    if (!searchText) return tables;
-    return tables.filter((table) =>
+    // 只显示表，不显示视图
+    const baseTables = tables.filter(t => t.table_type === 'BASE TABLE');
+    if (!searchText) return baseTables;
+    return baseTables.filter((table) =>
       table.table_name.toLowerCase().includes(searchText.toLowerCase()) ||
       table.comment?.toLowerCase().includes(searchText.toLowerCase())
     );
   }, [tables, searchText]);
 
-  const tableCount = filteredTables.filter(t => t.table_type === 'BASE TABLE').length;
-  const viewCount = filteredTables.filter(t => t.table_type === 'VIEW').length;
+  const tableCount = filteredTables.length;
+
+  const toolbarBg = isDarkMode ? '#141414' : '#fafafa';
+  const borderColor = isDarkMode ? '#303030' : '#e8e8e8';
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: isDarkMode ? '#1f1f1f' : '#fff' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: isDarkMode ? '#1f1f1f' : '#fff', overflow: 'hidden' }}>
+      {/* Toolbar */}
       <div style={{
-        padding: '4px 8px',
-        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: isDarkMode ? '#141414' : '#fafafa',
         flexShrink: 0,
+        borderBottom: `1px solid ${borderColor}`,
+        padding: '8px 12px',
+        background: toolbarBg,
       }}>
-        <Space size="small">
-          <Button icon={<ReloadOutlined />} size="small" onClick={loadTables} loading={loading}>
-            刷新
-          </Button>
-          <div style={{ width: 1, height: 16, background: isDarkMode ? '#434343' : '#d9d9d9', margin: '0 4px' }} />
-          <Input
-            placeholder="搜索表名或注释..."
-            prefix={<SearchOutlined style={{ color: '#999' }} />}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            allowClear
-            size="small"
-            style={{ width: 160 }}
-          />
-        </Space>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Space size="small">
+            <Button
+              icon={<ReloadOutlined />}
+              size="small"
+              onClick={refreshTables}
+              loading={loading}
+            >
+              刷新
+            </Button>
+            <Input
+              placeholder="搜索表名或注释..."
+              prefix={<SearchOutlined style={{ color: '#999' }} />}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              allowClear
+              size="small"
+              style={{ width: 180 }}
+            />
+          </Space>
 
-        <Space size="small">
-          <Tag color="blue">表 {tableCount}</Tag>
-          <Tag color="purple">视图 {viewCount}</Tag>
-          <Button
-            icon={viewMode === 'list' ? <UnorderedListOutlined /> : <AppstoreOutlined />}
-            size="small"
-            type="text"
-            onClick={() => setViewMode(prev => prev === 'list' ? 'grid' : 'list')}
-          />
-        </Space>
+          <Space size="small">
+            <Tag color="blue">表 {tableCount}</Tag>
+            <Tooltip title={viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}>
+              <Button
+                icon={viewMode === 'list' ? <AppstoreOutlined /> : <UnorderedListOutlined />}
+                size="small"
+                type="text"
+                onClick={() => {
+                  setViewMode(prev => prev === 'list' ? 'grid' : 'list');
+                }}
+              />
+            </Tooltip>
+          </Space>
+        </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin size="large" />
-            <div style={{ marginTop: 16, color: '#999' }}>加载中...</div>
-          </div>
-        ) : filteredTables.length === 0 ? (
-          searchText ? (
-            <Empty description="未找到匹配的表" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          ) : (
-            <Empty description="暂无表" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          )
-        ) : viewMode === 'list' ? (
-          <List
-            dataSource={filteredTables}
-            renderItem={(table) => (
-              <List.Item
-                onClick={() => onTableSelect?.(table.table_name)}
-                style={{
-                  padding: '10px 16px',
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  borderBottom: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(24,144,255,0.1)' : '#f5f5f5';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                <List.Item.Meta
-                  avatar={
-                    table.table_type === 'VIEW'
-                      ? <TableOutlined style={{ fontSize: 18, color: '#1890ff' }} />
-                      : <TableOutlined style={{ fontSize: 18, color: '#52c41a' }} />
-                  }
-                  title={
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Text strong>{table.table_name}</Text>
-                      {table.table_type === 'VIEW' && (
-                        <Tag color="purple" style={{ fontSize: 10 }}>视图</Tag>
-                      )}
-                    </div>
-                  }
-                  description={
-                    <div style={{ fontSize: 12, color: '#999' }}>
-                      {table.comment && <div style={{ marginBottom: 2 }}>{table.comment}</div>}
-                      {table.row_count !== undefined && `${table.row_count.toLocaleString()} 行`}
-                    </div>
-                  }
-                />
-              </List.Item>
-            )}
-          />
-        ) : (
-          <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-            {filteredTables.map((table) => (
-              <div
-                key={table.table_name}
-                onClick={() => onTableSelect?.(table.table_name)}
-                style={{
-                  padding: 16,
-                  cursor: 'pointer',
-                  borderRadius: 8,
-                  border: `1px solid ${isDarkMode ? '#434343' : '#e8e8e8'}`,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#1890ff';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(24,144,255,0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = isDarkMode ? '#434343' : '#e8e8e8';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  {table.table_type === 'VIEW'
-                    ? <TableOutlined style={{ fontSize: 20, color: '#1890ff' }} />
-                    : <TableOutlined style={{ fontSize: 20, color: '#52c41a' }} />
-                  }
-                  <Text strong style={{ fontSize: 14 }}>{table.table_name}</Text>
-                </div>
-                {table.comment && <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>{table.comment}</div>}
-                {table.row_count !== undefined && (
-                  <div style={{ fontSize: 12, color: '#999' }}>{table.row_count.toLocaleString()} 行</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
+      {/* Status bar */}
       {!loading && tables.length > 0 && (
         <div style={{
-          padding: '8px 16px',
-          borderTop: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
-          fontSize: 12,
-          color: '#999',
-          textAlign: 'right',
           flexShrink: 0,
+          borderBottom: `1px solid ${borderColor}`,
+          padding: '4px 16px',
+          textAlign: 'right',
+          fontSize: 11,
+          color: '#999',
+          background: isDarkMode ? '#141414' : '#fafafa',
         }}>
           共 {filteredTables.length} 个对象
           {searchText && `（过滤自 ${tables.length} 个）`}
         </div>
       )}
+
+      {/* Content area */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <Spin size="large" />
+            <div style={{ marginTop: 12, fontSize: 13, color: '#999' }}>加载中...</div>
+          </div>
+        ) : filteredTables.length === 0 ? (
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {searchText ? (
+              <Empty description="未找到匹配的表" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            ) : (
+              <Empty description="暂无表" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
+          </div>
+        ) : viewMode === 'list' ? (
+          <div style={{
+            height: '100%',
+            overflowY: 'auto',
+            background: isDarkMode ? '#1f1f1f' : '#fff',
+          }}>
+            <ListHeader isDarkMode={isDarkMode} />
+            {filteredTables.map((table) => (
+              <TableRow
+                key={table.table_name}
+                table={table}
+                selected={selectedRow === table.table_name}
+                onClick={() => handleTableClick(table.table_name)}
+                isDarkMode={isDarkMode}
+              />
+            ))}
+          </div>
+        ) : (
+          <div style={{
+            height: '100%',
+            overflowY: 'auto',
+            padding: 4,
+          }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: 2,
+              }}
+            >
+              {filteredTables.map((table) => (
+                <TableGridCard
+                  key={table.table_name}
+                  table={table}
+                  onClick={() => handleTableClick(table.table_name)}
+                  isDarkMode={isDarkMode}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

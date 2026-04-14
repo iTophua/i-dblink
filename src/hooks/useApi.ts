@@ -4,6 +4,9 @@ import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
 
+// 模块级别的列缓存（跨组件实例共享）
+const columnsCache = new Map<string, Promise<any>>();
+
 export const useConnections = () => {
   const { message } = App.useApp();
   const {
@@ -82,11 +85,12 @@ export const useConnections = () => {
     host: string,
     port: number,
     username: string,
-    password: string
+    password: string,
+    database?: string
   ) => {
     try {
       setLoading(true);
-      const result = await api.testConnection(dbType, host, port, username, password);
+      const result = await api.testConnection(dbType, host, port, username, password, database);
       message.success('连接测试成功');
       return result;
     } catch (err) {
@@ -99,6 +103,42 @@ export const useConnections = () => {
     }
   }, [setLoading, setError]);
 
+  const connect = useCallback(async (connectionId: string) => {
+    try {
+      setLoading(true);
+      await api.connectConnection(connectionId);
+      setConnections(connections.map(c =>
+        c.id === connectionId ? { ...c, status: 'connected' as const } : c
+      ));
+      message.success('连接成功');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '连接失败';
+      setError(errorMsg);
+      message.error(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [connections, setConnections, setLoading, setError]);
+
+  const disconnect = useCallback(async (connectionId: string) => {
+    try {
+      setLoading(true);
+      await api.disconnectConnection(connectionId);
+      setConnections(connections.map(c =>
+        c.id === connectionId ? { ...c, status: 'disconnected' as const } : c
+      ));
+      message.success('已断开连接');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '断开连接失败';
+      setError(errorMsg);
+      message.error(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [connections, setConnections, setLoading, setError]);
+
   return {
     connections,
     groups,
@@ -109,6 +149,8 @@ export const useConnections = () => {
     saveConnection,
     deleteConnection,
     testConnection,
+    connect,
+    disconnect,
     setActiveConnection,
   };
 };
@@ -170,12 +212,31 @@ export const useGroups = () => {
 
 export const useDatabase = () => {
   const { message } = App.useApp();
-  const { setLoading, setError } = useAppStore();
+  const { setLoading, setError, setTableData, setTableDataLoading, getTableData, clearTableData } = useAppStore();
 
-  const getTables = useCallback(async (connectionId: string) => {
+  const getTables = useCallback(async (connectionId: string, database?: string, forceRefresh = false) => {
+    const cacheKey = `${connectionId}::${database || ''}`;
+    
+    // If force refresh, clear cache first
+    if (forceRefresh) {
+      clearTableData(connectionId);
+    }
+
+    // Check if we have cached data
+    const cached = getTableData(cacheKey);
+    if (cached && cached.loaded && !cached.loading && !forceRefresh) {
+      return cached.tables;
+    }
+    
+    // If already loading, don't start another request
+    if (cached?.loading && !forceRefresh) {
+      return cached.tables;
+    }
+    
     try {
-      setLoading(true);
-      const tables = await api.getTables(connectionId);
+      setTableDataLoading(cacheKey, true);
+      const tables = await api.getTables(connectionId, database);
+      setTableData(cacheKey, tables);
       return tables;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '获取表列表失败';
@@ -185,15 +246,19 @@ export const useDatabase = () => {
     } finally {
       setLoading(false);
     }
-  }, [setLoading, setError]);
+  }, [setLoading, setError, setTableData, setTableDataLoading, getTableData, clearTableData]);
 
-  const getColumns = useCallback(async (connectionId: string, tableName: string) => {
+  const refreshTables = useCallback(async (connectionId: string, database?: string) => {
+    return getTables(connectionId, database, true);
+  }, [getTables]);
+
+  const getDatabases = useCallback(async (connectionId: string) => {
     try {
       setLoading(true);
-      const columns = await api.getColumns(connectionId, tableName);
-      return columns;
+      const databases = await api.getDatabases(connectionId);
+      return databases;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取列信息失败';
+      const errorMsg = err instanceof Error ? err.message : '获取数据库列表失败';
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -202,10 +267,115 @@ export const useDatabase = () => {
     }
   }, [setLoading, setError]);
 
-  const executeQuery = useCallback(async (connectionId: string, sql: string) => {
+  const getColumns = useCallback(async (connectionId: string, tableName: string, database?: string) => {
+    const cacheKey = `${connectionId}::${database || ''}::${tableName}`;
+    
+    // 检查缓存
+    if (columnsCache.has(cacheKey)) {
+      return columnsCache.get(cacheKey)!;
+    }
+
+    const promise = api.getColumns(connectionId, tableName, database);
+    columnsCache.set(cacheKey, promise);
+    return promise;
+  }, []);
+
+  const getIndexes = useCallback(async (connectionId: string, tableName: string, database?: string) => {
     try {
       setLoading(true);
+      const indexes = await api.getIndexes(connectionId, tableName, database);
+      return indexes;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '获取索引信息失败';
+      setError(errorMsg);
+      message.error(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, setError]);
+
+  const getForeignKeys = useCallback(async (connectionId: string, tableName: string, database?: string) => {
+    try {
+      setLoading(true);
+      const fks = await api.getForeignKeys(connectionId, tableName, database);
+      return fks;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '获取外键信息失败';
+      setError(errorMsg);
+      message.error(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, setError]);
+  
+  const getTableInfo = useCallback(async (connectionId: string, tableName: string, database?: string) => {
+    try {
+      setLoading(true);
+      const sql = database 
+        ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${database}' AND TABLE_NAME = '${tableName}'`
+        : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${tableName}'`;
+      
       const result = await api.executeQuery(connectionId, sql);
+      
+      if (result.error || result.rows.length === 0) {
+        return null;
+      }
+      
+      const columns = result.columns;
+      const row = result.rows[0];
+      
+      return {
+        table_name: row[columns.indexOf('TABLE_NAME')] as string,
+        engine: row[columns.indexOf('ENGINE')] as string,
+        row_count: row[columns.indexOf('TABLE_ROWS')] as number,
+        data_length: row[columns.indexOf('DATA_LENGTH')] as number,
+        index_length: row[columns.indexOf('INDEX_LENGTH')] as number,
+        create_time: row[columns.indexOf('CREATE_TIME')] as string,
+        update_time: row[columns.indexOf('UPDATE_TIME')] as string,
+        collation: row[columns.indexOf('TABLE_COLLATION')] as string,
+        comment: row[columns.indexOf('TABLE_COMMENT')] as string,
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '获取表信息失败';
+      setError(errorMsg);
+      message.error(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, setError]);
+  
+  const getCreateTableSQL = useCallback(async (connectionId: string, tableName: string, database?: string) => {
+    try {
+      setLoading(true);
+      const sql = database 
+        ? `SHOW CREATE TABLE \`${database}\`.\`${tableName}\``
+        : `SHOW CREATE TABLE \`${tableName}\``;
+      
+      const result = await api.executeQuery(connectionId, sql);
+      
+      if (result.error || result.rows.length === 0) {
+        return '';
+      }
+      
+      // SHOW CREATE TABLE 返回两列：Table 和 Create Table
+      return result.rows[0][1] as string;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '获取 CREATE TABLE 语句失败';
+      setError(errorMsg);
+      message.error(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, setError]);
+
+  const executeQuery = useCallback(async (connectionId: string, sql: string, database?: string) => {
+    try {
+      setLoading(true);
+      const result = await api.executeQuery(connectionId, sql, database);
       if (result.error) {
         message.error(result.error);
       }
@@ -222,7 +392,13 @@ export const useDatabase = () => {
 
   return {
     getTables,
+    refreshTables,
+    getDatabases,
     getColumns,
+    getIndexes,
+    getForeignKeys,
+    getTableInfo,
+    getCreateTableSQL,
     executeQuery,
   };
 };
