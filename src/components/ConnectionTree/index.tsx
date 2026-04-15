@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons';
 import { theme } from 'antd';
 import type { Connection, ConnectionGroup } from '../../stores/appStore';
+import { useAppStore } from '../../stores/appStore';
 import type { TableInfo, ColumnInfo, IndexInfo } from '../../types/api';
 import { GroupDialog } from './GroupDialog';
 
@@ -69,7 +70,13 @@ type ConnectionTreeProps = {
   onLoadDatabases?: (connectionId: string) => void;
   onTableExpand: (connectionId: string, database: string, tableName: string) => void;
   onSaveConnection: (data: any) => Promise<void>;
-  onSaveGroup: (data: { id?: string; name: string; icon: string; color: string; parent_id?: string }) => void;
+  onSaveGroup: (data: {
+    id?: string;
+    name: string;
+    icon: string;
+    color: string;
+    parent_id?: string;
+  }) => void;
   onDeleteGroup: (id: string) => void;
   tableStructures: Record<string, { columns: ColumnInfo[]; indexes: IndexInfo[]; loaded: boolean }>;
 };
@@ -117,6 +124,49 @@ export function ConnectionTree({
   // Inline rename state
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+
+  // 上一帧的数据库表数量快照，用于日志记录
+  const prevTableCountsRef = useRef<Map<string, number>>(new Map());
+
+  // 使用 ref 存储最新的 connectionDatabases，避免闭包问题
+  const connectionDatabasesRef = useRef(connectionDatabases);
+  useEffect(() => {
+    connectionDatabasesRef.current = connectionDatabases;
+  }, [connectionDatabases]);
+
+  // 从 appStore 中获取表数据，确保与右侧同步
+  const getTablesFromStore = useCallback((connectionId: string, database: string) => {
+    const { getTableData } = useAppStore.getState();
+    const cacheKey = `${connectionId}::${database || ''}`;
+    const cached = getTableData(cacheKey);
+    return cached?.tables || [];
+  }, []);
+
+  // 订阅 appStore 的 tableDataCache 变化，确保表数据更新时重新渲染
+  const [storeVersion, setStoreVersion] = useState(0);
+  useEffect(() => {
+    const unsub = useAppStore.subscribe((state, prevState) => {
+      if (state.tableDataCache !== prevState.tableDataCache) {
+        setStoreVersion((v) => v + 1);
+      }
+    });
+    return unsub;
+  }, []);
+
+  // 表数据加载完成时记录日志（不再需要强制刷新 Tree）
+  useEffect(() => {
+    // 收集当前表数量并更新快照
+    const currentTableCounts = new Map<string, number>();
+    Object.entries(connectionDatabases).forEach(([connId, dbs]) => {
+      dbs.forEach((db) => {
+        if (db.loaded) {
+          const tableCount = db.tables.filter((t) => t.table_type === 'BASE TABLE').length;
+          currentTableCounts.set(`${connId}::${db.database}`, tableCount);
+        }
+      });
+    });
+    prevTableCountsRef.current = currentTableCounts;
+  }, [connectionDatabases]);
 
   // ---- Grouped connections map ----
   const groupedConnections = useMemo(() => {
@@ -208,7 +258,17 @@ export function ConnectionTree({
         }
       },
     }),
-    [groups, expandedKeys, onConnect, onDisconnect, onExpand, onEditConnection, onDeleteConnection, onNewQuery, onExpandKeys]
+    [
+      groups,
+      expandedKeys,
+      onConnect,
+      onDisconnect,
+      onExpand,
+      onEditConnection,
+      onDeleteConnection,
+      onNewQuery,
+      onExpandKeys,
+    ]
   );
 
   // ---- Group context menu ----
@@ -222,7 +282,13 @@ export function ConnectionTree({
         { type: 'divider' },
         { key: 'export', label: '导出分组' },
         { type: 'divider' },
-        { key: 'delete', label: '删除分组', icon: <DeleteOutlined />, danger: true, disabled: group.id === 'default' },
+        {
+          key: 'delete',
+          label: '删除分组',
+          icon: <DeleteOutlined />,
+          danger: true,
+          disabled: group.id === 'default',
+        },
       ],
       onClick: ({ key }) => {
         if (key === 'new-connection') {
@@ -248,9 +314,10 @@ export function ConnectionTree({
           const connCount = groupedConnections[group.id]?.length || 0;
           Modal.confirm({
             title: '确认删除分组',
-            content: connCount > 0
-              ? `确定要删除分组 "${group.name}" 吗？该分组下有 ${connCount} 个连接，连接将移至"未分组"。`
-              : `确定要删除分组 "${group.name}" 吗？`,
+            content:
+              connCount > 0
+                ? `确定要删除分组 "${group.name}" 吗？该分组下有 ${connCount} 个连接，连接将移至"未分组"。`
+                : `确定要删除分组 "${group.name}" 吗？`,
             okText: '删除',
             okType: 'danger',
             cancelText: '取消',
@@ -414,7 +481,13 @@ export function ConnectionTree({
   );
 
   const handleGroupSave = useCallback(
-    async (data: { id?: string; name: string; icon: string; color: string; parent_id?: string }) => {
+    async (data: {
+      id?: string;
+      name: string;
+      icon: string;
+      color: string;
+      parent_id?: string;
+    }) => {
       onSaveGroup(data);
       setGroupDialogOpen(false);
       setEditingGroup(null);
@@ -431,7 +504,12 @@ export function ConnectionTree({
       }
       const group = groups.find((g) => g.id === groupId);
       if (group && group.name !== renameValue.trim()) {
-        onSaveGroup({ id: groupId, name: renameValue.trim(), icon: group.icon, color: group.color });
+        onSaveGroup({
+          id: groupId,
+          name: renameValue.trim(),
+          icon: group.icon,
+          color: group.color,
+        });
       }
       setRenamingKey(null);
     },
@@ -458,8 +536,6 @@ export function ConnectionTree({
   // ---- Double click handler ----
   const handleDoubleClick = useCallback(
     (key: string) => {
-      console.log('[Tree] Double click:', key);
-
       if (key.startsWith('table::')) {
         // 双击表 → 打开数据浏览
         const parts = key.split('::');
@@ -467,7 +543,6 @@ export function ConnectionTree({
           const connectionId = parts[1];
           const database = parts[2];
           const tableName = parts.slice(3).join('::');
-          console.log('[Tree] Open table:', tableName, database);
           onTableOpen(tableName, database);
         }
       } else if (key.startsWith('view::')) {
@@ -479,22 +554,28 @@ export function ConnectionTree({
         }
       } else if (key.startsWith('db::')) {
         // 双击数据库 → 切换展开
-        const isExpanded = expandedKeys.includes(key);
-        if (isExpanded) {
-          onExpandKeys(expandedKeys.filter((k) => k !== key));
-        } else {
-          onExpandKeys([...expandedKeys, key]);
-          // 展开数据库节点时，如果数据未加载，触发加载
-          const parts = key.split('::');
-          if (parts.length >= 3) {
-            const connectionId = parts[1];
-            const database = parts[2];
-            const dbList = connectionDatabases[connectionId] || [];
+        // 提取连接 ID 和数据库名（忽略可能的 loaded/tables 后缀）
+        const parts = key.split('::');
+        if (parts.length >= 3) {
+          const connectionId = parts[1];
+          const database = parts[2];
+          const dbKey = `db::${connectionId}::${database}`;
+
+          // 检查是否已展开（匹配任何变体）
+          const isExpanded = expandedKeys.some((k) => k.startsWith(dbKey));
+
+          if (isExpanded) {
+            onExpandKeys(expandedKeys.filter((k) => !k.startsWith(dbKey)));
+          } else {
+            // 先展开节点
+            onExpandKeys([...expandedKeys, dbKey]);
+            // 然后检查并加载表数据
+            // 使用 ref 获取最新的 connectionDatabases，避免闭包问题
+            const dbList = connectionDatabasesRef.current[connectionId] || [];
             const db = dbList.find((d) => d.database === database);
-            if (db && !db.loaded) {
-              onDatabaseExpand(connectionId, database);
-            } else if (!db) {
-              // 数据库对象不存在，也尝试加载（可能是连接后首次展开）
+
+            // 如果数据库未加载或表数量为 0，触发加载
+            if (!db || !db.loaded) {
               onDatabaseExpand(connectionId, database);
             }
           }
@@ -521,8 +602,6 @@ export function ConnectionTree({
         if (!conn) return;
 
         if (conn.status !== 'connected') {
-          // 未连接 → 连接
-          console.log('[Tree] Connect and expand:', key);
           onConnect(key);
         } else {
           // 已连接 → 切换展开
@@ -535,25 +614,38 @@ export function ConnectionTree({
         }
       }
     },
-    [connections, expandedKeys, onExpandKeys, onConnect, onTableOpen, onDatabaseExpand, connectionDatabases]
+    [
+      connections,
+      expandedKeys,
+      onExpandKeys,
+      onConnect,
+      onTableOpen,
+      onDatabaseExpand,
+    ]
   );
 
   // ---- Build connection node ----
   const buildConnectionNode = useCallback(
     (conn: Connection) => {
-      const dbList = connectionDatabases[conn.id] || [];
+      // 使用 ref 获取最新的 connectionDatabases，避免闭包问题
+      const dbList = connectionDatabasesRef.current[conn.id] || [];
       const isConnRenaming = false;
 
       const databaseChildren = dbList.map((db) => {
-        const isLoaded = db.loaded;
+        // 优先从 appStore 中读取表数据，确保与右侧同步
+        const storeTables = getTablesFromStore(conn.id, db.database);
+        const isLoaded = db.loaded || storeTables.length > 0;
         const tableItems = isLoaded
-          ? db.tables.filter((t) => t.table_type === 'BASE TABLE')
+          ? (storeTables.length > 0 ? storeTables : db.tables).filter((t) => t.table_type === 'BASE TABLE')
           : [];
-        const viewItems = isLoaded ? db.tables.filter((t) => t.table_type === 'VIEW') : [];
+        const viewItems = isLoaded
+          ? (storeTables.length > 0 ? storeTables : db.tables).filter((t) => t.table_type === 'VIEW')
+          : [];
+
+        const dbExpanded = expandedKeys.some((k) => k.startsWith(`db::${conn.id}::${db.database}`));
 
         return {
           key: `db::${conn.id}::${db.database}`,
-          isLeaf: false,
           title: (
             <Dropdown menu={getDatabaseMenu(conn.id, db.database)} trigger={['contextMenu']}>
               <div
@@ -563,8 +655,20 @@ export function ConnectionTree({
                   handleDoubleClick(`db::${conn.id}::${db.database}`);
                 }}
               >
-                <DatabaseOutlined style={{ color: '#1890ff', fontSize: 12 }} />
-                <span>{db.database}</span>
+                <DatabaseOutlined
+                  style={{
+                    color: isLoaded ? '#52c41a' : '#1890ff',
+                    fontSize: 12,
+                  }}
+                />
+                <span
+                  style={{
+                    color: isLoaded ? '#52c41a' : undefined,
+                    fontWeight: isLoaded ? 500 : undefined,
+                  }}
+                >
+                  {db.database}
+                </span>
               </div>
             </Dropdown>
           ),
@@ -580,125 +684,34 @@ export function ConnectionTree({
                         handleDoubleClick(`tables::${conn.id}::${db.database}`);
                       }}
                     >
-                      <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />
-                      表 ({tableItems.length})
+                      <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />表 (
+                      {tableItems.length})
                     </span>
                   ),
                   isLeaf: false,
                   children:
                     tableItems.length > 0
-                      ? tableItems.map((table) => {
-                          const tableKey = `${conn.id}::${db.database}::${table.table_name}`;
-                          const structure = tableStructures[tableKey];
-                          const isTableExpanded = expandedKeys.includes(`table::${tableKey}`);
-                          
-                          return {
-                            key: `table::${tableKey}`,
-                            isLeaf: false,  // 改为 false 以支持展开
-                            title: (
-                              <Dropdown
-                                menu={getTableMenu(conn.id, table.table_name, db.database)}
-                                trigger={['contextMenu']}
-                              >
-                                <span
-                                  style={{
-                                    cursor: 'pointer',
-                                    background:
-                                      selectedTableId === table.table_name
-                                        ? isDarkMode
-                                          ? 'rgba(24, 144, 255, 0.2)'
-                                          : 'rgba(24, 144, 255, 0.1)'
-                                        : 'transparent',
-                                    padding: '1px 4px',
-                                    borderRadius: 3,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTableClick(table.table_name, db.database);
-                                  }}
-                                  onDoubleClick={(e) => {
-                                    e.stopPropagation();
-                                    onTableOpen(table.table_name, db.database);
-                                  }}
-                                >
-                                  <TableOutlined style={{ color: '#52c41a', fontSize: 11 }} />
-                                  {table.table_name}
-                                </span>
-                              </Dropdown>
-                            ),
-                            children: isTableExpanded && structure?.loaded
-                              ? [
-                                  {
-                                    key: `columns::${tableKey}`,
-                                    title: (
-                                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <KeyOutlined style={{ color: '#faad14', fontSize: 11 }} />
-                                        列 ({structure.columns.length})
-                                      </span>
-                                    ),
-                                    isLeaf: true,
-                                    selectable: false,
-                                    children: structure.columns.map((col) => ({
-                                      key: `column::${tableKey}::${col.column_name}`,
-                                      title: (
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-                                          <span style={{ color: col.column_key === 'PRI' ? '#ff4d4f' : '#8c8c8c' }}>
-                                            {col.column_key === 'PRI' ? '🔑' : '•'}
-                                          </span>
-                                          <span>{col.column_name}</span>
-                                          <span style={{ color: '#8c8c8c', fontSize: 10 }}>{col.data_type}</span>
-                                          {col.is_nullable === false && <span style={{ color: '#ff4d4f', fontSize: 9 }}>NOT NULL</span>}
-                                        </span>
-                                      ),
-                                      isLeaf: true,
-                                      selectable: false,
-                                    })),
-                                  },
-                                  {
-                                    key: `indexes::${tableKey}`,
-                                    title: (
-                                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <SearchOutlined style={{ color: '#1890ff', fontSize: 11 }} />
-                                        索引 ({structure.indexes.length})
-                                      </span>
-                                    ),
-                                    isLeaf: true,
-                                    selectable: false,
-                                    children: structure.indexes.length > 0
-                                      ? structure.indexes.map((idx) => ({
-                                          key: `index::${tableKey}::${idx.index_name}`,
-                                          title: (
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-                                              <span>{idx.is_primary ? '🔑' : '📇'}</span>
-                                              <span>{idx.index_name}</span>
-                                              <span style={{ color: '#8c8c8c', fontSize: 10 }}>({idx.column_name})</span>
-                                              {idx.is_unique && <Tag color="blue" style={{ fontSize: 9, padding: '0 4px', margin: 0 }}>唯一</Tag>}
-                                            </span>
-                                          ),
-                                          isLeaf: true,
-                                          selectable: false,
-                                        }))
-                                      : [{
-                                          key: `no-indexes::${tableKey}`,
-                                          title: <span style={{ color: '#999', fontSize: 10 }}>暂无索引</span>,
-                                          isLeaf: true,
-                                          selectable: false,
-                                        }],
-                                  },
-                                ]
-                              : [
-                                  {
-                                    key: `table-loading::${tableKey}`,
-                                    title: <span style={{ color: '#999', fontSize: 11 }}>加载中...</span>,
-                                    isLeaf: true,
-                                    selectable: false,
-                                  },
-                                ],
-                          };
-                        })
+                      ? tableItems.map((table) => ({
+                          key: `table::${conn.id}::${db.database}::${table.table_name}`,
+                          isLeaf: true,
+                          title: (
+                            <span
+                              style={{
+                                cursor: 'pointer',
+                                padding: '1px 4px',
+                                borderRadius: 3,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                              onClick={() => handleTableClick(table.table_name, db.database)}
+                              onDoubleClick={() => onTableOpen(table.table_name, db.database)}
+                            >
+                              <TableOutlined style={{ color: '#52c41a', fontSize: 11 }} />
+                              {table.table_name}
+                            </span>
+                          ),
+                        }))
                       : [
                           {
                             key: `no-tables::${conn.id}::${db.database}`,
@@ -711,13 +724,7 @@ export function ConnectionTree({
                 {
                   key: `views::${conn.id}::${db.database}`,
                   title: (
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        handleDoubleClick(`views::${conn.id}::${db.database}`);
-                      }}
-                    >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <EyeOutlined style={{ color: '#1890ff', fontSize: 12 }} />
                       视图 ({viewItems.length})
                     </span>
@@ -729,25 +736,10 @@ export function ConnectionTree({
                           key: `view::${conn.id}::${db.database}::${view.table_name}`,
                           isLeaf: true,
                           title: (
-                            <Dropdown
-                              menu={getViewMenu(conn.id, view.table_name, db.database)}
-                              trigger={['contextMenu']}
-                            >
-                              <span
-                                style={{
-                                  cursor: 'pointer',
-                                  padding: '1px 4px',
-                                  borderRadius: 3,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                }}
-                                onClick={() => message.info('视图浏览功能开发中...')}
-                              >
-                                <EyeOutlined style={{ color: '#1890ff', fontSize: 11 }} />
-                                {view.table_name}
-                              </span>
-                            </Dropdown>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <EyeOutlined style={{ color: '#1890ff', fontSize: 11 }} />
+                              {view.table_name}
+                            </span>
                           ),
                         }))
                       : [
@@ -759,53 +751,8 @@ export function ConnectionTree({
                           },
                         ],
                 },
-                {
-                  key: `procedures::${conn.id}::${db.database}`,
-                  title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <ThunderboltOutlined style={{ color: '#faad14', fontSize: 12 }} />
-                      存储过程
-                    </span>
-                  ),
-                  isLeaf: true,
-                  selectable: false,
-                  children: [
-                    {
-                      key: `no-procedures::${conn.id}::${db.database}`,
-                      title: <span style={{ color: '#999', fontSize: 11 }}>暂无存储过程</span>,
-                      isLeaf: true,
-                      selectable: false,
-                    },
-                  ],
-                },
-                {
-                  key: `functions::${conn.id}::${db.database}`,
-                  title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <FunctionOutlined style={{ color: '#722ed1', fontSize: 12 }} />
-                      函数
-                    </span>
-                  ),
-                  isLeaf: true,
-                  selectable: false,
-                  children: [
-                    {
-                      key: `no-functions::${conn.id}::${db.database}`,
-                      title: <span style={{ color: '#999', fontSize: 11 }}>暂无函数</span>,
-                      isLeaf: true,
-                      selectable: false,
-                    },
-                  ],
-                },
               ]
-            : [
-                {
-                  key: `db-loading::${conn.id}::${db.database}`,
-                  title: <span style={{ color: '#999', fontSize: 11 }}>加载中...</span>,
-                  isLeaf: true,
-                  selectable: false,
-                },
-              ],
+            : undefined,
         };
       });
 
@@ -814,11 +761,7 @@ export function ConnectionTree({
       if (isConnRenaming) {
         connTitle = <Input size="small" defaultValue={conn.name} style={{ width: 100 }} />;
       } else {
-        const iconColor = DB_TYPE_COLORS[conn.db_type] || '#8c8c8c';
         const isConnected = conn.status === 'connected';
-        const iconStyle: React.CSSProperties = !isConnected
-          ? { opacity: 0.5, filter: 'grayscale(100%)' }
-          : {};
 
         connTitle = (
           <Dropdown menu={getConnectionMenu(conn)} trigger={['contextMenu']}>
@@ -836,7 +779,14 @@ export function ConnectionTree({
               }}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={iconStyle}>{getDbIcon(conn.db_type)}</span>
+                <span
+                  style={{
+                    filter: isConnected ? 'none' : 'grayscale(100%)',
+                    opacity: isConnected ? 1 : 0.4,
+                  }}
+                >
+                  {getDbIcon(conn.db_type)}
+                </span>
                 <span
                   style={{
                     color: isConnected
@@ -844,35 +794,40 @@ export function ConnectionTree({
                         ? '#e8e8e8'
                         : '#262626'
                       : isDarkMode
-                      ? '#595959'
-                      : '#8c8c8c',
+                        ? '#666666'
+                        : '#999999',
                     fontWeight: isConnected ? 500 : 400,
                     transition: 'color 0.2s ease',
                   }}
                 >
                   {conn.name}
                 </span>
+                {conn.status === 'connected' && (
+                  <span style={{ color: '#52c41a', fontSize: 10 }}>●</span>
+                )}
+                {conn.status === 'loading' && (
+                  <span style={{ color: '#faad14', fontSize: 10 }}>●</span>
+                )}
               </span>
             </div>
           </Dropdown>
         );
       }
 
+      const isConnected = conn.status === 'connected';
+
       return {
         key: conn.id,
         title: connTitle,
-        isLeaf: false,
-        icon: null,
-        children:
-          databaseChildren.length > 0
+        children: isConnected
+          ? databaseChildren.length > 0
             ? databaseChildren
             : [
                 {
                   key: `tables-${conn.id}`,
                   title: (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />
-                      表
+                      <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />表
                     </span>
                   ),
                   isLeaf: false,
@@ -913,7 +868,8 @@ export function ConnectionTree({
                   isLeaf: true,
                   selectable: false,
                 },
-              ],
+              ]
+          : undefined,
       };
     },
     [
@@ -922,6 +878,7 @@ export function ConnectionTree({
       selectedTableId,
       isDarkMode,
       expandedKeys,
+      storeVersion,
       getConnectionMenu,
       getDatabaseMenu,
       getTableMenu,
@@ -937,18 +894,45 @@ export function ConnectionTree({
     const treeNodes: any[] = [];
     const autoExpandKeys: string[] = [];
 
+    // 辅助函数：判断表类型
+    const isBaseTable = (tableType: string): boolean => {
+      const normalizedType = tableType.toUpperCase().trim();
+      return (
+        normalizedType === 'BASE TABLE' ||
+        normalizedType === 'TABLE' ||
+        normalizedType === 'BASE_TABLE' ||
+        // SQLite 可能返回空字符串或 null
+        normalizedType === '' ||
+        normalizedType === 'NULL'
+      );
+    };
+
+    const isView = (tableType: string): boolean => {
+      const normalizedType = tableType.toUpperCase().trim();
+      return (
+        normalizedType === 'VIEW' ||
+        normalizedType === 'SYSTEM VIEW' ||
+        normalizedType === 'MATERIALIZED VIEW' ||
+        normalizedType === 'MATERIALIZED_VIEW'
+      );
+    };
+
     // Helper: check if any item in a list matches the query
     const matchTables = (tables: TableInfo[]) =>
       !q || tables.some((t) => t.table_name.toLowerCase().includes(q));
     const matchViews = (tables: TableInfo[]) =>
-      !q || tables.filter((t) => t.table_type === 'VIEW').some((v) => v.table_name.toLowerCase().includes(q));
+      !q ||
+      tables
+        .filter((t) => isView(t.table_type))
+        .some((v) => v.table_name.toLowerCase().includes(q));
 
     // Build table children with filtering
     const buildTableNodes = (
       connId: string,
       db: { database: string; tables: TableInfo[]; loaded: boolean },
       allTableItems: TableInfo[],
-      allViewItems: TableInfo[]
+      allViewItems: TableInfo[],
+      isDbExpanded: boolean
     ) => {
       const tableItems = allTableItems;
       const viewItems = allViewItems;
@@ -971,15 +955,24 @@ export function ConnectionTree({
           </span>
         ),
         isLeaf: false,
-        children:
-          !db.loaded
-            ? [{ key: `loading-tables::${connId}::${db.database}`, title: <span style={{ color: '#999', fontSize: 11 }}>点击展开加载表...</span>, isLeaf: true, selectable: false }]
-            : filteredTables.length > 0
+        children: !db.loaded
+          ? [
+              {
+                key: `loading-tables::${connId}::${db.database}`,
+                title: <span style={{ color: '#999', fontSize: 11 }}>点击展开加载表...</span>,
+                isLeaf: true,
+                selectable: false,
+              },
+            ]
+          : filteredTables.length > 0
             ? filteredTables.map((table) => ({
                 key: `table::${connId}::${db.database}::${table.table_name}`,
                 isLeaf: true,
                 title: (
-                  <Dropdown menu={getTableMenu(connId, table.table_name, db.database)} trigger={['contextMenu']}>
+                  <Dropdown
+                    menu={getTableMenu(connId, table.table_name, db.database)}
+                    trigger={['contextMenu']}
+                  >
                     <span
                       style={{
                         cursor: 'pointer',
@@ -1010,7 +1003,14 @@ export function ConnectionTree({
                   </Dropdown>
                 ),
               }))
-            : [{ key: `no-tables::${connId}::${db.database}`, title: <span style={{ color: '#999', fontSize: 11 }}>暂无表</span>, isLeaf: true, selectable: false }],
+            : [
+                {
+                  key: `no-tables::${connId}::${db.database}`,
+                  title: <span style={{ color: '#999', fontSize: 11 }}>暂无表</span>,
+                  isLeaf: true,
+                  selectable: false,
+                },
+              ],
       };
 
       // Build "Views" folder
@@ -1023,15 +1023,24 @@ export function ConnectionTree({
           </span>
         ),
         isLeaf: false,
-        children:
-          !db.loaded
-            ? [{ key: `loading-views::${connId}::${db.database}`, title: <span style={{ color: '#999', fontSize: 11 }}>点击展开加载视图...</span>, isLeaf: true, selectable: false }]
-            : filteredViews.length > 0
+        children: !db.loaded
+          ? [
+              {
+                key: `loading-views::${connId}::${db.database}`,
+                title: <span style={{ color: '#999', fontSize: 11 }}>点击展开加载视图...</span>,
+                isLeaf: true,
+                selectable: false,
+              },
+            ]
+          : filteredViews.length > 0
             ? filteredViews.map((view) => ({
                 key: `view::${connId}::${db.database}::${view.table_name}`,
                 isLeaf: true,
                 title: (
-                  <Dropdown menu={getViewMenu(connId, view.table_name, db.database)} trigger={['contextMenu']}>
+                  <Dropdown
+                    menu={getViewMenu(connId, view.table_name, db.database)}
+                    trigger={['contextMenu']}
+                  >
                     <span
                       style={{
                         cursor: 'pointer',
@@ -1052,7 +1061,14 @@ export function ConnectionTree({
                   </Dropdown>
                 ),
               }))
-            : [{ key: `no-views::${connId}::${db.database}`, title: <span style={{ color: '#999', fontSize: 11 }}>暂无视图</span>, isLeaf: true, selectable: false }],
+            : [
+                {
+                  key: `no-views::${connId}::${db.database}`,
+                  title: <span style={{ color: '#999', fontSize: 11 }}>暂无视图</span>,
+                  isLeaf: true,
+                  selectable: false,
+                },
+              ],
       };
 
       // Build "Procedures" folder
@@ -1100,8 +1116,8 @@ export function ConnectionTree({
       // Only show tables/views nodes if they have content or if no search
       const dbChildren = q
         ? [
-            ...filteredTables.length ? [tablesNode] : [],
-            ...filteredViews.length ? [viewsNode] : [],
+            ...(filteredTables.length ? [tablesNode] : []),
+            ...(filteredViews.length ? [viewsNode] : []),
             proceduresNode,
             functionsNode,
           ]
@@ -1116,7 +1132,6 @@ export function ConnectionTree({
 
       return {
         key: `db::${connId}::${db.database}`,
-        isLeaf: false,
         title: (
           <Dropdown menu={getDatabaseMenu(connId, db.database)} trigger={['contextMenu']}>
             <div
@@ -1126,12 +1141,25 @@ export function ConnectionTree({
                 handleDoubleClick(`db::${connId}::${db.database}`);
               }}
             >
-              <DatabaseOutlined style={{ color: '#1890ff', fontSize: 12 }} />
-              <span>{db.database}</span>
+              <DatabaseOutlined
+                style={{
+                  color: db.loaded ? '#52c41a' : '#1890ff',
+                  fontSize: 12,
+                }}
+              />
+              <span
+                style={{
+                  color: db.loaded ? '#52c41a' : undefined,
+                  fontWeight: db.loaded ? 500 : undefined,
+                }}
+              >
+                {db.database}
+              </span>
             </div>
           </Dropdown>
         ),
-        children: dbChildren,
+        isLeaf: !db.loaded,
+        children: db.loaded ? dbChildren : undefined,
       };
     };
 
@@ -1144,17 +1172,22 @@ export function ConnectionTree({
       let dbNodes: any[] = [];
       for (const db of dbList) {
         const dbMatch = !q || db.database.toLowerCase().includes(q);
-        const tableItems = db.loaded ? db.tables.filter((t) => t.table_type === 'BASE TABLE') : [];
-        const viewItems = db.loaded ? db.tables.filter((t) => t.table_type === 'VIEW') : [];
+        const storeTables = getTablesFromStore(conn.id, db.database);
+        const isLoaded = db.loaded || storeTables.length > 0;
+        const tableItems = isLoaded
+          ? (storeTables.length > 0 ? storeTables : db.tables).filter((t) => t.table_type === 'BASE TABLE')
+          : [];
+        const viewItems = isLoaded
+          ? (storeTables.length > 0 ? storeTables : db.tables).filter((t) => t.table_type === 'VIEW')
+          : [];
 
         const tablesMatch = matchTables(tableItems);
-        const viewsMatch = matchViews(db.tables);
-        const isDbExpanded = expandedKeys.includes(`db::${conn.id}::${db.database}`);
+        const viewsMatch = matchViews(storeTables.length > 0 ? storeTables : db.tables);
+        const isDbExpanded = expandedKeys.some((k) => k.startsWith(`db::${conn.id}::${db.database}`));
 
-        // Skip if search active and nothing matches (unless db is expanded)
         if (q && !dbMatch && !tablesMatch && !viewsMatch && !isDbExpanded) continue;
 
-        const dbNode = buildTableNodes(conn.id, db, tableItems, viewItems);
+        const dbNode = buildTableNodes(conn.id, db, tableItems, viewItems, isDbExpanded);
         if (dbNode) dbNodes.push(dbNode);
 
         if (q && dbNode && (tablesMatch || viewsMatch || dbMatch)) {
@@ -1175,21 +1208,44 @@ export function ConnectionTree({
             }}
           >
             {getDbIcon(conn.db_type)}
-            <span>{conn.name}</span>
-            {conn.database && <span style={{ color: '#999', fontSize: 11 }}>({conn.database})</span>}
+            <span
+              style={{
+                color: conn.status === 'connected' ? '#52c41a' : undefined,
+                fontWeight: conn.status === 'connected' ? 500 : undefined,
+              }}
+            >
+              {conn.name}
+            </span>
+            {conn.status === 'connected' && (
+              <span style={{ color: '#52c41a', fontSize: 10 }}>●</span>
+            )}
+            {conn.status === 'loading' && (
+              <span style={{ color: '#faad14', fontSize: 10 }}>●</span>
+            )}
+            {conn.database && (
+              <span style={{ color: '#999', fontSize: 11 }}>({conn.database})</span>
+            )}
           </div>
         </Dropdown>
       );
 
       return {
         key: conn.id,
-        isLeaf: false,
         title: connTitle,
-        children: dbNodes.length > 0
-          ? dbNodes
-          : (conn.status === 'connected'
-            ? [{ key: `loading::${conn.id}`, title: <span style={{ color: '#999', fontSize: 11 }}>暂无数据库</span>, isLeaf: true, selectable: false }]
-            : undefined),
+        isLeaf: conn.status !== 'connected',
+        children:
+          conn.status === 'connected'
+            ? dbNodes.length > 0
+              ? dbNodes
+              : [
+                  {
+                    key: `loading::${conn.id}`,
+                    title: <span style={{ color: '#999', fontSize: 11 }}>暂无数据库</span>,
+                    isLeaf: true,
+                    selectable: false,
+                  },
+                ]
+            : undefined,
       };
     };
 
@@ -1292,6 +1348,7 @@ export function ConnectionTree({
   }, [
     groups,
     groupedConnections,
+    connections,
     searchText,
     connectionDatabases,
     expandedKeys,
@@ -1299,6 +1356,7 @@ export function ConnectionTree({
     isDarkMode,
     renamingKey,
     renameValue,
+    storeVersion,
     buildConnectionNode,
     getGroupMenu,
     getDatabaseMenu,
@@ -1331,15 +1389,25 @@ export function ConnectionTree({
           if (db.database.toLowerCase().includes(q)) {
             autoExpandKeys.push(`db::${conn.id}::${db.database}`);
           }
-          const tableItems = db.loaded ? db.tables.filter((t) => t.table_type === 'BASE TABLE') : [];
+          const tableItems = db.loaded
+            ? db.tables.filter((t) => t.table_type === 'BASE TABLE')
+            : [];
           const viewItems = db.loaded ? db.tables.filter((t) => t.table_type === 'VIEW') : [];
           const matchTables = tableItems.some((t) => t.table_name.toLowerCase().includes(q));
           const matchViews = viewItems.some((v) => v.table_name.toLowerCase().includes(q));
           if (matchTables) {
-            autoExpandKeys.push(conn.id, `db::${conn.id}::${db.database}`, `tables::${conn.id}::${db.database}`);
+            autoExpandKeys.push(
+              conn.id,
+              `db::${conn.id}::${db.database}`,
+              `tables::${conn.id}::${db.database}`
+            );
           }
           if (matchViews) {
-            autoExpandKeys.push(conn.id, `db::${conn.id}::${db.database}`, `views::${conn.id}::${db.database}`);
+            autoExpandKeys.push(
+              conn.id,
+              `db::${conn.id}::${db.database}`,
+              `views::${conn.id}::${db.database}`
+            );
           }
         }
       }
@@ -1378,7 +1446,9 @@ export function ConnectionTree({
           // 已连接但数据库列表未加载时，加载数据库列表
           const dbList = connectionDatabases[key] || [];
           if (dbList.length === 0 && onLoadDatabases) {
-            console.log('[Tree] Connection expanded but no databases loaded, calling onLoadDatabases...');
+            console.log(
+              '[Tree] Connection expanded but no databases loaded, calling onLoadDatabases...'
+            );
             onLoadDatabases(key);
           }
         }
@@ -1390,22 +1460,18 @@ export function ConnectionTree({
         const parts = key.split('::');
         const connectionId = parts[1];
         const database = parts[2];
-        console.log('[Tree] Database expand:', connectionId, database);
 
-        const dbList = connectionDatabases[connectionId] || [];
-        console.log('[Tree] dbList:', dbList);
-
+        // 使用 ref 获取最新的 connectionDatabases，避免闭包问题
+        const dbList = connectionDatabasesRef.current[connectionId] || [];
         const db = dbList.find((d) => d.database === database);
-        console.log('[Tree] db:', db);
 
         if (db && !db.loaded) {
-          console.log('[Tree] Calling onDatabaseExpand...');
           onDatabaseExpand(connectionId, database);
         } else if (!db) {
-          console.warn('[Tree] Database not found in connectionDatabases, trying to load anyway...');
           onDatabaseExpand(connectionId, database);
-        } else {
-          console.log('[Tree] Database already loaded, skipping');
+        } else if (db.tables.length === 0) {
+          // 即使已加载，如果表数量为 0，也尝试重新加载
+          onDatabaseExpand(connectionId, database);
         }
       }
 
@@ -1416,21 +1482,28 @@ export function ConnectionTree({
         if (parts.length >= 4) {
           const connectionId = parts[1];
           const database = parts[2];
-          const tableName = parts.slice(3).join('::');  // 处理表名中包含 :: 的情况
+          const tableName = parts.slice(3).join('::'); // 处理表名中包含 :: 的情况
           console.log('[Tree] Table expand:', connectionId, database, tableName);
           onTableExpand(connectionId, database, tableName);
         }
       }
     },
-    [connections, connectionDatabases, onExpandKeys, onConnect, onExpand, onDatabaseExpand, onTableExpand, onLoadDatabases]
+    [
+      connections,
+      connectionDatabases,
+      onExpandKeys,
+      onConnect,
+      onExpand,
+      onDatabaseExpand,
+      onTableExpand,
+      onLoadDatabases,
+    ]
   );
 
   const handleSelect = useCallback(
     (keys: React.Key[]) => {
       const key = keys[0] as string;
       if (!key) return;
-
-      console.log('[Tree] handleSelect key:', key);
 
       if (key.startsWith('table::')) {
         // Table selection - extract connectionId, database and tableName
@@ -1439,91 +1512,86 @@ export function ConnectionTree({
           const connectionId = parts[1];
           const database = parts[2];
           const tableName = parts.slice(3).join('::');
-          console.log('[Tree] Table select:', connectionId, database, tableName);
           onSelect(connectionId);
           onTableSelect(tableName, database);
         }
       } else if (key.startsWith('db::')) {
-        // DB selection - extract connectionId and database
-        const parts = key.split('::');
-        const connectionId = parts[1];
-        const database = parts[2];
-        onSelect(connectionId);
-        onTableSelect(null, database);
+        // DB selection - 单击不做任何操作
+        return;
       } else if (key.startsWith('tables::') || key.startsWith('views::')) {
         // Tables/Views group selection - extract connectionId and database
         const parts = key.split('::');
         const connectionId = parts[1];
         const database = parts[2];
-        console.log('[Tree] Tables/Views group select:', connectionId, database);
         onSelect(connectionId);
         onTableSelect(null, database);
       } else if (key.startsWith('group-')) {
         // Group selection - do nothing special
+      } else if (key.startsWith('table::') || key.startsWith('view::')) {
+        // 表/视图选择
       } else {
-        onSelect(key);
+        // 连接节点 - 单击不做任何操作
+        return;
       }
     },
     [onSelect, onTableSelect]
   );
 
-  // ---- Collapsed view ----
+  // ---- Collapsed tree view ----
   if (collapsed) {
     return (
-      <>
-        <div style={{ padding: '8px 12px' }}>
-          {isLoading ? (
-            <Spin size="small" />
-          ) : connections.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无连接" />
-          ) : (
-            connections.map((conn) => (
-              <Dropdown key={conn.id} menu={getConnectionMenu(conn)} trigger={['contextMenu']}>
-                <div
-                  onClick={() => onSelect(conn.id)}
-                  style={{
-                    padding: '8px',
-                    marginBottom: 4,
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    background:
-                      selectedId === conn.id
-                        ? isDarkMode
-                          ? 'rgba(24, 144, 255, 0.2)'
-                          : 'rgba(24, 144, 255, 0.1)'
-                        : 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'background 0.2s',
-                  }}
-                >
-                  {getDbIcon(conn.db_type)}
-                </div>
-              </Dropdown>
-            ))
-          )}
+      <div style={{ padding: '8px 12px' }}>
+        {isLoading ? (
+          <Spin size="small" />
+        ) : connections.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无连接" />
+        ) : (
+          connections.map((conn) => (
+            <Dropdown key={conn.id} menu={getConnectionMenu(conn)} trigger={['contextMenu']}>
+              <div
+                onClick={() => onSelect(conn.id)}
+                style={{
+                  padding: '8px',
+                  marginBottom: 4,
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  background:
+                    selectedId === conn.id
+                      ? isDarkMode
+                        ? 'rgba(24, 144, 255, 0.2)'
+                        : 'rgba(24, 144, 255, 0.1)'
+                      : 'transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background 0.2s',
+                }}
+              >
+                {getDbIcon(conn.db_type)}
+              </div>
+            </Dropdown>
+          ))
+        )}
 
-          <div
-            style={{
-              marginTop: 8,
-              padding: '6px',
-              borderRadius: 6,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
-              border: `1px dashed ${isDarkMode ? '#434343' : '#d9d9d9'}`,
-            }}
-            onClick={() => {
-              setEditingGroup(null);
-              setParentGroupId(null);
-              setGroupDialogOpen(true);
-            }}
-          >
-            <PlusOutlined style={{ color: isDarkMode ? '#8c8c8c' : '#bfbfbf' }} />
-          </div>
+        <div
+          style={{
+            marginTop: 8,
+            padding: '6px',
+            borderRadius: 6,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
+            border: `1px dashed ${isDarkMode ? '#434343' : '#d9d9d9'}`,
+          }}
+          onClick={() => {
+            setEditingGroup(null);
+            setParentGroupId(null);
+            setGroupDialogOpen(true);
+          }}
+        >
+          <PlusOutlined style={{ color: isDarkMode ? '#8c8c8c' : '#bfbfbf' }} />
         </div>
 
         <GroupDialog
@@ -1537,40 +1605,41 @@ export function ConnectionTree({
           }}
           onSave={handleGroupSave}
         />
-      </>
+      </div>
     );
   }
 
   // ---- Full tree view ----
   return (
-    <>
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0, paddingBottom: 8 }}>
-        <Spin spinning={isLoading} size="small">
-          {connections.length === 0 && !isLoading ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无连接"
-              style={{ padding: '20px 0' }}
+    <div>
+      <Spin spinning={isLoading} size="small">
+        {connections.length === 0 && !isLoading ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="暂无连接"
+            style={{ padding: '20px 0' }}
+          >
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: '#999' }}>创建第一个连接开始使用</span>
-              </div>
-            </Empty>
-          ) : (
-            <Tree
-              showIcon={false}
-              selectedKeys={selectedId ? [selectedId] : []}
-              expandedKeys={expandedKeys}
-              onExpand={handleExpand}
-              onSelect={handleSelect}
-              treeData={treeData as any}
-              style={{ background: 'transparent', padding: '0 4px', fontSize: 12 }}
-              virtual
-              className="connection-tree"
-            />
-          )}
-        </Spin>
-      </div>
+              <span style={{ fontSize: 12, color: '#999' }}>创建第一个连接开始使用</span>
+            </div>
+          </Empty>
+        ) : (
+          <Tree
+            showIcon={false}
+            selectedKeys={selectedId ? [selectedId] : []}
+            expandedKeys={expandedKeys}
+            onExpand={(keys, info) => {
+              handleExpand(keys, info);
+            }}
+            onSelect={handleSelect}
+            treeData={treeData as any}
+            style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 12 }}
+            className="connection-tree"
+          />
+        )}
+      </Spin>
 
       {/* Group Dialog */}
       <GroupDialog
@@ -1584,7 +1653,7 @@ export function ConnectionTree({
         }}
         onSave={handleGroupSave}
       />
-    </>
+    </div>
   );
 }
 

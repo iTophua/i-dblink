@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Layout, Input, theme } from 'antd';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
 import { Toolbar } from './Toolbar';
@@ -7,9 +7,11 @@ import { TabPanel } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
 import { LogPanel } from './LogPanel';
+import { SettingsDialog } from './SettingsDialog';
 import type { TableInfo, ColumnInfo, IndexInfo } from '../types/api';
 import type { ConnectionFormData } from './ConnectionDialog';
 import type { Connection } from '../stores/appStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 const { Sider, Content } = Layout;
 const { Search } = Input;
@@ -37,6 +39,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   >({});
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<ConnectionFormData | undefined>();
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
@@ -119,6 +122,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       const { action } = event.detail;
       if (action === 'new-connection') {
         setConnectionDialogOpen(true);
+      } else if (action === 'options') {
+        setSettingsDialogOpen(true);
       }
     };
 
@@ -172,6 +177,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     async (connectionId: string, database: string, forceRefresh = false) => {
       try {
         const tables = await getTables(connectionId, database, forceRefresh);
+
         setConnectionDatabases((prev) => {
           const dbList = prev[connectionId] || [];
           const dbIndex = dbList.findIndex((db) => db.database === database);
@@ -241,7 +247,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         }));
         setExpandedKeys((prev) => [...prev, connectionId]);
       } catch (error) {
-        console.error('连接或加载数据库失败:', error);
+        // 连接失败时静默处理或显示消息
       }
     },
     [connect, getDatabases]
@@ -359,7 +365,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Toolbar />
 
-      <Layout style={{ flex: 1, overflow: 'hidden' }}>
+      <Layout style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         <Sider
           collapsible
           collapsed={collapsed}
@@ -369,10 +375,9 @@ export function MainLayout({ children }: MainLayoutProps) {
           style={{
             background: isDarkMode ? '#1f1f1f' : '#fff',
             borderRight: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-            display: 'flex',
-            flexDirection: 'column',
           }}
         >
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {!collapsed && (
             <div style={{ padding: '8px 8px 4px', flexShrink: 0 }}>
               <Search
@@ -392,11 +397,9 @@ export function MainLayout({ children }: MainLayoutProps) {
           <div
             style={{
               flex: 1,
-              overflow: 'auto',
               minHeight: 0,
+              overflow: 'auto',
               marginBottom: 0,
-              display: 'flex',
-              flexDirection: 'column',
             }}
           >
             <ConnectionTree
@@ -468,6 +471,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               {collapsed ? '展开' : '收起'}
             </span>
           </div>
+          </div>
         </Sider>
 
         <Content
@@ -491,6 +495,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               selectedDatabase={selectedDatabase}
               tableToOpen={tableToOpen}
               onSqlTabCountChange={setSqlTabCount}
+              pageSize={useSettingsStore.getState().settings.pageSize}
             />
           </div>
 
@@ -538,6 +543,11 @@ export function MainLayout({ children }: MainLayoutProps) {
           await handleDialogSave(data);
           setEditingConnection(undefined);
         }}
+      />
+
+      <SettingsDialog
+        open={settingsDialogOpen}
+        onCancel={() => setSettingsDialogOpen(false)}
       />
     </Layout>
   );

@@ -30,10 +30,11 @@ interface DataTableProps {
   connectionId: string;
   tableName: string;
   database?: string;
+  pageSize?: number;
   onDirtyChange?: (isDirty: boolean) => void;  // 通知父组件 dirty 状态
 }
 
-export function DataTable({ connectionId, tableName, database, onDirtyChange }: DataTableProps) {
+export function DataTable({ connectionId, tableName, database, pageSize: propPageSize, onDirtyChange }: DataTableProps) {
   const [loading, setLoading] = useState(false);
   const [rowData, setRowData] = useState<RowData[]>([]);
   const [columnDefs, setColumnDefs] = useState<ColDef[]>([]);
@@ -46,7 +47,8 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
   const [editForm] = Form.useForm();
   const gridApiRef = useRef<GridApi | null>(null);
   const [selectedRows, setSelectedRows] = useState<RowData[]>([]);
-  const [pageSize, setPageSize] = useState(50);
+  const defaultPageSize = 1000;
+  const [pageSize, setPageSize] = useState(propPageSize ?? defaultPageSize);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [currentSql, setCurrentSql] = useState('');
@@ -56,6 +58,13 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
     deletes: RowData[];
   }>({ inserts: [], updates: [], deletes: [] });
   const [sortModel, setSortModel] = useState<{ colId: string; sort: 'asc' | 'desc' }[]>([]);
+
+  // 当外部 pageSize 变化时，更新本地状态
+  useEffect(() => {
+    if (propPageSize !== undefined) {
+      setPageSize(propPageSize);
+    }
+  }, [propPageSize]);
 
   // 通知父组件 dirty 状态变化
   useEffect(() => {
@@ -108,18 +117,20 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
 
       setColumns(colResult);
 
-      const colDefs: ColDef[] = colResult.map((col) => ({
+      const colDefs: ColDef[] = colResult.map((col: any) => ({
         field: col.column_name,
         headerName: col.column_name,
         sortable: true,
         filter: true,
         resizable: true,
-        minWidth: 80,
+        minWidth: 50,
+        maxWidth: 250,
+        width: 100,
         editable: true,
         headerTooltip: `${col.data_type}${col.is_nullable ? ' | NULL' : ' | NOT NULL'}${col.comment ? ` | ${col.comment}` : ''}`,
         cellRenderer,
         cellClassRules: {
-          'null-cell': (params) => params.value === null || params.value === undefined,
+          'null-cell': (params: any) => params.value === null || params.value === undefined,
         },
       }));
       setColumnDefs(colDefs);
@@ -135,7 +146,9 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
           };
           dataResult.columns.forEach((col, colIndex) => {
             rowData[col] = row[colIndex];
-            rowData.__original_data__[col] = row[colIndex];
+            if (rowData.__original_data__) {
+              rowData.__original_data__[col] = row[colIndex];
+            }
           });
           return rowData;
         });
@@ -182,7 +195,10 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
     sortable: true,
     filter: true,
     resizable: true,
-    minWidth: 100,
+    minWidth: 60,
+    maxWidth: 300,
+    width: 120,
+    cellStyle: { padding: '0 6px' },
   }), []);
 
   const onCellValueChanged = useCallback((event: any) => {
@@ -553,8 +569,9 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
       // 复制单元格范围
       const cells: string[][] = [];
       for (const range of selectedRanges) {
-        const startRow = range.startRowIndex;
-        const endRow = range.endRowIndex;
+        const rangeAny = range as any;
+        const startRow = rangeAny.startRowIndex;
+        const endRow = rangeAny.endRowIndex;
         
         for (let rowIdx = startRow; rowIdx <= endRow; rowIdx++) {
           const node = api.getDisplayedRowAtIndex(rowIdx);
@@ -766,7 +783,7 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
           <Empty description="暂无数据" style={{ marginTop: '20%' }} />
         ) : (
           <div
-            className={isDarkMode ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+            className={`ag-theme-compact ${isDarkMode ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}`}
             style={{ height: '100%', width: '100%' }}
           >
             <AgGridReact
@@ -795,9 +812,11 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
               suppressRowClickSelection={true}
               suppressPaginationPanel={true}
               enableRangeSelection={true}
-              animateRows={true}
-              headerHeight={28}
-              rowHeight={26}
+              animateRows={false}
+              headerHeight={24}
+              rowHeight={22}
+              rowBuffer={8}
+              enableBrowserTooltips={false}
             />
           </div>
         )}
@@ -879,12 +898,14 @@ export function DataTable({ connectionId, tableName, database, onDirtyChange }: 
             value={pageSize}
             onChange={(val) => handlePageChange(1, val)}
             size="small"
-            style={{ width: 80 }}
+            style={{ width: 90 }}
             options={[
               { label: '10 行', value: 10 },
               { label: '50 行', value: 50 },
               { label: '100 行', value: 100 },
               { label: '500 行', value: 500 },
+              { label: '1000 行', value: 1000 },
+              { label: '5000 行', value: 5000 },
             ]}
           />
           <span style={{ 

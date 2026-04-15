@@ -565,29 +565,34 @@ tbody tr:hover {
 
 /* ==================== ConnectionTree Tree 组件样式 ==================== */
 .connection-tree.ant-tree {
-  /* 减少展开图标和节点内容之间的间距 */
   --ant-tree-node-content-unit-height: 24px;
 }
 
+/* 展开按钮样式 */
 .connection-tree.ant-tree .ant-tree-switcher {
-  /* 减小 switcher 宽度 */
   width: 18px !important;
   margin-right: 2px !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
 }
 
+/* 节点内容对齐 */
 .connection-tree.ant-tree .ant-tree-node-content-wrapper {
-  /* 减少节点内容左侧间距 */
   padding-left: 2px !important;
+  display: inline-flex !important;
+  align-items: center;
 }
 
+/* 缩进单元 */
 .connection-tree.ant-tree .ant-tree-indent-unit {
-  /* 减少缩进单元宽度 */
   width: 16px !important;
 }
 
-.connection-tree.ant-tree .ant-tree-indent {
-  /* 减少整体缩进 */
-  margin-right: 2px !important;
+/* 行对齐 */
+.connection-tree.ant-tree .ant-tree-treenode {
+  align-items: center !important;
+  padding-left: 0 !important;
 }
 
 /* ==================== TableList 样式 ==================== */
@@ -611,4 +616,110 @@ tbody tr:hover {
 .ag-theme-alpine .null-cell {
   color: #888 !important;
   font-style: italic !important;
+}
+
+/* ==================== AG Grid 紧凑模式样式 ==================== */
+.ag-theme-compact.ag-theme-alpine,
+.ag-theme-compact.ag-theme-alpine-dark {
+  /* 减小基础字体大小 */
+  --ag-font-size: 12px;
+  
+  /* 行高 */
+  --ag-row-height: 22px;
+  --ag-header-height: 24px;
+  
+  /* 单元格内边距 */
+  --ag-cell-horizontal-padding: 6px;
+  
+  /* 边框 */
+  --ag-borders: solid 1px;
+  --ag-border-color: var(--ag-border-color, #d9d9d9);
+  
+  /* 紧凑间距 */
+  --ag-grid-size: 4px;
+  
+  /* 滚动优化 */
+  --ag-row-animation-speed: 0s;
+}
+
+/* 列边框 */
+.ag-theme-compact .ag-cell {
+  border-right: 1px solid #e8e8e8;
+  /* 优化渲染 */
+  will-change: auto;
+}
+
+.ag-theme-compact .ag-header-cell {
+  border-right: 1px solid #d9d9d9;
+}
+
+/* 暗黑模式边框 */
+.ag-theme-compact.ag-theme-alpine-dark .ag-cell {
+  border-right: 1px solid #303030;
+}
+
+.ag-theme-compact.ag-theme-alpine-dark .ag-header-cell {
+  border-right: 1px solid #434343;
+}
+
+/* 最后一列不需要右边框 */
+.ag-theme-compact .ag-cell-last-in-row,
+.ag-theme-compact .ag-header-cell:last-child .ag-header-cell {
+  border-right: none !important;
+}
+
+/* 优化表头样式 */
+.ag-theme-compact .ag-header {
+  background-color: #fafafa;
+  font-weight: 500;
+  will-change: auto;
+}
+
+.ag-theme-compact.ag-theme-alpine-dark .ag-header {
+  background-color: #1a1a1a;
+}
+
+/* 选中行样式 */
+.ag-theme-compact .ag-row-selected {
+  background-color: rgba(24, 144, 255, 0.08) !important;
+}
+
+.ag-theme-compact.ag-theme-alpine-dark .ag-row-selected {
+  background-color: rgba(24, 144, 255, 0.15) !important;
+}
+
+/* 悬浮行样式 - 禁用过渡动画以提升性能 */
+.ag-theme-compact .ag-row-hover {
+  background-color: rgba(0, 0, 0, 0.02);
+  transition: none !important;
+}
+
+.ag-theme-compact.ag-theme-alpine-dark .ag-row-hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  transition: none !important;
+}
+
+/* 滚动容器优化 */
+.ag-theme-compact .ag-body-viewport {
+  scroll-behavior: auto;
+  overflow-anchor: none;
+}
+
+.ag-theme-compact .ag-body-viewport::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* 优化行渲染 */
+.ag-theme-compact .ag-row {
+  transition: none !important;
+  will-change: transform;
+}
+
+/* 优化单元格渲染 */
+.ag-theme-compact .ag-cell {
+  line-height: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -225,13 +225,13 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   style={compactFormItemStyle}
                 >
                   <Select onChange={handleDbTypeChange}>
-                    <Option value="mysql">MySQL</Option>
-                    <Option value="postgresql">PostgreSQL</Option>
-                    <Option value="sqlite">SQLite</Option>
-                    <Option value="mariadb">MariaDB</Option>
-                    <Option value="sqlserver">SQL Server</Option>
-                    <Option value="oracle">Oracle</Option>
-                    <Option value="dameng">达梦 (DM)</Option>
+                    <Select.Option value="mysql">MySQL</Select.Option>
+                    <Select.Option value="postgresql">PostgreSQL</Select.Option>
+                    <Select.Option value="sqlite">SQLite</Select.Option>
+                    <Select.Option value="mariadb">MariaDB</Select.Option>
+                    <Select.Option value="sqlserver">SQL Server</Select.Option>
+                    <Select.Option value="oracle">Oracle</Select.Option>
+                    <Select.Option value="dameng">达梦 (DM)</Select.Option>
                   </Select>
                 </Form.Item>
 
@@ -442,10 +442,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   style={compactFormItemStyle}
                 >
                   <Select>
-                    <Option value="utf8mb4">utf8mb4</Option>
-                    <Option value="utf8">utf8</Option>
-                    <Option value="gbk">gbk</Option>
-                    <Option value="latin1">latin1</Option>
+                    <Select.Option value="utf8mb4">utf8mb4</Select.Option>
+                    <Select.Option value="utf8">utf8</Select.Option>
+                    <Select.Option value="gbk">gbk</Select.Option>
+                    <Select.Option value="latin1">latin1</Select.Option>
                   </Select>
                 </Form.Item>
 

@@ -21,6 +21,8 @@ interface TabPanelProps {
   tableToOpen?: { name: string; database?: string } | null;
   /** 当有 SQL 查询 Tab 打开时回调，用于控制日志面板显示 */
   onSqlTabCountChange?: (count: number) => void;
+  /** 分页大小 */
+  pageSize?: number;
 }
 
 interface OpenedTable {
@@ -36,6 +38,7 @@ export function TabPanel({
   selectedDatabase,
   tableToOpen,
   onSqlTabCountChange,
+  pageSize,
 }: TabPanelProps) {
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
@@ -358,6 +361,7 @@ export function TabPanel({
                 tableName={table.name}
                 connectionId={table.connectionId}
                 database={table.database}
+                pageSize={pageSize}
                 onDirtyChange={(isDirty) => handleTableDirtyChange(dataTabKey, isDirty)}
               />
             </div>

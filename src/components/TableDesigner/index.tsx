@@ -4,6 +4,7 @@ import {
   Table,
   Button,
   Input,
+  InputNumber,
   Select,
   Switch,
   Space,
@@ -363,12 +364,12 @@ export function TableDesigner({
       dataIndex: 'length',
       width: 100,
       render: (val: number | undefined, record: DesignerColumn) => (
-        <Input.Number
+        <InputNumber
           size="small"
           min={1}
           value={val}
           placeholder="-"
-          onChange={(v) => updateColumn(record.key, 'length', v ?? undefined)}
+          onChange={(v: number | null) => updateColumn(record.key, 'length', v ?? undefined)}
         />
       ),
     },
