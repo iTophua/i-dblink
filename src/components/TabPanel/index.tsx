@@ -31,7 +31,7 @@ interface OpenedTable {
   connectionId: string;
   connectionName: string;
   database?: string;
-  isDirty?: boolean;  // 是否有未保存的更改
+  isDirty?: boolean; // 是否有未保存的更改
 }
 
 export function TabPanel({
@@ -51,7 +51,7 @@ export function TabPanel({
   // SQL 查询 Tab 列表（动态添加/删除）
   const [openedSqlTabs, setOpenedSqlTabs] = useState<{ key: string; title: string }[]>([]);
   const [activeKey, setActiveKey] = useState('objects');
-  
+
   // 通知父组件 SQL Tab 数量变化
   useEffect(() => {
     onSqlTabCountChange?.(openedSqlTabs.length);
@@ -105,19 +105,32 @@ export function TabPanel({
       if (!exists) {
         setOpenedTables((prev) => [
           ...prev,
-          { name: tableName, connectionId: selectedConnectionId, connectionName: selectedConnectionName || selectedConnectionId, database, isDirty: false },
+          {
+            name: tableName,
+            connectionId: selectedConnectionId,
+            connectionName: selectedConnectionName || selectedConnectionId,
+            database,
+            isDirty: false,
+          },
         ]);
       }
       setActiveKey(dataTabKey);
     },
     [selectedConnectionId, selectedConnectionName, openedTables]
   );
-  
+
+  // 监听 tableToOpen 变化，当双击树中的表时打开新 Tab
+  useEffect(() => {
+    if (tableToOpen && selectedConnectionId) {
+      openTableTab(tableToOpen.name, tableToOpen.database);
+    }
+  }, [tableToOpen, selectedConnectionId, openTableTab]);
+
   // 更新 Tab 的 dirty 状态
   const handleTableDirtyChange = useCallback((tabKey: string, isDirty: boolean) => {
     const baseKey = tabKey.replace(/-data$/, '');
-    setOpenedTables(prev =>
-      prev.map(t => {
+    setOpenedTables((prev) =>
+      prev.map((t) => {
         const tKey = t.database ? `${t.name}@${t.database}` : t.name;
         return tKey === baseKey ? { ...t, isDirty } : t;
       })
@@ -125,57 +138,60 @@ export function TabPanel({
   }, []);
 
   // 关闭单个 Tab
-  const handleCloseTab = useCallback((key: string) => {
-    if (key.endsWith('-data')) {
-      // 检查 dirty 状态
-      const baseKey = key.replace(/-data$/, '');
-      const table = openedTables.find(t => {
-        const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-        return tKey === baseKey;
-      });
-      
-      if (table?.isDirty) {
-        // 有未保存的更改，显示确认对话框
-        Modal.confirm({
-          title: '未保存的更改',
-          content: `"${table.name}" 有未保存的数据更改，确定要关闭吗？`,
-          okText: '关闭',
-          okType: 'danger',
-          cancelText: '取消',
-          onOk: () => {
-            setOpenedTables((prev) =>
-              prev.filter((t) => {
-                const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-                return tKey !== baseKey;
-              })
-            );
-            if (activeKey === key) {
-              setActiveKey('objects');
-            }
-          },
-        });
-        return;
-      }
-      
-      // 没有未保存的更改，直接关闭
-      setOpenedTables((prev) =>
-        prev.filter((t) => {
+  const handleCloseTab = useCallback(
+    (key: string) => {
+      if (key.endsWith('-data')) {
+        // 检查 dirty 状态
+        const baseKey = key.replace(/-data$/, '');
+        const table = openedTables.find((t) => {
           const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-          return tKey !== baseKey;
-        })
-      );
-      if (activeKey === key) {
-        setActiveKey('objects');
+          return tKey === baseKey;
+        });
+
+        if (table?.isDirty) {
+          // 有未保存的更改，显示确认对话框
+          Modal.confirm({
+            title: '未保存的更改',
+            content: `"${table.name}" 有未保存的数据更改，确定要关闭吗？`,
+            okText: '关闭',
+            okType: 'danger',
+            cancelText: '取消',
+            onOk: () => {
+              setOpenedTables((prev) =>
+                prev.filter((t) => {
+                  const tKey = t.database ? `${t.name}@${t.database}` : t.name;
+                  return tKey !== baseKey;
+                })
+              );
+              if (activeKey === key) {
+                setActiveKey('objects');
+              }
+            },
+          });
+          return;
+        }
+
+        // 没有未保存的更改，直接关闭
+        setOpenedTables((prev) =>
+          prev.filter((t) => {
+            const tKey = t.database ? `${t.name}@${t.database}` : t.name;
+            return tKey !== baseKey;
+          })
+        );
+        if (activeKey === key) {
+          setActiveKey('objects');
+        }
+      } else if (key.startsWith('sql-')) {
+        // 关闭 SQL 查询 Tab
+        setOpenedSqlTabs((prev) => prev.filter((tab) => tab.key !== key));
+        if (activeKey === key) {
+          setActiveKey('objects');
+        }
       }
-    } else if (key.startsWith('sql-')) {
-      // 关闭 SQL 查询 Tab
-      setOpenedSqlTabs((prev) => prev.filter((tab) => tab.key !== key));
-      if (activeKey === key) {
-        setActiveKey('objects');
-      }
-    }
-  }, [activeKey, openedTables]);
-  
+    },
+    [activeKey, openedTables]
+  );
+
   // 右键菜单处理
   const handleTabContextMenu = useCallback((e: React.MouseEvent, tabKey: string) => {
     e.preventDefault();
@@ -187,85 +203,92 @@ export function TabPanel({
       tabKey,
     });
   }, []);
-  
+
   // 关闭右键菜单
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenu.visible && contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(prev => ({ ...prev, visible: false }));
+      if (
+        contextMenu.visible &&
+        contextMenuRef.current &&
+        !contextMenuRef.current.contains(e.target as Node)
+      ) {
+        setContextMenu((prev) => ({ ...prev, visible: false }));
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [contextMenu.visible]);
-  
+
   // 右键菜单操作
-  const handleContextMenuAction = useCallback((action: string, tabKey: string) => {
-    setContextMenu(prev => ({ ...prev, visible: false }));
-    
-    switch (action) {
-      case 'close':
-        handleCloseTab(tabKey);
-        break;
-        
-      case 'closeOthers':
-        // 关闭其他所有 Tab
-        if (tabKey.endsWith('-data')) {
-          const baseKey = tabKey.replace(/-data$/, '');
-          setOpenedTables(prev => 
-            prev.filter(t => {
-              const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-              return tKey === baseKey;
-            })
-          );
-        } else if (tabKey.startsWith('sql-')) {
-          setOpenedSqlTabs(prev => prev.filter(t => t.key === tabKey));
-        }
-        setActiveKey(tabKey);
-        message.success('已关闭其他标签');
-        break;
-        
-      case 'closeRight':
-        // 关闭右侧所有 Tab
-        if (tabKey.endsWith('-data')) {
-          const allDataKeys = openedTables.map(t => {
-            const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
-            return `${baseKey}-data`;
-          });
-          const currentIndex = allDataKeys.indexOf(tabKey);
-          if (currentIndex >= 0) {
-            const keysToClose = allDataKeys.slice(currentIndex + 1);
-            const baseKeysToKeep = keysToClose.map(k => k.replace(/-data$/, ''));
-            setOpenedTables(prev => 
-              prev.filter(t => {
+  const handleContextMenuAction = useCallback(
+    (action: string, tabKey: string) => {
+      setContextMenu((prev) => ({ ...prev, visible: false }));
+
+      switch (action) {
+        case 'close':
+          handleCloseTab(tabKey);
+          break;
+
+        case 'closeOthers':
+          // 关闭其他所有 Tab
+          if (tabKey.endsWith('-data')) {
+            const baseKey = tabKey.replace(/-data$/, '');
+            setOpenedTables((prev) =>
+              prev.filter((t) => {
                 const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-                return !baseKeysToKeep.includes(tKey);
+                return tKey === baseKey;
               })
             );
+          } else if (tabKey.startsWith('sql-')) {
+            setOpenedSqlTabs((prev) => prev.filter((t) => t.key === tabKey));
           }
-        } else if (tabKey.startsWith('sql-')) {
-          const sqlKeys = openedSqlTabs.map(t => t.key);
-          const currentIndex = sqlKeys.indexOf(tabKey);
-          if (currentIndex >= 0) {
-            const keysToClose = sqlKeys.slice(currentIndex + 1);
-            setOpenedSqlTabs(prev => prev.filter(t => !keysToClose.includes(t.key)));
+          setActiveKey(tabKey);
+          message.success('已关闭其他标签');
+          break;
+
+        case 'closeRight':
+          // 关闭右侧所有 Tab
+          if (tabKey.endsWith('-data')) {
+            const allDataKeys = openedTables.map((t) => {
+              const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
+              return `${baseKey}-data`;
+            });
+            const currentIndex = allDataKeys.indexOf(tabKey);
+            if (currentIndex >= 0) {
+              const keysToClose = allDataKeys.slice(currentIndex + 1);
+              const baseKeysToKeep = keysToClose.map((k) => k.replace(/-data$/, ''));
+              setOpenedTables((prev) =>
+                prev.filter((t) => {
+                  const tKey = t.database ? `${t.name}@${t.database}` : t.name;
+                  return !baseKeysToKeep.includes(tKey);
+                })
+              );
+            }
+          } else if (tabKey.startsWith('sql-')) {
+            const sqlKeys = openedSqlTabs.map((t) => t.key);
+            const currentIndex = sqlKeys.indexOf(tabKey);
+            if (currentIndex >= 0) {
+              const keysToClose = sqlKeys.slice(currentIndex + 1);
+              setOpenedSqlTabs((prev) => prev.filter((t) => !keysToClose.includes(t.key)));
+            }
           }
-        }
-        setActiveKey(tabKey);
-        message.success('已关闭右侧标签');
-        break;
-        
-      case 'closeAll':
-        // 关闭所有 Tab
-        setOpenedTables([]);
-        setOpenedSqlTabs([]);
-        setActiveKey('objects');
-        message.success('已关闭所有标签');
-        break;
-    }
-  }, [handleCloseTab, openedTables, openedSqlTabs]);
-  
+          setActiveKey(tabKey);
+          message.success('已关闭右侧标签');
+          break;
+
+        case 'closeAll':
+          // 关闭所有 Tab
+          setOpenedTables([]);
+          setOpenedSqlTabs([]);
+          setActiveKey('objects');
+          message.success('已关闭所有标签');
+          break;
+      }
+    },
+    [handleCloseTab, openedTables, openedSqlTabs]
+  );
+
   // 关闭 Tab
   const handleTabEdit = useCallback(
     (targetKey: React.MouseEvent | React.KeyboardEvent | string, action: 'add' | 'remove') => {
@@ -293,7 +316,9 @@ export function TabPanel({
         </span>
       ),
       children: (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div
+          style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        >
           {/* 面包屑导航 */}
           {selectedTable && (
             <div
@@ -324,7 +349,15 @@ export function TabPanel({
           )}
 
           {/* 内容区域 */}
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
             {selectedConnectionId ? (
               selectedTable ? (
                 // 单击表 → 展示表结构
@@ -366,7 +399,9 @@ export function TabPanel({
     ...openedTables.flatMap((table) => {
       const baseKey = table.database ? `${table.name}@${table.database}` : table.name;
       const dataTabKey = `${baseKey}-data`;
-      const tooltipTitle = table.database ? `${table.database} @ ${table.connectionName}` : table.connectionName;
+      const tooltipTitle = table.database
+        ? `${table.database} @ ${table.connectionName}`
+        : table.connectionName;
 
       return [
         {
@@ -375,10 +410,17 @@ export function TabPanel({
             <Tooltip title={tooltipTitle} placement="bottom">
               <span
                 onContextMenu={(e) => handleTabContextMenu(e, dataTabKey)}
-                style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', maxWidth: 160 }}
+                style={{
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  maxWidth: 160,
+                }}
               >
                 <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
                   {table.name}
                 </span>
                 {table.isDirty && <span style={{ color: '#ff4d4f', marginLeft: 4 }}>*</span>}
@@ -438,13 +480,19 @@ export function TabPanel({
         activeKey={activeKey}
         onChange={setActiveKey}
         hideAdd
-        style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
+        style={{
+          flex: 1,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+        }}
         tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
         tabBarGutter={2}
         items={tabItems as any}
         onEdit={handleTabEdit}
       />
-      
+
       {/* 右键菜单 */}
       {contextMenu.visible && (
         <div

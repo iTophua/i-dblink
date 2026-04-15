@@ -77,9 +77,10 @@ pub async fn get_indexes_by_type(
     db_type: &str,
     pool: &DbPool,
     table_name: &str,
+    database: Option<&str>,
 ) -> Result<Vec<IndexInfo>, String> {
     match db_type {
-        "mysql" => MySqlDriver::get_indexes(pool, table_name).await,
+        "mysql" => MySqlDriver::get_indexes(pool, table_name, database).await,
         "postgresql" => PgDriver::get_indexes(pool, table_name).await,
         "sqlite" => SqliteDriver::get_indexes(pool, table_name).await,
         _ => Err(format!("Unsupported database type: {}", db_type)),
@@ -90,9 +91,10 @@ pub async fn get_foreign_keys_by_type(
     db_type: &str,
     pool: &DbPool,
     table_name: &str,
+    database: Option<&str>,
 ) -> Result<Vec<ForeignKeyInfo>, String> {
     match db_type {
-        "mysql" => MySqlDriver::get_foreign_keys(pool, table_name, None).await,
+        "mysql" => MySqlDriver::get_foreign_keys(pool, table_name, database).await,
         "postgresql" => PgDriver::get_foreign_keys(pool, table_name).await,
         "sqlite" => SqliteDriver::get_foreign_keys(pool, table_name).await,
         _ => Err(format!("Unsupported database type: {}", db_type)),

@@ -74,7 +74,7 @@ impl MySqlDriver {
                 .await
                 .map_err(|e| format!("Failed to query tables: {}", e))?;
 
-            let format_bytes = |bytes: Option<i64>| -> Option<String> {
+            let format_bytes = |bytes: Option<u64>| -> Option<String> {
                 bytes.map(|b| {
                     let kb = b as f64 / 1024.0;
                     if kb >= 1024.0 {
@@ -91,8 +91,9 @@ impl MySqlDriver {
                     let try_get = |name: &str| -> Option<String> {
                         row.try_get::<Option<String>, _>(name).ok().flatten()
                     };
+                    // MySQL information_schema 中的 TABLE_ROWS、DATA_LENGTH、INDEX_LENGTH 都是 bigint unsigned
                     let try_get_u64 = |name: &str| -> Option<u64> {
-                        row.try_get::<Option<i64>, _>(name).ok().flatten().map(|v| v as u64)
+                        row.try_get::<Option<u64>, _>(name).ok().flatten()
                     };
 
                     let comment = try_get("TABLE_COMMENT").filter(|s| !s.is_empty());
@@ -107,8 +108,8 @@ impl MySqlDriver {
                         row_count: try_get_u64("TABLE_ROWS"),
                         comment,
                         engine,
-                        data_size: format_bytes(row.try_get::<Option<i64>, _>("DATA_LENGTH").ok().flatten()),
-                        index_size: format_bytes(row.try_get::<Option<i64>, _>("INDEX_LENGTH").ok().flatten()),
+                        data_size: format_bytes(try_get_u64("DATA_LENGTH")),
+                        index_size: format_bytes(try_get_u64("INDEX_LENGTH")),
                         create_time,
                         update_time,
                         collation,
@@ -179,7 +180,10 @@ impl MySqlDriver {
                 .into_iter()
                 .map(|row| {
                     let try_get = |name: &str| -> String {
-                        row.try_get::<Option<String>, _>(name).ok().flatten().unwrap_or_default()
+                        row.try_get::<Option<String>, _>(name)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_default()
                     };
 
                     let comment = try_get("COLUMN_COMMENT");
@@ -191,9 +195,16 @@ impl MySqlDriver {
                         data_type: try_get("COLUMN_TYPE"),
                         is_nullable: try_get("IS_NULLABLE") == "YES",
                         column_key: if key.is_empty() { None } else { Some(key) },
-                        column_default: row.try_get::<Option<String>, _>("COLUMN_DEFAULT").ok().flatten(),
+                        column_default: row
+                            .try_get::<Option<String>, _>("COLUMN_DEFAULT")
+                            .ok()
+                            .flatten(),
                         extra: if extra.is_empty() { None } else { Some(extra) },
-                        comment: if comment.is_empty() { None } else { Some(comment) },
+                        comment: if comment.is_empty() {
+                            None
+                        } else {
+                            Some(comment)
+                        },
                     }
                 })
                 .collect();
@@ -257,9 +268,17 @@ impl MySqlDriver {
         let column = row.columns().get(idx).unwrap();
         let type_name = column.type_info().to_string().to_lowercase();
         if type_name.contains("int") || type_name.contains("serial") {
-            match row.get::<Option<i64>, _>(idx) {
-                Some(v) => serde_json::Value::Number(v.into()),
-                None => serde_json::Value::Null,
+            // MySQL unsigned 整数需要使用 u64
+            if type_name.contains("unsigned") {
+                match row.get::<Option<u64>, _>(idx) {
+                    Some(v) => serde_json::Value::Number(v.into()),
+                    None => serde_json::Value::Null,
+                }
+            } else {
+                match row.get::<Option<i64>, _>(idx) {
+                    Some(v) => serde_json::Value::Number(v.into()),
+                    None => serde_json::Value::Null,
+                }
             }
         } else if type_name.contains("float")
             || type_name.contains("double")
@@ -311,9 +330,18 @@ impl MySqlDriver {
         }
     }
 
-    pub async fn get_indexes(pool: &DbPool, table_name: &str) -> Result<Vec<IndexInfo>, String> {
+    pub async fn get_indexes(
+        pool: &DbPool,
+        table_name: &str,
+        database: Option<&str>,
+    ) -> Result<Vec<IndexInfo>, String> {
         if let DbPool::MySql(pool) = pool {
-            let query = format!("SHOW INDEX FROM `{}`", table_name);
+            // 使用 database.table_name 格式，避免 "No database selected" 错误
+            let qualified_table = match database {
+                Some(db) => format!("`{}`.`{}`", db, table_name),
+                None => format!("`{}`", table_name),
+            };
+            let query = format!("SHOW INDEX FROM {}", qualified_table);
 
             use sqlx::Row;
             let rows = sqlx::query(&query)
@@ -323,17 +351,18 @@ impl MySqlDriver {
 
             Ok(rows
                 .into_iter()
-                .map(|row| {
-                    IndexInfo {
-                        index_name: row.try_get::<String, _>("Key_name").unwrap_or_default(),
-                        column_name: row.try_get::<String, _>("Column_name").unwrap_or_default(),
-                        is_unique: row.try_get::<bool, _>("Non_unique").map(|v| !v).unwrap_or(false),
-                        is_primary: {
-                            let key_name = row.try_get::<String, _>("Key_name").unwrap_or_default();
-                            key_name == "PRIMARY"
-                        },
-                        seq_in_index: row.try_get::<i64, _>("Seq_in_index").unwrap_or(0),
-                    }
+                .map(|row| IndexInfo {
+                    index_name: row.try_get::<String, _>("Key_name").unwrap_or_default(),
+                    column_name: row.try_get::<String, _>("Column_name").unwrap_or_default(),
+                    is_unique: row
+                        .try_get::<bool, _>("Non_unique")
+                        .map(|v| !v)
+                        .unwrap_or(false),
+                    is_primary: {
+                        let key_name = row.try_get::<String, _>("Key_name").unwrap_or_default();
+                        key_name == "PRIMARY"
+                    },
+                    seq_in_index: row.try_get::<i64, _>("Seq_in_index").unwrap_or(0),
                 })
                 .collect())
         } else {
@@ -369,13 +398,17 @@ impl MySqlDriver {
 
             Ok(rows
                 .into_iter()
-                .map(|row| {
-                    ForeignKeyInfo {
-                        constraint_name: row.try_get::<String, _>("CONSTRAINT_NAME").unwrap_or_default(),
-                        column_name: row.try_get::<String, _>("COLUMN_NAME").unwrap_or_default(),
-                        referenced_table: row.try_get::<String, _>("REFERENCED_TABLE_NAME").unwrap_or_default(),
-                        referenced_column: row.try_get::<String, _>("REFERENCED_COLUMN_NAME").unwrap_or_default(),
-                    }
+                .map(|row| ForeignKeyInfo {
+                    constraint_name: row
+                        .try_get::<String, _>("CONSTRAINT_NAME")
+                        .unwrap_or_default(),
+                    column_name: row.try_get::<String, _>("COLUMN_NAME").unwrap_or_default(),
+                    referenced_table: row
+                        .try_get::<String, _>("REFERENCED_TABLE_NAME")
+                        .unwrap_or_default(),
+                    referenced_column: row
+                        .try_get::<String, _>("REFERENCED_COLUMN_NAME")
+                        .unwrap_or_default(),
                 })
                 .collect())
         } else {

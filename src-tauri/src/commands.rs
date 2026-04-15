@@ -268,7 +268,13 @@ pub async fn get_indexes(
         }
     };
 
-    let indexes = get_indexes_by_type(&conn_config.db_type, &pool, &table_name).await?;
+    let indexes = get_indexes_by_type(
+        &conn_config.db_type,
+        &pool,
+        &table_name,
+        database.as_deref(),
+    )
+    .await?;
     Ok(indexes)
 }
 
@@ -302,7 +308,13 @@ pub async fn get_foreign_keys(
         }
     };
 
-    let fks = get_foreign_keys_by_type(&conn_config.db_type, &pool, &table_name).await?;
+    let fks = get_foreign_keys_by_type(
+        &conn_config.db_type,
+        &pool,
+        &table_name,
+        database.as_deref(),
+    )
+    .await?;
     Ok(fks)
 }
 

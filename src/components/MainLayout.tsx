@@ -11,6 +11,7 @@ import { SettingsDialog } from './SettingsDialog';
 import type { TableInfo, ColumnInfo, IndexInfo } from '../types/api';
 import type { ConnectionFormData } from './ConnectionDialog';
 import type { Connection } from '../stores/appStore';
+import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 const { Sider, Content } = Layout;
@@ -159,7 +160,12 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   const loadDatabaseTables = useCallback(
     async (connectionId: string, database: string, forceRefresh = false) => {
+      const cacheKey = `${connectionId}::${database || ''}`;
+      const { setTableDataLoading } = useAppStore.getState();
+
       try {
+        setTableDataLoading(cacheKey, true);
+
         const tables = await getTables(connectionId, database, forceRefresh);
 
         setConnectionDatabases((prev) => {
@@ -201,6 +207,8 @@ export function MainLayout({ children }: MainLayoutProps) {
             };
           }
         });
+      } finally {
+        setTableDataLoading(cacheKey, false);
       }
     },
     [getTables]
@@ -270,16 +278,16 @@ export function MainLayout({ children }: MainLayoutProps) {
   const handleTableExpand = useCallback(
     async (connectionId: string, database: string, tableName: string) => {
       const tableKey = `${connectionId}::${database}::${tableName}`;
-      
+
       // 如果已经加载过，跳过
       if (tableStructures[tableKey]?.loaded) return;
-      
+
       try {
         const [columns, indexes] = await Promise.all([
           getColumns(connectionId, tableName, database),
           getIndexes(connectionId, tableName, database),
         ]);
-        
+
         setTableStructures((prev) => ({
           ...prev,
           [tableKey]: { columns, indexes, loaded: true },
@@ -364,10 +372,14 @@ export function MainLayout({ children }: MainLayoutProps) {
           }
           break;
         case 'new-query':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } }));
+          window.dispatchEvent(
+            new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } })
+          );
           break;
         case 'execute-query':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'execute-query' } }));
+          window.dispatchEvent(
+            new CustomEvent('tab-action', { detail: { action: 'execute-query' } })
+          );
           break;
         case 'connect-selected':
           if (selectedConnectionId) {
@@ -425,7 +437,9 @@ export function MainLayout({ children }: MainLayoutProps) {
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'fullscreen' } }));
           break;
         case 'close-all':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'close-all-tabs' } }));
+          window.dispatchEvent(
+            new CustomEvent('tab-action', { detail: { action: 'close-all-tabs' } })
+          );
           break;
         case 'exit':
           window.close();
@@ -482,99 +496,102 @@ export function MainLayout({ children }: MainLayoutProps) {
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {!collapsed && (
-            <div style={{ padding: '8px 8px 4px', flexShrink: 0 }}>
-              <Search
-                placeholder="搜索..."
-                value={searchText}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                style={{
-                  borderRadius: 4,
-                  background: isDarkMode ? '#141414' : '#fafafa',
-                }}
-                size="small"
-                allowClear
-              />
-            </div>
-          )}
+            {!collapsed && (
+              <div style={{ padding: '8px 8px 4px', flexShrink: 0 }}>
+                <Search
+                  placeholder="搜索..."
+                  value={searchText}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  style={{
+                    borderRadius: 4,
+                    background: isDarkMode ? '#141414' : '#fafafa',
+                  }}
+                  size="small"
+                  allowClear
+                />
+              </div>
+            )}
 
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              overflow: 'auto',
-              marginBottom: 0,
-            }}
-          >
-            <ConnectionTree
-              connections={connections}
-              groups={groups}
-              selectedId={selectedConnectionId}
-              selectedTableId={selectedTable}
-              onSelect={handleConnectionSelect}
-              onTableSelect={(table, database) => {
-                setSelectedTable(table);
-                setSelectedDatabase(database);
-              }}
-              onTableOpen={(tableName, database) => {
-                // Double-click tree table → open new tab
-                setTableToOpen({ name: tableName, database });
-              }}
-              onExpand={handleConnectionExpand}
-              collapsed={collapsed}
-              searchText={debouncedSearch}
-              expandedKeys={expandedKeys}
-              onExpandKeys={setExpandedKeys}
-              connectionDatabases={connectionDatabases}
-              tableStructures={tableStructures}
-              isLoading={isLoading}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-              onEditConnection={handleEditConnection}
-              onDeleteConnection={handleDeleteConnection}
-              onNewQuery={handleNewQuery}
-              onDatabaseExpand={handleDatabaseExpand}
-              onDatabaseRefresh={handleDatabaseRefresh}
-              onLoadDatabases={handleLoadDatabases}
-              onTableExpand={handleTableExpand}
-              onSaveConnection={handleSaveConnection}
-              onSaveGroup={handleSaveGroup}
-              onDeleteGroup={handleDeleteGroup}
-            />
-          </div>
-
-          <div
-            onClick={() => setCollapsed(!collapsed)}
-            style={{
-              height: 28,
-              flexShrink: 0,
-              background: isDarkMode ? '#141414' : '#fafafa',
-              borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'background 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = isDarkMode ? '#1f1f1f' : '#f0f0f0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = isDarkMode ? '#141414' : '#fafafa';
-            }}
-          >
-            <span
+            <div
               style={{
-                color: isDarkMode ? '#bfbfbf' : '#595959',
-                fontSize: 11,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
+                flex: 1,
+                minHeight: 0,
+                overflow: 'auto',
+                marginBottom: 0,
               }}
             >
-              {collapsed ? '展开' : '收起'}
-            </span>
-          </div>
+              <ConnectionTree
+                connections={connections}
+                groups={groups}
+                selectedId={selectedConnectionId}
+                selectedTableId={selectedTable}
+                onSelect={handleConnectionSelect}
+                onTableSelect={(table, database) => {
+                  setSelectedTable(table);
+                  setSelectedDatabase(database);
+                }}
+                onTableOpen={(tableName, database) => {
+                  // 双击表时，先重置再设置，确保重复双击同一表也能触发
+                  setTableToOpen(null);
+                  setTimeout(() => {
+                    setTableToOpen({ name: tableName, database });
+                  }, 0);
+                }}
+                onExpand={handleConnectionExpand}
+                collapsed={collapsed}
+                searchText={debouncedSearch}
+                expandedKeys={expandedKeys}
+                onExpandKeys={setExpandedKeys}
+                connectionDatabases={connectionDatabases}
+                tableStructures={tableStructures}
+                isLoading={isLoading}
+                onConnect={handleConnect}
+                onDisconnect={handleDisconnect}
+                onEditConnection={handleEditConnection}
+                onDeleteConnection={handleDeleteConnection}
+                onNewQuery={handleNewQuery}
+                onDatabaseExpand={handleDatabaseExpand}
+                onDatabaseRefresh={handleDatabaseRefresh}
+                onLoadDatabases={handleLoadDatabases}
+                onTableExpand={handleTableExpand}
+                onSaveConnection={handleSaveConnection}
+                onSaveGroup={handleSaveGroup}
+                onDeleteGroup={handleDeleteGroup}
+              />
+            </div>
+
+            <div
+              onClick={() => setCollapsed(!collapsed)}
+              style={{
+                height: 28,
+                flexShrink: 0,
+                background: isDarkMode ? '#141414' : '#fafafa',
+                borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'background 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDarkMode ? '#1f1f1f' : '#f0f0f0';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = isDarkMode ? '#141414' : '#fafafa';
+              }}
+            >
+              <span
+                style={{
+                  color: isDarkMode ? '#bfbfbf' : '#595959',
+                  fontSize: 11,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                {collapsed ? '展开' : '收起'}
+              </span>
+            </div>
           </div>
         </Sider>
 
@@ -592,10 +609,22 @@ export function MainLayout({ children }: MainLayoutProps) {
             minHeight: 0,
           }}
         >
-          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div
+            style={{
+              flex: 1,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+            }}
+          >
             <TabPanel
               selectedConnectionId={selectedConnectionId}
-              selectedConnectionName={selectedConnectionId ? connections.find(c => c.id === selectedConnectionId)?.name : undefined}
+              selectedConnectionName={
+                selectedConnectionId
+                  ? connections.find((c) => c.id === selectedConnectionId)?.name
+                  : undefined
+              }
               selectedTable={selectedTable}
               selectedDatabase={selectedDatabase}
               tableToOpen={tableToOpen}
@@ -605,7 +634,9 @@ export function MainLayout({ children }: MainLayoutProps) {
           </div>
 
           {/* 日志面板：仅在有 SQL 查询 Tab 时显示 */}
-          {sqlTabCount > 0 && !logPanelCollapsed && <LogPanel onCollapse={() => setLogPanelCollapsed(true)} />}
+          {sqlTabCount > 0 && !logPanelCollapsed && (
+            <LogPanel onCollapse={() => setLogPanelCollapsed(true)} />
+          )}
 
           {sqlTabCount > 0 && logPanelCollapsed && (
             <div
@@ -650,10 +681,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         }}
       />
 
-      <SettingsDialog
-        open={settingsDialogOpen}
-        onCancel={() => setSettingsDialogOpen(false)}
-      />
+      <SettingsDialog open={settingsDialogOpen} onCancel={() => setSettingsDialogOpen(false)} />
     </Layout>
   );
 }

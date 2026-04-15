@@ -58,25 +58,52 @@ impl SqliteDriver {
                   AND name NOT LIKE 'sqlite_%'
                 ORDER BY name
             "#;
-            let rows = sqlx::query_as::<_, (String, String, Option<i64>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(query)
-                .fetch_all(pool)
-                .await
-                .map_err(|e| format!("Failed to query tables: {}", e))?;
+            let rows = sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    Option<i64>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                ),
+            >(query)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("Failed to query tables: {}", e))?;
 
             let tables = rows
                 .into_iter()
-                .map(|(table_name, table_type, row_count, comment, engine, data_size, index_size, create_time, update_time, collation)| TableInfo {
-                    table_name,
-                    table_type,
-                    row_count: row_count.map(|v| v as u64),
-                    comment,
-                    engine,
-                    data_size,
-                    index_size,
-                    create_time,
-                    update_time,
-                    collation,
-                })
+                .map(
+                    |(
+                        table_name,
+                        table_type,
+                        row_count,
+                        comment,
+                        engine,
+                        data_size,
+                        index_size,
+                        create_time,
+                        update_time,
+                        collation,
+                    )| TableInfo {
+                        table_name,
+                        table_type,
+                        row_count: row_count.map(|v| v as u64),
+                        comment,
+                        engine,
+                        data_size,
+                        index_size,
+                        create_time,
+                        update_time,
+                        collation,
+                    },
+                )
                 .collect();
             Ok(tables)
         } else {
