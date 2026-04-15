@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Tabs, Empty, Breadcrumb, theme, Dropdown, Menu, message, Modal } from 'antd';
+import { Tabs, Empty, Breadcrumb, theme, Dropdown, Menu, message, Modal, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   DatabaseOutlined,
@@ -15,6 +15,7 @@ import { TableStructure } from '../TableStructure';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
+  selectedConnectionName?: string;
   selectedTable: string | null;
   selectedDatabase?: string;
   /** 双击表时设置此值，TabPanel 会打开新的数据浏览 Tab */
@@ -28,12 +29,14 @@ interface TabPanelProps {
 interface OpenedTable {
   name: string;
   connectionId: string;
+  connectionName: string;
   database?: string;
   isDirty?: boolean;  // 是否有未保存的更改
 }
 
 export function TabPanel({
   selectedConnectionId,
+  selectedConnectionName,
   selectedTable,
   selectedDatabase,
   tableToOpen,
@@ -61,8 +64,31 @@ export function TabPanel({
     y: number;
     tabKey: string;
   }>({ visible: false, x: 0, y: 0, tabKey: '' });
-  
+
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // 监听 tab-action 事件（来自菜单或工具栏）
+  useEffect(() => {
+    const handleTabAction = (event: CustomEvent<{ action: string }>) => {
+      const { action } = event.detail;
+      if (action === 'new-sql-tab') {
+        const newSqlKey = `sql-${Date.now()}`;
+        setOpenedSqlTabs((prev) => [...prev, { key: newSqlKey, title: 'SQL 查询' }]);
+        setActiveKey(newSqlKey);
+      } else if (action === 'close-tab') {
+        if (activeKey.startsWith('sql-')) {
+          const keyToClose = activeKey;
+          setOpenedSqlTabs((prev) => prev.filter((t) => t.key !== keyToClose));
+          setActiveKey('objects');
+        }
+      }
+    };
+
+    window.addEventListener('tab-action', handleTabAction as EventListener);
+    return () => {
+      window.removeEventListener('tab-action', handleTabAction as EventListener);
+    };
+  }, [activeKey]);
 
   // 双击表时调用（来自树或表列表），打开新的数据浏览 Tab
   const openTableTab = useCallback(
@@ -79,12 +105,12 @@ export function TabPanel({
       if (!exists) {
         setOpenedTables((prev) => [
           ...prev,
-          { name: tableName, connectionId: selectedConnectionId, database, isDirty: false },
+          { name: tableName, connectionId: selectedConnectionId, connectionName: selectedConnectionName || selectedConnectionId, database, isDirty: false },
         ]);
       }
       setActiveKey(dataTabKey);
     },
-    [selectedConnectionId, openedTables]
+    [selectedConnectionId, selectedConnectionName, openedTables]
   );
   
   // 更新 Tab 的 dirty 状态
@@ -340,20 +366,24 @@ export function TabPanel({
     ...openedTables.flatMap((table) => {
       const baseKey = table.database ? `${table.name}@${table.database}` : table.name;
       const dataTabKey = `${baseKey}-data`;
+      const tooltipTitle = table.database ? `${table.database} @ ${table.connectionName}` : table.connectionName;
 
       return [
         {
           key: dataTabKey,
           label: (
-            <span
-              onContextMenu={(e) => handleTabContextMenu(e, dataTabKey)}
-              style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
-            >
-              <TableOutlined style={{ marginRight: 4 }} />
-              {table.name}
-              {table.database ? ` (${table.database})` : ''}
-              {table.isDirty && <span style={{ color: '#ff4d4f', marginLeft: 4 }}>*</span>}
-            </span>
+            <Tooltip title={tooltipTitle} placement="bottom">
+              <span
+                onContextMenu={(e) => handleTabContextMenu(e, dataTabKey)}
+                style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', maxWidth: 160 }}
+              >
+                <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {table.name}
+                </span>
+                {table.isDirty && <span style={{ color: '#ff4d4f', marginLeft: 4 }}>*</span>}
+              </span>
+            </Tooltip>
           ),
           children: (
             <div style={{ height: '100%' }}>
@@ -404,11 +434,12 @@ export function TabPanel({
     >
       <Tabs
         type="editable-card"
+        size="small"
         activeKey={activeKey}
         onChange={setActiveKey}
         hideAdd
         style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
-        tabBarStyle={{ margin: 0, padding: '4px 4px 0', background: 'transparent', flexShrink: 0 }}
+        tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
         tabBarGutter={2}
         items={tabItems as any}
         onEdit={handleTabEdit}

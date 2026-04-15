@@ -14,14 +14,6 @@ function App() {
   useEffect(() => {
     const unlisten = listen<string>('menu-action', (event) => {
       console.log('Menu action received:', event.payload);
-
-      // 处理主题切换命令
-      if (event.payload === 'toggle-theme') {
-        setIsDarkMode(prev => !prev);
-        return;
-      }
-
-      // 触发自定义事件，让组件处理
       window.dispatchEvent(new CustomEvent('menu-action', {
         detail: { action: event.payload }
       }));
@@ -29,6 +21,20 @@ function App() {
 
     return () => {
       unlisten.then(fn => fn());
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleAppAction = (event: CustomEvent<{ action: string }>) => {
+      const { action } = event.detail;
+      if (action === 'toggle-theme') {
+        setIsDarkMode(prev => !prev);
+      }
+    };
+
+    window.addEventListener('app-action' as any, handleAppAction as any);
+    return () => {
+      window.removeEventListener('app-action' as any, handleAppAction as any);
     };
   }, []);
 

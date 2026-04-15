@@ -56,7 +56,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   groups: [
     {
       id: 'default',
-      name: '默认分组',
+      name: '不分组',
       icon: '📁',
       color: '#6d6d6d',
       parent_id: undefined

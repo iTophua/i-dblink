@@ -195,20 +195,19 @@ export function TableList({ connectionId, database, onTableSelect, onTableOpen }
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(getInitialViewMode);
+  const [localLoading, setLocalLoading] = useState(false);
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
 
-  // Use the shared store and hook
-  const { getTableData } = useAppStore();
+  const tableDataCache = useAppStore(state => state.tableDataCache);
   const { getTables } = useDatabase();
 
   const cacheKey = `${connectionId}::${database || ''}`;
-  const cacheData = getTableData(cacheKey);
+  const cacheData = tableDataCache[cacheKey];
 
-  // Derive loading state and tables from cache
-  const loading = cacheData?.loading || false;
   const tables = cacheData?.tables || [];
+  const loading = localLoading || cacheData?.loading || false;
 
   // Save view mode to localStorage when it changes
   useEffect(() => {
@@ -222,9 +221,12 @@ export function TableList({ connectionId, database, onTableSelect, onTableOpen }
   // Load tables only if not already loaded or loading
   useEffect(() => {
     if (!cacheData || (!cacheData.loaded && !cacheData.loading)) {
-      getTables(connectionId, database);
+      setLocalLoading(true);
+      getTables(connectionId, database).finally(() => {
+        setLocalLoading(false);
+      });
     }
-  }, [connectionId, database, cacheData]);
+  }, [connectionId, database, cacheData, getTables]);
 
   const handleTableClick = useCallback(
     (tableName: string) => {
@@ -247,10 +249,13 @@ export function TableList({ connectionId, database, onTableSelect, onTableOpen }
 
   const refreshTables = async () => {
     try {
+      setLocalLoading(true);
       await getTables(connectionId, database, true);
     } catch (error: any) {
       console.error('Failed to refresh tables:', error);
       message.error(`刷新表列表失败：${error}`);
+    } finally {
+      setLocalLoading(false);
     }
   };
 

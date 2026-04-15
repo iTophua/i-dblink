@@ -1,170 +1,242 @@
 import React, { useCallback } from 'react';
-import { Layout, Menu, Space, Button } from 'antd';
+import { Layout, Button, Dropdown, theme } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   PlusOutlined,
+  ReloadOutlined,
+  PlayCircleOutlined,
   FolderOpenOutlined,
   SaveOutlined,
-  UploadOutlined,
-  DownloadOutlined,
-  SearchOutlined,
-  UndoOutlined,
-  RedoOutlined,
-  ScissorOutlined,
-  CopyOutlined,
-  PushpinOutlined,
-  ReloadOutlined,
+  ImportOutlined,
+  ExportOutlined,
   SettingOutlined,
   SunOutlined,
   MoonOutlined,
-  DeleteOutlined,
+  LinkOutlined,
+  DisconnectOutlined,
+  DatabaseOutlined,
+  CodeOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
-import { theme } from 'antd';
 
-type HeaderStyle = React.CSSProperties;
+type ToolbarStyle = React.CSSProperties;
 
 const { Header } = Layout;
+
+const isMacOS = typeof navigator !== 'undefined' && (
+  navigator.platform === 'MacIntel' ||
+  navigator.platform === 'MacPPC' ||
+  navigator.platform === 'Mac68K' ||
+  navigator.userAgent.includes('Mac')
+);
 
 export function Toolbar(): JSX.Element {
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
-
-  const isMacOS = typeof navigator !== 'undefined' && (navigator.platform === 'MacIntel' || navigator.platform === 'MacPPC' || navigator.platform === 'Mac68K' || navigator.userAgent.includes('Mac'));
-  // macOS 使用系统菜单栏，不显示应用内菜单
-  const showAppMenu = !isMacOS;
 
   const handleMenuAction = useCallback((action: string) => {
     window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
   }, []);
 
   const handleToggleTheme = useCallback(() => {
-    handleMenuAction('toggle-theme');
-  }, [handleMenuAction]);
+    window.dispatchEvent(new CustomEvent('menu-action', { detail: { action: 'toggle-theme' } }));
+  }, []);
 
-  
-  const headerStyle: HeaderStyle = {
-    height: 28,
-    lineHeight: '28px',
-    background: isDarkMode ? '#141414' : '#f0f0f0',
-    borderBottom: `1px solid ${isDarkMode ? '#434343' : '#d9d9d9'}`,
-    padding: '0 8px',
+  const toolbarStyle: ToolbarStyle = {
+    height: 36,
+    lineHeight: '36px',
+    background: isDarkMode ? '#252525' : '#f5f5f5',
+    borderBottom: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+    padding: '0 12px',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
   };
 
-  const menuStyle: React.CSSProperties = {
-    flex: 1,
-    borderBottom: 'none',
-    background: 'transparent',
+  const dividerStyle: React.CSSProperties = {
+    width: 1,
+    height: 20,
+    background: isDarkMode ? '#434343' : '#d9d9d9',
+    margin: '0 8px',
+  };
+
+  const fileMenuItems: MenuProps['items'] = [
+    { key: 'new-connection', icon: <PlusOutlined />, label: '新建连接 (N)' },
+    { key: 'open-connection', icon: <FolderOpenOutlined />, label: '打开连接 (O)' },
+    { type: 'divider' },
+    { key: 'save', icon: <SaveOutlined />, label: '保存 (S)' },
+    { key: 'save-as', label: '另存为... (A)' },
+    { type: 'divider' },
+    { key: 'import', icon: <ImportOutlined />, label: '导入 (I)' },
+    { key: 'export', icon: <ExportOutlined />, label: '导出 (E)' },
+    { type: 'divider' },
+    { key: 'exit', label: '退出 (X)' },
+  ];
+
+  const editMenuItems: MenuProps['items'] = [
+    { key: 'undo', label: '撤销 (U)', icon: <span style={{ fontFamily: 'monospace' }}>↩</span> },
+    { key: 'redo', label: '重做 (R)', icon: <span style={{ fontFamily: 'monospace' }}>↪</span> },
+    { type: 'divider' },
+    { key: 'cut', label: '剪切 (T)' },
+    { key: 'copy', label: '复制 (C)' },
+    { key: 'paste', label: '粘贴 (P)' },
+    { key: 'delete', label: '删除 (D)' },
+    { type: 'divider' },
+    { key: 'select-all', label: '全选 (A)' },
+    { key: 'find', label: '查找/替换... (F)' },
+  ];
+
+  const viewMenuItems: MenuProps['items'] = [
+    { key: 'refresh', icon: <ReloadOutlined />, label: '刷新 (R)' },
+    { type: 'divider' },
+    { key: 'zoom-in', label: '放大 (I)' },
+    { key: 'zoom-out', label: '缩小 (O)' },
+    { key: 'zoom-reset', label: '实际大小 (Z)' },
+    { type: 'divider' },
+    { key: 'fullscreen', label: '全屏切换 (B)' },
+  ];
+
+  const connectionMenuItems: MenuProps['items'] = [
+    { key: 'connect-selected', icon: <LinkOutlined />, label: '连接所选 (C)' },
+    { key: 'disconnect', icon: <DisconnectOutlined />, label: '断开连接 (D)' },
+    { type: 'divider' },
+    { key: 'new-query', icon: <CodeOutlined />, label: '新建查询 (Q)' },
+    { key: 'execute-query', icon: <PlayCircleOutlined />, label: '执行查询 (E)' },
+    { type: 'divider' },
+    { key: 'close-all', label: '关闭所有连接 (L)' },
+  ];
+
+  const toolsMenuItems: MenuProps['items'] = [
+    { key: 'options', icon: <SettingOutlined />, label: '选项/设置... (O)' },
+    { type: 'divider' },
+    { key: 'data-sync', icon: <SyncOutlined />, label: '数据同步... (S)' },
+    { key: 'backup', icon: <DatabaseOutlined />, label: '备份数据库... (B)' },
+    { key: 'restore', icon: <DatabaseOutlined />, label: '恢复数据库... (R)' },
+    { type: 'divider' },
+    { key: 'model-designer', label: '模型设计器... (M)' },
+  ];
+
+  const windowMenuItems: MenuProps['items'] = [
+    { key: 'new-tab', label: '新建标签页 (N)' },
+    { key: 'close-tab', label: '关闭标签页 (C)' },
+    { type: 'divider' },
+    { key: 'next-tab', label: '切换到下一个标签页' },
+    { key: 'prev-tab', label: '切换到上一个标签页' },
+  ];
+
+  const helpMenuItems: MenuProps['items'] = [
+    { key: 'documentation', label: '文档 (D)' },
+    { key: 'search', label: '搜索... (S)' },
+    { type: 'divider' },
+    { key: 'check-update', label: '检查更新... (U)' },
+    { type: 'divider' },
+    { key: 'about', label: '关于 i-dblink (A)' },
+  ];
+
+  const buttonStyle: React.CSSProperties = {
     fontSize: 12,
+    color: isDarkMode ? '#e8e8e8' : '#333',
   };
 
-  const compactBar: React.CSSProperties = {
-    height: 28,
-    lineHeight: '28px',
-    background: isDarkMode ? '#1f1f1f' : '#fff',
-    borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-    padding: '0 8px',
-    display: 'flex',
-    alignItems: 'center',
-  };
+  const renderToolbarButtons = () => (
+    <>
+      <Button
+        type="text"
+        size="small"
+        icon={<PlusOutlined />}
+        onClick={() => handleMenuAction('new-connection')}
+        style={buttonStyle}
+      >
+        新建连接
+      </Button>
+      <Button
+        type="text"
+        size="small"
+        icon={<ReloadOutlined />}
+        onClick={() => handleMenuAction('refresh')}
+        style={buttonStyle}
+      >
+        刷新
+      </Button>
+      <Button
+        type="text"
+        size="small"
+        icon={<CodeOutlined />}
+        onClick={() => handleMenuAction('new-query')}
+        style={buttonStyle}
+      >
+        新建查询
+      </Button>
+      <Button
+        type="text"
+        size="small"
+        icon={<PlayCircleOutlined />}
+        onClick={() => handleMenuAction('execute-query')}
+        style={buttonStyle}
+      >
+        执行
+      </Button>
+    </>
+  );
+
+  const renderAppButtons = () => (
+    <>
+      <Button
+        type="text"
+        size="small"
+        icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
+        onClick={handleToggleTheme}
+        style={buttonStyle}
+      >
+        {isDarkMode ? '浅色' : '深色'}
+      </Button>
+      <Button
+        type="text"
+        size="small"
+        icon={<SettingOutlined />}
+        onClick={() => handleMenuAction('options')}
+        style={buttonStyle}
+      >
+        设置
+      </Button>
+    </>
+  );
 
   return (
-    <>
-      {showAppMenu && (
-        <Header style={headerStyle}>
-          <Menu
-            mode="horizontal"
-            style={menuStyle}
-            items={[
-              { key: 'file', label: '文件', children: [
-                { key: 'new-connection', label: '新建连接 (N)', icon: <PlusOutlined /> },
-                { key: 'open-connection', label: '打开连接 (O)', icon: <FolderOpenOutlined /> },
-                { type: 'divider' },
-                { key: 'save', label: '保存 (S)', icon: <SaveOutlined /> },
-                { key: 'save-as', label: '另存为... (A)' },
-                { type: 'divider' },
-                { key: 'import', label: '导入 (I)', icon: <UploadOutlined /> },
-                { key: 'export', label: '导出 (E)', icon: <DownloadOutlined /> },
-                { type: 'divider' },
-                { key: 'exit', label: '退出 (X)' },
-              ]},
-              { key: 'edit', label: '编辑', children: [
-                { key: 'undo', label: '撤销 (U)', icon: <UndoOutlined /> },
-                { key: 'redo', label: '重做 (R)', icon: <RedoOutlined /> },
-                { type: 'divider' },
-                { key: 'cut', label: '剪切 (T)', icon: <ScissorOutlined /> },
-                { key: 'copy', label: '复制 (C)', icon: <CopyOutlined /> },
-                { key: 'paste', label: '粘贴 (P)', icon: <PushpinOutlined /> },
-                { key: 'delete', label: '删除 (D)', icon: <DeleteOutlined /> },
-                { type: 'divider' },
-                { key: 'select-all', label: '全选 (A)' },
-                { key: 'find', label: '查找/替换... (F)', icon: <SearchOutlined /> },
-              ]},
-              { key: 'view', label: '查看', children: [
-                { key: 'refresh', label: '刷新 (R)', icon: <ReloadOutlined /> },
-                { type: 'divider' },
-                { key: 'zoom-in', label: '放大 (I)' },
-                { key: 'zoom-out', label: '缩小 (O)' },
-                { key: 'zoom-reset', label: '实际大小 (Z)' },
-                { type: 'divider' },
-                { key: 'fullscreen', label: '全屏切换 (B)' },
-              ]},
-              { key: 'connection', label: '连接', children: [
-                { key: 'connect-selected', label: '连接所选 (C)' },
-                { key: 'disconnect', label: '断开连接 (D)' },
-                { type: 'divider' },
-                { key: 'new-query', label: '新建查询 (Q)' },
-                { key: 'execute-query', label: '执行查询 (E)' },
-                { type: 'divider' },
-                { key: 'close-all', label: '关闭所有连接 (L)' },
-              ]},
-              { key: 'tools', label: '工具', children: [
-                { key: 'options', label: '选项/设置... (O)', icon: <SettingOutlined /> },
-                { type: 'divider' },
-                { key: 'data-sync', label: '数据同步... (S)' },
-                { key: 'backup', label: '备份数据库... (B)' },
-                { key: 'restore', label: '恢复数据库... (R)' },
-                { type: 'divider' },
-                { key: 'model-designer', label: '模型设计器... (M)' },
-              ]},
-              { key: 'window', label: '窗口', children: [
-                { key: 'new-tab', label: '新建标签页 (N)' },
-                { key: 'close-tab', label: '关闭标签页 (C)' },
-                { type: 'divider' },
-                { key: 'next-tab', label: '切换到下一个标签页' },
-                { key: 'prev-tab', label: '切换到上一个标签页' },
-              ]},
-              { key: 'help', label: '帮助', children: [
-                { key: 'documentation', label: '文档 (D)' },
-                { key: 'search', label: '搜索... (S)' },
-                { type: 'divider' },
-                { key: 'check-update', label: '检查更新... (U)' },
-                { type: 'divider' },
-                { key: 'about', label: '关于 i-dblink (A)' },
-              ]},
-            ]}
-          />
-        </Header>
-      )}
-
-      {!showAppMenu && (
-        <div style={compactBar}>
-          <Space size="small">
-            <Button icon={<PlusOutlined />} size="small" type="primary" onClick={() => handleMenuAction('new-connection')} />
-            <Button icon={<ReloadOutlined />} size="small" onClick={() => handleMenuAction('refresh')} />
-            <Button icon={<UploadOutlined />} size="small" onClick={() => handleMenuAction('import')} />
-            <Button icon={<DownloadOutlined />} size="small" onClick={() => handleMenuAction('export')} />
-            <div style={{ width: 1, height: 16, background: isDarkMode ? '#434343' : '#d9d9d9' }} />
-            <Button 
-              icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />} 
-              size="small"
-              onClick={handleToggleTheme}
-            />
-            <Button icon={<SettingOutlined />} size="small" onClick={() => handleMenuAction('options')} />
-          </Space>
-        </div>
-      )}
-    </>
+    <Header style={toolbarStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {!isMacOS && (
+          <>
+            <Dropdown menu={{ items: fileMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+              <Button type="text" size="small" style={buttonStyle}>文件</Button>
+            </Dropdown>
+            <Dropdown menu={{ items: editMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+              <Button type="text" size="small" style={buttonStyle}>编辑</Button>
+            </Dropdown>
+            <Dropdown menu={{ items: viewMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+              <Button type="text" size="small" style={buttonStyle}>查看</Button>
+            </Dropdown>
+            <Dropdown menu={{ items: connectionMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+              <Button type="text" size="small" style={buttonStyle}>连接</Button>
+            </Dropdown>
+            <Dropdown menu={{ items: toolsMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+              <Button type="text" size="small" style={buttonStyle}>工具</Button>
+            </Dropdown>
+            <Dropdown menu={{ items: windowMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+              <Button type="text" size="small" style={buttonStyle}>窗口</Button>
+            </Dropdown>
+            <Dropdown menu={{ items: helpMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+              <Button type="text" size="small" style={buttonStyle}>帮助</Button>
+            </Dropdown>
+            <div style={dividerStyle} />
+          </>
+        )}
+        {renderToolbarButtons()}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {renderAppButtons()}
+      </div>
+    </Header>
   );
 }
 

@@ -1,0 +1,56 @@
+.ag-theme-alpine .null-cell,
+.ag-theme-alpine-dark .null-cell {
+  color: #999 !important;
+  font-style: italic;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.ag-theme-alpine-dark .null-cell {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ag-grid-container {
+  height: 100%;
+  width: 100%;
+}
+
+.ag-theme-alpine .ag-header-cell {
+  background: #e6f7ff !important;
+}
+
+.ag-theme-alpine-dark .ag-header-cell {
+  background: #111a2c !important;
+}
+
+.ag-theme-alpine .ag-header-group-cell {
+  background: #d9f0ff !important;
+}
+
+.ag-theme-alpine-dark .ag-header-group-cell {
+  background: #0d1520 !important;
+}
+
+.ag-theme-alpine .ag-paging-panel {
+  font-size: 11px;
+}
+
+.ag-theme-alpine-dark .ag-paging-panel {
+  font-size: 11px;
+}
+
+.ant-pagination.ant-pagination-small {
+  font-size: 11px;
+}
+
+.ant-pagination-simple .ant-pagination-simple-pager input {
+  font-size: 10px !important;
+  width: 40px !important;
+  height: 18px !important;
+  padding: 0 2px !important;
+  min-height: 18px !important;
+  line-height: 18px !important;
+}
+
+.ant-pagination-simple-pager {
+  height: 18px !important;
+}

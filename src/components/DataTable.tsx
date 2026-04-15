@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, ICellRendererParams, GridApi } from 'ag-grid-community';
-import { Spin, Empty, Button, Space, message, Modal, Form, Input, theme, Tag, Popconfirm, Select, Pagination } from 'antd';
+import { ColDef, GridApi } from 'ag-grid-community';
+import { Spin, Empty, Button, Space, message, Modal, Form, Input, theme, Tag, Popconfirm, Select, Pagination, Tooltip } from 'antd';
 import {
   ReloadOutlined,
   DownloadOutlined,
@@ -18,6 +18,7 @@ import type { ColumnInfo } from '../types/api';
 
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
+import './DataTable.css';
 
 interface RowData {
   [key: string]: any;
@@ -34,8 +35,9 @@ interface DataTableProps {
   onDirtyChange?: (isDirty: boolean) => void;  // 通知父组件 dirty 状态
 }
 
-export function DataTable({ connectionId, tableName, database, pageSize: propPageSize, onDirtyChange }: DataTableProps) {
+export const DataTable = memo(function DataTable({ connectionId, tableName, database, pageSize: propPageSize, onDirtyChange }: DataTableProps) {
   const [loading, setLoading] = useState(false);
+  const [hasEverLoaded, setHasEverLoaded] = useState(false);
   const [rowData, setRowData] = useState<RowData[]>([]);
   const [columnDefs, setColumnDefs] = useState<ColDef[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -77,14 +79,6 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
   const { getColumns, executeQuery } = useDatabase();
   const loadingRef = useRef(false);
 
-  // 稳定的 cellRenderer 函数 - 返回纯文本，使用 CSS 样式化 NULL 值
-  const cellRenderer = useCallback((params: ICellRendererParams) => {
-    if (params.value === null || params.value === undefined) {
-      return 'NULL';
-    }
-    return String(params.value);
-  }, []);
-
   const buildQuery = useCallback((page: number, size: number, sort?: { colId: string; sort: 'asc' | 'desc' }[]) => {
     const offset = (page - 1) * size;
     const tableRef = database ? `\`${database}\`.\`${tableName}\`` : `\`${tableName}\``;
@@ -117,49 +111,73 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
 
       setColumns(colResult);
 
-      const colDefs: ColDef[] = colResult.map((col: any) => ({
-        field: col.column_name,
-        headerName: col.column_name,
-        sortable: true,
-        filter: true,
-        resizable: true,
-        minWidth: 50,
-        maxWidth: 250,
-        width: 100,
-        editable: true,
-        headerTooltip: `${col.data_type}${col.is_nullable ? ' | NULL' : ' | NOT NULL'}${col.comment ? ` | ${col.comment}` : ''}`,
-        cellRenderer,
-        cellClassRules: {
-          'null-cell': (params: any) => params.value === null || params.value === undefined,
-        },
-      }));
-      setColumnDefs(colDefs);
-
       if (dataResult.error) {
         message.error(`加载数据失败：${dataResult.error}`);
         setRowData([]);
       } else {
-        const data = dataResult.rows.map((row, index) => {
+        const rowIdPrefix = `row-${Date.now()}-`;
+        let rowIdCounter = 0;
+        const data = dataResult.rows.map((row) => {
           const rowData: RowData = {
-            __row_id__: `row-${index}`,
-            __original_data__: {},
+            __row_id__: `${rowIdPrefix}${rowIdCounter++}`,
           };
-          dataResult.columns.forEach((col, colIndex) => {
-            rowData[col] = row[colIndex];
-            if (rowData.__original_data__) {
-              rowData.__original_data__[col] = row[colIndex];
-            }
-          });
+          const originalData: Record<string, any> = {};
+          for (let colIndex = 0; colIndex < dataResult.columns.length; colIndex++) {
+            const col = dataResult.columns[colIndex];
+            const value = row[colIndex];
+            rowData[col] = value;
+            originalData[col] = value;
+          }
+          rowData.__original_data__ = originalData;
           return rowData;
         });
         setRowData(data);
+
+        const colWidths: Record<string, number> = {};
+        const sampleSize = Math.min(data.length, 50);
+        for (let i = 0; i < sampleSize; i++) {
+          const row = data[i];
+          for (let colIndex = 0; colIndex < dataResult.columns.length; colIndex++) {
+            const col = dataResult.columns[colIndex];
+            const value = row[col];
+            const valueStr = value === null ? 'NULL' : String(value);
+            const currentMax = colWidths[col] || 0;
+            colWidths[col] = Math.max(currentMax, valueStr.length);
+          }
+        }
+
+        const colDefs: ColDef[] = colResult.map((col: any) => {
+          const headerLength = col.column_name.length;
+          const dataMaxLength = colWidths[col.column_name] || 0;
+          const contentWidth = Math.max(headerLength, dataMaxLength);
+          const autoWidth = Math.max(60, Math.min(300, contentWidth * 8 + 30));
+          const nullableInfo = col.is_nullable ? ' | NULL' : ' | NOT NULL';
+          const commentInfo = col.comment ? ` | ${col.comment}` : '';
+          return {
+            field: col.column_name,
+            headerName: col.column_name,
+            sortable: true,
+            filter: true,
+            resizable: true,
+            minWidth: 60,
+            maxWidth: 300,
+            width: autoWidth,
+            editable: true,
+            headerTooltip: col.data_type + nullableInfo + commentInfo,
+            cellClass: (params: any) => params.value === null ? 'null-cell' : undefined,
+            cellRenderer: (params: any) => params.value,
+          };
+        });
+        setColumnDefs(colDefs);
         setHasUnsavedChanges(false);
         setPendingChanges({ inserts: [], updates: [], deletes: [] });
+        setHasEverLoaded(true);
       }
     } catch (error: any) {
       console.error('Failed to load table data:', error);
       message.error(`加载数据失败：${error.message || error}`);
       setRowData([]);
+      setHasEverLoaded(true);
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -178,7 +196,7 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
   }, [connectionId, tableName, database, executeQuery]);
 
   useEffect(() => {
-    // 切换表/数据库时清除排序状态
+    setHasEverLoaded(false);
     setSortModel([]);
     loadData();
     loadCount();
@@ -198,32 +216,26 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
     minWidth: 60,
     maxWidth: 300,
     width: 120,
-    cellStyle: { padding: '0 6px' },
+    cellStyle: { padding: '0 6px', fontSize: 12 },
   }), []);
 
   const onCellValueChanged = useCallback((event: any) => {
-    if (event.newValue !== event.oldValue) {
-      const updatedRow = { ...event.data };
-
-      // 标记为修改状态
-      if (!updatedRow.__status__ || updatedRow.__status__ !== 'new') {
-        updatedRow.__status__ = 'modified';
-      }
-
-      // 使用 AG Grid 的 applyTransaction 进行增量更新
-      gridApiRef.current?.applyTransaction({ update: [updatedRow] });
-
-      setHasUnsavedChanges(true);
-
-      // 添加到待更新列表
-      setPendingChanges(prev => {
-        const updates = prev.updates.filter(r => r.__row_id__ !== updatedRow.__row_id__);
-        return {
-          ...prev,
-          updates: [...updates, updatedRow],
-        };
-      });
+    if (event.newValue === event.oldValue) {
+      return;
     }
+    const updatedRow = { ...event.data };
+    if (!updatedRow.__status__ || updatedRow.__status__ !== 'new') {
+      updatedRow.__status__ = 'modified';
+    }
+    gridApiRef.current?.applyTransaction({ update: [updatedRow] });
+    setHasUnsavedChanges(true);
+    setPendingChanges(prev => {
+      const filteredUpdates = prev.updates.filter(r => r.__row_id__ !== updatedRow.__row_id__);
+      return {
+        ...prev,
+        updates: [...filteredUpdates, updatedRow],
+      };
+    });
   }, []);
 
   const handleCommit = useCallback(async () => {
@@ -507,15 +519,19 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
       return;
     }
 
-    const csvData = [
-      columns.map(col => col.column_name).join(','),
-      ...rowData.map(row =>
-        columns.map(col => {
-          const value = row[col.column_name];
-          return value === null || value === undefined ? '' : String(value);
-        }).join(',')
-      )
-    ].join('\n');
+    const colNames = columns.map(col => col.column_name);
+    const header = colNames.join(',');
+    const rows: string[] = [header];
+    for (let i = 0; i < rowData.length; i++) {
+      const row = rowData[i];
+      const values: string[] = [];
+      for (let j = 0; j < colNames.length; j++) {
+        const value = row[colNames[j]];
+        values.push(value === null || value === undefined ? '' : String(value));
+      }
+      rows.push(values.join(','));
+    }
+    const csvData = rows.join('\n');
 
     const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -668,29 +684,31 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
   const endRow = Math.min(currentPage * pageSize, totalCount);
 
   const toolbarStyle: React.CSSProperties = {
-    padding: '6px 12px',
+    padding: '1px 4px',
     borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     background: isDarkMode ? '#1a1a1a' : '#fafafa',
     flexShrink: 0,
+    minHeight: 22,
   };
 
   const statusBarStyle: React.CSSProperties = {
     borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
     background: isDarkMode ? '#1a1a1a' : '#fafafa',
-    padding: '6px 12px',
+    padding: '1px 4px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     flexShrink: 0,
-    gap: 12,
+    gap: 4,
+    minHeight: 22,
   };
 
   const dividerStyle: React.CSSProperties = {
     width: 1,
-    height: 16,
+    height: 14,
     background: isDarkMode ? '#434343' : '#d9d9d9',
     margin: '0 4px',
   };
@@ -704,65 +722,30 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
     }}>
       {/* 顶部工具栏 */}
       <div style={toolbarStyle}>
-        <Space size="small">
-          <Space size="middle">
-            <Button icon={<PlusOutlined />} onClick={handleAddRow} type="primary" size="small">
-              新增
-            </Button>
-            <Button 
-              icon={<EditOutlined />} 
-              onClick={handleEditRow} 
-              disabled={selectedRows.length !== 1} 
-              size="small"
-            >
-              编辑
-            </Button>
-            <Popconfirm
-              title="确认删除"
-              description={`确定要删除选中的 ${selectedRows.length} 行吗？`}
-              onConfirm={handleDeleteRows}
-              okText="删除"
-              cancelText="取消"
-            >
-              <Button 
-                icon={<DeleteOutlined />} 
-                disabled={selectedRows.length === 0} 
-                danger 
-                size="small"
-              >
-                删除
-              </Button>
-            </Popconfirm>
-          </Space>
+        <Space size={2}>
+          <Button icon={<PlusOutlined />} onClick={handleAddRow} type="primary" size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>新增</Button>
+          <Button icon={<EditOutlined />} onClick={handleEditRow} disabled={selectedRows.length !== 1} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>编辑</Button>
+          <Popconfirm
+            title="确认删除"
+            description={`确定要删除选中的 ${selectedRows.length} 行吗？`}
+            onConfirm={handleDeleteRows}
+            okText="删除"
+            cancelText="取消"
+          >
+            <Button icon={<DeleteOutlined />} disabled={selectedRows.length === 0} danger size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>删除</Button>
+          </Popconfirm>
 
           <div style={dividerStyle} />
 
-          <Space size="middle">
-            <Button 
-              icon={<DownloadOutlined />} 
-              onClick={exportToCSV} 
-              disabled={rowData.length === 0} 
-              size="small"
-            >
-              导出
-            </Button>
-          </Space>
+          <Button icon={<DownloadOutlined />} onClick={exportToCSV} disabled={rowData.length === 0} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>导出</Button>
         </Space>
 
-        <Space size="middle">
-          {hasUnsavedChanges && (
-            <Tag color="warning" style={{ margin: 0 }}>
-              未保存
-            </Tag>
-          )}
-          <Tag color="blue" style={{ margin: 0 }}>{tableName}</Tag>
-          <Tag color="green" style={{ margin: 0 }}>
-            共 {totalCount.toLocaleString()} 行
-          </Tag>
+        <Space size={2}>
+          {hasUnsavedChanges && <Tag color="warning" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>未保存</Tag>}
+          <Tag color="blue" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>{tableName}</Tag>
+          <Tag color="green" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>{totalCount.toLocaleString()} 行</Tag>
           {selectedRows.length > 0 && (
-            <Tag color="orange" style={{ margin: 0 }}>
-              已选 {selectedRows.length} 行
-            </Tag>
+            <Tag color="orange" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>{selectedRows.length} 行</Tag>
           )}
         </Space>
       </div>
@@ -779,7 +762,7 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
           </div>
         )}
 
-        {!loading && rowData.length === 0 ? (
+        {!loading && rowData.length === 0 && hasEverLoaded ? (
           <Empty description="暂无数据" style={{ marginTop: '20%' }} />
         ) : (
           <div
@@ -791,6 +774,7 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
               rowData={rowData}
               columnDefs={columnDefs}
               defaultColDef={defaultColDef}
+              getRowId={(params) => params.data.__row_id__}
               onCellValueChanged={onCellValueChanged}
               onSelectionChanged={onSelectionChanged}
               onSortChanged={(event) => {
@@ -803,7 +787,6 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
                     sort: col.sort as 'asc' | 'desc',
                   }));
                 setSortModel(sortState);
-                // 排序时重置到第一页
                 if (currentPage !== 1) {
                   setCurrentPage(1);
                 }
@@ -811,12 +794,91 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
               rowSelection="multiple"
               suppressRowClickSelection={true}
               suppressPaginationPanel={true}
-              enableRangeSelection={true}
+              suppressCellFocus={true}
               animateRows={false}
               headerHeight={24}
               rowHeight={22}
-              rowBuffer={8}
-              enableBrowserTooltips={false}
+              rowBuffer={10}
+              domLayout="normal"
+              suppressColumnVirtualisation={false}
+              suppressRowVirtualisation={false}
+              debounceVerticalScrollbar={true}
+              suppressScrollOnNewData={true}
+              suppressAnimationFrame={true}
+              localeText={{
+                pinLeft: '左侧固定',
+                pinRight: '右侧固定',
+                noPin: '取消固定',
+                autoSize: '自动列宽',
+                resetColumns: '重置列',
+                expandAll: '展开全部',
+                collapseAll: '折叠全部',
+                copyWithHeaders: '复制带表头',
+                copyWithGroupHeaders: '复制带分组表头',
+                menu: '菜单',
+                filter: '筛选',
+                filters: '筛选器',
+                columns: '列',
+                values: '值',
+                pinColumn: '固定列',
+                autoSizeColumn: '自动列宽',
+                resetColumn: '重置列',
+                moveColumn: '移动列',
+                sortAscending: '升序',
+                sortDescending: '降序',
+                sortUnsort: '取消排序',
+                close: '关闭',
+                loadingOoo: '加载中...',
+                noRowsToShow: '暂无数据',
+                enabled: '启用',
+                disabled: '禁用',
+                true: '是',
+                false: '否',
+                contains: '包含',
+                notContains: '不包含',
+                startsWith: '开始于',
+                endsWith: '结束于',
+                equals: '等于',
+                notEqual: '不等于',
+                lessThan: '小于',
+                greaterThan: '大于',
+                inRange: '范围内',
+                lessThanOrEqual: '小于等于',
+                greaterThanOrEqual: '大于等于',
+                filterOoo: '筛选中...',
+                applyFilter: '应用筛选',
+                clearFilter: '清除筛选',
+                blank: '空白',
+                notBlank: '非空白',
+                and: '且',
+                or: '或',
+                searchOoo: '搜索...',
+                selectAll: '全选',
+                selectAllFiltered: '全选筛选结果',
+                addCurrentSelectionToFilter: '将当前选择添加到筛选',
+                sum: '求和',
+                min: '最小值',
+                max: '最大值',
+                count: '计数',
+                avg: '平均值',
+                page: '页',
+                pageSize: '每页',
+                total: '共',
+                of: '条',
+                nextPage: '下一页',
+                prevPage: '上一页',
+                firstPage: '首页',
+                lastPage: '末页',
+                to: '至',
+                OOO: '可选',
+                any: '任意',
+                condition: '条件',
+                conditions: '条件',
+                operator: '运算符',
+                all: '全部',
+                group: '分组',
+                columns: '列',
+              }}
             />
           </div>
         )}
@@ -824,39 +886,13 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
 
       {/* 底部状态栏 */}
       <div style={statusBarStyle}>
-        <Space size="small">
-          <Space size="small">
-            <Button
-              icon={<SaveOutlined />}
-              size="small"
-              type={hasUnsavedChanges ? 'primary' : 'default'}
-              onClick={handleCommit}
-              disabled={!hasUnsavedChanges}
-            >
-              提交
-            </Button>
-            <Button
-              icon={<UndoOutlined />}
-              size="small"
-              onClick={handleUndo}
-              disabled={!hasUnsavedChanges}
-            >
-              撤回
-            </Button>
-          </Space>
+        <Space size={2}>
+          <Button icon={<SaveOutlined />} type={hasUnsavedChanges ? 'primary' : 'default'} onClick={handleCommit} disabled={!hasUnsavedChanges} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>提交</Button>
+          <Button icon={<UndoOutlined />} onClick={handleUndo} disabled={!hasUnsavedChanges} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>撤销</Button>
 
           <div style={dividerStyle} />
 
-          <Space size="small">
-            <Button 
-              icon={<ReloadOutlined />} 
-              size="small" 
-              onClick={loadData} 
-              loading={loading}
-            >
-              刷新
-            </Button>
-          </Space>
+          <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>刷新</Button>
         </Space>
 
         {/* SQL 预览 */}
@@ -864,9 +900,10 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
           flex: 1,
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: 4,
           minWidth: 0,
-          maxWidth: 600,
+          maxWidth: 700,
+          marginLeft: 8,
         }}>
           <code style={{
             flex: 1,
@@ -876,44 +913,36 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
             fontSize: 11,
             color: isDarkMode ? '#8c8c8c' : '#595959',
             fontFamily: "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace",
-            padding: '2px 8px',
+            padding: '2px 6px',
             background: isDarkMode ? '#0f0f0f' : '#f5f5f5',
             borderRadius: 3,
             border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
           }}>
             {currentSql}
           </code>
-          <Button 
-            icon={<CopyOutlined />} 
-            size="small" 
-            type="text" 
-            onClick={copySql}
-            style={{ flexShrink: 0 }}
-          />
+          <Tooltip title="复制 SQL"><Button icon={<CopyOutlined />} type="text" onClick={copySql} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>复制</Button></Tooltip>
         </div>
 
         {/* 分页控制 */}
-        <Space size="small" style={{ flexShrink: 0 }}>
+        <Space size={4} style={{ flexShrink: 0 }}>
           <Select
             value={pageSize}
             onChange={(val) => handlePageChange(1, val)}
             size="small"
-            style={{ width: 90 }}
+            style={{ width: 80, fontSize: 11 }}
             options={[
-              { label: '10 行', value: 10 },
-              { label: '50 行', value: 50 },
-              { label: '100 行', value: 100 },
-              { label: '500 行', value: 500 },
-              { label: '1000 行', value: 1000 },
-              { label: '5000 行', value: 5000 },
+              { label: '50', value: 50 },
+              { label: '100', value: 100 },
+              { label: '500', value: 500 },
+              { label: '1000', value: 1000 },
             ]}
           />
-          <span style={{ 
-            fontSize: 12, 
+          <span style={{
+            fontSize: 10,
             color: isDarkMode ? '#8c8c8c' : '#595959',
             whiteSpace: 'nowrap',
           }}>
-            {startRow}-{endRow} / {totalCount.toLocaleString()}
+            {startRow}-{endRow}
           </span>
           <Pagination
             size="small"
@@ -923,7 +952,6 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
             showSizeChanger={false}
             onChange={handlePageChange}
             simple
-            style={{ marginLeft: 4 }}
           />
         </Space>
       </div>
@@ -995,4 +1023,4 @@ export function DataTable({ connectionId, tableName, database, pageSize: propPag
       </Modal>
     </div>
   );
-}
+});

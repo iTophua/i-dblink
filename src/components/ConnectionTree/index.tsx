@@ -19,6 +19,7 @@ import {
   FunctionOutlined,
   KeyOutlined,
   SearchOutlined,
+  MinusOutlined,
 } from '@ant-design/icons';
 import { theme } from 'antd';
 import type { Connection, ConnectionGroup } from '../../stores/appStore';
@@ -41,6 +42,11 @@ const DB_TYPE_COLORS: Record<string, string> = {
 function getDbIcon(dbType: string) {
   const color = DB_TYPE_COLORS[dbType] || '#8c8c8c';
   return <DatabaseOutlined style={{ color }} />;
+}
+
+function getConnIcon(dbType: string) {
+  const color = DB_TYPE_COLORS[dbType] || '#8c8c8c';
+  return <CloudServerOutlined style={{ color }} />;
 }
 
 // ============ Props ============
@@ -197,13 +203,19 @@ export function ConnectionTree({
                 key: 'move',
                 label: '移动至分组',
                 icon: <FolderOutlined />,
-                children: groups
-                  .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
-                  .map((g) => ({
-                    key: `move-to-${g.id}`,
-                    label: `${g.icon} ${g.name}`,
-                    disabled: conn.group_id === g.id,
-                  })),
+                children: [
+                  ...groups
+                    .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
+                    .map((g) => ({
+                      key: `move-to-${g.id}`,
+                      label: g.id === 'default' 
+                        ? <><MinusOutlined /> {g.name}</>
+                        : <>{g.icon} {g.name}</>,
+                      disabled: conn.group_id === g.id,
+                    })),
+                  { type: 'divider' },
+                  { key: 'new-group', label: '新建分组', icon: <PlusOutlined /> },
+                ],
               },
               { type: 'divider' },
               { key: 'delete', label: '删除连接', icon: <DeleteOutlined />, danger: true },
@@ -217,13 +229,19 @@ export function ConnectionTree({
                 key: 'move',
                 label: '移动至分组',
                 icon: <FolderOutlined />,
-                children: groups
-                  .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
-                  .map((g) => ({
-                    key: `move-to-${g.id}`,
-                    label: `${g.icon} ${g.name}`,
-                    disabled: conn.group_id === g.id,
-                  })),
+                children: [
+                  ...groups
+                    .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
+                    .map((g) => ({
+                      key: `move-to-${g.id}`,
+                      label: g.id === 'default' 
+                        ? <><MinusOutlined /> {g.name}</>
+                        : <>{g.icon} {g.name}</>,
+                      disabled: conn.group_id === g.id,
+                    })),
+                  { type: 'divider' },
+                  { key: 'new-group', label: '新建分组', icon: <PlusOutlined /> },
+                ],
               },
               { type: 'divider' },
               { key: 'delete', label: '删除连接', icon: <DeleteOutlined />, danger: true },
@@ -252,6 +270,10 @@ export function ConnectionTree({
           onNewQuery(conn.id);
         } else if (key === 'copy') {
           handleCopyConnection(conn);
+        } else if (key === 'new-group') {
+          setEditingGroup(null);
+          setParentGroupId(null);
+          setGroupDialogOpen(true);
         } else if (key.startsWith('move-to-')) {
           const targetGroupId = key.replace('move-to-', '');
           handleMoveConnection(conn.id, targetGroupId);
@@ -268,6 +290,9 @@ export function ConnectionTree({
       onDeleteConnection,
       onNewQuery,
       onExpandKeys,
+      setGroupDialogOpen,
+      setEditingGroup,
+      setParentGroupId,
     ]
   );
 
@@ -316,7 +341,7 @@ export function ConnectionTree({
             title: '确认删除分组',
             content:
               connCount > 0
-                ? `确定要删除分组 "${group.name}" 吗？该分组下有 ${connCount} 个连接，连接将移至"未分组"。`
+                ? `确定要删除分组 "${group.name}" 吗？该分组下有 ${connCount} 个连接，连接将移至"不分组"。`
                 : `确定要删除分组 "${group.name}" 吗？`,
             okText: '删除',
             okType: 'danger',
@@ -472,7 +497,7 @@ export function ConnectionTree({
           group_id: targetGroupId === 'default' ? null : targetGroupId,
         });
         const group = groups.find((g) => g.id === targetGroupId);
-        message.success(`已移动到"${group?.name || '未分组'}"分组`);
+        message.success(`已移动到"${group?.name || '不分组'}"分组`);
       } catch (error: any) {
         message.error(`移动失败：${error.message || error}`);
       }
@@ -1207,7 +1232,7 @@ export function ConnectionTree({
               handleDoubleClick(conn.id);
             }}
           >
-            {getDbIcon(conn.db_type)}
+            {getConnIcon(conn.db_type)}
             <span
               style={{
                 color: conn.status === 'connected' ? '#52c41a' : undefined,
@@ -1328,7 +1353,7 @@ export function ConnectionTree({
       });
     }
 
-    // 2. 添加未分组的连接（直接作为顶级节点）
+    // 2. 添加不分组的连接（直接作为顶级节点）
     const ungroupedConnNodes = (groupedConnections['ungrouped'] || [])
       .map((conn) => buildConnNode(conn))
       .filter(Boolean);

@@ -117,22 +117,6 @@ export function MainLayout({ children }: MainLayoutProps) {
     [deleteGroup]
   );
 
-  useEffect(() => {
-    const handleMenuAction = (event: CustomEvent<{ action: string }>) => {
-      const { action } = event.detail;
-      if (action === 'new-connection') {
-        setConnectionDialogOpen(true);
-      } else if (action === 'options') {
-        setSettingsDialogOpen(true);
-      }
-    };
-
-    window.addEventListener('menu-action' as any, handleMenuAction as any);
-    return () => {
-      window.removeEventListener('menu-action' as any, handleMenuAction as any);
-    };
-  }, []);
-
   const handleDialogSave = useCallback(
     async (data: ConnectionFormData) => {
       try {
@@ -361,6 +345,126 @@ export function MainLayout({ children }: MainLayoutProps) {
     }
   }, []);
 
+  useEffect(() => {
+    const handleMenuAction = (event: CustomEvent<{ action: string }>) => {
+      const { action } = event.detail;
+      switch (action) {
+        case 'new-connection':
+          setConnectionDialogOpen(true);
+          break;
+        case 'options':
+          setSettingsDialogOpen(true);
+          break;
+        case 'toggle-theme':
+          window.dispatchEvent(new CustomEvent('app-action', { detail: { action } }));
+          break;
+        case 'refresh':
+          if (selectedConnectionId && selectedDatabase) {
+            loadDatabaseTables(selectedConnectionId, selectedDatabase, true);
+          }
+          break;
+        case 'new-query':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } }));
+          break;
+        case 'execute-query':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'execute-query' } }));
+          break;
+        case 'connect-selected':
+          if (selectedConnectionId) {
+            handleConnect(selectedConnectionId);
+          }
+          break;
+        case 'disconnect':
+          if (selectedConnectionId) {
+            handleDisconnect(selectedConnectionId);
+          }
+          break;
+        case 'save':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'save' } }));
+          break;
+        case 'import':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'import' } }));
+          break;
+        case 'export':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'export' } }));
+          break;
+        case 'undo':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'undo' } }));
+          break;
+        case 'redo':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'redo' } }));
+          break;
+        case 'cut':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'cut' } }));
+          break;
+        case 'copy':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'copy' } }));
+          break;
+        case 'paste':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'paste' } }));
+          break;
+        case 'delete':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'delete' } }));
+          break;
+        case 'select-all':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'select-all' } }));
+          break;
+        case 'find':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'find' } }));
+          break;
+        case 'zoom-in':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-in' } }));
+          break;
+        case 'zoom-out':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-out' } }));
+          break;
+        case 'zoom-reset':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-reset' } }));
+          break;
+        case 'fullscreen':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'fullscreen' } }));
+          break;
+        case 'close-all':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'close-all-tabs' } }));
+          break;
+        case 'exit':
+          window.close();
+          break;
+        case 'new-tab':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-tab' } }));
+          break;
+        case 'close-tab':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'close-tab' } }));
+          break;
+        case 'next-tab':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'next-tab' } }));
+          break;
+        case 'prev-tab':
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'prev-tab' } }));
+          break;
+        case 'documentation':
+        case 'search':
+        case 'check-update':
+        case 'about':
+          window.dispatchEvent(new CustomEvent('app-action', { detail: { action } }));
+          break;
+        case 'data-sync':
+        case 'backup':
+        case 'restore':
+        case 'model-designer':
+          console.log(`Menu action ${action} not yet implemented`);
+          break;
+        default:
+          console.log(`Unknown menu action: ${action}`);
+      }
+    };
+
+    window.addEventListener('menu-action' as any, handleMenuAction as any);
+    return () => {
+      window.removeEventListener('menu-action' as any, handleMenuAction as any);
+    };
+  }, [selectedConnectionId, selectedDatabase, loadDatabaseTables, handleConnect, handleDisconnect]);
+
   return (
     <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Toolbar />
@@ -491,6 +595,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <TabPanel
               selectedConnectionId={selectedConnectionId}
+              selectedConnectionName={selectedConnectionId ? connections.find(c => c.id === selectedConnectionId)?.name : undefined}
               selectedTable={selectedTable}
               selectedDatabase={selectedDatabase}
               tableToOpen={tableToOpen}
