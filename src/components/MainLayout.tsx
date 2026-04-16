@@ -26,6 +26,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [selectedDatabase, setSelectedDatabase] = useState<string | undefined>();
+  const [selectedObjectType, setSelectedObjectType] = useState<'table' | 'view' | 'all'>('all');
   // 双击表时触发，用于在 TabPanel 中打开新 Tab
   const [tableToOpen, setTableToOpen] = useState<{ name: string; database?: string } | null>(null);
   const [logPanelCollapsed, setLogPanelCollapsed] = useState(false);
@@ -247,6 +248,8 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   const handleDatabaseExpand = useCallback(
     async (connectionId: string, database: string) => {
+      setSelectedConnectionId(connectionId);
+      setSelectedDatabase(database);
       await loadDatabaseTables(connectionId, database);
     },
     [loadDatabaseTables]
@@ -530,6 +533,10 @@ export function MainLayout({ children }: MainLayoutProps) {
                   setSelectedTable(table);
                   setSelectedDatabase(database);
                 }}
+                onObjectTypeSelect={(objectType, database) => {
+                  setSelectedObjectType(objectType);
+                  setSelectedDatabase(database);
+                }}
                 onTableOpen={(tableName, database) => {
                   // 双击表时，先重置再设置，确保重复双击同一表也能触发
                   setTableToOpen(null);
@@ -627,6 +634,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               }
               selectedTable={selectedTable}
               selectedDatabase={selectedDatabase}
+              selectedObjectType={selectedObjectType}
               tableToOpen={tableToOpen}
               onSqlTabCountChange={setSqlTabCount}
               pageSize={useSettingsStore.getState().settings.pageSize}

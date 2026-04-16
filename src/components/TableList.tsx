@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Tag, Typography, Spin, Empty, Button, Space, message, Input, Tooltip } from 'antd';
 import { TableOutlined, EyeOutlined, SearchOutlined, ReloadOutlined, AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { theme } from 'antd';
@@ -39,19 +39,16 @@ export interface TableData {
 export interface TableListProps {
   connectionId: string;
   database?: string;
+  objectType?: 'table' | 'view' | 'all';
   onTableSelect?: (tableName: string, database?: string) => void;
   onTableOpen?: (tableName: string, database?: string) => void;
 }
 
 // Navicat-style grid card component
-function TableGridCard({ table, onClick, isDarkMode }: { table: TableData; onClick: () => void; isDarkMode: boolean }) {
-  const [hovered, setHovered] = useState(false);
-
+const TableGridCard = React.memo(function TableGridCard({ table, onClick, isDarkMode }: { table: TableData; onClick: () => void; isDarkMode: boolean }) {
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -59,8 +56,12 @@ function TableGridCard({ table, onClick, isDarkMode }: { table: TableData; onCli
         padding: '3px 6px',
         cursor: 'pointer',
         borderRadius: 3,
-        background: hovered ? (isDarkMode ? '#1a1a1a' : '#f5f5f5') : 'transparent',
-        transition: 'background 0.15s',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = isDarkMode ? '#1a1a1a' : '#f5f5f5';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
       }}
     >
       {table.table_type === 'VIEW' ? (
@@ -81,10 +82,10 @@ function TableGridCard({ table, onClick, isDarkMode }: { table: TableData; onCli
       </Tooltip>
     </div>
   );
-}
+});
 
 // List view row component
-function TableRow({ table, selected, onClick, isDarkMode }: {
+const TableRow = React.memo(function TableRow({ table, selected, onClick, isDarkMode }: {
   table: TableData;
   selected: boolean;
   onClick: () => void;
@@ -158,7 +159,7 @@ function TableRow({ table, selected, onClick, isDarkMode }: {
       </div>
     </div>
   );
-}
+});
 
 // List header component
 function ListHeader({ isDarkMode }: { isDarkMode: boolean }) {
@@ -190,7 +191,7 @@ function ListHeader({ isDarkMode }: { isDarkMode: boolean }) {
   );
 }
 
-export function TableList({ connectionId, database, onTableSelect, onTableOpen }: TableListProps) {
+export function TableList({ connectionId, database, objectType = 'all', onTableSelect, onTableOpen }: TableListProps) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -260,16 +261,21 @@ export function TableList({ connectionId, database, onTableSelect, onTableOpen }
   };
 
   const filteredTables = useMemo(() => {
-    // 只显示表，不显示视图
-    const baseTables = tables.filter(t => t.table_type === 'BASE TABLE');
-    if (!searchText) return baseTables;
-    return baseTables.filter((table) =>
+    let filtered = tables;
+    if (objectType === 'table') {
+      filtered = tables.filter(t => t.table_type === 'BASE TABLE');
+    } else if (objectType === 'view') {
+      filtered = tables.filter(t => t.table_type === 'VIEW');
+    }
+    if (!searchText) return filtered;
+    return filtered.filter((table) =>
       table.table_name.toLowerCase().includes(searchText.toLowerCase()) ||
       table.comment?.toLowerCase().includes(searchText.toLowerCase())
     );
-  }, [tables, searchText]);
+  }, [tables, searchText, objectType]);
 
-  const tableCount = filteredTables.length;
+  const tableCount = tables.filter(t => t.table_type === 'BASE TABLE').length;
+  const viewCount = tables.filter(t => t.table_type === 'VIEW').length;
 
   const toolbarBg = isDarkMode ? '#141414' : '#fafafa';
   const borderColor = isDarkMode ? '#303030' : '#e8e8e8';
@@ -305,7 +311,16 @@ export function TableList({ connectionId, database, onTableSelect, onTableOpen }
           </Space>
 
           <Space size="small">
-            <Tag color="blue">表 {tableCount}</Tag>
+            {objectType === 'all' ? (
+              <>
+                <Tag color="blue">表 {tableCount}</Tag>
+                <Tag color="purple">视图 {viewCount}</Tag>
+              </>
+            ) : objectType === 'table' ? (
+              <Tag color="blue">表 {tableCount}</Tag>
+            ) : (
+              <Tag color="purple">视图 {viewCount}</Tag>
+            )}
             <Tooltip title={viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}>
               <Button
                 icon={viewMode === 'list' ? <AppstoreOutlined /> : <UnorderedListOutlined />}
@@ -321,7 +336,7 @@ export function TableList({ connectionId, database, onTableSelect, onTableOpen }
       </div>
 
       {/* Status bar */}
-      {!loading && tables.length > 0 && (
+      {!loading && filteredTables.length > 0 && (
         <div style={{
           flexShrink: 0,
           borderBottom: `1px solid ${borderColor}`,
@@ -331,7 +346,11 @@ export function TableList({ connectionId, database, onTableSelect, onTableOpen }
           color: '#999',
           background: isDarkMode ? '#141414' : '#fafafa',
         }}>
-          共 {filteredTables.length} 个对象
+          {objectType === 'all'
+            ? `共 ${tableCount} 个表, ${viewCount} 个视图`
+            : objectType === 'table'
+              ? `共 ${tableCount} 个表`
+              : `共 ${viewCount} 个视图`}
           {searchText && `（过滤自 ${tables.length} 个）`}
         </div>
       )}

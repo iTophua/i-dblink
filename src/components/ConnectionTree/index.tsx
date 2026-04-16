@@ -58,6 +58,7 @@ type ConnectionTreeProps = {
   selectedTableId: string | null;
   onSelect: (id: string | null) => void;
   onTableSelect: (table: string | null, database?: string) => void;
+  onObjectTypeSelect?: (objectType: 'table' | 'view' | 'all', database?: string) => void;
   onTableOpen: (tableName: string, database?: string) => void;
   onExpand: (connectionId: string, expanded: boolean) => void;
   collapsed: boolean;
@@ -96,6 +97,7 @@ export function ConnectionTree({
   selectedTableId,
   onSelect,
   onTableSelect,
+  onObjectTypeSelect,
   onTableOpen,
   onExpand,
   collapsed,
@@ -400,7 +402,7 @@ export function ConnectionTree({
         }
       },
     }),
-    [expandedKeys, onNewQuery, onDatabaseRefresh, onExpandKeys]
+    [onNewQuery, onDatabaseRefresh]
   );
 
   // ---- Table node context menu ----
@@ -694,7 +696,7 @@ export function ConnectionTree({
           title: (
             <Dropdown menu={getDatabaseMenu(conn.id, db.database)} trigger={['contextMenu']}>
               <div
-                style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, userSelect: 'none' }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   handleDoubleClick(`db::${conn.id}::${db.database}`);
@@ -723,7 +725,7 @@ export function ConnectionTree({
                   key: `tables::${conn.id}::${db.database}`,
                   title: (
                     <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}
                       onDoubleClick={(e) => {
                         e.stopPropagation();
                         handleDoubleClick(`tables::${conn.id}::${db.database}`);
@@ -769,7 +771,7 @@ export function ConnectionTree({
                 {
                   key: `views::${conn.id}::${db.database}`,
                   title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
                       <EyeOutlined style={{ color: '#1890ff', fontSize: 12 }} />
                       视图 ({viewItems.length})
                     </span>
@@ -828,6 +830,7 @@ export function ConnectionTree({
                 justifyContent: 'space-between',
                 flex: 1,
                 paddingRight: 4,
+                userSelect: 'none',
               }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
@@ -854,6 +857,7 @@ export function ConnectionTree({
                         : '#999999',
                     fontWeight: isConnected ? 500 : 400,
                     transition: 'color 0.2s ease',
+                    userSelect: 'none',
                   }}
                 >
                   {conn.name}
@@ -882,7 +886,7 @@ export function ConnectionTree({
                 {
                   key: `tables-${conn.id}`,
                   title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
                       <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />表
                     </span>
                   ),
@@ -893,7 +897,7 @@ export function ConnectionTree({
                 {
                   key: `views-${conn.id}`,
                   title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
                       <EyeOutlined style={{ color: '#1890ff', fontSize: 12 }} />
                       视图
                     </span>
@@ -905,7 +909,7 @@ export function ConnectionTree({
                 {
                   key: `procedures-${conn.id}`,
                   title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
                       <ThunderboltOutlined style={{ color: '#faad14', fontSize: 12 }} />
                       存储过程
                     </span>
@@ -916,7 +920,7 @@ export function ConnectionTree({
                 {
                   key: `functions-${conn.id}`,
                   title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
                       <FunctionOutlined style={{ color: '#722ed1', fontSize: 12 }} />
                       函数
                     </span>
@@ -1083,7 +1087,7 @@ export function ConnectionTree({
       const viewsNode = {
         key: `views::${connId}::${db.database}`,
         title: (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <EyeOutlined style={{ color: '#1890ff', fontSize: 12 }} />
             <span>视图 ({db.loaded ? filteredViews.length : 0})</span>
           </span>
@@ -1160,7 +1164,7 @@ export function ConnectionTree({
       const proceduresNode = {
         key: `procedures::${connId}::${db.database}`,
         title: (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <ThunderboltOutlined style={{ color: '#faad14', fontSize: 12 }} />
             存储过程
           </span>
@@ -1181,7 +1185,7 @@ export function ConnectionTree({
       const functionsNode = {
         key: `functions::${connId}::${db.database}`,
         title: (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <FunctionOutlined style={{ color: '#722ed1', fontSize: 12 }} />
             函数
           </span>
@@ -1220,7 +1224,7 @@ export function ConnectionTree({
         title: (
           <Dropdown menu={getDatabaseMenu(connId, db.database)} trigger={['contextMenu']}>
             <div
-              style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, userSelect: 'none' }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 handleDoubleClick(`db::${connId}::${db.database}`);
@@ -1236,6 +1240,7 @@ export function ConnectionTree({
                 style={{
                   color: db.loaded ? '#52c41a' : undefined,
                   fontWeight: db.loaded ? 500 : undefined,
+                  userSelect: 'none',
                 }}
               >
                 {db.database}
@@ -1243,8 +1248,7 @@ export function ConnectionTree({
             </div>
           </Dropdown>
         ),
-        isLeaf: !db.loaded,
-        children: db.loaded ? dbChildren : undefined,
+        children: db.loaded || isDbExpanded ? dbChildren : undefined,
       };
     };
 
@@ -1292,7 +1296,7 @@ export function ConnectionTree({
       const connTitle = (
         <Dropdown menu={getConnectionMenu(conn)} trigger={['contextMenu']}>
           <div
-            style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, userSelect: 'none' }}
             onDoubleClick={(e) => {
               e.stopPropagation();
               handleDoubleClick(conn.id);
@@ -1303,6 +1307,7 @@ export function ConnectionTree({
               style={{
                 color: conn.status === 'connected' ? '#52c41a' : undefined,
                 fontWeight: conn.status === 'connected' ? 500 : undefined,
+                userSelect: 'none',
               }}
             >
               {conn.name}
@@ -1390,6 +1395,7 @@ export function ConnectionTree({
                 justifyContent: 'space-between',
                 flex: 1,
                 paddingRight: 4,
+                userSelect: 'none',
               }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
@@ -1603,6 +1609,7 @@ export function ConnectionTree({
           const tableName = parts.slice(3).join('::');
           onSelect(connectionId);
           onTableSelect(tableName, database);
+          onObjectTypeSelect?.('table', database);
         }
       } else if (key.startsWith('view::')) {
         // View selection - extract connectionId, database and viewName
@@ -1613,25 +1620,47 @@ export function ConnectionTree({
           const viewName = parts.slice(3).join('::');
           onSelect(connectionId);
           onTableSelect(viewName, database);
+          onObjectTypeSelect?.('view', database);
         }
       } else if (key.startsWith('db::')) {
-        // DB selection - 单击不做任何操作
-        return;
-      } else if (key.startsWith('tables::') || key.startsWith('views::')) {
-        // Tables/Views group selection - extract connectionId and database
+        // DB selection - 选中数据库并显示表列表
+        const parts = key.split('::');
+        if (parts.length >= 3) {
+          const connectionId = parts[1];
+          const database = parts[2];
+          onSelect(connectionId);
+          onTableSelect(null, database);
+          onObjectTypeSelect?.('all', database);
+        }
+      } else if (key.startsWith('tables::')) {
+        // Tables group selection - 显示表列表
         const parts = key.split('::');
         const connectionId = parts[1];
         const database = parts[2];
         onSelect(connectionId);
         onTableSelect(null, database);
+        onObjectTypeSelect?.('table', database);
+      } else if (key.startsWith('views::')) {
+        // Views group selection - 显示视图列表
+        const parts = key.split('::');
+        const connectionId = parts[1];
+        const database = parts[2];
+        onSelect(connectionId);
+        onTableSelect(null, database);
+        onObjectTypeSelect?.('view', database);
       } else if (key.startsWith('group-')) {
         // Group selection - do nothing special
       } else {
-        // 连接节点 - 单击不做任何操作
-        return;
+        // 连接节点 - 单击选中连接并显示表列表
+        const conn = connections.find((c) => c.id === key);
+        if (conn) {
+          onSelect(key);
+          onTableSelect(null, undefined);
+          onObjectTypeSelect?.('all', undefined);
+        }
       }
     },
-    [onSelect, onTableSelect]
+    [onSelect, onTableSelect, onObjectTypeSelect, connections]
   );
 
   // ---- Collapsed tree view ----
@@ -1730,8 +1759,10 @@ export function ConnectionTree({
             }}
             onSelect={handleSelect}
             treeData={treeData as any}
-            style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 12 }}
+            style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 12, userSelect: 'none' }}
             className="connection-tree"
+            blockNode
+            virtual
           />
         )}
       </Spin>

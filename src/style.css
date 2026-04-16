@@ -568,6 +568,15 @@ tbody tr:hover {
   --ant-tree-node-content-unit-height: 24px;
 }
 
+/* 防止双击选中文本 */
+.connection-tree.ant-tree .ant-tree-node-content-wrapper,
+.connection-tree.ant-tree .ant-tree-node-content-wrapper * {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
 /* 展开按钮样式 */
 .connection-tree.ant-tree .ant-tree-switcher {
   width: 18px !important;

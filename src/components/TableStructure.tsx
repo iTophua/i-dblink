@@ -67,7 +67,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       title: '列名',
       dataIndex: 'column_name',
       key: 'column_name',
-      width: 160,
+      minWidth: 150,
       render: (text: string, record: ColumnInfo) => (
         <span>
           {record.column_key === 'PRI' && <KeyOutlined style={{ color: '#faad14', marginRight: 4 }} />}
@@ -198,7 +198,15 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
   }
 
   return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
+    <div style={{ height: '100%', overflow: 'auto', padding: '8px 12px' }}>
+      <style>{`
+        .table-compact .ant-table-row td {
+          padding: 4px 8px !important;
+        }
+        .table-compact .ant-table-thead th {
+          padding: 4px 8px !important;
+        }
+      `}</style>
       <Tabs
         size="small"
         items={[
@@ -211,43 +219,43 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
               </span>
             ),
             children: tableInfo ? (
-              <div style={{ padding: 16 }}>
-                <table style={{ width: '100%', fontSize: 13 }}>
+              <div style={{ padding: '4px 0' }}>
+                <table style={{ width: '100%', fontSize: 11, lineHeight: '18px' }}>
                   <tbody>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500, width: 120 }}>表名</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500, width: 100 }}>表名</td>
                       <td>{tableInfo.table_name}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500 }}>引擎</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>引擎</td>
                       <td><Tag color="blue">{tableInfo.engine || '-'}</Tag></td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500 }}>行数</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>行数</td>
                       <td>{tableInfo.row_count?.toLocaleString() || '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500 }}>数据大小</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>数据大小</td>
                       <td>{tableInfo.data_length ? `${(tableInfo.data_length / 1024).toFixed(2)} KB` : '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500 }}>索引大小</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>索引大小</td>
                       <td>{tableInfo.index_length ? `${(tableInfo.index_length / 1024).toFixed(2)} KB` : '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500 }}>排序规则</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>排序规则</td>
                       <td><Tag color="green">{tableInfo.collation || '-'}</Tag></td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500 }}>创建时间</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>创建时间</td>
                       <td>{tableInfo.create_time || '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500 }}>更新时间</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>更新时间</td>
                       <td>{tableInfo.update_time || '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 0', fontWeight: 500 }}>注释</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>注释</td>
                       <td>{tableInfo.comment || '-'}</td>
                     </tr>
                   </tbody>
@@ -265,6 +273,8 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 rowKey="column_name"
                 size="small"
                 pagination={false}
+                scroll={{ x: 'max-content' }}
+                className="table-compact"
               />
             ) : <Empty description="暂无列信息" />,
           },
@@ -278,6 +288,8 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 rowKey={(record) => `${record.index_name}-${record.column_name}`}
                 size="small"
                 pagination={false}
+                scroll={{ x: 'max-content' }}
+                className="table-compact"
               />
             ) : <Empty description="暂无索引" />,
           },
@@ -291,6 +303,8 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 rowKey={(record) => `${record.constraint_name}-${record.column_name}`}
                 size="small"
                 pagination={false}
+                scroll={{ x: 'max-content' }}
+                className="table-compact"
               />
             ) : <Empty description="暂无外键" />,
           },
@@ -303,15 +317,15 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
               </span>
             ),
             children: createTableSQL ? (
-              <div style={{ padding: 16 }}>
+              <div style={{ padding: '8px 0' }}>
                 <pre style={{
                   background: '#f5f5f5',
-                  padding: 16,
+                  padding: 12,
                   borderRadius: 4,
-                  fontSize: 13,
+                  fontSize: 12,
                   fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                   overflow: 'auto',
-                  maxHeight: 400,
+                  maxHeight: 300,
                 }}>
                   {createTableSQL}
                 </pre>

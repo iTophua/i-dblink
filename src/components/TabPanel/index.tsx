@@ -18,6 +18,7 @@ interface TabPanelProps {
   selectedConnectionName?: string;
   selectedTable: string | null;
   selectedDatabase?: string;
+  selectedObjectType?: 'table' | 'view' | 'all';
   /** 双击表时设置此值，TabPanel 会打开新的数据浏览 Tab */
   tableToOpen?: { name: string; database?: string } | null;
   /** 当有 SQL 查询 Tab 打开时回调，用于控制日志面板显示 */
@@ -39,6 +40,7 @@ export function TabPanel({
   selectedConnectionName,
   selectedTable,
   selectedDatabase,
+  selectedObjectType = 'all',
   tableToOpen,
   onSqlTabCountChange,
   pageSize,
@@ -339,7 +341,7 @@ export function TabPanel({
                         </span>
                       ),
                     },
-                    selectedConnectionId ? { title: '对象列表' } : null,
+                    selectedConnectionId ? { title: selectedConnectionName || '对象列表' } : null,
                     selectedDatabase ? { title: selectedDatabase } : null,
                     { title: selectedTable },
                   ].filter(Boolean) as { title: React.ReactNode }[]
@@ -371,6 +373,7 @@ export function TabPanel({
                 <TableList
                   connectionId={selectedConnectionId}
                   database={selectedDatabase}
+                  objectType={selectedObjectType}
                   onTableSelect={(tableName, db) => {
                     // Single click in TableList → show structure in objects tab
                   }}
