@@ -1,11 +1,79 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { App } from 'antd';
 import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
 
-// 模块级别的列缓存（跨组件实例共享）
-const columnsCache = new Map<string, Promise<any>>();
+// 性能优化：带 TTL 的 LRU 缓存
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+class TTLCache<T> {
+  private cache = new Map<string, CacheEntry<T>>();
+  private maxSize: number;
+  private ttl: number; // 毫秒
+
+  constructor(maxSize = 100, ttl = 5 * 60 * 1000) { // 默认 5 分钟 TTL
+    this.maxSize = maxSize;
+    this.ttl = ttl;
+  }
+
+  get(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    
+    // 检查是否过期
+    if (Date.now() - entry.timestamp > this.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return entry.data;
+  }
+
+  set(key: string, data: T): void {
+    // 如果缓存已满，删除最老的条目
+    if (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) this.cache.delete(oldestKey);
+    }
+    
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+    });
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  // 清理过期条目
+  cleanup(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > this.ttl) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+// 模块级别的列缓存（跨组件实例共享）- 使用 TTL 缓存
+const columnsCache = new TTLCache<Promise<any>>(100, 10 * 60 * 1000); // 10 分钟 TTL
+
+// 定期清理过期缓存
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    columnsCache.cleanup();
+  }, 60000); // 每分钟清理一次
+}
 
 export const useConnections = () => {
   const { message } = App.useApp();
@@ -270,9 +338,10 @@ export const useDatabase = () => {
   const getColumns = useCallback(async (connectionId: string, tableName: string, database?: string) => {
     const cacheKey = `${connectionId}::${database || ''}::${tableName}`;
     
-    // 检查缓存
-    if (columnsCache.has(cacheKey)) {
-      return columnsCache.get(cacheKey)!;
+    // 检查缓存 - 使用新的 TTLCache API
+    const cached = columnsCache.get(cacheKey);
+    if (cached) {
+      return cached;
     }
 
     const promise = api.getColumns(connectionId, tableName, database);

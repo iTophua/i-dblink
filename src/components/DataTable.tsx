@@ -39,7 +39,6 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
   const [loading, setLoading] = useState(false);
   const [hasEverLoaded, setHasEverLoaded] = useState(false);
   const [rowData, setRowData] = useState<RowData[]>([]);
-  const [columnDefs, setColumnDefs] = useState<ColDef[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -100,7 +99,6 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
       loadingRef.current = true;
       setLoading(true);
 
-      // 并行执行列信息获取和数据查询
       const query = buildQuery(currentPage, pageSize, sortModel);
       setCurrentSql(query);
 
@@ -132,43 +130,6 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
           return rowData;
         });
         setRowData(data);
-
-        const colWidths: Record<string, number> = {};
-        const sampleSize = Math.min(data.length, 50);
-        for (let i = 0; i < sampleSize; i++) {
-          const row = data[i];
-          for (let colIndex = 0; colIndex < dataResult.columns.length; colIndex++) {
-            const col = dataResult.columns[colIndex];
-            const value = row[col];
-            const valueStr = value === null ? 'NULL' : String(value);
-            const currentMax = colWidths[col] || 0;
-            colWidths[col] = Math.max(currentMax, valueStr.length);
-          }
-        }
-
-        const colDefs: ColDef[] = colResult.map((col: any) => {
-          const headerLength = col.column_name.length;
-          const dataMaxLength = colWidths[col.column_name] || 0;
-          const contentWidth = Math.max(headerLength, dataMaxLength);
-          const autoWidth = Math.max(60, Math.min(300, contentWidth * 8 + 30));
-          const nullableInfo = col.is_nullable ? ' | NULL' : ' | NOT NULL';
-          const commentInfo = col.comment ? ` | ${col.comment}` : '';
-          return {
-            field: col.column_name,
-            headerName: col.column_name,
-            sortable: true,
-            filter: true,
-            resizable: true,
-            minWidth: 60,
-            maxWidth: 300,
-            width: autoWidth,
-            editable: true,
-            headerTooltip: col.data_type + nullableInfo + commentInfo,
-            cellClass: (params: any) => params.value === null ? 'null-cell' : undefined,
-            cellRenderer: (params: any) => params.value,
-          };
-        });
-        setColumnDefs(colDefs);
         setHasUnsavedChanges(false);
         setPendingChanges({ inserts: [], updates: [], deletes: [] });
         setHasEverLoaded(true);
@@ -183,6 +144,54 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
       loadingRef.current = false;
     }
   }, [connectionId, tableName, database, currentPage, pageSize, sortModel]);
+
+  // 性能优化：计算列宽的 useMemo
+  const colWidths = useMemo(() => {
+    if (rowData.length === 0 || columns.length === 0) return {};
+
+    const widths: Record<string, number> = {};
+    const sampleSize = Math.min(rowData.length, 50);
+    
+    // 只在必要时计算
+    for (let i = 0; i < sampleSize; i++) {
+      const row = rowData[i];
+      for (const col of columns) {
+        const value = row[col.column_name];
+        const valueStr = value === null ? 'NULL' : String(value);
+        const currentMax = widths[col.column_name] || 0;
+        widths[col.column_name] = Math.max(currentMax, valueStr.length);
+      }
+    }
+    
+    return widths;
+  }, [rowData, columns]);
+
+  // 性能优化：计算列定义的 useMemo
+  const columnDefs = useMemo(() => {
+    return columns.map((col) => {
+      const headerLength = col.column_name.length;
+      const dataMaxLength = colWidths[col.column_name] || 0;
+      const contentWidth = Math.max(headerLength, dataMaxLength);
+      const autoWidth = Math.max(60, Math.min(300, contentWidth * 8 + 30));
+      const nullableInfo = col.is_nullable ? ' | NULL' : ' | NOT NULL';
+      const commentInfo = col.comment ? ` | ${col.comment}` : '';
+
+      return {
+        field: col.column_name,
+        headerName: col.column_name,
+        sortable: true,
+        filter: true,
+        resizable: true,
+        minWidth: 60,
+        maxWidth: 300,
+        width: autoWidth,
+        editable: true,
+        headerTooltip: col.data_type + nullableInfo + commentInfo,
+        cellClass: (params: any) => params.value === null ? 'null-cell' : undefined,
+        cellRenderer: (params: any) => params.value,
+      } as ColDef;
+    });
+  }, [columns, colWidths]);
 
   const loadCount = useCallback(async () => {
     try {
@@ -877,7 +886,6 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
                 operator: '运算符',
                 all: '全部',
                 group: '分组',
-                columns: '列',
               }}
             />
           </div>

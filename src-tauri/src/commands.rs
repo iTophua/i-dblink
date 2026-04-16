@@ -8,7 +8,7 @@ use crate::storage::Storage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 #[tauri::command]
 pub fn greet(name: &str) -> String {
@@ -139,7 +139,7 @@ pub async fn get_tables(
     connection_id: String,
     database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, Mutex<ActiveConnections>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<TableInfo>, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
@@ -152,12 +152,10 @@ pub async fn get_tables(
 
     let password = password_opt.unwrap_or_default();
 
-    let pool = {
-        let conns = connections.lock().await;
-        if let Some(pool) = conns.get(&connection_id) {
-            pool.clone_ref()
-        } else {
-            drop(conns);
+    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
+    let pool = match connections.read().await.get(&connection_id).await {
+        Some(pool) => pool,
+        None => {
             connect_by_type(&conn_config.db_type, &conn_config, &password).await?
         }
     };
@@ -171,7 +169,7 @@ pub async fn get_tables(
 pub async fn get_databases(
     connection_id: String,
     state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, Mutex<ActiveConnections>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<String>, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
@@ -184,12 +182,10 @@ pub async fn get_databases(
 
     let password = password_opt.unwrap_or_default();
 
-    let pool = {
-        let conns = connections.lock().await;
-        if let Some(pool) = conns.get(&connection_id) {
-            pool.clone_ref()
-        } else {
-            drop(conns);
+    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
+    let pool = match connections.read().await.get(&connection_id).await {
+        Some(pool) => pool,
+        None => {
             connect_by_type(&conn_config.db_type, &conn_config, &password).await?
         }
     };
@@ -205,7 +201,7 @@ pub async fn get_columns(
     table_name: String,
     database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, Mutex<ActiveConnections>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<ColumnInfo>, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
@@ -218,12 +214,10 @@ pub async fn get_columns(
 
     let password = password_opt.unwrap_or_default();
 
-    let pool = {
-        let conns = connections.lock().await;
-        if let Some(pool) = conns.get(&connection_id) {
-            pool.clone_ref()
-        } else {
-            drop(conns);
+    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
+    let pool = match connections.read().await.get(&connection_id).await {
+        Some(pool) => pool,
+        None => {
             connect_by_type(&conn_config.db_type, &conn_config, &password).await?
         }
     };
@@ -245,7 +239,7 @@ pub async fn get_indexes(
     table_name: String,
     database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, Mutex<ActiveConnections>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<IndexInfo>, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
@@ -258,12 +252,10 @@ pub async fn get_indexes(
 
     let password = password_opt.unwrap_or_default();
 
-    let pool = {
-        let conns = connections.lock().await;
-        if let Some(pool) = conns.get(&connection_id) {
-            pool.clone_ref()
-        } else {
-            drop(conns);
+    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
+    let pool = match connections.read().await.get(&connection_id).await {
+        Some(pool) => pool,
+        None => {
             connect_by_type(&conn_config.db_type, &conn_config, &password).await?
         }
     };
@@ -285,7 +277,7 @@ pub async fn get_foreign_keys(
     table_name: String,
     database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, Mutex<ActiveConnections>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<ForeignKeyInfo>, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
@@ -298,12 +290,10 @@ pub async fn get_foreign_keys(
 
     let password = password_opt.unwrap_or_default();
 
-    let pool = {
-        let conns = connections.lock().await;
-        if let Some(pool) = conns.get(&connection_id) {
-            pool.clone_ref()
-        } else {
-            drop(conns);
+    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
+    let pool = match connections.read().await.get(&connection_id).await {
+        Some(pool) => pool,
+        None => {
             connect_by_type(&conn_config.db_type, &conn_config, &password).await?
         }
     };
@@ -325,7 +315,7 @@ pub async fn execute_query(
     sql: String,
     database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, Mutex<ActiveConnections>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<QueryResult, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
@@ -338,12 +328,10 @@ pub async fn execute_query(
 
     let password = password_opt.unwrap_or_default();
 
-    let pool = {
-        let conns = connections.lock().await;
-        if let Some(pool) = conns.get(&connection_id) {
-            pool.clone_ref()
-        } else {
-            drop(conns);
+    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
+    let pool = match connections.read().await.get(&connection_id).await {
+        Some(pool) => pool,
+        None => {
             connect_by_type(&conn_config.db_type, &conn_config, &password).await?
         }
     };
@@ -424,31 +412,46 @@ pub async fn test_connection(
 }
 
 /// 活跃连接池（内存中管理）
+/// 性能优化：使用 RwLock 替代 Mutex，提升读多写少场景的性能
 pub struct ActiveConnections {
-    pools: HashMap<String, DbPool>,
+    pools: RwLock<HashMap<String, DbPool>>,
 }
 
 impl ActiveConnections {
     pub fn new() -> Self {
         Self {
-            pools: HashMap::new(),
+            pools: RwLock::new(HashMap::new()),
         }
     }
 
-    pub fn add(&mut self, connection_id: String, pool: DbPool) {
-        self.pools.insert(connection_id, pool);
+    /// 读取连接池 - 使用读锁，并发读取性能更好
+    pub async fn get(&self, connection_id: &str) -> Option<DbPool> {
+        let pools = self.pools.read().await;
+        pools.get(connection_id).cloned()
     }
 
-    pub fn get(&self, connection_id: &str) -> Option<&DbPool> {
-        self.pools.get(connection_id)
+    /// 添加连接池 - 使用写锁
+    pub async fn add(&self, connection_id: String, pool: DbPool) {
+        let mut pools = self.pools.write().await;
+        pools.insert(connection_id, pool);
     }
 
-    pub fn remove(&mut self, connection_id: &str) -> Option<DbPool> {
-        self.pools.remove(connection_id)
+    /// 移除连接池 - 使用写锁
+    pub async fn remove(&self, connection_id: &str) -> Option<DbPool> {
+        let mut pools = self.pools.write().await;
+        pools.remove(connection_id)
     }
 
-    pub fn contains(&self, connection_id: &str) -> bool {
-        self.pools.contains_key(connection_id)
+    /// 检查连接是否存在 - 使用读锁
+    pub async fn contains(&self, connection_id: &str) -> bool {
+        let pools = self.pools.read().await;
+        pools.contains_key(connection_id)
+    }
+
+    /// 获取所有连接 ID - 使用读锁
+    pub async fn get_all_ids(&self) -> Vec<String> {
+        let pools = self.pools.read().await;
+        pools.keys().cloned().collect()
     }
 }
 
@@ -457,15 +460,15 @@ impl ActiveConnections {
 pub async fn connect_database(
     connection_id: String,
     state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, Mutex<ActiveConnections>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<bool, String> {
     let guard = state.lock().await;
     let storage = guard.as_ref().unwrap();
 
-    // 检查是否已经连接
+    // 检查是否已经连接 - 性能优化：使用读锁
     {
-        let conns = connections.lock().await;
-        if conns.contains(&connection_id) {
+        let conns = connections.read().await;
+        if conns.contains(&connection_id).await {
             return Ok(true);
         }
     }
@@ -521,8 +524,8 @@ pub async fn connect_database(
         }
     }
 
-    let mut conns = connections.lock().await;
-    conns.add(connection_id, pool);
+    // 性能优化：使用 RwLock 的写锁（write().await）
+    let _ = connections.write().await.add(connection_id, pool);
 
     println!("Connected successfully");
     Ok(true)
@@ -532,10 +535,10 @@ pub async fn connect_database(
 #[tauri::command]
 pub async fn disconnect_database(
     connection_id: String,
-    connections: State<'_, Mutex<ActiveConnections>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<bool, String> {
-    let mut conns = connections.lock().await;
-    if conns.remove(&connection_id).is_some() {
+    // 性能优化：使用 RwLock 的写锁（write().await）
+    if connections.write().await.remove(&connection_id).await.is_some() {
         println!("Disconnected from {}", connection_id);
         Ok(true)
     } else {

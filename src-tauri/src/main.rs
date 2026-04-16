@@ -12,7 +12,7 @@ mod storage;
 use commands::ActiveConnections;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 // 创建文件菜单
 fn create_file_menu<R: tauri::Runtime>(
@@ -305,7 +305,8 @@ fn main() {
             });
 
             app.manage(Mutex::new(Some(storage)));
-            app.manage(Mutex::new(ActiveConnections::new()));
+            // 性能优化：使用 RwLock 替代 Mutex 提升并发性能
+            app.manage(RwLock::new(ActiveConnections::new()));
 
             println!("Storage and menu initialized successfully");
             Ok(())

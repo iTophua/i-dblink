@@ -66,6 +66,33 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 性能优化：缓存搜索结果
+  const filteredConnections = useMemo(() => {
+    if (!debouncedSearch.trim()) return connections;
+    const lower = debouncedSearch.toLowerCase();
+    return connections.filter(
+      (conn) =>
+        conn.name.toLowerCase().includes(lower) ||
+        conn.host?.toLowerCase().includes(lower)
+    );
+  }, [connections, debouncedSearch]);
+
+  // 性能优化：缓存连接统计
+  const connectionStats = useMemo(() => {
+    return {
+      total: connections.length,
+      connected: connections.filter((c) => c.status === 'connected').length,
+      filtered: filteredConnections.length,
+    };
+  }, [connections, filteredConnections]);
+
+  // 性能优化：缓存数据库列表
+  const allDatabases = useMemo(() => {
+    return Object.values(connectionDatabases).flatMap((dbs) =>
+      dbs.map((db) => db.database)
+    );
+  }, [connectionDatabases]);
+
   const handleSearchChange = useCallback((value: string | undefined) => {
     const newValue = value ?? '';
     setSearchText(newValue);

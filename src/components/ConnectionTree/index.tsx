@@ -27,7 +27,7 @@ import { useAppStore } from '../../stores/appStore';
 import type { TableInfo, ColumnInfo, IndexInfo } from '../../types/api';
 import { GroupDialog } from './GroupDialog';
 
-// ============ Icon helpers ============
+// ============ 性能优化：提取常量和辅助函数 ============
 
 const DB_TYPE_COLORS: Record<string, string> = {
   mysql: '#1890ff',
@@ -39,6 +39,29 @@ const DB_TYPE_COLORS: Record<string, string> = {
   dameng: '#722ed1',
 };
 
+const isBaseTable = (tableType: string): boolean => {
+  const normalizedType = tableType.toUpperCase().trim();
+  return (
+    normalizedType === 'BASE TABLE' ||
+    normalizedType === 'TABLE' ||
+    normalizedType === 'BASE_TABLE' ||
+    normalizedType === '' ||
+    normalizedType === 'NULL'
+  );
+};
+
+const isView = (tableType: string): boolean => {
+  const normalizedType = tableType.toUpperCase().trim();
+  return (
+    normalizedType === 'VIEW' ||
+    normalizedType === 'SYSTEM VIEW' ||
+    normalizedType === 'MATERIALIZED VIEW' ||
+    normalizedType === 'MATERIALIZED_VIEW'
+  );
+};
+
+// ============ Memoized Node Components ============
+
 function getDbIcon(dbType: string) {
   const color = DB_TYPE_COLORS[dbType] || '#8c8c8c';
   return <DatabaseOutlined style={{ color }} />;
@@ -48,6 +71,116 @@ function getConnIcon(dbType: string) {
   const color = DB_TYPE_COLORS[dbType] || '#8c8c8c';
   return <CloudServerOutlined style={{ color }} />;
 }
+
+// ============ Memoized Node Components ============
+
+interface TableNodeProps {
+  connId: string;
+  database: string;
+  table: TableInfo;
+  selectedTableId: string | null;
+  isDarkMode: boolean;
+  onTableClick: (tableName: string, database: string) => void;
+  onTableOpen: (tableName: string, database: string) => void;
+  onContextMenu: (connId: string, tableName: string, database?: string) => MenuProps;
+}
+
+const TableNode = React.memo<TableNodeProps>(({
+  connId,
+  database,
+  table,
+  selectedTableId,
+  isDarkMode,
+  onTableClick,
+  onTableOpen,
+  onContextMenu,
+}) => {
+  const isSelected = selectedTableId === table.table_name;
+  return (
+    <Dropdown menu={onContextMenu(connId, table.table_name, database)} trigger={['contextMenu']}>
+      <span
+        style={{
+          cursor: 'pointer',
+          background: isSelected
+            ? isDarkMode
+              ? 'rgba(24, 144, 255, 0.2)'
+              : 'rgba(24, 144, 255, 0.1)'
+            : 'transparent',
+          padding: '1px 4px',
+          borderRadius: 3,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onTableClick(table.table_name, database);
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          onTableOpen(table.table_name, database);
+        }}
+      >
+        <TableOutlined style={{ color: '#52c41a', fontSize: 11 }} />
+        {table.table_name}
+      </span>
+    </Dropdown>
+  );
+});
+
+interface ViewNodeProps {
+  connId: string;
+  database: string;
+  view: TableInfo;
+  selectedTableId: string | null;
+  isDarkMode: boolean;
+  onTableClick: (tableName: string, database: string) => void;
+  onTableOpen: (tableName: string, database: string) => void;
+  onContextMenu: (connId: string, tableName: string, database?: string) => MenuProps;
+}
+
+const ViewNode = React.memo<ViewNodeProps>(({
+  connId,
+  database,
+  view,
+  selectedTableId,
+  isDarkMode,
+  onTableClick,
+  onTableOpen,
+  onContextMenu,
+}) => {
+  const isSelected = selectedTableId === view.table_name;
+  return (
+    <Dropdown menu={onContextMenu(connId, view.table_name, database)} trigger={['contextMenu']}>
+      <span
+        style={{
+          cursor: 'pointer',
+          background: isSelected
+            ? isDarkMode
+              ? 'rgba(24, 144, 255, 0.2)'
+              : 'rgba(24, 144, 255, 0.1)'
+            : 'transparent',
+          padding: '1px 4px',
+          borderRadius: 3,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onTableClick(view.table_name, database);
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          onTableOpen(view.table_name, database);
+        }}
+      >
+        <EyeOutlined style={{ color: '#1890ff', fontSize: 11 }} />
+        {view.table_name}
+      </span>
+    </Dropdown>
+  );
+});
 
 // ============ Props ============
 
@@ -158,11 +291,44 @@ export function ConnectionTree({
   }, []);
 
   // 订阅 appStore 的 tableDataCache 变化，确保表数据更新时重新渲染
+  // 性能优化：使用 ref 跟踪缓存变化，避免每次变化都触发重渲染
   const [storeVersion, setStoreVersion] = useState(0);
+  const lastUpdateRef = useRef<number>(0);
   useEffect(() => {
     const unsub = useAppStore.subscribe((state, prevState) => {
-      if (state.tableDataCache !== prevState.tableDataCache) {
-        setStoreVersion((v) => v + 1);
+      // 只在缓存实际更新时触发（非 loading 状态变化）
+      const prevKeys = Object.keys(prevState.tableDataCache);
+      const currKeys = Object.keys(state.tableDataCache);
+      
+      const hasDataChange = prevKeys.some(key => {
+        const prev = prevState.tableDataCache[key];
+        const curr = state.tableDataCache[key];
+        
+        // 如果 prev 不存在，说明是新添加的缓存
+        if (!prev) {
+          return curr?.loaded;
+        }
+        
+        // 如果当前已加载但之前没有加载，触发更新
+        if (curr?.loaded && !prev?.loaded) {
+          return true;
+        }
+        
+        // 如果两边都已加载，比较 tables 数组长度（简单有效的方式）
+        if (curr?.loaded && prev?.loaded) {
+          return curr.tables.length !== prev.tables.length;
+        }
+        
+        return false;
+      }) || prevKeys.length !== currKeys.length;
+      
+      if (hasDataChange) {
+        // 防抖：限制更新频率
+        const now = Date.now();
+        if (now - lastUpdateRef.current > 100) {
+          lastUpdateRef.current = now;
+          setStoreVersion((v) => v + 1);
+        }
       }
     });
     return unsub;
@@ -193,6 +359,17 @@ export function ConnectionTree({
     });
     return map;
   }, [connections]);
+
+  // ---- 性能优化：缓存过滤结果 ----
+  const filteredConnections = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return connections;
+    return connections.filter(
+      (conn) =>
+        conn.name.toLowerCase().includes(q) ||
+        conn.host.toLowerCase().includes(q)
+    );
+  }, [connections, searchText]);
 
   // ---- Connection context menu ----
   const getConnectionMenu = useCallback(
@@ -667,287 +844,6 @@ export function ConnectionTree({
     [connections, expandedKeys, onExpandKeys, onConnect, onTableOpen, onDatabaseExpand]
   );
 
-  // ---- Build connection node ----
-  const buildConnectionNode = useCallback(
-    (conn: Connection) => {
-      // 使用 ref 获取最新的 connectionDatabases，避免闭包问题
-      const dbList = connectionDatabasesRef.current[conn.id] || [];
-      const isConnRenaming = false;
-
-      const databaseChildren = dbList.map((db) => {
-        // 优先从 appStore 中读取表数据，确保与右侧同步
-        const storeTables = getTablesFromStore(conn.id, db.database);
-        const isLoaded = db.loaded || storeTables.length > 0;
-        const tableItems = isLoaded
-          ? (storeTables.length > 0 ? storeTables : db.tables).filter(
-              (t) => t.table_type === 'BASE TABLE'
-            )
-          : [];
-        const viewItems = isLoaded
-          ? (storeTables.length > 0 ? storeTables : db.tables).filter(
-              (t) => t.table_type === 'VIEW'
-            )
-          : [];
-
-        const dbExpanded = expandedKeys.some((k) => k.startsWith(`db::${conn.id}::${db.database}`));
-
-        return {
-          key: `db::${conn.id}::${db.database}`,
-          title: (
-            <Dropdown menu={getDatabaseMenu(conn.id, db.database)} trigger={['contextMenu']}>
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, userSelect: 'none' }}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  handleDoubleClick(`db::${conn.id}::${db.database}`);
-                }}
-              >
-                <DatabaseOutlined
-                  style={{
-                    color: isLoaded ? '#52c41a' : '#1890ff',
-                    fontSize: 12,
-                  }}
-                />
-                <span
-                  style={{
-                    color: isLoaded ? '#52c41a' : undefined,
-                    fontWeight: isLoaded ? 500 : undefined,
-                  }}
-                >
-                  {db.database}
-                </span>
-              </div>
-            </Dropdown>
-          ),
-          children: isLoaded
-            ? [
-                {
-                  key: `tables::${conn.id}::${db.database}`,
-                  title: (
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        handleDoubleClick(`tables::${conn.id}::${db.database}`);
-                      }}
-                    >
-                      <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />表 (
-                      {tableItems.length})
-                    </span>
-                  ),
-                  isLeaf: false,
-                  children:
-                    tableItems.length > 0
-                      ? tableItems.map((table) => ({
-                          key: `table::${conn.id}::${db.database}::${table.table_name}`,
-                          isLeaf: true,
-                          title: (
-                            <span
-                              style={{
-                                cursor: 'pointer',
-                                padding: '1px 4px',
-                                borderRadius: 3,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                              }}
-                              onClick={() => handleTableClick(table.table_name, db.database)}
-                              onDoubleClick={() => onTableOpen(table.table_name, db.database)}
-                            >
-                              <TableOutlined style={{ color: '#52c41a', fontSize: 11 }} />
-                              {table.table_name}
-                            </span>
-                          ),
-                        }))
-                      : [
-                          {
-                            key: `no-tables::${conn.id}::${db.database}`,
-                            title: <span style={{ color: '#999', fontSize: 11 }}>暂无表</span>,
-                            isLeaf: true,
-                            selectable: false,
-                          },
-                        ],
-                },
-                {
-                  key: `views::${conn.id}::${db.database}`,
-                  title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                      <EyeOutlined style={{ color: '#1890ff', fontSize: 12 }} />
-                      视图 ({viewItems.length})
-                    </span>
-                  ),
-                  isLeaf: false,
-                  children:
-                    viewItems.length > 0
-                      ? viewItems.map((view) => ({
-                          key: `view::${conn.id}::${db.database}::${view.table_name}`,
-                          isLeaf: true,
-                          title: (
-                            <span
-                              style={{
-                                cursor: 'pointer',
-                                padding: '1px 4px',
-                                borderRadius: 3,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                              }}
-                              onClick={() => handleTableClick(view.table_name, db.database)}
-                              onDoubleClick={() => onTableOpen(view.table_name, db.database)}
-                            >
-                              <EyeOutlined style={{ color: '#1890ff', fontSize: 11 }} />
-                              {view.table_name}
-                            </span>
-                          ),
-                        }))
-                      : [
-                          {
-                            key: `no-views::${conn.id}::${db.database}`,
-                            title: <span style={{ color: '#999', fontSize: 11 }}>暂无视图</span>,
-                            isLeaf: true,
-                            selectable: false,
-                          },
-                        ],
-                },
-              ]
-            : undefined,
-        };
-      });
-
-      // Connection title
-      let connTitle: React.ReactNode;
-      if (isConnRenaming) {
-        connTitle = <Input size="small" defaultValue={conn.name} style={{ width: 100 }} />;
-      } else {
-        const isConnected = conn.status === 'connected';
-
-        connTitle = (
-          <Dropdown menu={getConnectionMenu(conn)} trigger={['contextMenu']}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flex: 1,
-                paddingRight: 4,
-                userSelect: 'none',
-              }}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                handleDoubleClick(conn.id);
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span
-                  style={{
-                    filter: isConnected ? 'none' : 'grayscale(100%)',
-                    opacity: isConnected ? 1 : 0.4,
-                  }}
-                >
-                  {getDbIcon(conn.db_type)}
-                </span>
-                <span
-                  style={{
-                    color: isConnected
-                      ? isDarkMode
-                        ? '#e8e8e8'
-                        : '#262626'
-                      : isDarkMode
-                        ? '#666666'
-                        : '#999999',
-                    fontWeight: isConnected ? 500 : 400,
-                    transition: 'color 0.2s ease',
-                    userSelect: 'none',
-                  }}
-                >
-                  {conn.name}
-                </span>
-                {conn.status === 'connected' && (
-                  <span style={{ color: '#52c41a', fontSize: 10 }}>●</span>
-                )}
-                {conn.status === 'loading' && (
-                  <span style={{ color: '#faad14', fontSize: 10 }}>●</span>
-                )}
-              </span>
-            </div>
-          </Dropdown>
-        );
-      }
-
-      const isConnected = conn.status === 'connected';
-
-      return {
-        key: conn.id,
-        title: connTitle,
-        children: isConnected
-          ? databaseChildren.length > 0
-            ? databaseChildren
-            : [
-                {
-                  key: `tables-${conn.id}`,
-                  title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                      <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />表
-                    </span>
-                  ),
-                  isLeaf: false,
-                  selectable: false,
-                  children: [],
-                },
-                {
-                  key: `views-${conn.id}`,
-                  title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                      <EyeOutlined style={{ color: '#1890ff', fontSize: 12 }} />
-                      视图
-                    </span>
-                  ),
-                  isLeaf: false,
-                  selectable: false,
-                  children: [],
-                },
-                {
-                  key: `procedures-${conn.id}`,
-                  title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                      <ThunderboltOutlined style={{ color: '#faad14', fontSize: 12 }} />
-                      存储过程
-                    </span>
-                  ),
-                  isLeaf: true,
-                  selectable: false,
-                },
-                {
-                  key: `functions-${conn.id}`,
-                  title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                      <FunctionOutlined style={{ color: '#722ed1', fontSize: 12 }} />
-                      函数
-                    </span>
-                  ),
-                  isLeaf: true,
-                  selectable: false,
-                },
-              ]
-          : undefined,
-      };
-    },
-    [
-      connectionDatabases,
-      tableStructures,
-      selectedTableId,
-      isDarkMode,
-      expandedKeys,
-      storeVersion,
-      getConnectionMenu,
-      getDatabaseMenu,
-      getTableMenu,
-      getViewMenu,
-      handleTableClick,
-      handleDoubleClick,
-    ]
-  );
-
   // ---- Build tree data ----
   const treeData = useMemo(() => {
     const q = searchText.trim().toLowerCase();
@@ -997,6 +893,10 @@ export function ConnectionTree({
       const tableItems = allTableItems;
       const viewItems = allViewItems;
       const isLoading = getTableLoadingFromStore(connId, db.database);
+      const tablesFolderKey = `tables::${connId}::${db.database}`;
+      const viewsFolderKey = `views::${connId}::${db.database}`;
+      const isTablesFolderExpanded = expandedKeys.includes(tablesFolderKey);
+      const isViewsFolderExpanded = expandedKeys.includes(viewsFolderKey);
 
       // Filter tables
       const filteredTables = q
@@ -1006,9 +906,9 @@ export function ConnectionTree({
         ? viewItems.filter((v) => v.table_name.toLowerCase().includes(q))
         : viewItems;
 
-      // Build "Tables" folder
+      // Build "Tables" folder - only render table nodes if folder is expanded
       const tablesNode = {
-        key: `tables::${connId}::${db.database}`,
+        key: tablesFolderKey,
         title: (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />
@@ -1034,58 +934,38 @@ export function ConnectionTree({
                   selectable: false,
                 },
               ]
-            : filteredTables.length > 0
+            : isTablesFolderExpanded && filteredTables.length > 0
               ? filteredTables.map((table) => ({
                   key: `table::${connId}::${db.database}::${table.table_name}`,
                   isLeaf: true,
                   title: (
-                    <Dropdown
-                      menu={getTableMenu(connId, table.table_name, db.database)}
-                      trigger={['contextMenu']}
-                    >
-                      <span
-                        style={{
-                          cursor: 'pointer',
-                          background:
-                            selectedTableId === table.table_name
-                              ? isDarkMode
-                                ? 'rgba(24, 144, 255, 0.2)'
-                                : 'rgba(24, 144, 255, 0.1)'
-                              : 'transparent',
-                          padding: '1px 4px',
-                          borderRadius: 3,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTableClick(table.table_name, db.database);
-                        }}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          onTableOpen(table.table_name, db.database);
-                        }}
-                      >
-                        <TableOutlined style={{ color: '#52c41a', fontSize: 11 }} />
-                        {table.table_name}
-                      </span>
-                    </Dropdown>
+                    <TableNode
+                      connId={connId}
+                      database={db.database}
+                      table={table}
+                      selectedTableId={selectedTableId}
+                      isDarkMode={isDarkMode}
+                      onTableClick={handleTableClick}
+                      onTableOpen={onTableOpen}
+                      onContextMenu={getTableMenu}
+                    />
                   ),
                 }))
-              : [
-                  {
-                    key: `no-tables::${connId}::${db.database}`,
-                    title: <span style={{ color: '#999', fontSize: 11 }}>暂无表</span>,
-                    isLeaf: true,
-                    selectable: false,
-                  },
-                ],
+              : filteredTables.length > 0
+                ? undefined
+                : [
+                    {
+                      key: `no-tables::${connId}::${db.database}`,
+                      title: <span style={{ color: '#999', fontSize: 11 }}>暂无表</span>,
+                      isLeaf: true,
+                      selectable: false,
+                    },
+                  ],
       };
 
       // Build "Views" folder
       const viewsNode = {
-        key: `views::${connId}::${db.database}`,
+        key: viewsFolderKey,
         title: (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <EyeOutlined style={{ color: '#1890ff', fontSize: 12 }} />
@@ -1111,53 +991,33 @@ export function ConnectionTree({
                   selectable: false,
                 },
               ]
-            : filteredViews.length > 0
+            : isViewsFolderExpanded && filteredViews.length > 0
               ? filteredViews.map((view) => ({
                   key: `view::${connId}::${db.database}::${view.table_name}`,
                   isLeaf: true,
                   title: (
-                    <Dropdown
-                      menu={getViewMenu(connId, view.table_name, db.database)}
-                      trigger={['contextMenu']}
-                    >
-                      <span
-                        style={{
-                          cursor: 'pointer',
-                          background:
-                            selectedTableId === view.table_name
-                              ? isDarkMode
-                                ? 'rgba(24, 144, 255, 0.2)'
-                                : 'rgba(24, 144, 255, 0.1)'
-                              : 'transparent',
-                          padding: '1px 4px',
-                          borderRadius: 3,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTableClick(view.table_name, db.database);
-                        }}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          onTableOpen(view.table_name, db.database);
-                        }}
-                      >
-                        <EyeOutlined style={{ color: '#1890ff', fontSize: 11 }} />
-                        {view.table_name}
-                      </span>
-                    </Dropdown>
+                    <ViewNode
+                      connId={connId}
+                      database={db.database}
+                      view={view}
+                      selectedTableId={selectedTableId}
+                      isDarkMode={isDarkMode}
+                      onTableClick={handleTableClick}
+                      onTableOpen={onTableOpen}
+                      onContextMenu={getViewMenu}
+                    />
                   ),
                 }))
-              : [
-                  {
-                    key: `no-views::${connId}::${db.database}`,
-                    title: <span style={{ color: '#999', fontSize: 11 }}>暂无视图</span>,
-                    isLeaf: true,
-                    selectable: false,
-                  },
-                ],
+              : filteredViews.length > 0
+                ? undefined
+                : [
+                    {
+                      key: `no-views::${connId}::${db.database}`,
+                      title: <span style={{ color: '#999', fontSize: 11 }}>暂无视图</span>,
+                      isLeaf: true,
+                      selectable: false,
+                    },
+                  ],
       };
 
       // Build "Procedures" folder
@@ -1347,14 +1207,7 @@ export function ConnectionTree({
     const realGroups = groups.filter((g) => g.id !== 'default');
     for (const group of realGroups) {
       const groupMatch = !q || group.name.toLowerCase().includes(q);
-      const groupConns: Connection[] = [];
 
-      for (const conn of groupedConnections[group.id] || []) {
-        const node = buildConnNode(conn);
-        if (node) groupConns.push(conn); // just track it exists
-      }
-
-      // Rebuild to get actual nodes
       const groupConnNodes = (groupedConnections[group.id] || [])
         .map((conn) => buildConnNode(conn))
         .filter(Boolean);
@@ -1452,7 +1305,6 @@ export function ConnectionTree({
     renamingKey,
     renameValue,
     storeVersion,
-    buildConnectionNode,
     getGroupMenu,
     getDatabaseMenu,
     getTableMenu,
@@ -1466,44 +1318,31 @@ export function ConnectionTree({
   ]);
 
   // Auto-expand matching keys when search changes
+  // 性能优化：独立 useEffect 避免 treeData 依赖过多
   useEffect(() => {
     const q = searchText.trim().toLowerCase();
     if (!q) return;
 
     const autoExpandKeys: string[] = [];
 
-    // Collect keys that match search
-    for (const conn of connections) {
-      if (conn.name.toLowerCase().includes(q)) {
-        autoExpandKeys.push(conn.id);
-        if (conn.group_id) {
-          autoExpandKeys.push(`group-${conn.group_id}`);
+    // Collect keys that match search - 优化：使用 filteredConnections 减少迭代
+    for (const conn of filteredConnections) {
+      const dbList = connectionDatabases[conn.id] || [];
+      for (const db of dbList) {
+        if (db.database.toLowerCase().includes(q)) {
+          autoExpandKeys.push(`db::${conn.id}::${db.database}`);
         }
-        const dbList = connectionDatabases[conn.id] || [];
-        for (const db of dbList) {
-          if (db.database.toLowerCase().includes(q)) {
-            autoExpandKeys.push(`db::${conn.id}::${db.database}`);
-          }
-          const tableItems = db.loaded
-            ? db.tables.filter((t) => t.table_type === 'BASE TABLE')
-            : [];
-          const viewItems = db.loaded ? db.tables.filter((t) => t.table_type === 'VIEW') : [];
-          const matchTables = tableItems.some((t) => t.table_name.toLowerCase().includes(q));
-          const matchViews = viewItems.some((v) => v.table_name.toLowerCase().includes(q));
-          if (matchTables) {
-            autoExpandKeys.push(
-              conn.id,
-              `db::${conn.id}::${db.database}`,
-              `tables::${conn.id}::${db.database}`
-            );
-          }
-          if (matchViews) {
-            autoExpandKeys.push(
-              conn.id,
-              `db::${conn.id}::${db.database}`,
-              `views::${conn.id}::${db.database}`
-            );
-          }
+        const tableItems = db.loaded
+          ? db.tables.filter((t) => t.table_type === 'BASE TABLE')
+          : [];
+        const viewItems = db.loaded ? db.tables.filter((t) => t.table_type === 'VIEW') : [];
+        const matchTables = tableItems.some((t) => t.table_name.toLowerCase().includes(q));
+        const matchViews = viewItems.some((v) => v.table_name.toLowerCase().includes(q));
+        if (matchTables) {
+          autoExpandKeys.push(`db::${conn.id}::${db.database}`, `tables::${conn.id}::${db.database}`);
+        }
+        if (matchViews) {
+          autoExpandKeys.push(`db::${conn.id}::${db.database}`, `views::${conn.id}::${db.database}`);
         }
       }
     }
