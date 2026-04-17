@@ -1,6 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Tag, Typography, Spin, Empty, Button, Space, message, Input, Tooltip } from 'antd';
-import { TableOutlined, EyeOutlined, SearchOutlined, ReloadOutlined, AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons';
+import {
+  TableOutlined,
+  EyeOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+  AppstoreOutlined,
+  UnorderedListOutlined,
+} from '@ant-design/icons';
 import { theme } from 'antd';
 import { useAppStore } from '../stores/appStore';
 import { useDatabase } from '../hooks/useApi';
@@ -45,7 +52,15 @@ export interface TableListProps {
 }
 
 // Navicat-style grid card component
-const TableGridCard = React.memo(function TableGridCard({ table, onClick, isDarkMode }: { table: TableData; onClick: () => void; isDarkMode: boolean }) {
+const TableGridCard = React.memo(function TableGridCard({
+  table,
+  onClick,
+  isDarkMode,
+}: {
+  table: TableData;
+  onClick: () => void;
+  isDarkMode: boolean;
+}) {
   return (
     <div
       onClick={onClick}
@@ -85,7 +100,12 @@ const TableGridCard = React.memo(function TableGridCard({ table, onClick, isDark
 });
 
 // List view row component
-const TableRow = React.memo(function TableRow({ table, selected, onClick, isDarkMode }: {
+const TableRow = React.memo(function TableRow({
+  table,
+  selected,
+  onClick,
+  isDarkMode,
+}: {
   table: TableData;
   selected: boolean;
   onClick: () => void;
@@ -102,7 +122,9 @@ const TableRow = React.memo(function TableRow({ table, selected, onClick, isDark
         cursor: 'pointer',
         borderBottom: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
         background: selected
-          ? (isDarkMode ? 'rgba(24,144,255,0.2)' : 'rgba(24,144,255,0.1)')
+          ? isDarkMode
+            ? 'rgba(24,144,255,0.2)'
+            : 'rgba(24,144,255,0.1)'
           : 'transparent',
         transition: 'background 0.2s',
       }}
@@ -119,7 +141,9 @@ const TableRow = React.memo(function TableRow({ table, selected, onClick, isDark
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <TableOutlined style={{ color: '#52c41a', flexShrink: 0, fontSize: 12 }} />
-        <Text ellipsis style={{ fontSize: 12 }}>{table.table_name}</Text>
+        <Text ellipsis style={{ fontSize: 12 }}>
+          {table.table_name}
+        </Text>
       </div>
       <div style={{ minWidth: 0, paddingRight: 8 }}>
         <Tooltip title={table.comment}>
@@ -134,14 +158,10 @@ const TableRow = React.memo(function TableRow({ table, selected, onClick, isDark
         </span>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 11, color: '#999' }}>
-          {table.data_size || '-'}
-        </span>
+        <span style={{ fontSize: 11, color: '#999' }}>{table.data_size || '-'}</span>
       </div>
       <div style={{ textAlign: 'center' }}>
-        <span style={{ fontSize: 10, color: '#666' }}>
-          {table.engine || '-'}
-        </span>
+        <span style={{ fontSize: 10, color: '#666' }}>{table.engine || '-'}</span>
       </div>
       <div>
         <Tooltip title={table.create_time}>
@@ -191,7 +211,13 @@ function ListHeader({ isDarkMode }: { isDarkMode: boolean }) {
   );
 }
 
-export function TableList({ connectionId, database, objectType = 'all', onTableSelect, onTableOpen }: TableListProps) {
+function TableListComponent({
+  connectionId,
+  database,
+  objectType = 'all',
+  onTableSelect,
+  onTableOpen,
+}: TableListProps) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -201,7 +227,7 @@ export function TableList({ connectionId, database, objectType = 'all', onTableS
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
 
-  const tableDataCache = useAppStore(state => state.tableDataCache);
+  const tableDataCache = useAppStore((state) => state.tableDataCache);
   const { getTables } = useDatabase();
 
   const cacheKey = `${connectionId}::${database || ''}`;
@@ -263,32 +289,43 @@ export function TableList({ connectionId, database, objectType = 'all', onTableS
   const filteredTables = useMemo(() => {
     let filtered = tables;
     if (objectType === 'table') {
-      filtered = tables.filter(t => t.table_type === 'BASE TABLE');
+      filtered = tables.filter((t) => t.table_type === 'BASE TABLE');
     } else if (objectType === 'view') {
-      filtered = tables.filter(t => t.table_type === 'VIEW');
+      filtered = tables.filter((t) => t.table_type === 'VIEW');
     }
     if (!searchText) return filtered;
-    return filtered.filter((table) =>
-      table.table_name.toLowerCase().includes(searchText.toLowerCase()) ||
-      table.comment?.toLowerCase().includes(searchText.toLowerCase())
+    return filtered.filter(
+      (table) =>
+        table.table_name.toLowerCase().includes(searchText.toLowerCase()) ||
+        table.comment?.toLowerCase().includes(searchText.toLowerCase())
     );
   }, [tables, searchText, objectType]);
 
-  const tableCount = tables.filter(t => t.table_type === 'BASE TABLE').length;
-  const viewCount = tables.filter(t => t.table_type === 'VIEW').length;
+  const tableCount = tables.filter((t) => t.table_type === 'BASE TABLE').length;
+  const viewCount = tables.filter((t) => t.table_type === 'VIEW').length;
 
   const toolbarBg = isDarkMode ? '#141414' : '#fafafa';
   const borderColor = isDarkMode ? '#303030' : '#e8e8e8';
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: isDarkMode ? '#1f1f1f' : '#fff', overflow: 'hidden' }}>
+    <div
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        background: isDarkMode ? '#1f1f1f' : '#fff',
+        overflow: 'hidden',
+      }}
+    >
       {/* Toolbar */}
-      <div style={{
-        flexShrink: 0,
-        borderBottom: `1px solid ${borderColor}`,
-        padding: '8px 12px',
-        background: toolbarBg,
-      }}>
+      <div
+        style={{
+          flexShrink: 0,
+          borderBottom: `1px solid ${borderColor}`,
+          padding: '8px 12px',
+          background: toolbarBg,
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Space size="small">
             <Button
@@ -327,7 +364,7 @@ export function TableList({ connectionId, database, objectType = 'all', onTableS
                 size="small"
                 type="text"
                 onClick={() => {
-                  setViewMode(prev => prev === 'list' ? 'grid' : 'list');
+                  setViewMode((prev) => (prev === 'list' ? 'grid' : 'list'));
                 }}
               />
             </Tooltip>
@@ -337,15 +374,17 @@ export function TableList({ connectionId, database, objectType = 'all', onTableS
 
       {/* Status bar */}
       {!loading && filteredTables.length > 0 && (
-        <div style={{
-          flexShrink: 0,
-          borderBottom: `1px solid ${borderColor}`,
-          padding: '4px 16px',
-          textAlign: 'right',
-          fontSize: 11,
-          color: '#999',
-          background: isDarkMode ? '#141414' : '#fafafa',
-        }}>
+        <div
+          style={{
+            flexShrink: 0,
+            borderBottom: `1px solid ${borderColor}`,
+            padding: '4px 16px',
+            textAlign: 'right',
+            fontSize: 11,
+            color: '#999',
+            background: isDarkMode ? '#141414' : '#fafafa',
+          }}
+        >
           {objectType === 'all'
             ? `共 ${tableCount} 个表, ${viewCount} 个视图`
             : objectType === 'table'
@@ -358,12 +397,27 @@ export function TableList({ connectionId, database, objectType = 'all', onTableS
       {/* Content area */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {loading ? (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             <Spin size="large" />
             <div style={{ marginTop: 12, fontSize: 13, color: '#999' }}>加载中...</div>
           </div>
         ) : filteredTables.length === 0 ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             {searchText ? (
               <Empty description="未找到匹配的表" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             ) : (
@@ -371,11 +425,13 @@ export function TableList({ connectionId, database, objectType = 'all', onTableS
             )}
           </div>
         ) : viewMode === 'list' ? (
-          <div style={{
-            height: '100%',
-            overflowY: 'auto',
-            background: isDarkMode ? '#1f1f1f' : '#fff',
-          }}>
+          <div
+            style={{
+              height: '100%',
+              overflowY: 'auto',
+              background: isDarkMode ? '#1f1f1f' : '#fff',
+            }}
+          >
             <ListHeader isDarkMode={isDarkMode} />
             {filteredTables.map((table) => (
               <TableRow
@@ -388,11 +444,13 @@ export function TableList({ connectionId, database, objectType = 'all', onTableS
             ))}
           </div>
         ) : (
-          <div style={{
-            height: '100%',
-            overflowY: 'auto',
-            padding: 4,
-          }}>
+          <div
+            style={{
+              height: '100%',
+              overflowY: 'auto',
+              padding: 4,
+            }}
+          >
             <div
               style={{
                 display: 'grid',
@@ -415,3 +473,5 @@ export function TableList({ connectionId, database, objectType = 'all', onTableS
     </div>
   );
 }
+
+export const TableList = React.memo(TableListComponent);

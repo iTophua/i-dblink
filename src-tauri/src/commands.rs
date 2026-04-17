@@ -133,6 +133,30 @@ pub struct ForeignKeyInfo {
     pub referenced_column: String,
 }
 
+async fn get_connection_pool(
+    connection_id: &str,
+    state: &State<'_, Mutex<Option<Storage>>>,
+    connections: &State<'_, RwLock<ActiveConnections>>,
+) -> Result<(crate::drivers::db_pool::DbPool, String), String> {
+    let guard = state.lock().await;
+    let storage = guard.as_ref().unwrap();
+
+    let (conn_config, password_opt) = storage
+        .get_connection_with_password(connection_id)
+        .await
+        .map_err(|e| format!("Failed to get connection: {}", e))?
+        .ok_or_else(|| "Connection not found".to_string())?;
+
+    let password = password_opt.unwrap_or_default();
+
+    let pool = match connections.read().await.get(connection_id).await {
+        Some(pool) => pool,
+        None => connect_by_type(&conn_config.db_type, &conn_config, &password).await?,
+    };
+
+    Ok((pool, conn_config.db_type))
+}
+
 /// 表信息
 #[tauri::command]
 pub async fn get_tables(
@@ -141,26 +165,8 @@ pub async fn get_tables(
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<TableInfo>, String> {
-    let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
-
-    let (conn_config, password_opt) = storage
-        .get_connection_with_password(&connection_id)
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?
-        .ok_or_else(|| "Connection not found".to_string())?;
-
-    let password = password_opt.unwrap_or_default();
-
-    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
-    let pool = match connections.read().await.get(&connection_id).await {
-        Some(pool) => pool,
-        None => {
-            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
-        }
-    };
-
-    let tables = get_tables_by_type(&conn_config.db_type, &pool, database.as_deref()).await?;
+    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
+    let tables = get_tables_by_type(&db_type, &pool, database.as_deref()).await?;
     Ok(tables)
 }
 
@@ -171,26 +177,8 @@ pub async fn get_databases(
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<String>, String> {
-    let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
-
-    let (conn_config, password_opt) = storage
-        .get_connection_with_password(&connection_id)
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?
-        .ok_or_else(|| "Connection not found".to_string())?;
-
-    let password = password_opt.unwrap_or_default();
-
-    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
-    let pool = match connections.read().await.get(&connection_id).await {
-        Some(pool) => pool,
-        None => {
-            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
-        }
-    };
-
-    let databases = get_databases_by_type(&conn_config.db_type, &pool).await?;
+    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
+    let databases = get_databases_by_type(&db_type, &pool).await?;
     Ok(databases)
 }
 
@@ -203,32 +191,8 @@ pub async fn get_columns(
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<ColumnInfo>, String> {
-    let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
-
-    let (conn_config, password_opt) = storage
-        .get_connection_with_password(&connection_id)
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?
-        .ok_or_else(|| "Connection not found".to_string())?;
-
-    let password = password_opt.unwrap_or_default();
-
-    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
-    let pool = match connections.read().await.get(&connection_id).await {
-        Some(pool) => pool,
-        None => {
-            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
-        }
-    };
-
-    let cols = get_columns_by_type(
-        &conn_config.db_type,
-        &pool,
-        &table_name,
-        database.as_deref(),
-    )
-    .await?;
+    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
+    let cols = get_columns_by_type(&db_type, &pool, &table_name, database.as_deref()).await?;
     Ok(cols)
 }
 
@@ -241,32 +205,8 @@ pub async fn get_indexes(
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<IndexInfo>, String> {
-    let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
-
-    let (conn_config, password_opt) = storage
-        .get_connection_with_password(&connection_id)
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?
-        .ok_or_else(|| "Connection not found".to_string())?;
-
-    let password = password_opt.unwrap_or_default();
-
-    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
-    let pool = match connections.read().await.get(&connection_id).await {
-        Some(pool) => pool,
-        None => {
-            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
-        }
-    };
-
-    let indexes = get_indexes_by_type(
-        &conn_config.db_type,
-        &pool,
-        &table_name,
-        database.as_deref(),
-    )
-    .await?;
+    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
+    let indexes = get_indexes_by_type(&db_type, &pool, &table_name, database.as_deref()).await?;
     Ok(indexes)
 }
 
@@ -279,32 +219,8 @@ pub async fn get_foreign_keys(
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<Vec<ForeignKeyInfo>, String> {
-    let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
-
-    let (conn_config, password_opt) = storage
-        .get_connection_with_password(&connection_id)
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?
-        .ok_or_else(|| "Connection not found".to_string())?;
-
-    let password = password_opt.unwrap_or_default();
-
-    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
-    let pool = match connections.read().await.get(&connection_id).await {
-        Some(pool) => pool,
-        None => {
-            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
-        }
-    };
-
-    let fks = get_foreign_keys_by_type(
-        &conn_config.db_type,
-        &pool,
-        &table_name,
-        database.as_deref(),
-    )
-    .await?;
+    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
+    let fks = get_foreign_keys_by_type(&db_type, &pool, &table_name, database.as_deref()).await?;
     Ok(fks)
 }
 
@@ -317,26 +233,8 @@ pub async fn execute_query(
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<QueryResult, String> {
-    let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
-
-    let (conn_config, password_opt) = storage
-        .get_connection_with_password(&connection_id)
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?
-        .ok_or_else(|| "Connection not found".to_string())?;
-
-    let password = password_opt.unwrap_or_default();
-
-    // 性能优化：使用 RwLock 的读锁（read().await）而非整个锁
-    let pool = match connections.read().await.get(&connection_id).await {
-        Some(pool) => pool,
-        None => {
-            connect_by_type(&conn_config.db_type, &conn_config, &password).await?
-        }
-    };
-
-    let result = execute_query_by_type(&conn_config.db_type, &pool, &sql).await?;
+    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
+    let result = execute_query_by_type(&db_type, &pool, &sql).await?;
     Ok(result)
 }
 
@@ -538,7 +436,13 @@ pub async fn disconnect_database(
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<bool, String> {
     // 性能优化：使用 RwLock 的写锁（write().await）
-    if connections.write().await.remove(&connection_id).await.is_some() {
+    if connections
+        .write()
+        .await
+        .remove(&connection_id)
+        .await
+        .is_some()
+    {
         println!("Disconnected from {}", connection_id);
         Ok(true)
     } else {

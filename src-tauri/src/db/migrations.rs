@@ -94,6 +94,16 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_connections_name ON connections(name)")
+        .execute(pool)
+        .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_connection_groups_sort_name ON connection_groups(sort_order, name)",
+    )
+    .execute(pool)
+    .await?;
+
     // 插入默认分组（如果不存在）
     sqlx::query(
         r#"

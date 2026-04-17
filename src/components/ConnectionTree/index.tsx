@@ -791,20 +791,10 @@ export function ConnectionTree({
           // 检查是否已展开（匹配任何变体）
           const isExpanded = expandedKeys.some((k) => k.startsWith(dbKey));
 
-          if (isExpanded) {
+                    if (isExpanded) {
             onExpandKeys(expandedKeys.filter((k) => !k.startsWith(dbKey)));
           } else {
-            // 先展开节点
             onExpandKeys([...expandedKeys, dbKey]);
-            // 然后检查并加载表数据
-            // 使用 ref 获取最新的 connectionDatabases，避免闭包问题
-            const dbList = connectionDatabasesRef.current[connectionId] || [];
-            const db = dbList.find((d) => d.database === database);
-
-            // 如果数据库未加载或表数量为 0，触发加载
-            if (!db || !db.loaded) {
-              onDatabaseExpand(connectionId, database);
-            }
           }
         }
       } else if (key.startsWith('tables::') || key.startsWith('views::')) {
@@ -841,7 +831,7 @@ export function ConnectionTree({
         }
       }
     },
-    [connections, expandedKeys, onExpandKeys, onConnect, onTableOpen, onDatabaseExpand]
+    [connections, expandedKeys, onExpandKeys, onConnect, onTableOpen]
   );
 
   // ---- Build tree data ----

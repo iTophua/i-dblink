@@ -23,13 +23,7 @@ fn create_file_menu<R: tauri::Runtime>(
         "文件",
         true,
         &[
-            &MenuItem::with_id(
-                app,
-                "new-connection",
-                "新建连接",
-                true,
-                Some("CmdOrCtrl+N"),
-            )?,
+            &MenuItem::with_id(app, "new-connection", "新建连接", true, Some("CmdOrCtrl+N"))?,
             &MenuItem::with_id(
                 app,
                 "open-connection",
@@ -38,20 +32,8 @@ fn create_file_menu<R: tauri::Runtime>(
                 Some("CmdOrCtrl+O"),
             )?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
-                "save-connection",
-                "保存",
-                true,
-                Some("CmdOrCtrl+S"),
-            )?,
-            &MenuItem::with_id(
-                app,
-                "save-as",
-                "另存为...",
-                true,
-                Some("CmdOrCtrl+Shift+S"),
-            )?,
+            &MenuItem::with_id(app, "save-connection", "保存", true, Some("CmdOrCtrl+S"))?,
+            &MenuItem::with_id(app, "save-as", "另存为...", true, Some("CmdOrCtrl+Shift+S"))?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "import", "导入", true, Some("CmdOrCtrl+I"))?,
             &MenuItem::with_id(app, "export", "导出", true, Some("CmdOrCtrl+E"))?,
@@ -105,13 +87,7 @@ fn create_view_menu<R: tauri::Runtime>(
             &MenuItem::with_id(app, "zoom-out", "缩小", true, Some("CmdOrCtrl+-"))?,
             &MenuItem::with_id(app, "zoom-reset", "实际大小", true, Some("CmdOrCtrl+0"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
-                "toggle-fullscreen",
-                "全屏切换",
-                true,
-                Some("F11"),
-            )?,
+            &MenuItem::with_id(app, "toggle-fullscreen", "全屏切换", true, Some("F11"))?,
         ],
     )
 }
@@ -143,13 +119,7 @@ fn create_connection_menu<R: tauri::Runtime>(
                 Some("CmdOrCtrl+Enter"),
             )?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
-                "close-all",
-                "关闭所有连接",
-                true,
-                None::<&str>,
-            )?,
+            &MenuItem::with_id(app, "close-all", "关闭所有连接", true, None::<&str>)?,
         ],
     )
 }
@@ -169,13 +139,7 @@ fn create_tools_menu<R: tauri::Runtime>(
             &MenuItem::with_id(app, "backup", "备份数据库...", true, None::<&str>)?,
             &MenuItem::with_id(app, "restore", "恢复数据库...", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
-                "model-designer",
-                "模型设计器...",
-                true,
-                None::<&str>,
-            )?,
+            &MenuItem::with_id(app, "model-designer", "模型设计器...", true, None::<&str>)?,
         ],
     )
 }
@@ -192,7 +156,13 @@ fn create_window_menu<R: tauri::Runtime>(
             &MenuItem::with_id(app, "new-tab", "新建标签页", true, Some("CmdOrCtrl+T"))?,
             &MenuItem::with_id(app, "close-tab", "关闭标签页", true, Some("CmdOrCtrl+W"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "next-tab", "切换到下一个标签页", true, Some("CmdOrCtrl+Tab"))?,
+            &MenuItem::with_id(
+                app,
+                "next-tab",
+                "切换到下一个标签页",
+                true,
+                Some("CmdOrCtrl+Tab"),
+            )?,
             &MenuItem::with_id(
                 app,
                 "previous-tab",
@@ -202,20 +172,8 @@ fn create_window_menu<R: tauri::Runtime>(
             )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "cascade", "层叠", true, None::<&str>)?,
-            &MenuItem::with_id(
-                app,
-                "tile-horizontally",
-                "水平平铺",
-                true,
-                None::<&str>,
-            )?,
-            &MenuItem::with_id(
-                app,
-                "tile-vertically",
-                "垂直平铺",
-                true,
-                None::<&str>,
-            )?,
+            &MenuItem::with_id(app, "tile-horizontally", "水平平铺", true, None::<&str>)?,
+            &MenuItem::with_id(app, "tile-vertically", "垂直平铺", true, None::<&str>)?,
         ],
     )
 }
@@ -232,13 +190,7 @@ fn create_help_menu<R: tauri::Runtime>(
             &MenuItem::with_id(app, "contents", "文档", true, Some("F1"))?,
             &MenuItem::with_id(app, "search-help", "搜索...", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
-                "check-updates",
-                "检查更新...",
-                true,
-                None::<&str>,
-            )?,
+            &MenuItem::with_id(app, "check-updates", "检查更新...", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "About iDBlink", "关于 i-dblink", true, None::<&str>)?,
         ],

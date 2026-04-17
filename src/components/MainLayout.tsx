@@ -17,11 +17,74 @@ import { useSettingsStore } from '../stores/settingsStore';
 const { Sider, Content } = Layout;
 const { Search } = Input;
 
+const getStyles = (isDarkMode: boolean) => ({
+  root: { height: '100vh' as const, overflow: 'hidden' as const },
+  mainLayout: { flex: 1, overflow: 'hidden' as const, display: 'flex' as const },
+  sider: {
+    background: isDarkMode ? '#1f1f1f' : '#fff',
+    borderRight: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+  },
+  siderContent: { display: 'flex' as const, flexDirection: 'column' as const, height: '100%' },
+  searchContainer: { padding: '8px 8px 4px', flexShrink: 0 },
+  searchInput: {
+    borderRadius: 4,
+    background: isDarkMode ? '#141414' : '#fafafa',
+  },
+  connectionTreeContainer: { flex: 1, minHeight: 0, overflow: 'auto' as const, marginBottom: 0 },
+  collapseButton: {
+    height: 28,
+    flexShrink: 0,
+    background: isDarkMode ? '#141414' : '#fafafa',
+    borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+    display: 'flex' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    cursor: 'pointer' as const,
+    transition: 'background 0.2s ease',
+  },
+  collapseButtonText: {
+    color: isDarkMode ? '#bfbfbf' : '#595959',
+    fontSize: 11,
+    display: 'flex' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  content: {
+    flex: 1,
+    background: isDarkMode ? '#1f1f1f' : '#fff',
+    margin: 0,
+    marginLeft: 0,
+    padding: 0,
+    borderRadius: 0,
+    overflow: 'hidden' as const,
+    display: 'flex' as const,
+    flexDirection: 'column' as const,
+    minHeight: 0,
+  },
+  tabPanelContainer: {
+    flex: 1,
+    overflow: 'hidden' as const,
+    display: 'flex' as const,
+    flexDirection: 'column' as const,
+    minHeight: 0,
+  },
+  logPanelCollapsed: {
+    height: 28,
+    borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+    background: isDarkMode ? '#141414' : '#fafafa',
+    padding: '0 16px',
+    display: 'flex' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'flex-end' as const,
+  },
+  logLink: { fontSize: 12, color: isDarkMode ? '#177ddc' : '#1890ff' },
+});
+
 interface MainLayoutProps {
   children?: React.ReactNode;
 }
 
-export function MainLayout({ children }: MainLayoutProps) {
+function MainLayoutComponent({ children }: MainLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -45,6 +108,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const {
     connections,
@@ -71,9 +135,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     if (!debouncedSearch.trim()) return connections;
     const lower = debouncedSearch.toLowerCase();
     return connections.filter(
-      (conn) =>
-        conn.name.toLowerCase().includes(lower) ||
-        conn.host?.toLowerCase().includes(lower)
+      (conn) => conn.name.toLowerCase().includes(lower) || conn.host?.toLowerCase().includes(lower)
     );
   }, [connections, debouncedSearch]);
 
@@ -88,9 +150,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   // 性能优化：缓存数据库列表
   const allDatabases = useMemo(() => {
-    return Object.values(connectionDatabases).flatMap((dbs) =>
-      dbs.map((db) => db.database)
-    );
+    return Object.values(connectionDatabases).flatMap((dbs) => dbs.map((db) => db.database));
   }, [connectionDatabases]);
 
   const handleSearchChange = useCallback((value: string | undefined) => {
@@ -510,46 +570,33 @@ export function MainLayout({ children }: MainLayoutProps) {
   }, [selectedConnectionId, selectedDatabase, loadDatabaseTables, handleConnect, handleDisconnect]);
 
   return (
-    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+    <Layout style={styles.root}>
       <Toolbar />
 
-      <Layout style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+      <Layout style={styles.mainLayout}>
         <Sider
           collapsible
           collapsed={collapsed}
           onCollapse={(value) => setCollapsed(value)}
           width={320}
           trigger={null}
-          style={{
-            background: isDarkMode ? '#1f1f1f' : '#fff',
-            borderRight: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-          }}
+          style={styles.sider}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={styles.siderContent}>
             {!collapsed && (
-              <div style={{ padding: '8px 8px 4px', flexShrink: 0 }}>
+              <div style={styles.searchContainer}>
                 <Search
                   placeholder="搜索..."
                   value={searchText}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  style={{
-                    borderRadius: 4,
-                    background: isDarkMode ? '#141414' : '#fafafa',
-                  }}
+                  style={styles.searchInput}
                   size="small"
                   allowClear
                 />
               </div>
             )}
 
-            <div
-              style={{
-                flex: 1,
-                minHeight: 0,
-                overflow: 'auto',
-                marginBottom: 0,
-              }}
-            >
+            <div style={styles.connectionTreeContainer}>
               <ConnectionTree
                 connections={connections}
                 groups={groups}
@@ -596,17 +643,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
             <div
               onClick={() => setCollapsed(!collapsed)}
-              style={{
-                height: 28,
-                flexShrink: 0,
-                background: isDarkMode ? '#141414' : '#fafafa',
-                borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'background 0.2s ease',
-              }}
+              style={styles.collapseButton}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = isDarkMode ? '#1f1f1f' : '#f0f0f0';
               }}
@@ -614,44 +651,13 @@ export function MainLayout({ children }: MainLayoutProps) {
                 e.currentTarget.style.background = isDarkMode ? '#141414' : '#fafafa';
               }}
             >
-              <span
-                style={{
-                  color: isDarkMode ? '#bfbfbf' : '#595959',
-                  fontSize: 11,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                {collapsed ? '展开' : '收起'}
-              </span>
+              <span style={styles.collapseButtonText}>{collapsed ? '展开' : '收起'}</span>
             </div>
           </div>
         </Sider>
 
-        <Content
-          style={{
-            flex: 1,
-            background: isDarkMode ? '#1f1f1f' : '#fff',
-            margin: 0,
-            marginLeft: 0,
-            padding: 0,
-            borderRadius: 0,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 0,
-          }}
-        >
-          <div
-            style={{
-              flex: 1,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: 0,
-            }}
-          >
+        <Content style={styles.content}>
+          <div style={styles.tabPanelContainer}>
             <TabPanel
               selectedConnectionId={selectedConnectionId}
               selectedConnectionName={
@@ -674,21 +680,8 @@ export function MainLayout({ children }: MainLayoutProps) {
           )}
 
           {sqlTabCount > 0 && logPanelCollapsed && (
-            <div
-              style={{
-                height: 28,
-                borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-                background: isDarkMode ? '#141414' : '#fafafa',
-                padding: '0 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-              }}
-            >
-              <a
-                onClick={() => setLogPanelCollapsed(false)}
-                style={{ fontSize: 12, color: isDarkMode ? '#177ddc' : '#1890ff' }}
-              >
+            <div style={styles.logPanelCollapsed}>
+              <a onClick={() => setLogPanelCollapsed(false)} style={styles.logLink}>
                 显示日志
               </a>
             </div>
@@ -720,3 +713,5 @@ export function MainLayout({ children }: MainLayoutProps) {
     </Layout>
   );
 }
+
+export const MainLayout = React.memo(MainLayoutComponent);
