@@ -6,8 +6,9 @@
 
 ```
 src/
-├── db/           # 数据库模块 (6 文件，实际内容)
-├── commands.rs   # Tauri 命令 (1151 行，高重复)
+├── db/           # 数据库模块 (6 文件)
+├── drivers/      # 数据库驱动抽象 (mysql/pg/sqlite)
+├── commands.rs   # Tauri 命令 (657 行，已优化)
 ├── main.rs       # Rust 入口、菜单初始化
 ├── security.rs   # 系统密钥链密码管理
 └── storage.rs    # 连接配置持久化
@@ -28,13 +29,12 @@ src/
 ### 命令处理 (`commands.rs`)
 
 ```rust
-// 重复的数据库连接逻辑 (MySQL/PostgreSQL/SQLite)
+// ✅ 已重构：通过 DbPool::validate() 消除重复代码
 #[tauri::command]
-pub async fn get_tables_mysql(connection_id: String) -> Result<Vec<TableInfo>, String> {
-    let conn_config = Storage::get_connection(&connection_id)?;
-    let password = PasswordManager::get_password(&connection_id)?;
-    let pool = create_mysql_pool(&conn_config, &password).await?;
-    // ... 查询逻辑
+pub async fn test_connection(...) -> Result<bool, String> {
+    let pool = connect_by_type(db_type, &config, password).await?;
+    pool.validate().await?;  // 统一的验证逻辑
+    Ok(true)
 }
 ```
 
@@ -47,6 +47,22 @@ pub use self::pool::*;
 pub use self::migrations::*;
 pub use self::query::*;
 pub use self::repository::*;
+```
+
+### 数据库驱动 (`drivers/`)
+
+```rust
+// DbPool 统一的验证方法
+impl DbPool {
+    pub async fn validate(&self) -> Result<(), String> {
+        match self {
+            DbPool::MySql(pool) => { sqlx::query("SELECT 1").fetch_one(pool).await?; }
+            DbPool::Postgres(pool) => { sqlx::query("SELECT 1").fetch_one(pool).await?; }
+            DbPool::Sqlite(pool) => { sqlx::query("SELECT 1").fetch_one(pool).await?; }
+        }
+        Ok(())
+    }
+}
 ```
 
 ### 安全存储 (`security.rs`)
@@ -67,12 +83,8 @@ impl PasswordManager {
 - **数据库连接**: sqlx 连接池管理
 - **密码安全**: 系统密钥链 (keyring crate)
 
-## 源码特定问题
+## 源码改进
 
-1. **commands.rs 大文件**: 1151 行，需拆分为 `commands/` 模块
-2. **TODO**: 连接测试逻辑待实现
-
-## 改进建议
-
-1. **重构 commands.rs**: 提取数据库驱动抽象层，减少重复代码
-2. **模块化**: 使用 `commands/` 目录拆分命令模块
+1. ✅ **commands.rs 重构**: 提取 `DbPool::validate()` 方法，消除重复代码 57 行
+2. ✅ **drivers 模块化**: 驱动逻辑分离到 `drivers/` 目录
+3. ✅ **连接验证**: 统一的 `validate()` 方法替代重复的 match 模式

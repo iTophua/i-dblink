@@ -3,7 +3,6 @@ import {
   Tabs,
   Table,
   Button,
-  Input,
   InputNumber,
   Select,
   Switch,
@@ -14,6 +13,7 @@ import {
   Typography,
   Tooltip,
 } from 'antd';
+import { GlobalInput } from '../GlobalInput';
 import {
   PlusOutlined,
   DeleteOutlined,
@@ -324,7 +324,7 @@ export function TableDesigner({
       dataIndex: 'name',
       width: 160,
       render: (val: string, record: DesignerColumn) => (
-        <Input
+        <GlobalInput
           size="small"
           value={val}
           placeholder="column_name"
@@ -386,7 +386,7 @@ export function TableDesigner({
       dataIndex: 'defaultValue',
       width: 140,
       render: (val: string | undefined, record: DesignerColumn) => (
-        <Input
+        <GlobalInput
           size="small"
           value={val || ''}
           placeholder="NULL"
@@ -399,7 +399,7 @@ export function TableDesigner({
       dataIndex: 'comment',
       width: 160,
       render: (val: string | undefined, record: DesignerColumn) => (
-        <Input
+        <GlobalInput
           size="small"
           value={val || ''}
           placeholder="comment"
@@ -438,7 +438,7 @@ export function TableDesigner({
       dataIndex: 'name',
       width: 200,
       render: (val: string, record: DesignerIndex) => (
-        <Input
+        <GlobalInput
           size="small"
           value={val}
           placeholder="index_name"
@@ -497,7 +497,7 @@ export function TableDesigner({
       dataIndex: 'name',
       width: 180,
       render: (val: string, record: DesignerForeignKey) => (
-        <Input
+        <GlobalInput
           size="small"
           value={val}
           placeholder="fk_name"
@@ -526,7 +526,7 @@ export function TableDesigner({
       dataIndex: 'referencedTable',
       width: 160,
       render: (val: string, record: DesignerForeignKey) => (
-        <Input
+        <GlobalInput
           size="small"
           value={val}
           placeholder="table_name"
@@ -539,7 +539,7 @@ export function TableDesigner({
       dataIndex: 'referencedColumn',
       width: 160,
       render: (val: string, record: DesignerForeignKey) => (
-        <Input
+        <GlobalInput
           size="small"
           value={val}
           placeholder="column_name"
@@ -721,7 +721,7 @@ export function TableDesigner({
           <Text strong style={{ fontSize: 14 }}>
             Table Designer
           </Text>
-          <Input
+          <GlobalInput
             size="small"
             style={{ width: 200 }}
             value={tableName}

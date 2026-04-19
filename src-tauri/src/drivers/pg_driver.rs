@@ -1,4 +1,4 @@
-use crate::commands::{ColumnInfo, ForeignKeyInfo, IndexInfo, QueryResult, TableInfo};
+use crate::commands::{ColumnInfo, ForeignKeyInfo, IndexInfo, QueryResult, TableInfo, TableStructure, TablesResult};
 use crate::db::DbConnection;
 use crate::drivers::db_pool::DbPool;
 use sqlx::{Column, Row};
@@ -395,5 +395,119 @@ impl PgDriver {
         } else {
             Err("Pool type mismatch for PostgreSQL".to_string())
         }
+    }
+
+    /// 获取分类的表和视图（支持搜索过滤）
+    pub async fn get_tables_categorized(
+        pool: &DbPool,
+        _database: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<TablesResult, String> {
+        if let DbPool::Postgres(pool) = pool {
+            let search_filter = match search {
+                Some(s) if !s.is_empty() => format!("AND c.relname LIKE '%{}%'", s),
+                _ => String::new(),
+            };
+
+            let query = format!(
+                r#"
+                SELECT c.relname AS table_name,
+                       CASE c.relkind
+                           WHEN 'r' THEN 'BASE TABLE'
+                           WHEN 'v' THEN 'VIEW'
+                           WHEN 'm' THEN 'MATERIALIZED VIEW'
+                           ELSE 'OTHER'
+                       END AS table_type,
+                       NULL::bigint AS row_count,
+                       COALESCE(d.description, '') AS comment,
+                       NULL AS engine,
+                       NULL AS data_size,
+                       NULL AS index_size,
+                       NULL AS create_time,
+                       NULL AS update_time,
+                       NULL AS collation
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+                WHERE c.relkind IN ('r','v','m','f')
+                  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                  AND n.nspname NOT LIKE 'pg_toast%'
+                  {}
+                ORDER BY c.relname
+            "#,
+                search_filter
+            );
+
+            let rows = sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    Option<i64>,
+                    String,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                ),
+            >(&query)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("Failed to query tables: {}", e))?;
+
+            let mut tables = Vec::new();
+            let mut views = Vec::new();
+
+            for (table_name, table_type, row_count, comment, engine, data_size, index_size, create_time, update_time, collation) in rows {
+                let comment_val = if comment.is_empty() { None } else { Some(comment) };
+
+                let table_info = TableInfo {
+                    table_name: table_name.clone(),
+                    table_type: table_type.clone(),
+                    row_count: row_count.map(|v| v as u64),
+                    comment: comment_val,
+                    engine,
+                    data_size,
+                    index_size,
+                    create_time,
+                    update_time,
+                    collation,
+                };
+
+                // 根据 TABLE_TYPE 分类
+                match table_type.as_str() {
+                    "BASE TABLE" => tables.push(table_info),
+                    "VIEW" | "MATERIALIZED VIEW" => views.push(table_info),
+                    _ => tables.push(table_info),
+                }
+            }
+
+            Ok(TablesResult { tables, views })
+        } else {
+            Err("Pool type mismatch for PostgreSQL".to_string())
+        }
+    }
+
+    /// 获取完整的表结构（列、索引、外键）
+    pub async fn get_table_structure(
+        pool: &DbPool,
+        table_name: &str,
+        _database: Option<&str>,
+    ) -> Result<TableStructure, String> {
+        // 并行获取列、索引、外键信息
+        // 子函数会自己处理 pool 类型匹配
+        let (columns, indexes, foreign_keys) = tokio::join!(
+            Self::get_columns(pool, table_name, None),
+            Self::get_indexes(pool, table_name),
+            Self::get_foreign_keys(pool, table_name),
+        );
+
+        Ok(TableStructure {
+            columns: columns?,
+            indexes: indexes?,
+            foreign_keys: foreign_keys?,
+        })
     }
 }

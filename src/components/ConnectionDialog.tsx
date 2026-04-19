@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Modal,
   Form,
-  Input,
   InputNumber,
   Select,
   message,
@@ -13,6 +12,7 @@ import {
 } from 'antd';
 import { UploadOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
+import { GlobalInput, GlobalInputPassword } from './GlobalInput';
 
 export interface ConnectionFormData {
   id?: string;
@@ -215,7 +215,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   rules={[{ required: true, message: '请输入连接名称' }]}
                   style={compactFormItemStyle}
                 >
-                  <Input placeholder="例如：我的 MySQL 数据库" />
+                  <GlobalInput placeholder="例如：我的 MySQL 数据库" />
                 </Form.Item>
 
                 <Form.Item
@@ -243,7 +243,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                       rules={[{ required: true, message: '请输入主机地址' }]}
                       style={compactFormItemStyle}
                     >
-                      <Input placeholder="例如：localhost 或 192.168.1.100" />
+                      <GlobalInput placeholder="例如：localhost 或 192.168.1.100" />
                     </Form.Item>
 
                     <Form.Item
@@ -264,7 +264,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     rules={[{ required: true, message: '请输入数据库文件路径' }]}
                     style={compactFormItemStyle}
                   >
-                    <Input placeholder="例如：/path/to/database.db" />
+                    <GlobalInput placeholder="例如：/path/to/database.db" />
                   </Form.Item>
                 )}
 
@@ -274,7 +274,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   rules={[{ required: dbType !== 'sqlite', message: '请输入用户名' }]}
                   style={compactFormItemStyle}
                 >
-                  <Input placeholder="例如：root" />
+                  <GlobalInput placeholder="例如：root" />
                 </Form.Item>
 
                 <Form.Item
@@ -283,14 +283,14 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   rules={[{ required: !editingData && dbType !== 'sqlite', message: '请输入密码' }]}
                   style={compactFormItemStyle}
                 >
-                  <Input.Password
+                  <GlobalInputPassword
                     placeholder={editingData ? '留空则保持密码不变' : '请输入密码'}
                     autoComplete="new-password"
                   />
                 </Form.Item>
 
                 <Form.Item name="database" label="数据库名" style={compactFormItemStyle}>
-                  <Input placeholder="例如：mydb（可选）" />
+                  <GlobalInput placeholder="例如：mydb（可选）" />
                 </Form.Item>
               </Form>
             ),
@@ -311,7 +311,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                 <Form.Item name="ssl_ca_cert" label="CA 证书文件" style={compactFormItemStyle}>
                   <Space.Compact style={{ width: '100%' }}>
-                    <Input placeholder="选择 CA 证书文件路径" readOnly />
+                    <GlobalInput placeholder="选择 CA 证书文件路径" readOnly />
                     <AntButton
                       icon={<UploadOutlined />}
                       size="small"
@@ -326,7 +326,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   style={compactFormItemStyle}
                 >
                   <Space.Compact style={{ width: '100%' }}>
-                    <Input placeholder="选择客户端证书文件路径" readOnly />
+                    <GlobalInput placeholder="选择客户端证书文件路径" readOnly />
                     <AntButton
                       icon={<UploadOutlined />}
                       size="small"
@@ -341,7 +341,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   style={compactFormItemStyle}
                 >
                   <Space.Compact style={{ width: '100%' }}>
-                    <Input placeholder="选择客户端私钥文件路径" readOnly />
+                    <GlobalInput placeholder="选择客户端私钥文件路径" readOnly />
                     <AntButton
                       icon={<UploadOutlined />}
                       size="small"
@@ -371,7 +371,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                 </Form.Item>
 
                 <Form.Item name="ssh_host" label="SSH 主机地址" style={compactFormItemStyle}>
-                  <Input placeholder="例如：192.168.1.100" />
+                  <GlobalInput placeholder="例如：192.168.1.100" />
                 </Form.Item>
 
                 <Form.Item
@@ -384,11 +384,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                 </Form.Item>
 
                 <Form.Item name="ssh_username" label="SSH 用户名" style={compactFormItemStyle}>
-                  <Input placeholder="例如：root" />
+                  <GlobalInput placeholder="例如：root" />
                 </Form.Item>
 
                 <Form.Item name="ssh_password" label="SSH 密码" style={compactFormItemStyle}>
-                  <Input.Password placeholder="请输入 SSH 密码" autoComplete="new-password" />
+                  <GlobalInputPassword placeholder="请输入 SSH 密码" autoComplete="new-password" />
                 </Form.Item>
 
                 <Form.Item
@@ -397,7 +397,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   style={compactFormItemStyle}
                 >
                   <Space.Compact style={{ width: '100%' }}>
-                    <Input placeholder="选择私钥文件路径" readOnly />
+                    <GlobalInput placeholder="选择私钥文件路径" readOnly />
                     <AntButton
                       icon={<UploadOutlined />}
                       size="small"

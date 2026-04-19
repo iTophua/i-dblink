@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Layout, Input, theme } from 'antd';
+import { Layout, theme } from 'antd';
+import { GlobalSearch } from './GlobalInput';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
 import { Toolbar } from './Toolbar';
-import { ConnectionTree } from './ConnectionTree';
+import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
 import { TabPanel } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
@@ -15,7 +16,6 @@ import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 const { Sider, Content } = Layout;
-const { Search } = Input;
 
 const getStyles = (isDarkMode: boolean) => ({
   root: { height: '100vh' as const, overflow: 'hidden' as const },
@@ -337,7 +337,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     async (connectionId: string, database: string) => {
       setSelectedConnectionId(connectionId);
       setSelectedDatabase(database);
-      await loadDatabaseTables(connectionId, database);
+      // 始终强制刷新，因为展开数据库时需要最新数据
+      await loadDatabaseTables(connectionId, database, true);
     },
     [loadDatabaseTables]
   );
@@ -347,6 +348,43 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       await loadDatabaseTables(connectionId, database, true); // Force refresh
     },
     [loadDatabaseTables]
+  );
+
+  const handleDatabaseClose = useCallback(
+    (connectionId: string, database: string) => {
+      setConnectionDatabases((prev) => {
+        const newData = { ...prev };
+        if (newData[connectionId]) {
+          newData[connectionId] = newData[connectionId].map((db) =>
+            db.database === database ? { ...db, loaded: false, tables: [] } : db
+          );
+        }
+        return newData;
+      });
+      setExpandedKeys((prev) =>
+        prev.filter(
+          (key) =>
+            !key.startsWith(`db::${connectionId}::${database}`) &&
+            !key.startsWith(`tables::${connectionId}::${database}`) &&
+            !key.startsWith(`views::${connectionId}::${database}`) &&
+            !key.startsWith(`table::${connectionId}::${database}`) &&
+            !key.startsWith(`view::${connectionId}::${database}`)
+        )
+      );
+      setTableStructures((prev) => {
+        const newData = { ...prev };
+        const keysToDelete = Object.keys(newData).filter(
+          (key) => key.startsWith(`${connectionId}::${database}::`)
+        );
+        keysToDelete.forEach((key) => delete newData[key]);
+        return newData;
+      });
+      if (selectedConnectionId === connectionId && selectedDatabase === database) {
+        setSelectedTable(null);
+        setSelectedDatabase(undefined);
+      }
+    },
+    [selectedConnectionId, selectedDatabase]
   );
 
   const handleLoadDatabases = useCallback(
@@ -433,6 +471,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     (connectionId: string) => {
       setSelectedConnectionId(connectionId);
       setActiveConnection(connectionId);
+      window.dispatchEvent(
+        new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } })
+      );
     },
     [setActiveConnection]
   );
@@ -585,7 +626,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           <div style={styles.siderContent}>
             {!collapsed && (
               <div style={styles.searchContainer}>
-                <Search
+                <GlobalSearch
                   placeholder="搜索..."
                   value={searchText}
                   onChange={(e) => handleSearchChange(e.target.value)}
@@ -597,7 +638,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
             )}
 
             <div style={styles.connectionTreeContainer}>
-              <ConnectionTree
+              <EnhancedConnectionTree
                 connections={connections}
                 groups={groups}
                 selectedId={selectedConnectionId}
@@ -612,7 +653,6 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                   setSelectedDatabase(database);
                 }}
                 onTableOpen={(tableName, database) => {
-                  // 双击表时，先重置再设置，确保重复双击同一表也能触发
                   setTableToOpen(null);
                   setTimeout(() => {
                     setTableToOpen({ name: tableName, database });
@@ -624,7 +664,6 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                 expandedKeys={expandedKeys}
                 onExpandKeys={setExpandedKeys}
                 connectionDatabases={connectionDatabases}
-                tableStructures={tableStructures}
                 isLoading={isLoading}
                 onConnect={handleConnect}
                 onDisconnect={handleDisconnect}
@@ -633,11 +672,13 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                 onNewQuery={handleNewQuery}
                 onDatabaseExpand={handleDatabaseExpand}
                 onDatabaseRefresh={handleDatabaseRefresh}
+                onDatabaseClose={handleDatabaseClose}
                 onLoadDatabases={handleLoadDatabases}
                 onTableExpand={handleTableExpand}
                 onSaveConnection={handleSaveConnection}
                 onSaveGroup={handleSaveGroup}
                 onDeleteGroup={handleDeleteGroup}
+                onCreateConnection={() => setConnectionDialogOpen(true)}
               />
             </div>
 

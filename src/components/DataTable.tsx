@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, GridApi } from 'ag-grid-community';
-import { Spin, Empty, Button, Space, message, Modal, Form, Input, theme, Tag, Popconfirm, Select, Pagination, Tooltip } from 'antd';
+import { Spin, Empty, Button, Space, message, Modal, Form, theme, Tag, Popconfirm, Select, Pagination, Tooltip, Dropdown, Input, Switch, Checkbox, Divider } from 'antd';
+import { GlobalInput } from './GlobalInput';
 import {
   ReloadOutlined,
   DownloadOutlined,
@@ -12,6 +13,8 @@ import {
   UndoOutlined,
   StopOutlined,
   CopyOutlined,
+  ColumnWidthOutlined,
+  FilterOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
 import type { ColumnInfo } from '../types/api';
@@ -59,6 +62,12 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
     deletes: RowData[];
   }>({ inserts: [], updates: [], deletes: [] });
   const [sortModel, setSortModel] = useState<{ colId: string; sort: 'asc' | 'desc' }[]>([]);
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+  const [quickFilter, setQuickFilter] = useState('');
+  const loadDataRef = useRef<() => void>(() => {});
+  const loadCountRef = useRef<() => void>(() => {});
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
 
   // 当外部 pageSize 变化时，更新本地状态
   useEffect(() => {
@@ -69,8 +78,8 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
 
   // 通知父组件 dirty 状态变化
   useEffect(() => {
-    onDirtyChange?.(hasUnsavedChanges);
-  }, [hasUnsavedChanges, onDirtyChange]);
+    onDirtyChangeRef.current?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges]);
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
@@ -145,6 +154,8 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
     }
   }, [connectionId, tableName, database, currentPage, pageSize, sortModel]);
 
+  loadDataRef.current = loadData;
+
   // 性能优化：计算列宽的 useMemo
   const colWidths = useMemo(() => {
     if (rowData.length === 0 || columns.length === 0) return {};
@@ -169,6 +180,10 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
   // 性能优化：计算列定义的 useMemo
   const columnDefs = useMemo(() => {
     return columns.map((col) => {
+      if (hiddenColumns.has(col.column_name)) {
+        return { field: col.column_name, hide: true } as ColDef;
+      }
+
       const headerLength = col.column_name.length;
       const dataMaxLength = colWidths[col.column_name] || 0;
       const contentWidth = Math.max(headerLength, dataMaxLength);
@@ -189,9 +204,10 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
         headerTooltip: col.data_type + nullableInfo + commentInfo,
         cellClass: (params: any) => params.value === null ? 'null-cell' : undefined,
         cellRenderer: (params: any) => params.value,
+        checkboxSelection: col.column_key === 'PRI',
       } as ColDef;
     });
-  }, [columns, colWidths]);
+  }, [columns, colWidths, hiddenColumns]);
 
   const loadCount = useCallback(async () => {
     try {
@@ -203,6 +219,8 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
     } catch {
     }
   }, [connectionId, tableName, database, executeQuery]);
+
+  loadCountRef.current = loadCount;
 
   useEffect(() => {
     setHasEverLoaded(false);
@@ -557,6 +575,36 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
     message.success('SQL 已复制');
   }, [currentSql]);
 
+  const handleAutoSizeColumns = useCallback(() => {
+    if (gridApiRef.current) {
+      gridApiRef.current.sizeColumnsToFit();
+      message.success('列宽已自动调整');
+    }
+  }, []);
+
+  const toggleColumnVisibility = useCallback((columnName: string) => {
+    setHiddenColumns(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(columnName)) {
+        newSet.delete(columnName);
+      } else {
+        newSet.add(columnName);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const showAllColumns = useCallback(() => {
+    setHiddenColumns(new Set());
+  }, []);
+
+  const handleQuickFilter = useCallback((value: string) => {
+    setQuickFilter(value);
+    if (gridApiRef.current) {
+      gridApiRef.current.setGridOption('quickFilterText', value);
+    }
+  }, []);
+
   const onSelectionChanged = useCallback((event: any) => {
     const selected = event.api.getSelectedRows();
     setSelectedRows(selected);
@@ -747,6 +795,50 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
           <div style={dividerStyle} />
 
           <Button icon={<DownloadOutlined />} onClick={exportToCSV} disabled={rowData.length === 0} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>导出</Button>
+
+          <div style={dividerStyle} />
+
+          <Tooltip title="自动调整列宽">
+            <Button icon={<ColumnWidthOutlined />} onClick={handleAutoSizeColumns} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} />
+          </Tooltip>
+
+          <div style={dividerStyle} />
+
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              title: '列可见性',
+              items: [
+                { key: 'showAll', label: '显示全部', onClick: showAllColumns },
+                { type: 'divider' },
+                ...columns.map(col => ({
+                  key: col.column_name,
+                  label: (
+                    <Checkbox
+                      checked={!hiddenColumns.has(col.column_name)}
+                      onChange={() => toggleColumnVisibility(col.column_name)}
+                    >
+                      {col.column_name}
+                      {col.column_key === 'PRI' && <Tag color="blue" style={{ marginLeft: 4, fontSize: 9 }}>PK</Tag>}
+                    </Checkbox>
+                  ),
+                })),
+              ],
+            }}
+          >
+            <Button icon={<FilterOutlined />} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>
+              列
+            </Button>
+          </Dropdown>
+
+          <Input
+            placeholder="快速筛选..."
+            value={quickFilter}
+            onChange={(e) => handleQuickFilter(e.target.value)}
+            allowClear
+            size="small"
+            style={{ width: 120, height: 20, fontSize: 11 }}
+          />
         </Space>
 
         <Space size={2}>
@@ -990,7 +1082,7 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
               name={col.column_name}
               rules={[{ required: !col.is_nullable, message: `请输入 ${col.column_name}` }]}
             >
-              <Input placeholder={col.comment || col.data_type} />
+              <GlobalInput placeholder={col.comment || col.data_type} />
             </Form.Item>
           ))}
         </Form>
@@ -1021,7 +1113,7 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
               }
               name={col.column_name}
             >
-              <Input
+              <GlobalInput
                 placeholder={col.comment || col.data_type}
                 disabled={col.column_key === 'PRI'}
               />

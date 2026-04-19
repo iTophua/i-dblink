@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
-import { List, Input, Tag, Typography, Empty, Button, Space, Popconfirm } from 'antd';
+import { List, Tag, Typography, Empty, Button, Space, Popconfirm } from 'antd';
 import { SearchOutlined, ClearOutlined, ReloadOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { theme } from 'antd';
+import { GlobalInput } from '../GlobalInput';
 
 const { Text } = Typography;
 
@@ -98,7 +99,7 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
         flexShrink: 0,
       }}>
         <Space size="small">
-          <Input
+          <GlobalInput
             placeholder="搜索 SQL..."
             prefix={<SearchOutlined style={{ color: '#999' }} />}
             value={searchText}

@@ -589,8 +589,9 @@ tbody tr:hover {
 /* 节点内容对齐 */
 .connection-tree.ant-tree .ant-tree-node-content-wrapper {
   padding-left: 2px !important;
-  display: inline-flex !important;
+  display: block !important;
   align-items: center;
+  width: 100%;
 }
 
 /* 缩进单元 */
@@ -755,4 +756,61 @@ tbody tr:hover {
 
 .ant-tabs.ant-tabs-editable-card .ant-tabs-nav {
   margin: 0;
+}
+
+/* Tabs 高度约束 - 确保内容区域可滚动 */
+.ant-tabs {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.ant-tabs-content-holder {
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+}
+
+.ant-tabs-content {
+  height: 100% !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.ant-tabs-tabpane {
+  height: 100% !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.ant-tabs-tabpane-active {
+  height: 100% !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* 确保 Tabs 内部容器也有正确高度 */
+.ant-tabs-nav-wrap {
+  flex-shrink: 0;
+}
+
+.ant-tabs-nav-main {
+  flex-shrink: 0;
+}
+
+/* 强制内容容器不超出父元素 */
+.ant-tabs .ant-tabs-nav {
+  flex-shrink: 0 !important;
 }

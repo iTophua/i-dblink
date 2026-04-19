@@ -3,6 +3,7 @@ use crate::drivers::db_pool::DbPool;
 use crate::drivers::{
     connect_by_type, execute_query_by_type, get_columns_by_type, get_databases_by_type,
     get_foreign_keys_by_type, get_indexes_by_type, get_tables_by_type,
+    get_tables_categorized_by_type, get_table_structure_by_type,
 };
 use crate::storage::Storage;
 use serde::{Deserialize, Serialize};
@@ -133,6 +134,21 @@ pub struct ForeignKeyInfo {
     pub referenced_column: String,
 }
 
+/// 表列表结果（包含分类的表和视图）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TablesResult {
+    pub tables: Vec<TableInfo>,
+    pub views: Vec<TableInfo>,
+}
+
+/// 表结构结果（包含列、索引、外键）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableStructure {
+    pub columns: Vec<ColumnInfo>,
+    pub indexes: Vec<IndexInfo>,
+    pub foreign_keys: Vec<ForeignKeyInfo>,
+}
+
 async fn get_connection_pool(
     connection_id: &str,
     state: &State<'_, Mutex<Option<Storage>>>,
@@ -149,7 +165,8 @@ async fn get_connection_pool(
 
     let password = password_opt.unwrap_or_default();
 
-    let pool = match connections.read().await.get(connection_id).await {
+    let pools = connections.read().await;
+    let pool = match pools.get(connection_id).await {
         Some(pool) => pool,
         None => connect_by_type(&conn_config.db_type, &conn_config, &password).await?,
     };
@@ -168,6 +185,34 @@ pub async fn get_tables(
     let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
     let tables = get_tables_by_type(&db_type, &pool, database.as_deref()).await?;
     Ok(tables)
+}
+
+/// 获取分类的表和视图（支持搜索过滤）
+#[tauri::command]
+pub async fn get_tables_categorized(
+    connection_id: String,
+    database: Option<String>,
+    search: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<TablesResult, String> {
+    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
+    let result = get_tables_categorized_by_type(&db_type, &pool, database.as_deref(), search.as_deref()).await?;
+    Ok(result)
+}
+
+/// 获取完整的表结构（列、索引、外键）
+#[tauri::command]
+pub async fn get_table_structure(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<TableStructure, String> {
+    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
+    let result = get_table_structure_by_type(&db_type, &pool, &table_name, database.as_deref()).await?;
+    Ok(result)
 }
 
 /// 获取数据库列表
@@ -229,7 +274,7 @@ pub async fn get_foreign_keys(
 pub async fn execute_query(
     connection_id: String,
     sql: String,
-    database: Option<String>,
+    _database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<QueryResult, String> {
@@ -277,33 +322,7 @@ pub async fn test_connection(
     let pool = connect_by_type(db_type, &config, password).await?;
 
     // 验证连接池是否真正可用（执行简单查询）
-    match db_type {
-        "mysql" => {
-            if let DbPool::MySql(pool) = pool {
-                sqlx::query("SELECT 1")
-                    .fetch_one(&pool)
-                    .await
-                    .map_err(|e| format!("Connection test failed: {}", e))?;
-            }
-        }
-        "postgresql" => {
-            if let DbPool::Postgres(pool) = pool {
-                sqlx::query("SELECT 1")
-                    .fetch_one(&pool)
-                    .await
-                    .map_err(|e| format!("Connection test failed: {}", e))?;
-            }
-        }
-        "sqlite" => {
-            if let DbPool::Sqlite(pool) = pool {
-                sqlx::query("SELECT 1")
-                    .fetch_one(&pool)
-                    .await
-                    .map_err(|e| format!("Connection test failed: {}", e))?;
-            }
-        }
-        _ => return Err(format!("Unsupported database type: {}", db_type)),
-    }
+    pool.validate().await?;
 
     println!("Connection test successful");
     Ok(true)
@@ -347,7 +366,7 @@ impl ActiveConnections {
     }
 
     /// 获取所有连接 ID - 使用读锁
-    pub async fn get_all_ids(&self) -> Vec<String> {
+    pub async fn _get_all_ids(&self) -> Vec<String> {
         let pools = self.pools.read().await;
         pools.keys().cloned().collect()
     }
@@ -389,38 +408,7 @@ pub async fn connect_database(
     let pool = connect_by_type(&conn_config.db_type, &conn_config, &password).await?;
 
     // 验证连接可用性
-    match &conn_config.db_type {
-        db_type if db_type == "mysql" => {
-            if let DbPool::MySql(pool) = &pool {
-                sqlx::query("SELECT 1")
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|e| format!("Connection failed: {}", e))?;
-            }
-        }
-        db_type if db_type == "postgresql" => {
-            if let DbPool::Postgres(pool) = &pool {
-                sqlx::query("SELECT 1")
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|e| format!("Connection failed: {}", e))?;
-            }
-        }
-        db_type if db_type == "sqlite" => {
-            if let DbPool::Sqlite(pool) = &pool {
-                sqlx::query("SELECT 1")
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|e| format!("Connection failed: {}", e))?;
-            }
-        }
-        _ => {
-            return Err(format!(
-                "Unsupported database type: {}",
-                conn_config.db_type
-            ))
-        }
-    }
+    pool.validate().await?;
 
     // 性能优化：使用 RwLock 的写锁（write().await）
     let _ = connections.write().await.add(connection_id, pool);

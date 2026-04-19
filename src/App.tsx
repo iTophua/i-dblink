@@ -1,4 +1,3 @@
-import { Welcome } from './components/Welcome';
 import { MainLayout } from './components/MainLayout';
 import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
@@ -10,7 +9,6 @@ import './App.css';
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // 监听来自后端的菜单事件
   useEffect(() => {
     const unlisten = listen<string>('menu-action', (event) => {
       console.log('Menu action received:', event.payload);
@@ -38,7 +36,6 @@ function App() {
     };
   }, []);
 
-  // 应用主题到 data 属性
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
@@ -56,7 +53,7 @@ function App() {
         },
         components: {
           Layout: {
-            headerBg: isDarkMode ? '#141414' : '#f0f0f0',
+            headerBg: isDarkMode ? '#252525' : '#f5f5f5',
             siderBg: isDarkMode ? '#1f1f1f' : '#ffffff',
           },
           Menu: {
@@ -71,7 +68,7 @@ function App() {
     >
       <AntdApp>
         <MainLayout>
-          <Welcome />
+          {/* App content */}
         </MainLayout>
       </AntdApp>
     </ConfigProvider>

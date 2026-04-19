@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Modal, Form, Input, Select, message } from 'antd';
+import { Modal, Form, Select, message } from 'antd';
 import {
   FolderOutlined,
   GlobalOutlined,
@@ -11,6 +11,7 @@ import {
   StarOutlined,
 } from '@ant-design/icons';
 import type { ConnectionGroup } from '../../stores/appStore';
+import { GlobalInput } from '../GlobalInput';
 
 const GROUP_ICONS = [
   { label: '文件夹', value: '📁', icon: <FolderOutlined /> },
@@ -102,7 +103,7 @@ export function GroupDialog({ open, editingGroup, parentGroupId, onCancel, onSav
           label="分组名称"
           rules={[{ required: true, message: '请输入分组名称' }]}
         >
-          <Input placeholder="例如：开发环境" maxLength={50} />
+          <GlobalInput placeholder="例如：开发环境" maxLength={50} />
         </Form.Item>
 
         <Form.Item

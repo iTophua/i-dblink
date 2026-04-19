@@ -1,5 +1,5 @@
-import React, { useCallback } from 'react';
-import { Layout, Button, Dropdown, theme } from 'antd';
+import React, { useCallback, useState } from 'react';
+import { Layout, Button, Dropdown, theme, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   PlusOutlined,
@@ -17,7 +17,11 @@ import {
   DatabaseOutlined,
   CodeOutlined,
   SyncOutlined,
+  QuestionCircleOutlined,
+  ThunderboltOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
+import { KeyboardShortcutsModal } from '../../utils/uxEnhancements';
 
 type ToolbarStyle = React.CSSProperties;
 
@@ -33,6 +37,7 @@ const isMacOS = typeof navigator !== 'undefined' && (
 export function Toolbar(): JSX.Element {
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
   const handleMenuAction = useCallback((action: string) => {
     window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
@@ -181,6 +186,15 @@ export function Toolbar(): JSX.Element {
 
   const renderAppButtons = () => (
     <>
+      <Tooltip title="快捷键 (?)" placement="bottom">
+        <Button
+          type="text"
+          size="small"
+          icon={<KeyOutlined />}
+          onClick={() => setShortcutsModalOpen(true)}
+          style={buttonStyle}
+        />
+      </Tooltip>
       <Button
         type="text"
         size="small"
@@ -203,40 +217,47 @@ export function Toolbar(): JSX.Element {
   );
 
   return (
-    <Header style={toolbarStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {!isMacOS && (
-          <>
-            <Dropdown menu={{ items: fileMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-              <Button type="text" size="small" style={buttonStyle}>文件</Button>
-            </Dropdown>
-            <Dropdown menu={{ items: editMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-              <Button type="text" size="small" style={buttonStyle}>编辑</Button>
-            </Dropdown>
-            <Dropdown menu={{ items: viewMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-              <Button type="text" size="small" style={buttonStyle}>查看</Button>
-            </Dropdown>
-            <Dropdown menu={{ items: connectionMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-              <Button type="text" size="small" style={buttonStyle}>连接</Button>
-            </Dropdown>
-            <Dropdown menu={{ items: toolsMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-              <Button type="text" size="small" style={buttonStyle}>工具</Button>
-            </Dropdown>
-            <Dropdown menu={{ items: windowMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-              <Button type="text" size="small" style={buttonStyle}>窗口</Button>
-            </Dropdown>
-            <Dropdown menu={{ items: helpMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-              <Button type="text" size="small" style={buttonStyle}>帮助</Button>
-            </Dropdown>
-            <div style={dividerStyle} />
-          </>
-        )}
-        {renderToolbarButtons()}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {renderAppButtons()}
-      </div>
-    </Header>
+    <>
+      <Header style={toolbarStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {!isMacOS && (
+            <>
+              <Dropdown menu={{ items: fileMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+                <Button type="text" size="small" style={buttonStyle}>文件</Button>
+              </Dropdown>
+              <Dropdown menu={{ items: editMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+                <Button type="text" size="small" style={buttonStyle}>编辑</Button>
+              </Dropdown>
+              <Dropdown menu={{ items: viewMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+                <Button type="text" size="small" style={buttonStyle}>查看</Button>
+              </Dropdown>
+              <Dropdown menu={{ items: connectionMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+                <Button type="text" size="small" style={buttonStyle}>连接</Button>
+              </Dropdown>
+              <Dropdown menu={{ items: toolsMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+                <Button type="text" size="small" style={buttonStyle}>工具</Button>
+              </Dropdown>
+              <Dropdown menu={{ items: windowMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+                <Button type="text" size="small" style={buttonStyle}>窗口</Button>
+              </Dropdown>
+              <Dropdown menu={{ items: helpMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
+                <Button type="text" size="small" style={buttonStyle}>帮助</Button>
+              </Dropdown>
+              <div style={dividerStyle} />
+            </>
+          )}
+          {renderToolbarButtons()}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {renderAppButtons()}
+        </div>
+      </Header>
+
+      <KeyboardShortcutsModal
+        open={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
+    </>
   );
 }
 

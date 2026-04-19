@@ -9,6 +9,32 @@ import type {
   QueryResult,
 } from '../types/api';
 
+export interface TablesResult {
+  tables: TableInfo[];
+  views: TableInfo[];
+}
+
+export interface TableStructure {
+  columns: ColumnInfo[];
+  indexes: IndexInfo[];
+  foreign_keys: ForeignKeyInfo[];
+}
+
+export interface IndexInfo {
+  index_name: string;
+  column_name: string;
+  is_unique: boolean;
+  is_primary: boolean;
+  seq_in_index: number;
+}
+
+export interface ForeignKeyInfo {
+  constraint_name: string;
+  column_name: string;
+  referenced_table: string;
+  referenced_column: string;
+}
+
 export const api = {
   async testConnection(
     dbType: string,
@@ -66,6 +92,14 @@ export const api = {
 
   async getTables(connectionId: string, database?: string): Promise<TableInfo[]> {
     return await invoke('get_tables', { connectionId, database });
+  },
+
+  async getTablesCategorized(connectionId: string, database?: string, search?: string): Promise<TablesResult> {
+    return await invoke('get_tables_categorized', { connectionId, database, search });
+  },
+
+  async getTableStructure(connectionId: string, tableName: string, database?: string): Promise<TableStructure> {
+    return await invoke('get_table_structure', { connectionId, tableName, database });
   },
 
   async getColumns(connectionId: string, tableName: string, database?: string): Promise<ColumnInfo[]> {

@@ -44,7 +44,7 @@ impl DbPool {
     }
 
     /// 关闭连接池
-    pub async fn close(&self) {
+    pub async fn _close(&self) {
         self.pool.close().await;
     }
 }

@@ -14,16 +14,17 @@ iDBLink - 跨平台数据库管理工具（类似Navicat）。React 18 + TypeScr
 i-dblink/
 ├── src/                          # 前端源码 (TypeScript/React)
 │   ├── api/                      # Tauri invoke API 封装 (1 文件)
-│   ├── components/               # React 组件 (7 文件，复杂度高)
+│   ├── components/               # React 组件 (20+ 文件)
 │   ├── hooks/                    # 自定义 Hooks (2 文件，广泛引用)
-│   ├── stores/                   # Zustand 状态管理 (1 文件)
+│   ├── stores/                   # Zustand 状态管理 (2 文件)
 │   ├── types/                    # TypeScript 类型定义 (被 6 文件引用)
-│   ├── styles/                   # Ant Design 主题配置 (362 行常量)
+│   ├── styles/                   # Ant Design 主题配置
 │   └── constants/                # 快捷键配置 (1 文件)
 ├── src-tauri/                    # Rust 后端
 │   ├── src/
-│   │   ├── db/                   # 数据库模块 (6 文件，实际内容)
-│   │   ├── commands.rs           # Tauri 命令 (1151 行，高重复)
+│   │   ├── db/                   # 数据库模块 (6 文件)
+│   │   ├── drivers/              # 数据库驱动抽象 (3 文件)
+│   │   ├── commands.rs           # Tauri 命令 (657 行，已重构)
 │   │   ├── main.rs               # Rust 入口
 │   │   ├── security.rs           # 密钥链安全
 │   │   └── storage.rs            # 本地存储
@@ -36,16 +37,16 @@ i-dblink/
 
 | 任务 | 位置 | 备注 |
 |------|------|------|
-| 前端组件 | `src/components/` | 7 个组件文件，500+ 行占多数 |
-| 前端状态 | `src/stores/appStore.ts` | Zustand 全局状态，被 3 文件引用 |
+| 前端组件 | `src/components/` | 20+ 组件文件，含 MainLayout, SQLEditor, DataTable 等 |
+| 前端状态 | `src/stores/` | Zustand 全局状态 (appStore, settingsStore) |
 | 前端类型 | `src/types/api.ts` | 核心类型定义，被 6 文件引用 |
-| 前端 Hooks | `src/hooks/` | useApi (业务逻辑)，useMenuShortcuts (快捷键) |
+| 前端 Hooks | `src/hooks/` | useApi (业务逻辑 + TTL 缓存)，useMenuShortcuts |
 | 前端 API | `src/api/index.ts` | 封装 12 个 Tauri invoke 调用 |
 | Rust 入口 | `src-tauri/src/main.rs` | 应用启动、菜单初始化 |
 | Rust 数据库 | `src-tauri/src/db/` | 连接池、模型、迁移、查询、仓储 |
-| Rust 命令 | `src-tauri/src/commands.rs` | 数据库操作命令 (1151 行，需重构) |
+| Rust 命令 | `src-tauri/src/commands.rs` | 数据库操作命令 (657 行，已重构) |
+| Rust 驱动 | `src-tauri/src/drivers/` | MySQL/PostgreSQL/SQLite 驱动抽象 |
 | 安全存储 | `src-tauri/src/security.rs` | 系统密钥链密码管理 |
-| 本地存储 | `src-tauri/src/storage.rs` | 连接配置持久化 |
 
 ## CODE MAP
 
@@ -85,12 +86,12 @@ i-dblink/
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
-1. **重复代码**: `src-tauri/src/commands.rs` 中 MySQL/PostgreSQL/SQLite 连接逻辑高度重复
-2. **大文件**: 5 个文件 >500 行，`commands.rs` 达 1151 行
-3. **内联样式**: `MainLayout.tsx` 含 500+ 行内联样式
-4. **空目录**: `commands/`, `drivers/`, `models/`, `utils/` 为空 (预留模块化)
-5. **重复嵌套**: `src-tauri/src-tauri/.dev-data` 异常路径
-6. **无测试**: 零测试覆盖，3 个 TODO 待实现
+1. ~~**重复代码**: `commands.rs` 中 MySQL/PostgreSQL/SQLite 连接逻辑~~ ✅ **已修复**: 通过 `DbPool::validate()` 消除
+2. **大文件**: 少数文件 >500 行 (MainLayout.tsx 716行, SQLEditor.tsx 631行)
+3. ~~**空目录**: `commands/`, `models/`, `utils/`~~ ✅ **已清理**: 删除了空目录
+4. ~~**重复嵌套**: `src-tauri/src-tauri/.dev-data`~~ ✅ **已清理**: 删除了重复目录
+5. **无测试**: 零测试覆盖，需要添加
+6. **组件复杂度**: 部分组件职责过多，可进一步拆分
 
 ## UNIQUE STYLES
 

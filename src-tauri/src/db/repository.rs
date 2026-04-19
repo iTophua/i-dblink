@@ -36,7 +36,7 @@ impl ConnectionRepository {
     }
 
     /// 根据分组 ID 获取连接
-    pub async fn get_by_group(&self, group_id: &str) -> Result<Vec<DbConnection>, sqlx::Error> {
+    pub async fn _get_by_group(&self, group_id: &str) -> Result<Vec<DbConnection>, sqlx::Error> {
         let connections = sqlx::query_as::<_, DbConnection>(
             "SELECT * FROM connections WHERE group_id = ? ORDER BY name",
         )
@@ -112,7 +112,7 @@ impl ConnectionRepository {
     }
 
     /// 记录连接历史
-    pub async fn log_history(
+    pub async fn _log_history(
         &self,
         connection_id: &str,
         action: &str,
@@ -160,7 +160,7 @@ impl GroupRepository {
     }
 
     /// 根据 ID 获取分组
-    pub async fn get_by_id(&self, id: &str) -> Result<Option<ConnectionGroup>, sqlx::Error> {
+    pub async fn __get_by_id(&self, id: &str) -> Result<Option<ConnectionGroup>, sqlx::Error> {
         let group =
             sqlx::query_as::<_, ConnectionGroup>("SELECT * FROM connection_groups WHERE id = ?")
                 .bind(id)
@@ -242,17 +242,16 @@ impl GroupRepository {
 
 /// 应用配置仓库
 #[derive(Clone)]
-pub struct ConfigRepository {
+pub struct _ConfigRepository {
     pool: DbPool,
 }
 
-impl ConfigRepository {
-    pub fn new(pool: DbPool) -> Self {
+impl _ConfigRepository {
+    pub fn _new(pool: DbPool) -> Self {
         Self { pool }
     }
 
-    /// 获取配置值
-    pub async fn get(&self, key: &str) -> Result<Option<String>, sqlx::Error> {
+    pub async fn _get(&self, key: &str) -> Result<Option<String>, sqlx::Error> {
         let row = sqlx::query("SELECT value FROM app_config WHERE key = ?")
             .bind(key)
             .fetch_optional(self.pool.inner())
@@ -262,7 +261,7 @@ impl ConfigRepository {
     }
 
     /// 设置配置值
-    pub async fn set(&self, key: &str, value: &str) -> Result<(), sqlx::Error> {
+    pub async fn _set(&self, key: &str, value: &str) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             INSERT OR REPLACE INTO app_config (key, value, updated_at)

@@ -1,6 +1,7 @@
-use crate::commands::{ColumnInfo, ForeignKeyInfo, IndexInfo, QueryResult, TableInfo};
+use crate::commands::{ColumnInfo, ForeignKeyInfo, IndexInfo, QueryResult, TableInfo, TableStructure, TablesResult};
 use crate::db::DbConnection;
 use crate::drivers::db_pool::DbPool;
+use chrono::NaiveDateTime;
 use sqlx::{Column, Row};
 use std::time::Duration;
 use urlencoding;
@@ -414,5 +415,121 @@ impl MySqlDriver {
         } else {
             Err("Pool type mismatch for MySqlDriver".to_string())
         }
+    }
+
+    /// 获取分类的表和视图（支持搜索过滤）
+    pub async fn get_tables_categorized(
+        pool: &DbPool,
+        database: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<TablesResult, String> {
+        if let DbPool::MySql(pool) = pool {
+            // SHOW TABLE STATUS 语法：SHOW TABLE STATUS [FROM db_name]
+            // 如果指定了数据库，使用 SHOW TABLE STATUS FROM db_name（快）
+            // 如果没有指定数据库，直接返回空结果（不应在没有选数据库时获取表）
+            let query = match database {
+                Some(db) => format!("SHOW TABLE STATUS FROM `{}`", db),
+                None => {
+                    // 没有指定数据库时返回空结果，不查询
+                    // 调用者应该先选择数据库再获取表列表
+                    return Ok(TablesResult { tables: Vec::new(), views: Vec::new() });
+                }
+            };
+
+            use sqlx::Row;
+
+            // SHOW TABLE STATUS 列名：Name=表名, Engine=引擎, Rows=行数(估算), Comment=注释
+            // Data_length=数据大小, Index_length=索引大小, Create_time, Update_time, Collation
+            let rows = sqlx::query(&query)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| format!("Failed to query tables: {}", e))?;
+
+            let format_bytes = |bytes: Option<u64>| -> Option<String> {
+                bytes.map(|b| {
+                    let kb = b as f64 / 1024.0;
+                    if kb >= 1024.0 {
+                        format!("{:.2} MB", kb / 1024.0)
+                    } else {
+                        format!("{:.2} KB", kb)
+                    }
+                })
+            };
+
+            let mut tables = Vec::new();
+            let mut views = Vec::new();
+
+            for row in rows {
+                let table_name: String = row.try_get::<String, _>("Name").unwrap_or_default();
+                let engine: Option<String> = row.try_get::<Option<String>, _>("Engine").ok().flatten().filter(|s| !s.is_empty());
+                let comment: Option<String> = row.try_get::<Option<String>, _>("Comment").ok().flatten().filter(|s| !s.is_empty());
+                let collation: Option<String> = row.try_get::<Option<String>, _>("Collation").ok().flatten().filter(|s| !s.is_empty());
+                let create_time: Option<String> = row.try_get::<Option<NaiveDateTime>, _>("Create_time")
+                    .ok().flatten()
+                    .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
+                let update_time: Option<String> = row.try_get::<Option<NaiveDateTime>, _>("Update_time")
+                    .ok().flatten()
+                    .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
+                let row_count: Option<u64> = row.try_get::<Option<u64>, _>("Rows").ok().flatten();
+                let data_length: Option<u64> = row.try_get::<Option<u64>, _>("Data_length").ok().flatten();
+                let index_length: Option<u64> = row.try_get::<Option<u64>, _>("Index_length").ok().flatten();
+
+                // 判断是表还是视图：Comment 包含 "VIEW" 的是视图
+                let is_view = comment.as_ref().map(|c| c.contains("VIEW")).unwrap_or(false);
+
+                let table_info = TableInfo {
+                    table_name,
+                    table_type: if is_view { "VIEW".to_string() } else { "BASE TABLE".to_string() },
+                    row_count,
+                    comment,
+                    engine,
+                    data_size: format_bytes(data_length),
+                    index_size: format_bytes(index_length),
+                    create_time,
+                    update_time,
+                    collation,
+                };
+
+                if is_view {
+                    views.push(table_info);
+                } else {
+                    tables.push(table_info);
+                }
+            }
+
+            // 支持内存搜索过滤（因为 SHOW TABLE STATUS 不支持 WHERE）
+            if let Some(search) = search {
+                if !search.is_empty() {
+                    let search_lower = search.to_lowercase();
+                    tables.retain(|t| t.table_name.to_lowercase().contains(&search_lower));
+                    views.retain(|v| v.table_name.to_lowercase().contains(&search_lower));
+                }
+            }
+
+            Ok(TablesResult { tables, views })
+        } else {
+            Err("Pool type mismatch for MySqlDriver".to_string())
+        }
+    }
+
+    /// 获取完整的表结构（列、索引、外键）
+    pub async fn get_table_structure(
+        pool: &DbPool,
+        table_name: &str,
+        database: Option<&str>,
+    ) -> Result<TableStructure, String> {
+        // 并行获取列、索引、外键信息
+        // 子函数会自己处理 pool 类型匹配
+        let (columns, indexes, foreign_keys) = tokio::join!(
+            Self::get_columns(pool, table_name, database),
+            Self::get_indexes(pool, table_name, database),
+            Self::get_foreign_keys(pool, table_name, database),
+        );
+
+        Ok(TableStructure {
+            columns: columns?,
+            indexes: indexes?,
+            foreign_keys: foreign_keys?,
+        })
     }
 }

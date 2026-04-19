@@ -1,4 +1,4 @@
-use crate::commands::{ColumnInfo, ForeignKeyInfo, IndexInfo, QueryResult, TableInfo};
+use crate::commands::{ColumnInfo, ForeignKeyInfo, IndexInfo, QueryResult, TableInfo, TableStructure, TablesResult};
 use crate::db::DbConnection;
 use crate::drivers::db_pool::DbPool;
 use sqlx::{Column, Row};
@@ -9,17 +9,12 @@ pub struct SqliteDriver;
 impl SqliteDriver {
     pub async fn connect(config: &DbConnection, _password: &str) -> Result<DbPool, String> {
         // SQLite 使用文件路径或内存数据库
-        let db_path = if config
+        let db_path = config
             .database
             .as_ref()
-            .map(|d| d.as_str())
-            .unwrap_or("")
-            .is_empty()
-        {
-            ":memory:".to_string()
-        } else {
-            config.database.clone().unwrap()
-        };
+            .filter(|d| !d.is_empty())
+            .map(|d| d.clone())
+            .unwrap_or_else(|| ":memory:".to_string());
 
         let uri = if db_path == ":memory:" {
             ":memory:".to_string()
@@ -272,5 +267,105 @@ impl SqliteDriver {
         } else {
             Err("Pool type mismatch for SQLite".to_string())
         }
+    }
+
+    /// 获取分类的表和视图（SQLite 视图也作为 BASE TABLE 返回）
+    pub async fn get_tables_categorized(
+        pool: &DbPool,
+        _database: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<TablesResult, String> {
+        if let DbPool::Sqlite(pool) = pool {
+            let search_filter = match search {
+                Some(s) if !s.is_empty() => format!("AND name LIKE '%{}%'", s),
+                _ => String::new(),
+            };
+
+            let query = format!(
+                r#"
+                SELECT name AS table_name,
+                       'BASE TABLE' AS table_type,
+                       NULL AS row_count,
+                       NULL AS comment,
+                       NULL AS engine,
+                       NULL AS data_size,
+                       NULL AS index_size,
+                       NULL AS create_time,
+                       NULL AS update_time,
+                       NULL AS collation
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name NOT LIKE 'sqlite_%'
+                  {}
+                ORDER BY name
+            "#,
+                search_filter
+            );
+
+            let rows = sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    Option<i64>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                ),
+            >(&query)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("Failed to query tables: {}", e))?;
+
+            let tables: Vec<TableInfo> = rows
+                .into_iter()
+                .map(
+                    |(table_name, table_type, row_count, comment, engine, data_size, index_size, create_time, update_time, collation)| TableInfo {
+                        table_name,
+                        table_type,
+                        row_count: row_count.map(|v| v as u64),
+                        comment,
+                        engine,
+                        data_size,
+                        index_size,
+                        create_time,
+                        update_time,
+                        collation,
+                    },
+                )
+                .collect();
+
+            // SQLite 没有真正的视图分类，所有表都返回为 tables
+            Ok(TablesResult {
+                tables,
+                views: vec![],
+            })
+        } else {
+            Err("Pool type mismatch for SQLite".to_string())
+        }
+    }
+
+    /// 获取完整的表结构（列、索引、外键）
+    pub async fn get_table_structure(
+        pool: &DbPool,
+        table_name: &str,
+    ) -> Result<TableStructure, String> {
+        // 并行获取列、索引、外键信息
+        // 子函数会自己处理 pool 类型匹配
+        let (columns, indexes, foreign_keys) = tokio::join!(
+            Self::get_columns(pool, table_name, None),
+            Self::get_indexes(pool, table_name),
+            Self::get_foreign_keys(pool, table_name),
+        );
+
+        Ok(TableStructure {
+            columns: columns?,
+            indexes: indexes?,
+            foreign_keys: foreign_keys?,
+        })
     }
 }

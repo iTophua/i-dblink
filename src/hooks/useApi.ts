@@ -306,7 +306,7 @@ export const useDatabase = () => {
     useAppStore();
 
   const getTables = useCallback(
-    async (connectionId: string, database?: string, forceRefresh = false) => {
+    async (connectionId: string, database?: string, forceRefresh = false, search?: string) => {
       const cacheKey = `${connectionId}::${database || ''}`;
 
       // If force refresh, clear cache first
@@ -314,9 +314,9 @@ export const useDatabase = () => {
         clearTableData(connectionId);
       }
 
-      // Check if we have cached data
+      // Check if we have cached data (for non-search requests)
       const cached = getTableData(cacheKey);
-      if (cached && cached.loaded && !cached.loading && !forceRefresh) {
+      if (cached && cached.loaded && !cached.loading && !forceRefresh && !search) {
         return cached.tables;
       }
 
@@ -327,9 +327,10 @@ export const useDatabase = () => {
 
       try {
         setTableDataLoading(cacheKey, true);
-        const tables = await api.getTables(connectionId, database);
-        setTableData(cacheKey, tables);
-        return tables;
+        const result = await api.getTablesCategorized(connectionId, database, search);
+        const allTables = [...result.tables, ...result.views];
+        setTableData(cacheKey, allTables);
+        return allTables;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取表列表失败';
         setError(errorMsg);
@@ -343,8 +344,8 @@ export const useDatabase = () => {
   );
 
   const refreshTables = useCallback(
-    async (connectionId: string, database?: string) => {
-      return getTables(connectionId, database, true);
+    async (connectionId: string, database?: string, search?: string) => {
+      return getTables(connectionId, database, true, search);
     },
     [getTables]
   );
@@ -377,7 +378,10 @@ export const useDatabase = () => {
         return cached;
       }
 
-      const promise = api.getColumns(connectionId, tableName, database);
+      // 使用新的批量 API 获取完整的表结构
+      const promise = api.getTableStructure(connectionId, tableName, database).then(
+        (result) => result.columns
+      );
       columnsCache.set(cacheKey, promise);
       return promise;
     },
@@ -388,8 +392,9 @@ export const useDatabase = () => {
     async (connectionId: string, tableName: string, database?: string) => {
       try {
         setLoading(true);
-        const indexes = await api.getIndexes(connectionId, tableName, database);
-        return indexes;
+        // 使用新的批量 API
+        const result = await api.getTableStructure(connectionId, tableName, database);
+        return result.indexes;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取索引信息失败';
         setError(errorMsg);
@@ -406,8 +411,9 @@ export const useDatabase = () => {
     async (connectionId: string, tableName: string, database?: string) => {
       try {
         setLoading(true);
-        const fks = await api.getForeignKeys(connectionId, tableName, database);
-        return fks;
+        // 使用新的批量 API
+        const result = await api.getTableStructure(connectionId, tableName, database);
+        return result.foreign_keys;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取外键信息失败';
         setError(errorMsg);

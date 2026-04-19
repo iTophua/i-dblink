@@ -1,24 +1,453 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
+/* ===== iDBLink UX Enhancements ===== */
+
+/* Global Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* Fix Ant Design Tabs content holder height issue */
-.ant-tabs-content-holder {
-  flex: 1 !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
+@keyframes fadeSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* Fix Ant Design Tabs tab pane to fill available space */
-.ant-tabs-content {
-  height: 100% !important;
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.ant-tabs-tabpane {
-  height: 100% !important;
-  overflow: hidden !important;
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(82, 196, 26, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(82, 196, 26, 0.8);
+  }
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-2px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Smooth Transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Focus States */
+*:focus-visible {
+  outline: 2px solid #1890ff;
+  outline-offset: 2px;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.6);
+}
+
+/* Selection Styling */
+::selection {
+  background: rgba(24, 144, 255, 0.3);
+  color: inherit;
+}
+
+/* Connection Tree Enhancements */
+.connection-tree .ant-tree-node-content-wrapper {
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.connection-tree .ant-tree-node-content-wrapper:hover {
+  background: rgba(24, 144, 255, 0.08);
+}
+
+.connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
+  background: rgba(24, 144, 255, 0.15) !important;
+}
+
+.connection-tree .ant-tree-switcher {
+  transition: transform 0.2s ease;
+}
+
+/* Tab Panel Enhancements */
+.ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.ant-tabs-tab {
+  transition: all 0.2s ease;
+  border-radius: 4px 4px 0 0;
+}
+
+.ant-tabs-tab:hover {
+  color: #1890ff;
+  background: rgba(24, 144, 255, 0.05);
+}
+
+.ant-tabs-tab-active {
+  background: rgba(24, 144, 255, 0.1) !important;
+}
+
+/* Button Enhancements */
+.ant-btn {
+  transition: all 0.2s ease;
+  transform: translateY(0);
+}
+
+.ant-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ant-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.ant-btn-primary:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.4);
+}
+
+/* Card Enhancements */
+.ant-card {
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+/* Input Enhancements */
+.ant-input:focus,
+.ant-input-focused,
+.ant-input:hover {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+}
+
+/* Disable browser autocapitalize globally */
+input,
+textarea,
+[contenteditable] {
+  auto-capitalize: none !important;
+  auto-complete: off;
+  auto-correct: off;
+  spellcheck: false;
+}
+
+/* Loading States */
+.skeleton-pulse {
+  background: linear-gradient(
+    90deg,
+    rgba(128, 128, 128, 0.08) 0%,
+    rgba(128, 128, 128, 0.15) 50%,
+    rgba(128, 128, 128, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Toast Notifications */
+.ant-message {
+  animation: fadeSlideDown 0.3s ease;
+}
+
+/* Modal Enhancements */
+.ant-modal {
+  animation: scaleIn 0.2s ease;
+}
+
+.ant-modal-content {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ant-modal-header {
+  border-radius: 12px 12px 0 0;
+}
+
+.ant-modal-footer {
+  border-radius: 0 0 12px 12px;
+}
+
+/* Dropdown Menu Enhancements */
+.ant-dropdown-menu {
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.ant-dropdown-menu-item {
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.ant-dropdown-menu-item:hover {
+  background: rgba(24, 144, 255, 0.08);
+}
+
+/* Tooltip Enhancements */
+.ant-tooltip-inner {
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+/* Tag Enhancements */
+.ant-tag {
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+/* Badge Enhancements */
+.ant-badge-count {
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Empty State Enhancements */
+.ant-empty-description {
+  color: #8c8c8c;
+}
+
+/* Data Table Row Hover */
+.ag-theme-alpine .ag-row:hover,
+.ag-theme-alpine-dark .ag-row:hover {
+  background-color: rgba(24, 144, 255, 0.05) !important;
+}
+
+.ag-theme-alpine .ag-row-selected,
+.ag-theme-alpine-dark .ag-row-selected {
+  background-color: rgba(24, 144, 255, 0.1) !important;
+}
+
+/* Status Bar Enhancements */
+.status-bar {
+  backdrop-filter: blur(8px);
+}
+
+/* Toolbar Button Hover */
+.toolbar-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.toolbar-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(24, 144, 255, 0.1);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.3s ease, height 0.3s ease;
+}
+
+.toolbar-btn:hover::before {
+  width: 100%;
+  height: 100%;
+}
+
+/* Quick Actions */
+.quick-action-btn {
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all 0.2s ease;
+}
+
+:hover > .quick-action-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Connection Status Indicator */
+.connection-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.connection-status-dot.connected {
+  background: #52c41a;
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+.connection-status-dot.connecting {
+  background: #faad14;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.connection-status-dot.error {
+  background: #ff4d4f;
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Notification Toast */
+.notification-toast {
+  animation: slideInRight 0.3s ease;
+}
+
+/* Hover Scale Effect */
+.hover-scale {
+  transition: transform 0.2s ease;
+}
+
+.hover-scale:hover {
+  transform: scale(1.02);
+}
+
+/* Shimmer Effect for Loading */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .ant-modal {
+    max-width: calc(100vw - 32px);
+  }
+
+  .ant-card {
+    border-radius: 8px;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

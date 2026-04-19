@@ -319,7 +319,14 @@ export function TabPanel({
       ),
       children: (
         <div
-          style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            overflow: 'hidden',
+            height: '100%',
+          }}
         >
           {/* 面包屑导航 */}
           {selectedTable && (
@@ -351,49 +358,39 @@ export function TabPanel({
           )}
 
           {/* 内容区域 */}
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            {selectedConnectionId ? (
-              selectedTable ? (
-                // 单击表 → 展示表结构
-                <TableStructure
-                  connectionId={selectedConnectionId}
-                  tableName={selectedTable}
-                  database={selectedDatabase}
-                />
-              ) : (
-                // 未选表 → 显示表列表
-                <TableList
-                  connectionId={selectedConnectionId}
-                  database={selectedDatabase}
-                  objectType={selectedObjectType}
-                  onTableSelect={(tableName, db) => {
-                    // Single click in TableList → show structure in objects tab
-                  }}
-                  onTableOpen={openTableTab}
-                />
-              )
+          {selectedConnectionId ? (
+            selectedTable ? (
+              // 单击表 → 展示表结构
+              <TableStructure
+                connectionId={selectedConnectionId}
+                tableName={selectedTable}
+                database={selectedDatabase}
+              />
             ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  color: isDarkMode ? '#8c8c8c' : '#bfbfbf',
+              // 未选表 → 显示表列表
+              <TableList
+                connectionId={selectedConnectionId}
+                database={selectedDatabase}
+                objectType={selectedObjectType}
+                onTableSelect={(tableName, db) => {
+                  // Single click in TableList → show structure in objects tab
                 }}
-              >
-                <Empty description="请从左侧选择一个连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-              </div>
-            )}
-          </div>
+                onTableOpen={openTableTab}
+              />
+            )
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: isDarkMode ? '#8c8c8c' : '#bfbfbf',
+              }}
+            >
+              <Empty description="请从左侧选择一个连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            </div>
+          )}
         </div>
       ),
       closable: false,
@@ -474,7 +471,6 @@ export function TabPanel({
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
-        height: '100%',
       }}
     >
       <Tabs
@@ -483,6 +479,7 @@ export function TabPanel({
         activeKey={activeKey}
         onChange={setActiveKey}
         hideAdd
+        destroyInactiveTabPane
         style={{
           flex: 1,
           overflow: 'hidden',

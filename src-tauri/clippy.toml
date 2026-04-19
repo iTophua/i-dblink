@@ -1,4 +1,4 @@
-warns = [
-  "clippy::all",
-  "clippy::pedantic",
-]
+# Clippy configuration (valid fields only)
+msrv = "1.75"
+too-many-arguments-threshold = 8
+enable-raw-pointer-heuristic-for-send = true

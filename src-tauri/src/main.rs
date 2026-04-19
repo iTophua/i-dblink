@@ -249,7 +249,8 @@ fn main() {
 
             // 在 setup 中同步初始化存储
             let app_handle = app.handle().clone();
-            let rt = tokio::runtime::Runtime::new().unwrap();
+            let rt = tokio::runtime::Runtime::new()
+                .expect("Failed to create Tokio runtime - system resources may be exhausted");
             let storage = rt.block_on(async {
                 storage::init_storage(&app_handle)
                     .await
@@ -301,6 +302,8 @@ fn main() {
             commands::save_group,
             commands::delete_group,
             commands::get_tables,
+            commands::get_tables_categorized,
+            commands::get_table_structure,
             commands::get_databases,
             commands::get_columns,
             commands::get_indexes,

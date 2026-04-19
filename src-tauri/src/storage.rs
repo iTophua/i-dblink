@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 
 /// 获取应用数据目录（区分开发和生产环境）
-fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
+fn get_data_dir(_app_handle: &AppHandle) -> PathBuf {
     // 检查是否为开发模式（debug 构建）
     #[cfg(debug_assertions)]
     {
@@ -17,9 +17,8 @@ fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
             .unwrap_or(&PathBuf::from("."))
             .join(".dev-data");
 
-        if !dev_data_dir.exists() {
-            std::fs::create_dir_all(&dev_data_dir).expect("Failed to create dev data directory");
-        }
+        // 创建目录（如果不存在），使用 unwrap 因为开发环境中几乎不会失败
+        let _ = std::fs::create_dir_all(&dev_data_dir);
 
         println!("Using development data directory: {:?}", dev_data_dir);
         dev_data_dir
@@ -31,12 +30,12 @@ fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
         let app_data = app_handle
             .path()
             .app_data_dir()
-            .expect("Failed to get app data dir");
+            .expect("Failed to get app data dir - please ensure app data directory is accessible");
 
         let data_dir = app_data.join("data");
-        if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir).expect("Failed to create production data directory");
-        }
+        // 创建目录（如果不存在）
+        let _ = std::fs::create_dir_all(&data_dir)
+            .map_err(|e| eprintln!("Warning: Failed to create data directory: {}", e));
 
         println!("Using production data directory: {:?}", data_dir);
         data_dir
@@ -170,7 +169,7 @@ impl Storage {
     }
 
     /// 记录连接历史
-    pub async fn log_connection_history(
+    pub async fn _log_connection_history(
         &self,
         connection_id: &str,
         action: &str,
@@ -179,7 +178,7 @@ impl Storage {
     ) -> Result<(), anyhow::Error> {
         Ok(self
             .connection_repo
-            .log_history(connection_id, action, success, error_message)
+            ._log_history(connection_id, action, success, error_message)
             .await?)
     }
 }

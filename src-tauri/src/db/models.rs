@@ -33,7 +33,7 @@ pub struct ConnectionGroup {
 
 /// 连接历史记录
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct ConnectionHistory {
+pub struct _ConnectionHistory {
     pub id: String,
     pub connection_id: String,
     pub action: String,
@@ -44,7 +44,7 @@ pub struct ConnectionHistory {
 
 /// 应用配置
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct AppConfig {
+pub struct _AppConfig {
     pub key: String,
     pub value: String,
     pub updated_at: DateTime<Utc>,
