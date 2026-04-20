@@ -15,9 +15,20 @@ import {
   CopyOutlined,
   ColumnWidthOutlined,
   FilterOutlined,
+  DownOutlined,
+  UpOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
 import type { ColumnInfo } from '../types/api';
+import { Select, Empty } from 'antd';
+
+interface FilterCondition {
+  id: string;
+  field: string;
+  operator: string;
+  value: string;
+  logic: 'AND' | 'OR';
+}
 
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -64,6 +75,7 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
   const [sortModel, setSortModel] = useState<{ colId: string; sort: 'asc' | 'desc' }[]>([]);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [quickFilter, setQuickFilter] = useState('');
+  const [gridKey, setGridKey] = useState(0);
   const loadDataRef = useRef<() => void>(() => {});
   const loadCountRef = useRef<() => void>(() => {});
   const onDirtyChangeRef = useRef(onDirtyChange);
@@ -208,6 +220,17 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
       } as ColDef;
     });
   }, [columns, colWidths, hiddenColumns]);
+
+  useEffect(() => {
+    if (gridApiRef.current && columns.length > 0) {
+      const api = gridApiRef.current as any;
+      if (typeof api.setColumnDefs === 'function') {
+        api.setColumnDefs(columnDefs);
+      } else {
+        api.setGridOption('columnDefs', columnDefs);
+      }
+    }
+  }, [columnDefs, columns]);
 
   const loadCount = useCallback(async () => {
     try {
@@ -583,25 +606,28 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
   }, []);
 
   const toggleColumnVisibility = useCallback((columnName: string) => {
+    const isCurrentlyHidden = hiddenColumns.has(columnName);
     setHiddenColumns(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(columnName)) {
+      if (isCurrentlyHidden) {
         newSet.delete(columnName);
       } else {
         newSet.add(columnName);
       }
       return newSet;
     });
-  }, []);
+    setGridKey(k => k + 1);
+  }, [hiddenColumns]);
 
   const showAllColumns = useCallback(() => {
     setHiddenColumns(new Set());
+    setGridKey(k => k + 1);
   }, []);
 
   const handleQuickFilter = useCallback((value: string) => {
     setQuickFilter(value);
     if (gridApiRef.current) {
-      gridApiRef.current.setGridOption('quickFilterText', value);
+      (gridApiRef.current as any).setGridOption('quickFilterText', value);
     }
   }, []);
 
@@ -871,6 +897,7 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
             style={{ height: '100%', width: '100%' }}
           >
             <AgGridReact
+              key={gridKey}
               onGridReady={onGridReady}
               rowData={rowData}
               columnDefs={columnDefs}
@@ -879,8 +906,8 @@ export const DataTable = memo(function DataTable({ connectionId, tableName, data
               onCellValueChanged={onCellValueChanged}
               onSelectionChanged={onSelectionChanged}
               onSortChanged={(event) => {
-                const columnApi = event.columnApi;
-                const state = columnApi.getColumnState();
+                const api = event.api;
+                const state = api.getColumnState();
                 const sortState = state
                   .filter((col: any) => col.sort && col.sort !== 'none')
                   .map((col: any) => ({
