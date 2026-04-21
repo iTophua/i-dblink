@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState, useMemo, useEffect } from 'react';
+import React, { useRef, useCallback, useState, useMemo, useEffect, ChangeEvent, MouseEvent } from 'react';
 import { Tree, Spin, Dropdown, Badge, Modal, message, Tooltip, theme } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -25,6 +25,7 @@ import { useAppStore } from '../../stores/appStore';
 import type { TableInfo } from '../../types/api';
 import { GroupDialog } from './GroupDialog';
 import { EnhancedEmptyState } from '../LoadingStates';
+import { GlobalInput } from '../GlobalInput';
 
 const DB_TYPE_COLORS: Record<string, string> = {
   mysql: '#1890ff',
@@ -1224,12 +1225,12 @@ export function EnhancedConnectionTree({
             <GlobalInput
               size="small"
               value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setRenameValue(e.target.value)}
               onPressEnter={() => handleRenameCommit(group.id)}
               onBlur={() => handleRenameCommit(group.id)}
               autoFocus
               style={{ width: 100, height: 22, padding: '0 4px' }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e: MouseEvent) => e.stopPropagation()}
             />
           </div>
         );

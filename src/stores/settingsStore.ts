@@ -1,9 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { ThemePreset } from '../styles/theme';
+
+export type ThemeMode = 'light' | 'dark';
 
 export interface AppSettings {
   pageSize: number;
-  theme: 'light' | 'dark' | 'system';
+  themePreset: ThemePreset;
+  themeMode: ThemeMode;
+  themeSyncSystem: boolean;
   language: 'zh-CN' | 'en-US';
 }
 
@@ -15,7 +20,9 @@ interface SettingsState {
 
 const defaultSettings: AppSettings = {
   pageSize: 1000,
-  theme: 'system',
+  themePreset: 'midnightDeep',
+  themeMode: 'dark',
+  themeSyncSystem: true,
   language: 'zh-CN',
 };
 

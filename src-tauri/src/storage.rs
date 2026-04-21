@@ -1,10 +1,10 @@
 use crate::db::{ConnectionGroup, ConnectionRepository, DbConnection, DbPool, GroupRepository};
 use crate::security::PasswordManager;
 use std::path::PathBuf;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// 获取应用数据目录（区分开发和生产环境）
-fn get_data_dir(_app_handle: &AppHandle) -> PathBuf {
+fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
     // 检查是否为开发模式（debug 构建）
     #[cfg(debug_assertions)]
     {

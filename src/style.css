@@ -1,137 +1,73 @@
 /**
  * i-dblink 全局样式文件
- * 
- * 包含 CSS 变量定义、样式重置、基础样式和暗黑模式支持
+ *
+ * 包含 CSS 变量定义、样式重置、基础样式和多主题支持
  */
 
 /* ==================== CSS 变量定义 ==================== */
 :root {
-  /* 主题色 */
   --color-primary: #1890ff;
   --color-primary-hover: #40a9ff;
   --color-primary-active: #096dd9;
-  
   --color-success: #52c41a;
   --color-warning: #faad14;
   --color-error: #ff4d4f;
   --color-info: #1890ff;
-  
-  /* 数据库类型色 */
+
   --db-color-mysql: #1890ff;
   --db-color-postgresql: #336791;
   --db-color-sqlite: #003b57;
-
   --db-color-mariadb: #13c2c2;
   --db-color-dameng: #722ed1;
-  
-  /* 中性色 - 浅色模式 */
+
   --text-primary: #0f0f0f;
   --text-secondary: #595959;
   --text-tertiary: #8c8c8c;
   --text-disabled: #bfbfbf;
-  
+
   --border-color: #d9d9d9;
   --border-color-light: #e8e8e8;
   --border-color-dark: #bfbfbf;
-  
+
   --background: #f6f6f6;
   --background-card: #ffffff;
   --background-toolbar: #fafafa;
   --background-hover: #f5f5f5;
   --background-active: #e6f7ff;
-  
-  /* 字体 */
+
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-family-code: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
-  
-  /* 字号 */
   --font-size-base: 14px;
   --font-size-sm: 12px;
   --font-size-lg: 16px;
   --font-size-xl: 20px;
-  
-  /* 行高 */
   --line-height-base: 1.57;
   --line-height-heading: 1.4;
-  
-  /* 字重 */
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
-  
-  /* 间距 */
+
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 12px;
   --spacing-lg: 16px;
   --spacing-xl: 24px;
   --spacing-xxl: 32px;
-  
-  /* 圆角 */
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
-  
-  /* 阴影 */
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.15);
-  
-  /* 过渡 */
+
   --transition-fast: 0.1s;
   --transition-normal: 0.2s;
   --transition-slow: 0.3s;
   --transition-ease: cubic-bezier(0.645, 0.045, 0.355, 1);
-}
-
-/* 深色模式 */
-[data-theme='dark'] {
-  /* 中性色 - 深色模式 */
-  --text-primary: #f6f6f6;
-  --text-secondary: #bfbfbf;
-  --text-tertiary: #595959;
-  --text-disabled: #434343;
-  
-  --border-color: #434343;
-  --border-color-light: #303030;
-  --border-color-dark: #595959;
-  
-  --background: #2f2f2f;
-  --background-card: #1f1f1f;
-  --background-toolbar: #141414;
-  --background-hover: #1f1f1f;
-  --background-active: #111d2c;
-  
-  /* 阴影 */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
-}
-
-/* 系统级暗色模式支持 */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --text-primary: #f6f6f6;
-    --text-secondary: #bfbfbf;
-    --text-tertiary: #595959;
-    --text-disabled: #434343;
-    
-    --border-color: #434343;
-    --border-color-light: #303030;
-    --border-color-dark: #595959;
-    
-    --background: #2f2f2f;
-    --background-card: #1f1f1f;
-    --background-toolbar: #141414;
-    --background-hover: #1f1f1f;
-    --background-active: #111d2c;
-    
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
-  }
 }
 
 /* ==================== 样式重置 ==================== */
@@ -164,7 +100,6 @@ body {
   overflow: hidden;
 }
 
-/* 移除默认链接样式 */
 a {
   color: var(--color-primary);
   text-decoration: none;
@@ -175,7 +110,6 @@ a:hover {
   color: var(--color-primary-hover);
 }
 
-/* 移除按钮默认样式 */
 button {
   font-family: inherit;
   font-size: inherit;
@@ -185,7 +119,6 @@ button {
   outline: none;
 }
 
-/* 输入框样式重置 */
 input,
 textarea,
 select {
@@ -212,7 +145,6 @@ textarea::placeholder {
   color: var(--text-tertiary);
 }
 
-/* 禁用状态 */
 input:disabled,
 textarea:disabled,
 select:disabled,
@@ -238,15 +170,6 @@ button:disabled {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
-}
-
-/* 深色模式滚动条 */
-[data-theme='dark'] ::-webkit-scrollbar-thumb {
-  background: var(--text-disabled);
-}
-
-[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
 }
 
 /* ==================== 文本样式 ==================== */
@@ -495,7 +418,7 @@ tbody tr:hover {
   margin: 0 var(--spacing-lg);
 }
 
-/* ==================== 工具类 - 显示/隐藏 ==================== */
+/* ==================== 工具类 ==================== */
 .hidden {
   display: none !important;
 }
@@ -508,7 +431,6 @@ tbody tr:hover {
   visibility: hidden;
 }
 
-/* ==================== 工具类 - 间距 ==================== */
 .mt-sm { margin-top: var(--spacing-sm); }
 .mt-md { margin-top: var(--spacing-md); }
 .mt-lg { margin-top: var(--spacing-lg); }
@@ -524,7 +446,6 @@ tbody tr:hover {
 .p-lg { padding: var(--spacing-lg); }
 .p-xl { padding: var(--spacing-xl); }
 
-/* ==================== 工具类 - 文本对齐 ==================== */
 .text-left { text-align: left; }
 .text-center { text-align: center; }
 .text-right { text-align: right; }
@@ -534,7 +455,6 @@ tbody tr:hover {
 .text-warning { color: var(--color-warning); }
 .text-error { color: var(--color-error); }
 
-/* ==================== 工具类 - 尺寸 ==================== */
 .w-full { width: 100%; }
 .h-full { height: 100%; }
 .flex-1 { flex: 1; }
@@ -545,7 +465,6 @@ tbody tr:hover {
   outline-offset: 2px;
 }
 
-/* ==================== 选择样式 ==================== */
 ::selection {
   background-color: var(--color-primary);
   color: #fff;
@@ -568,7 +487,6 @@ tbody tr:hover {
   --ant-tree-node-content-unit-height: 24px;
 }
 
-/* 防止双击选中文本 */
 .connection-tree.ant-tree .ant-tree-node-content-wrapper,
 .connection-tree.ant-tree .ant-tree-node-content-wrapper * {
   user-select: none;
@@ -577,7 +495,6 @@ tbody tr:hover {
   -ms-user-select: none;
 }
 
-/* 展开按钮样式 */
 .connection-tree.ant-tree .ant-tree-switcher {
   width: 18px !important;
   margin-right: 2px !important;
@@ -586,7 +503,6 @@ tbody tr:hover {
   justify-content: center;
 }
 
-/* 节点内容对齐 */
 .connection-tree.ant-tree .ant-tree-node-content-wrapper {
   padding-left: 2px !important;
   display: block !important;
@@ -594,19 +510,16 @@ tbody tr:hover {
   width: 100%;
 }
 
-/* 缩进单元 */
 .connection-tree.ant-tree .ant-tree-indent-unit {
   width: 16px !important;
 }
 
-/* 行对齐 */
 .connection-tree.ant-tree .ant-tree-treenode {
   align-items: center !important;
   padding-left: 0 !important;
 }
 
 /* ==================== TableList 样式 ==================== */
-/* 禁用表格行动画，防止逐行跳出 */
 .table-list-row {
   animation: none !important;
   transition: none !important;
@@ -631,31 +544,18 @@ tbody tr:hover {
 /* ==================== AG Grid 紧凑模式样式 ==================== */
 .ag-theme-compact.ag-theme-alpine,
 .ag-theme-compact.ag-theme-alpine-dark {
-  /* 减小基础字体大小 */
   --ag-font-size: 12px;
-  
-  /* 行高 */
   --ag-row-height: 22px;
   --ag-header-height: 24px;
-  
-  /* 单元格内边距 */
   --ag-cell-horizontal-padding: 6px;
-  
-  /* 边框 */
   --ag-borders: solid 1px;
   --ag-border-color: var(--ag-border-color, #d9d9d9);
-  
-  /* 紧凑间距 */
   --ag-grid-size: 4px;
-  
-  /* 滚动优化 */
   --ag-row-animation-speed: 0s;
 }
 
-/* 列边框 */
 .ag-theme-compact .ag-cell {
   border-right: 1px solid #e8e8e8;
-  /* 优化渲染 */
   will-change: auto;
 }
 
@@ -663,7 +563,6 @@ tbody tr:hover {
   border-right: 1px solid #d9d9d9;
 }
 
-/* 暗黑模式边框 */
 .ag-theme-compact.ag-theme-alpine-dark .ag-cell {
   border-right: 1px solid #303030;
 }
@@ -672,24 +571,21 @@ tbody tr:hover {
   border-right: 1px solid #434343;
 }
 
-/* 最后一列不需要右边框 */
 .ag-theme-compact .ag-cell-last-in-row,
 .ag-theme-compact .ag-header-cell:last-child .ag-header-cell {
   border-right: none !important;
 }
 
-/* 优化表头样式 */
 .ag-theme-compact .ag-header {
-  background-color: #fafafa;
+  background-color: var(--background-toolbar);
   font-weight: 500;
   will-change: auto;
 }
 
 .ag-theme-compact.ag-theme-alpine-dark .ag-header {
-  background-color: #1a1a1a;
+  background-color: var(--background-toolbar);
 }
 
-/* 选中行样式 */
 .ag-theme-compact .ag-row-selected {
   background-color: rgba(24, 144, 255, 0.08) !important;
 }
@@ -698,9 +594,8 @@ tbody tr:hover {
   background-color: rgba(24, 144, 255, 0.15) !important;
 }
 
-/* 悬浮行样式 - 禁用过渡动画以提升性能 */
 .ag-theme-compact .ag-row-hover {
-  background-color: rgba(0, 0, 0, 0.02);
+  background-color: var(--background-hover);
   transition: none !important;
 }
 
@@ -709,7 +604,6 @@ tbody tr:hover {
   transition: none !important;
 }
 
-/* 滚动容器优化 */
 .ag-theme-compact .ag-body-viewport {
   scroll-behavior: auto;
   overflow-anchor: none;
@@ -720,13 +614,11 @@ tbody tr:hover {
   height: 8px;
 }
 
-/* 优化行渲染 */
 .ag-theme-compact .ag-row {
   transition: none !important;
   will-change: transform;
 }
 
-/* 优化单元格渲染 */
 .ag-theme-compact .ag-cell {
   line-height: 22px;
   overflow: hidden;
@@ -758,7 +650,6 @@ tbody tr:hover {
   margin: 0;
 }
 
-/* Tabs 高度约束 - 确保内容区域可滚动 */
 .ant-tabs {
   height: 100% !important;
   display: flex !important;
@@ -801,7 +692,6 @@ tbody tr:hover {
   overflow: hidden !important;
 }
 
-/* 确保 Tabs 内部容器也有正确高度 */
 .ant-tabs-nav-wrap {
   flex-shrink: 0;
 }
@@ -810,7 +700,39 @@ tbody tr:hover {
   flex-shrink: 0;
 }
 
-/* 强制内容容器不超出父元素 */
 .ant-tabs .ant-tabs-nav {
   flex-shrink: 0 !important;
+}
+
+/* ==================== NeonCyber 主题特效 ==================== */
+[data-theme-preset='neonCyber'] {
+  --glow-primary: 0 0 10px var(--color-primary), 0 0 20px var(--color-primary);
+  --glow-success: 0 0 10px var(--color-success), 0 0 20px var(--color-success);
+  --glow-warning: 0 0 10px var(--color-warning), 0 0 20px var(--color-warning);
+  --glow-error: 0 0 10px var(--color-error), 0 0 20px var(--color-error);
+}
+
+[data-theme-preset='neonCyber'] .ant-btn-primary {
+  box-shadow: var(--glow-primary);
+}
+
+[data-theme-preset='neonCyber'] .ant-btn-primary:hover {
+  box-shadow: 0 0 15px var(--color-primary), 0 0 30px var(--color-primary);
+}
+
+[data-theme-preset='neonCyber'] .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  text-shadow: var(--glow-primary);
+}
+
+[data-theme-preset='neonCyber'] .ant-tree .ant-tree-node-content-wrapper:hover {
+  text-shadow: var(--glow-primary);
+}
+
+/* ==================== 主题过渡效果 ==================== */
+[data-theme],
+[data-theme-preset] {
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
 }

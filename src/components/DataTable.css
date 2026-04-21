@@ -54,3 +54,29 @@
 .ant-pagination-simple-pager {
   height: 18px !important;
 }
+
+.filter-tag {
+  cursor: pointer;
+}
+
+.filter-tag:hover {
+  opacity: 0.8;
+}
+
+.filter-panel::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.filter-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.filter-panel::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.ag-theme-alpine-dark .filter-panel::-webkit-scrollbar-thumb {
+  background: #555;
+}

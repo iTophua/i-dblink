@@ -9,7 +9,10 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   build: {
-    target: ["es2021", "chrome100", "safari13"],
+    target: ["es2022", "chrome100", "safari15"],
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
     ...(process.env.TAURI_DEBUG
       ? {
           minify: false,
