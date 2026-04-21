@@ -6,6 +6,8 @@ import type {
   GroupOutput,
   TableInfo,
   ColumnInfo,
+  IndexInfo,
+  ForeignKeyInfo,
   QueryResult,
 } from '../types/api';
 
@@ -18,21 +20,6 @@ export interface TableStructure {
   columns: ColumnInfo[];
   indexes: IndexInfo[];
   foreign_keys: ForeignKeyInfo[];
-}
-
-export interface IndexInfo {
-  index_name: string;
-  column_name: string;
-  is_unique: boolean;
-  is_primary: boolean;
-  seq_in_index: number;
-}
-
-export interface ForeignKeyInfo {
-  constraint_name: string;
-  column_name: string;
-  referenced_table: string;
-  referenced_column: string;
 }
 
 export const api = {
@@ -106,11 +93,11 @@ export const api = {
     return await invoke('get_columns', { connectionId, tableName, database });
   },
 
-  async getIndexes(connectionId: string, tableName: string, database?: string): Promise<import('../types/api').IndexInfo[]> {
+  async getIndexes(connectionId: string, tableName: string, database?: string): Promise<IndexInfo[]> {
     return await invoke('get_indexes', { connectionId, tableName, database });
   },
 
-  async getForeignKeys(connectionId: string, tableName: string, database?: string): Promise<import('../types/api').ForeignKeyInfo[]> {
+  async getForeignKeys(connectionId: string, tableName: string, database?: string): Promise<ForeignKeyInfo[]> {
     return await invoke('get_foreign_keys', { connectionId, tableName, database });
   },
 

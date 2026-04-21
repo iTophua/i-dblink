@@ -155,7 +155,7 @@ async fn get_connection_pool(
     connections: &State<'_, RwLock<ActiveConnections>>,
 ) -> Result<(crate::drivers::db_pool::DbPool, String), String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
+    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
 
     let (conn_config, password_opt) = storage
         .get_connection_with_password(connection_id)
@@ -302,7 +302,7 @@ pub async fn test_connection(
     password: &str,
     database: Option<&str>,
 ) -> Result<bool, String> {
-    println!(
+    tracing::info!(
         "Testing connection to {}:{}:{} as {}",
         db_type, host, port, username
     );
@@ -324,7 +324,7 @@ pub async fn test_connection(
     // 验证连接池是否真正可用（执行简单查询）
     pool.validate().await?;
 
-    println!("Connection test successful");
+    tracing::info!("Connection test successful");
     Ok(true)
 }
 
@@ -380,7 +380,7 @@ pub async fn connect_database(
     connections: State<'_, RwLock<ActiveConnections>>,
 ) -> Result<bool, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
+    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
 
     // 检查是否已经连接 - 性能优化：使用读锁
     {
@@ -397,7 +397,7 @@ pub async fn connect_database(
         .map_err(|e| format!("Failed to get connection: {}", e))?
         .ok_or_else(|| "Connection not found".to_string())?;
 
-    println!(
+    tracing::info!(
         "Connecting to {}:{}:{} as {}",
         conn_config.db_type, conn_config.host, conn_config.port, conn_config.username
     );
@@ -413,7 +413,7 @@ pub async fn connect_database(
     // 性能优化：使用 RwLock 的写锁（write().await）
     let _ = connections.write().await.add(connection_id, pool);
 
-    println!("Connected successfully");
+    tracing::info!("Connected successfully");
     Ok(true)
 }
 
@@ -431,7 +431,7 @@ pub async fn disconnect_database(
         .await
         .is_some()
     {
-        println!("Disconnected from {}", connection_id);
+        tracing::info!("Disconnected from {}", connection_id);
         Ok(true)
     } else {
         Err(format!(
@@ -447,7 +447,7 @@ pub async fn get_connections(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<Vec<ConnectionOutput>, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
+    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
 
     match storage.get_connections().await {
         Ok(connections) => Ok(connections
@@ -465,7 +465,7 @@ pub async fn save_connection(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<ConnectionOutput, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
+    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
 
     match input.id {
         Some(id) => {
@@ -550,7 +550,7 @@ pub async fn delete_connection(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<(), String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
+    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
 
     storage
         .delete_connection(&id)
@@ -564,7 +564,7 @@ pub async fn get_groups(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<Vec<GroupOutput>, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
+    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
 
     match storage.get_groups().await {
         Ok(groups) => Ok(groups.into_iter().map(|g| g.into()).collect()),
@@ -579,7 +579,7 @@ pub async fn save_group(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<GroupOutput, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
+    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
 
     match input.id {
         Some(id) => {
@@ -644,7 +644,7 @@ pub async fn delete_group(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<(), String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().unwrap();
+    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
 
     if id == "default" {
         return Err("Cannot delete default group".to_string());

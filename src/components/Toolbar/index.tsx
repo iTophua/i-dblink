@@ -50,8 +50,8 @@ export function Toolbar(): JSX.Element {
   const toolbarStyle: ToolbarStyle = {
     height: 36,
     lineHeight: '36px',
-    background: isDarkMode ? '#252525' : '#f5f5f5',
-    borderBottom: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+    background: 'var(--background-toolbar)',
+    borderBottom: '1px solid var(--border-color)',
     padding: '0 12px',
     display: 'flex',
     alignItems: 'center',
@@ -61,7 +61,7 @@ export function Toolbar(): JSX.Element {
   const dividerStyle: React.CSSProperties = {
     width: 1,
     height: 20,
-    background: isDarkMode ? '#434343' : '#d9d9d9',
+    background: 'var(--border-color)',
     margin: '0 8px',
   };
 
@@ -140,7 +140,7 @@ export function Toolbar(): JSX.Element {
 
   const buttonStyle: React.CSSProperties = {
     fontSize: 12,
-    color: isDarkMode ? '#e8e8e8' : '#333',
+    color: 'var(--text-primary)',
   };
 
   const renderToolbarButtons = () => (
@@ -218,30 +218,30 @@ export function Toolbar(): JSX.Element {
 
   return (
     <>
-      <Header style={toolbarStyle}>
+      <Header style={toolbarStyle} className="toolbar-enhanced">
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {!isMacOS && (
             <>
               <Dropdown menu={{ items: fileMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-                <Button type="text" size="small" style={buttonStyle}>文件</Button>
+                <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">文件</Button>
               </Dropdown>
               <Dropdown menu={{ items: editMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-                <Button type="text" size="small" style={buttonStyle}>编辑</Button>
+                <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">编辑</Button>
               </Dropdown>
               <Dropdown menu={{ items: viewMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-                <Button type="text" size="small" style={buttonStyle}>查看</Button>
+                <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">查看</Button>
               </Dropdown>
               <Dropdown menu={{ items: connectionMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-                <Button type="text" size="small" style={buttonStyle}>连接</Button>
+                <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">连接</Button>
               </Dropdown>
               <Dropdown menu={{ items: toolsMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-                <Button type="text" size="small" style={buttonStyle}>工具</Button>
+                <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">工具</Button>
               </Dropdown>
               <Dropdown menu={{ items: windowMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-                <Button type="text" size="small" style={buttonStyle}>窗口</Button>
+                <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">窗口</Button>
               </Dropdown>
               <Dropdown menu={{ items: helpMenuItems, onClick: ({ key }) => handleMenuAction(key) }} trigger={['click']}>
-                <Button type="text" size="small" style={buttonStyle}>帮助</Button>
+                <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">帮助</Button>
               </Dropdown>
               <div style={dividerStyle} />
             </>

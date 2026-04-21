@@ -261,7 +261,7 @@ fn main() {
             // 性能优化：使用 RwLock 替代 Mutex 提升并发性能
             app.manage(RwLock::new(ActiveConnections::new()));
 
-            println!("Storage and menu initialized successfully");
+            tracing::info!("Storage and menu initialized successfully");
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -282,7 +282,7 @@ fn main() {
                     }
                 }
                 _ => {
-                    println!("Menu event received: {:?}", event.id);
+                    tracing::info!("Menu event received: {:?}", event.id);
                     // 将事件转发到前端处理
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.emit("menu-action", event.id.as_ref());

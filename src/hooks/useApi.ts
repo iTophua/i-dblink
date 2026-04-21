@@ -4,6 +4,10 @@ import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
 
+const escapeSqlString = (value: string): string => value.replace(/\\/g, '\\\\').replace(/'/g, "''");
+
+const escapeSqlIdentifier = (value: string): string => value.replace(/`/g, '``');
+
 // 性能优化：带 TTL 的 LRU 缓存
 interface CacheEntry<T> {
   data: T;
@@ -66,15 +70,7 @@ class TTLCache<T> {
   }
 }
 
-// 模块级别的列缓存（跨组件实例共享）- 使用 TTL 缓存
-const columnsCache = new TTLCache<Promise<any>>(100, 10 * 60 * 1000); // 10 分钟 TTL
-
-// 定期清理过期缓存
-if (typeof window !== 'undefined') {
-  setInterval(() => {
-    columnsCache.cleanup();
-  }, 60000); // 每分钟清理一次
-}
+const structureCache = new TTLCache<Promise<import('../api').TableStructure>>(100, 10 * 60 * 1000);
 
 export const useConnections = () => {
   const { message } = App.useApp();
@@ -112,11 +108,9 @@ export const useConnections = () => {
       try {
         setLoading(true);
         const connection = await api.saveConnection(input);
-        if (input.id) {
-          setConnections(connections.map((c) => (c.id === input.id ? connection : c)));
-        } else {
-          setConnections([...connections, connection]);
-        }
+        setConnections((prev) =>
+          input.id ? prev.map((c) => (c.id === input.id ? connection : c)) : [...prev, connection]
+        );
         message.success(input.id ? '连接已更新' : '连接已创建');
         return connection;
       } catch (err) {
@@ -128,7 +122,7 @@ export const useConnections = () => {
         setLoading(false);
       }
     },
-    [connections, setConnections, setLoading, setError]
+    [setConnections, setLoading, setError]
   );
 
   const deleteConnection = useCallback(
@@ -136,10 +130,8 @@ export const useConnections = () => {
       try {
         setLoading(true);
         await api.deleteConnection(id);
-        setConnections(connections.filter((c) => c.id !== id));
-        if (activeConnectionId === id) {
-          setActiveConnection(null);
-        }
+        setConnections((prev) => prev.filter((c) => c.id !== id));
+        setActiveConnection((current) => (current === id ? null : current));
         message.success('连接已删除');
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '删除连接失败';
@@ -150,7 +142,7 @@ export const useConnections = () => {
         setLoading(false);
       }
     },
-    [connections, activeConnectionId, setConnections, setActiveConnection, setLoading, setError]
+    [setConnections, setActiveConnection, setLoading, setError]
   );
 
   const testConnection = useCallback(
@@ -184,8 +176,8 @@ export const useConnections = () => {
       try {
         setLoading(true);
         await api.connectConnection(connectionId);
-        setConnections(
-          connections.map((c) =>
+        setConnections((prev) =>
+          prev.map((c) =>
             c.id === connectionId ? { ...c, status: 'connected' as const } : c
           )
         );
@@ -199,7 +191,7 @@ export const useConnections = () => {
         setLoading(false);
       }
     },
-    [connections, setConnections, setLoading, setError]
+    [setConnections, setLoading, setError]
   );
 
   const disconnect = useCallback(
@@ -207,8 +199,8 @@ export const useConnections = () => {
       try {
         setLoading(true);
         await api.disconnectConnection(connectionId);
-        setConnections(
-          connections.map((c) =>
+        setConnections((prev) =>
+          prev.map((c) =>
             c.id === connectionId ? { ...c, status: 'disconnected' as const } : c
           )
         );
@@ -222,7 +214,7 @@ export const useConnections = () => {
         setLoading(false);
       }
     },
-    [connections, setConnections, setLoading, setError]
+    [setConnections, setLoading, setError]
   );
 
   return {
@@ -254,11 +246,9 @@ export const useGroups = () => {
       try {
         setLoading(true);
         const group = await api.saveGroup(input);
-        if (input.id) {
-          setGroups(groups.map((g) => (g.id === input.id ? group : g)));
-        } else {
-          setGroups([...groups, group]);
-        }
+        setGroups((prev) =>
+          input.id ? prev.map((g) => (g.id === input.id ? group : g)) : [...prev, group]
+        );
         message.success(input.id ? '分组已更新' : '分组已创建');
         return group;
       } catch (err) {
@@ -270,7 +260,7 @@ export const useGroups = () => {
         setLoading(false);
       }
     },
-    [groups, setGroups, setLoading, setError]
+    [setGroups, setLoading, setError]
   );
 
   const deleteGroup = useCallback(
@@ -278,7 +268,7 @@ export const useGroups = () => {
       try {
         setLoading(true);
         await api.deleteGroup(id);
-        setGroups(groups.filter((g) => g.id !== id));
+        setGroups((prev) => prev.filter((g) => g.id !== id));
         message.success('分组已删除');
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '删除分组失败';
@@ -289,7 +279,7 @@ export const useGroups = () => {
         setLoading(false);
       }
     },
-    [groups, setGroups, setLoading, setError]
+    [setGroups, setLoading, setError]
   );
 
   return {
@@ -368,71 +358,55 @@ export const useDatabase = () => {
     [setLoading, setError]
   );
 
-  const getColumns = useCallback(
+  const getTableStructureCached = useCallback(
     async (connectionId: string, tableName: string, database?: string) => {
       const cacheKey = `${connectionId}::${database || ''}::${tableName}`;
 
-      // 检查缓存 - 使用新的 TTLCache API
-      const cached = columnsCache.get(cacheKey);
+      const cached = structureCache.get(cacheKey);
       if (cached) {
         return cached;
       }
 
-      // 使用新的批量 API 获取完整的表结构
-      const promise = api.getTableStructure(connectionId, tableName, database).then(
-        (result) => result.columns
-      );
-      columnsCache.set(cacheKey, promise);
+      const promise = api.getTableStructure(connectionId, tableName, database);
+      structureCache.set(cacheKey, promise);
       return promise;
     },
     []
   );
 
+  const getColumns = useCallback(
+    async (connectionId: string, tableName: string, database?: string) => {
+      const result = await getTableStructureCached(connectionId, tableName, database);
+      return result.columns;
+    },
+    [getTableStructureCached]
+  );
+
   const getIndexes = useCallback(
     async (connectionId: string, tableName: string, database?: string) => {
-      try {
-        setLoading(true);
-        // 使用新的批量 API
-        const result = await api.getTableStructure(connectionId, tableName, database);
-        return result.indexes;
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '获取索引信息失败';
-        setError(errorMsg);
-        message.error(errorMsg);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
+      const result = await getTableStructureCached(connectionId, tableName, database);
+      return result.indexes;
     },
-    [setLoading, setError]
+    [getTableStructureCached]
   );
 
   const getForeignKeys = useCallback(
     async (connectionId: string, tableName: string, database?: string) => {
-      try {
-        setLoading(true);
-        // 使用新的批量 API
-        const result = await api.getTableStructure(connectionId, tableName, database);
-        return result.foreign_keys;
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '获取外键信息失败';
-        setError(errorMsg);
-        message.error(errorMsg);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
+      const result = await getTableStructureCached(connectionId, tableName, database);
+      return result.foreign_keys;
     },
-    [setLoading, setError]
+    [getTableStructureCached]
   );
 
   const getTableInfo = useCallback(
     async (connectionId: string, tableName: string, database?: string) => {
       try {
         setLoading(true);
+        const safeDb = database ? escapeSqlString(database) : '';
+        const safeTable = escapeSqlString(tableName);
         const sql = database
-          ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${database}' AND TABLE_NAME = '${tableName}'`
-          : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${tableName}'`;
+          ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${safeDb}' AND TABLE_NAME = '${safeTable}'`
+          : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${safeTable}'`;
 
         const result = await api.executeQuery(connectionId, sql);
 
@@ -470,9 +444,11 @@ export const useDatabase = () => {
     async (connectionId: string, tableName: string, database?: string) => {
       try {
         setLoading(true);
+        const safeDb = database ? escapeSqlIdentifier(database) : '';
+        const safeTable = escapeSqlIdentifier(tableName);
         const sql = database
-          ? `SHOW CREATE TABLE \`${database}\`.\`${tableName}\``
-          : `SHOW CREATE TABLE \`${tableName}\``;
+          ? `SHOW CREATE TABLE \`${safeDb}\`.\`${safeTable}\``
+          : `SHOW CREATE TABLE \`${safeTable}\``;
 
         const result = await api.executeQuery(connectionId, sql);
 
@@ -534,17 +510,19 @@ export const useInitApp = () => {
   useEffect(() => {
     loadConnections();
 
-    // Listen for menu action events from toolbar buttons
     const handleMenuAction = (event: CustomEvent<{ action: string }>) => {
       console.log('Menu action triggered:', event.detail.action);
-      // TODO: Implement actual menu action handling
-      // This will be connected to Tauri menu system in production
     };
 
-    window.addEventListener('menu-action' as any, handleMenuAction as any);
+    window.addEventListener('menu-action', handleMenuAction);
+
+    const intervalId = setInterval(() => {
+      structureCache.cleanup();
+    }, 60000);
 
     return () => {
-      window.removeEventListener('menu-action' as any, handleMenuAction as any);
+      window.removeEventListener('menu-action', handleMenuAction);
+      clearInterval(intervalId);
     };
   }, [loadConnections]);
 };

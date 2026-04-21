@@ -83,7 +83,7 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
 
   // 暴露 addHistory 方法供外部调用
   useMemo(() => {
-    (window as any).__sqlHistoryApi = { addHistory };
+    window.__sqlHistoryApi = { addHistory };
   }, [addHistory]);
 
   return (

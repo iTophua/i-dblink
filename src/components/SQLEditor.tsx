@@ -26,6 +26,10 @@ import { useDatabase } from '../hooks/useApi';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import type { QueryResult } from '../types/api';
 
+interface QueryResultWithTiming extends QueryResult {
+  executionTime?: number;
+}
+
 interface SQLEditorProps {
   connectionId?: string | null;
   defaultQuery?: string;
@@ -35,7 +39,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
   const [sql, setSql] = useState(defaultQuery || '-- 输入 SQL 语句\nSELECT * FROM users LIMIT 100;');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
-  const [results, setResults] = useState<QueryResult[]>([]);  // 多结果集
+  const [results, setResults] = useState<QueryResultWithTiming[]>([]);
   const [activeTab, setActiveTab] = useState<'result' | 'results' | 'messages' | 'explain'>('result');
   const [messages, setMessages] = useState<string[]>([]);
   const [explainPlan, setExplainPlan] = useState<any[]>([]);
@@ -115,22 +119,22 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       const isMultiStatement = statements.length > 1;
       
       if (isMultiStatement) {
-        // 多语句执行
-        const multiResults: QueryResult[] = [];
+        const multiResults: QueryResultWithTiming[] = [];
         const msgs: string[] = [];
-        let totalSuccess = 0;
         let totalErrors = 0;
-        
-        for (let i = 0; i < statements.length; i++) {
+        let totalSuccess = 0;
+
+      for (let i = 0; i < statements.length; i++) {
+        try {
           const stmt = statements[i];
           if (abortControllerRef.current?.signal.aborted) break;
-          
+
           const startTime = Date.now();
           const queryResult = await executeQueryApi(connectionId, stmt);
           const executionTime = Date.now() - startTime;
-          
-          multiResults.push({ ...queryResult, executionTime } as any);
-          
+
+          multiResults.push({ ...queryResult, executionTime });
+
           if (queryResult.error) {
             msgs.push(`语句 ${i + 1} ✗：${queryResult.error}`);
             totalErrors++;
@@ -146,18 +150,22 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
             }
             totalSuccess++;
           }
+        } catch (error: any) {
+          msgs.push(`语句 ${i + 1} ✗：${error.message || error}`);
+          totalErrors++;
         }
-        
-        setResults(multiResults);
-        setMessages(msgs);
-        
-        if (totalErrors === 0) {
-          message.success(`全部执行成功：${totalSuccess} 条语句`);
-          setActiveTab('results');
-        } else {
-          message.error(`部分执行失败：${totalSuccess} 成功，${totalErrors} 失败`);
-          setActiveTab('messages');
-        }
+      }
+
+      setResults(multiResults);
+      setMessages(msgs);
+
+      if (totalErrors === 0) {
+        message.success(`全部执行成功：${totalSuccess} 条语句`);
+        setActiveTab('results');
+      } else {
+        message.error(`部分执行失败：${totalSuccess} 成功，${totalErrors} 失败`);
+        setActiveTab('messages');
+      }
       } else {
         // 单语句执行（原有逻辑）
         const startTime = Date.now();
@@ -229,7 +237,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       if (result.error) {
         message.error(`生成执行计划失败：${result.error}`);
       } else {
-        setExplainPlan(result.rows as any[]);
+        setExplainPlan(result.rows as unknown[]);
         setActiveTab('explain');
         message.success('执行计划已生成');
       }
@@ -583,7 +591,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                     size="small"
                     items={results.map((r, i) => ({
                       key: `result-${i}`,
-                      label: `结果 ${i + 1} (${r.rows.length} 行) ${(r as any).executionTime ? `${(r as any).executionTime}ms` : ''}`,
+                      label: `结果 ${i + 1} (${r.rows.length} 行) ${r.executionTime ? `${r.executionTime}ms` : ''}`,
                       children: renderResultTable(r),
                     }))}
                   />

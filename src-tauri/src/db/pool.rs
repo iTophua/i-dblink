@@ -20,7 +20,7 @@ impl DbPool {
             format!("file:{}?mode=rwc&cache=shared", db_path)
         };
 
-        println!("Creating SQLite pool with URI: {}", uri);
+        tracing::info!("Creating SQLite pool with URI: {}", uri);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
@@ -30,11 +30,11 @@ impl DbPool {
             .connect(&uri)
             .await
             .map_err(|e| {
-                eprintln!("Failed to connect to SQLite: {}", e);
+                tracing::warn!("Failed to connect to SQLite: {}", e);
                 e
             })?;
 
-        println!("SQLite pool created successfully");
+        tracing::info!("SQLite pool created successfully");
         Ok(Self { pool })
     }
 

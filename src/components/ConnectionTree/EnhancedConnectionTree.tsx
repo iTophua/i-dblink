@@ -107,18 +107,18 @@ const QuickActionButton: React.FC<QuickActionButtonProps> = ({
           borderRadius: 4,
           cursor: 'pointer',
           fontSize: 11,
-          background: isDarkMode ? '#303030' : '#f0f0f0',
-          color: isDarkMode ? '#bfbfbf' : '#595959',
+          background: 'var(--background-hover)',
+          color: 'var(--text-secondary)',
           transition: 'all 0.2s ease',
           marginLeft: 4,
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = isDarkMode ? '#434343' : '#d9d9d9';
-          e.currentTarget.style.color = '#1890ff';
+          e.currentTarget.style.background = 'var(--border-color)';
+          e.currentTarget.style.color = 'var(--color-primary)';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = isDarkMode ? '#303030' : '#f0f0f0';
-          e.currentTarget.style.color = isDarkMode ? '#bfbfbf' : '#595959';
+          e.currentTarget.style.background = 'var(--background-hover)';
+          e.currentTarget.style.color = 'var(--text-secondary)';
         }}
       >
         {icon}
@@ -863,7 +863,7 @@ export function EnhancedConnectionTree({
 
   const treeData = useMemo(() => {
     const q = searchText.trim().toLowerCase();
-    const treeNodes: any[] = [];
+    const treeNodes = [];
 
     const matchTables = (tables: TableInfo[]) =>
       !q || tables.some((t) => t.table_name.toLowerCase().includes(q));
@@ -1211,7 +1211,7 @@ export function EnhancedConnectionTree({
     for (const group of realGroups) {
       const groupConnNodes = (groupedConnections[group.id] || [])
         .map((conn) => buildConnNode(conn))
-        .filter(Boolean);
+        .filter((n) => n !== null && n !== undefined);
 
       if (groupConnNodes.length === 0 && q) continue;
 
@@ -1277,7 +1277,7 @@ export function EnhancedConnectionTree({
 
     const ungroupedConnNodes = (groupedConnections['ungrouped'] || [])
       .map((conn) => buildConnNode(conn))
-      .filter(Boolean);
+      .filter((n) => n !== null && n !== undefined);
 
     if (ungroupedConnNodes.length > 0 || !q) {
       for (const node of ungroupedConnNodes) {
@@ -1563,8 +1563,8 @@ export function EnhancedConnectionTree({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
-            border: `1px dashed ${isDarkMode ? '#434343' : '#d9d9d9'}`,
+            background: 'var(--background-hover)',
+            border: '1px dashed var(--border-color)',
           }}
           onClick={() => {
             setEditingGroup(null);
@@ -1572,7 +1572,7 @@ export function EnhancedConnectionTree({
             setGroupDialogOpen(true);
           }}
         >
-          <PlusOutlined style={{ color: isDarkMode ? '#8c8c8c' : '#bfbfbf' }} />
+          <PlusOutlined style={{ color: 'var(--text-tertiary)' }} />
         </div>
 
         <GroupDialog
@@ -1623,7 +1623,7 @@ export function EnhancedConnectionTree({
               handleExpand(keys, info);
             }}
             onSelect={handleSelect}
-            treeData={treeData as any}
+            treeData={treeData}
             style={{
               background: 'transparent',
               padding: '0 4px 8px',

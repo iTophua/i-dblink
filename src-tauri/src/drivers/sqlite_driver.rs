@@ -116,7 +116,8 @@ impl SqliteDriver {
         _database: Option<&str>,
     ) -> Result<Vec<ColumnInfo>, String> {
         if let DbPool::Sqlite(pool) = pool {
-            let query = format!("PRAGMA table_info(\"{}\")", table_name);
+            let safe_table = table_name.replace('"', "\"\"");
+            let query = format!("PRAGMA table_info(\"{}\")", safe_table);
             let rows =
                 sqlx::query_as::<_, (i32, String, String, bool, Option<String>, bool)>(&query)
                     .fetch_all(pool)
@@ -206,7 +207,8 @@ impl SqliteDriver {
 
     pub async fn get_indexes(pool: &DbPool, table_name: &str) -> Result<Vec<IndexInfo>, String> {
         if let DbPool::Sqlite(pool) = pool {
-            let query = format!("PRAGMA index_list(\"{}\")", table_name);
+            let safe_table = table_name.replace('"', "\"\"");
+            let query = format!("PRAGMA index_list(\"{}\")", safe_table);
             let indexes = sqlx::query_as::<_, (String, bool, String, String)>(&query)
                 .fetch_all(pool)
                 .await
@@ -214,7 +216,8 @@ impl SqliteDriver {
 
             let mut result = Vec::new();
             for (index_name, is_unique, _origin, _partial) in indexes {
-                let detail_query = format!("PRAGMA index_info(\"{}\")", index_name);
+                let safe_index = index_name.replace('"', "\"\"");
+                let detail_query = format!("PRAGMA index_info(\"{}\")", safe_index);
                 let details = sqlx::query_as::<_, (i64, i64, String)>(&detail_query)
                     .fetch_all(pool)
                     .await
@@ -242,7 +245,8 @@ impl SqliteDriver {
         table_name: &str,
     ) -> Result<Vec<ForeignKeyInfo>, String> {
         if let DbPool::Sqlite(pool) = pool {
-            let query = format!("PRAGMA foreign_key_list(\"{}\")", table_name);
+            let safe_table = table_name.replace('"', "\"\"");
+            let query = format!("PRAGMA foreign_key_list(\"{}\")", safe_table);
             let rows = sqlx::query_as::<
                 _,
                 (i64, i64, String, String, String, String, String, String),
@@ -276,33 +280,50 @@ impl SqliteDriver {
         search: Option<&str>,
     ) -> Result<TablesResult, String> {
         if let DbPool::Sqlite(pool) = pool {
-            let search_filter = match search {
-                Some(s) if !s.is_empty() => format!("AND name LIKE '%{}%'", s),
-                _ => String::new(),
+            let (query, has_search) = if let Some(_s) = search.filter(|s| !s.is_empty()) {
+                (
+                    r#"
+                    SELECT name AS table_name,
+                           'BASE TABLE' AS table_type,
+                           NULL AS row_count,
+                           NULL AS comment,
+                           NULL AS engine,
+                           NULL AS data_size,
+                           NULL AS index_size,
+                           NULL AS create_time,
+                           NULL AS update_time,
+                           NULL AS collation
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                      AND name NOT LIKE 'sqlite_%'
+                      AND name LIKE ?1
+                    ORDER BY name
+                "#,
+                    true,
+                )
+            } else {
+                (
+                    r#"
+                    SELECT name AS table_name,
+                           'BASE TABLE' AS table_type,
+                           NULL AS row_count,
+                           NULL AS comment,
+                           NULL AS engine,
+                           NULL AS data_size,
+                           NULL AS index_size,
+                           NULL AS create_time,
+                           NULL AS update_time,
+                           NULL AS collation
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                      AND name NOT LIKE 'sqlite_%'
+                    ORDER BY name
+                "#,
+                    false,
+                )
             };
 
-            let query = format!(
-                r#"
-                SELECT name AS table_name,
-                       'BASE TABLE' AS table_type,
-                       NULL AS row_count,
-                       NULL AS comment,
-                       NULL AS engine,
-                       NULL AS data_size,
-                       NULL AS index_size,
-                       NULL AS create_time,
-                       NULL AS update_time,
-                       NULL AS collation
-                FROM sqlite_master
-                WHERE type = 'table'
-                  AND name NOT LIKE 'sqlite_%'
-                  {}
-                ORDER BY name
-            "#,
-                search_filter
-            );
-
-            let rows = sqlx::query_as::<
+            let q = sqlx::query_as::<
                 _,
                 (
                     String,
@@ -316,10 +337,13 @@ impl SqliteDriver {
                     Option<String>,
                     Option<String>,
                 ),
-            >(&query)
-            .fetch_all(pool)
-            .await
-            .map_err(|e| format!("Failed to query tables: {}", e))?;
+            >(query);
+
+            let rows = if let Some(s) = search.filter(|_| has_search) {
+                q.bind(format!("%{}%", s)).fetch_all(pool).await.map_err(|e| format!("Failed to query tables: {}", e))?
+            } else {
+                q.fetch_all(pool).await.map_err(|e| format!("Failed to query tables: {}", e))?
+            };
 
             let tables: Vec<TableInfo> = rows
                 .into_iter()

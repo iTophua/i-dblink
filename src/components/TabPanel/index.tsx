@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Tabs, Empty, Breadcrumb, theme, Dropdown, Menu, message, Modal, Tooltip } from 'antd';
-import type { MenuProps } from 'antd';
+import type { MenuProps, TabsProps } from 'antd';
 import {
   DatabaseOutlined,
   TableOutlined,
@@ -308,7 +308,7 @@ export function TabPanel({
   );
 
   // 构建 Tab 列表
-  const tabItems = [
+  const tabItems: TabsProps['items'] = [
     {
       key: 'objects',
       label: (
@@ -489,7 +489,7 @@ export function TabPanel({
         }}
         tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
         tabBarGutter={2}
-        items={tabItems as any}
+        items={tabItems}
         onEdit={handleTabEdit}
       />
 

@@ -259,8 +259,9 @@ impl PgDriver {
 
     fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Value {
         use sqlx::Row;
-        let column = row.columns().get(idx).unwrap();
-        let type_name = column.type_info().to_string().to_lowercase();
+        let type_name = row.columns().get(idx)
+            .map(|c| c.type_info().to_string().to_lowercase())
+            .unwrap_or_default();
         if type_name.contains("int") || type_name.contains("serial") {
             match row.get::<Option<i64>, _>(idx) {
                 Some(v) => serde_json::Value::Number(v.into()),
@@ -404,41 +405,66 @@ impl PgDriver {
         search: Option<&str>,
     ) -> Result<TablesResult, String> {
         if let DbPool::Postgres(pool) = pool {
-            let search_filter = match search {
-                Some(s) if !s.is_empty() => format!("AND c.relname LIKE '%{}%'", s),
-                _ => String::new(),
+            let (query, has_search) = if let Some(_s) = search.filter(|s| !s.is_empty()) {
+                (
+                    r#"
+                    SELECT c.relname AS table_name,
+                           CASE c.relkind
+                               WHEN 'r' THEN 'BASE TABLE'
+                               WHEN 'v' THEN 'VIEW'
+                               WHEN 'm' THEN 'MATERIALIZED VIEW'
+                               ELSE 'OTHER'
+                           END AS table_type,
+                           NULL::bigint AS row_count,
+                           COALESCE(d.description, '') AS comment,
+                           NULL AS engine,
+                           NULL AS data_size,
+                           NULL AS index_size,
+                           NULL AS create_time,
+                           NULL AS update_time,
+                           NULL AS collation
+                    FROM pg_catalog.pg_class c
+                    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                    LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+                    WHERE c.relkind IN ('r','v','m','f')
+                      AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                      AND n.nspname NOT LIKE 'pg_toast%'
+                      AND c.relname LIKE $1
+                    ORDER BY c.relname
+                "#,
+                    true,
+                )
+            } else {
+                (
+                    r#"
+                    SELECT c.relname AS table_name,
+                           CASE c.relkind
+                               WHEN 'r' THEN 'BASE TABLE'
+                               WHEN 'v' THEN 'VIEW'
+                               WHEN 'm' THEN 'MATERIALIZED VIEW'
+                               ELSE 'OTHER'
+                           END AS table_type,
+                           NULL::bigint AS row_count,
+                           COALESCE(d.description, '') AS comment,
+                           NULL AS engine,
+                           NULL AS data_size,
+                           NULL AS index_size,
+                           NULL AS create_time,
+                           NULL AS update_time,
+                           NULL AS collation
+                    FROM pg_catalog.pg_class c
+                    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                    LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+                    WHERE c.relkind IN ('r','v','m','f')
+                      AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                      AND n.nspname NOT LIKE 'pg_toast%'
+                    ORDER BY c.relname
+                "#,
+                    false,
+                )
             };
 
-            let query = format!(
-                r#"
-                SELECT c.relname AS table_name,
-                       CASE c.relkind
-                           WHEN 'r' THEN 'BASE TABLE'
-                           WHEN 'v' THEN 'VIEW'
-                           WHEN 'm' THEN 'MATERIALIZED VIEW'
-                           ELSE 'OTHER'
-                       END AS table_type,
-                       NULL::bigint AS row_count,
-                       COALESCE(d.description, '') AS comment,
-                       NULL AS engine,
-                       NULL AS data_size,
-                       NULL AS index_size,
-                       NULL AS create_time,
-                       NULL AS update_time,
-                       NULL AS collation
-                FROM pg_catalog.pg_class c
-                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
-                WHERE c.relkind IN ('r','v','m','f')
-                  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-                  AND n.nspname NOT LIKE 'pg_toast%'
-                  {}
-                ORDER BY c.relname
-            "#,
-                search_filter
-            );
-
-            let rows = sqlx::query_as::<
+            let q = sqlx::query_as::<
                 _,
                 (
                     String,
@@ -452,10 +478,13 @@ impl PgDriver {
                     Option<String>,
                     Option<String>,
                 ),
-            >(&query)
-            .fetch_all(pool)
-            .await
-            .map_err(|e| format!("Failed to query tables: {}", e))?;
+            >(query);
+
+            let rows = if let Some(s) = search.filter(|_| has_search) {
+                q.bind(format!("%{}%", s)).fetch_all(pool).await.map_err(|e| format!("Failed to query tables: {}", e))?
+            } else {
+                q.fetch_all(pool).await.map_err(|e| format!("Failed to query tables: {}", e))?
+            };
 
             let mut tables = Vec::new();
             let mut views = Vec::new();

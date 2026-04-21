@@ -1,4 +1,5 @@
 import { AutoComplete, Input } from 'antd';
+import type { InputRef } from 'antd';
 import React, { useMemo, useCallback, useRef, useEffect, useState } from 'react';
 
 interface SqlInputProps {
@@ -318,7 +319,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
     }));
   }, [columns]);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<InputRef | null>(null);
   const lastSelectedRef = useRef<number>(0);
   const [autoOpen, setAutoOpen] = useState(false);
   const isAutoSelectedRef = useRef(false);
@@ -579,7 +580,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
       open={autoOpen}
     >
       <Input
-        ref={inputRef as any}
+        ref={inputRef}
         autoCapitalize="none"
         autoComplete="off"
         autoCorrect="off"

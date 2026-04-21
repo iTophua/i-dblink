@@ -82,7 +82,7 @@ export interface ForeignKeyInfo {
 
 export interface QueryResult {
   columns: string[];
-  rows: any[][];
+  rows: unknown[][];
   rows_affected?: number;
   error?: string;
 }

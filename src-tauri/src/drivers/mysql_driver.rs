@@ -44,36 +44,56 @@ impl MySqlDriver {
         database: Option<&str>,
     ) -> Result<Vec<TableInfo>, String> {
         if let DbPool::MySql(pool) = pool {
-            let db_filter = match database {
-                Some(db) => format!("AND TABLE_SCHEMA = '{}'", db),
-                None => "AND TABLE_SCHEMA = DATABASE()".to_string(),
-            };
-            let query = format!(
-                r#"
-                SELECT
-                    TABLE_NAME,
-                    TABLE_TYPE,
-                    TABLE_ROWS,
-                    COALESCE(TABLE_COMMENT, '') AS TABLE_COMMENT,
-                    COALESCE(ENGINE, '') AS ENGINE,
-                    DATA_LENGTH,
-                    INDEX_LENGTH,
-                    COALESCE(DATE_FORMAT(CREATE_TIME, '%Y-%m-%d %H:%i:%s'), '') AS CREATE_TIME,
-                    COALESCE(DATE_FORMAT(UPDATE_TIME, '%Y-%m-%d %H:%i:%s'), '') AS UPDATE_TIME,
-                    COALESCE(TABLE_COLLATION, '') AS TABLE_COLLATION
-                FROM information_schema.TABLES
-                WHERE 1=1 {}
-                AND TABLE_TYPE != 'SYSTEM VIEW'
-                ORDER BY TABLE_NAME
-            "#,
-                db_filter
-            );
-
             use sqlx::Row;
-            let rows = sqlx::query(&query)
+
+            let rows = if let Some(db) = database {
+                sqlx::query(
+                    r#"
+                    SELECT
+                        TABLE_NAME,
+                        TABLE_TYPE,
+                        TABLE_ROWS,
+                        COALESCE(TABLE_COMMENT, '') AS TABLE_COMMENT,
+                        COALESCE(ENGINE, '') AS ENGINE,
+                        DATA_LENGTH,
+                        INDEX_LENGTH,
+                        COALESCE(DATE_FORMAT(CREATE_TIME, '%Y-%m-%d %H:%i:%s'), '') AS CREATE_TIME,
+                        COALESCE(DATE_FORMAT(UPDATE_TIME, '%Y-%m-%d %H:%i:%s'), '') AS UPDATE_TIME,
+                        COALESCE(TABLE_COLLATION, '') AS TABLE_COLLATION
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = ?
+                    AND TABLE_TYPE != 'SYSTEM VIEW'
+                    ORDER BY TABLE_NAME
+                "#,
+                )
+                .bind(db)
                 .fetch_all(pool)
                 .await
-                .map_err(|e| format!("Failed to query tables: {}", e))?;
+                .map_err(|e| format!("Failed to query tables: {}", e))?
+            } else {
+                sqlx::query(
+                    r#"
+                    SELECT
+                        TABLE_NAME,
+                        TABLE_TYPE,
+                        TABLE_ROWS,
+                        COALESCE(TABLE_COMMENT, '') AS TABLE_COMMENT,
+                        COALESCE(ENGINE, '') AS ENGINE,
+                        DATA_LENGTH,
+                        INDEX_LENGTH,
+                        COALESCE(DATE_FORMAT(CREATE_TIME, '%Y-%m-%d %H:%i:%s'), '') AS CREATE_TIME,
+                        COALESCE(DATE_FORMAT(UPDATE_TIME, '%Y-%m-%d %H:%i:%s'), '') AS UPDATE_TIME,
+                        COALESCE(TABLE_COLLATION, '') AS TABLE_COLLATION
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_TYPE != 'SYSTEM VIEW'
+                    ORDER BY TABLE_NAME
+                "#,
+                )
+                .fetch_all(pool)
+                .await
+                .map_err(|e| format!("Failed to query tables: {}", e))?
+            };
 
             let format_bytes = |bytes: Option<u64>| -> Option<String> {
                 bytes.map(|b| {
@@ -266,8 +286,9 @@ impl MySqlDriver {
     // 将 MySQL 值转换为 JSON 值
     fn mysql_value_to_json(row: &sqlx::mysql::MySqlRow, idx: usize) -> serde_json::Value {
         use sqlx::Row;
-        let column = row.columns().get(idx).unwrap();
-        let type_name = column.type_info().to_string().to_lowercase();
+        let type_name = row.columns().get(idx)
+            .map(|c| c.type_info().to_string().to_lowercase())
+            .unwrap_or_default();
         if type_name.contains("int") || type_name.contains("serial") {
             // MySQL unsigned 整数需要使用 u64
             if type_name.contains("unsigned") {
@@ -338,11 +359,14 @@ impl MySqlDriver {
     ) -> Result<Vec<IndexInfo>, String> {
         if let DbPool::MySql(pool) = pool {
             // 使用 database.table_name 格式，避免 "No database selected" 错误
-            let qualified_table = match database {
-                Some(db) => format!("`{}`.`{}`", db, table_name),
-                None => format!("`{}`", table_name),
+            let safe_table = table_name.replace('`', "``");
+            let query = match database {
+                Some(db) => {
+                    let safe_db = db.replace('`', "``");
+                    format!("SHOW INDEX FROM `{}`.`{}`", safe_db, safe_table)
+                }
+                None => format!("SHOW INDEX FROM `{}`", safe_table),
             };
-            let query = format!("SHOW INDEX FROM {}", qualified_table);
 
             use sqlx::Row;
             let rows = sqlx::query(&query)
@@ -428,7 +452,10 @@ impl MySqlDriver {
             // 如果指定了数据库，使用 SHOW TABLE STATUS FROM db_name（快）
             // 如果没有指定数据库，直接返回空结果（不应在没有选数据库时获取表）
             let query = match database {
-                Some(db) => format!("SHOW TABLE STATUS FROM `{}`", db),
+                Some(db) => {
+                    let safe_db = db.replace('`', "``");
+                    format!("SHOW TABLE STATUS FROM `{}`", safe_db)
+                }
                 None => {
                     // 没有指定数据库时返回空结果，不查询
                     // 调用者应该先选择数据库再获取表列表

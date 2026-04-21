@@ -20,14 +20,15 @@ export function StatusBar({ isDarkMode, selectedConnectionId, connections, selec
         height: 28,
         lineHeight: '28px',
         padding: '0 8px',
-        background: isDarkMode ? '#141414' : '#fafafa',
-        borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+        background: 'var(--background-toolbar)',
+        borderTop: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         fontSize: 12,
-        color: isDarkMode ? '#bfbfbf' : '#595959',
+        color: 'var(--text-secondary)',
       }}
+      className="status-bar-enhanced"
     >
       <Space>
         <Text>

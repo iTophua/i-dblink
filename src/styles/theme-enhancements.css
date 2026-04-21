@@ -1,0 +1,721 @@
+/**
+ * i-dblink 全局主题增强效果
+ *
+ * 包含玻璃拟态、渐变色、阴影增强、Focus 样式等现代化视觉效果
+ */
+
+/* ==================== 玻璃拟态基础样式 ==================== */
+.glass-effect {
+  background: var(--glass-background, rgba(255, 255, 255, 0.7));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.3));
+  box-shadow: var(--glass-shadow, 0 8px 32px rgba(31, 38, 135, 0.15));
+}
+
+[data-theme='dark'] .glass-effect {
+  background: var(--glass-background, rgba(17, 25, 40, 0.75));
+  border-color: var(--glass-border, rgba(255, 255, 255, 0.1));
+  box-shadow: var(--glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.37));
+}
+
+/* ==================== 渐变背景效果 ==================== */
+.gradient-primary {
+  background: var(--color-primary-gradient, linear-gradient(135deg, #1890ff 0%, #40a9ff 100%));
+  color: #ffffff;
+}
+
+.gradient-success {
+  background: var(--color-success-gradient, linear-gradient(135deg, #52c41a 0%, #73d13d 100%));
+  color: #ffffff;
+}
+
+.gradient-warning {
+  background: var(--color-warning-gradient, linear-gradient(135deg, #faad14 0%, #ffc53d 100%));
+  color: #ffffff;
+}
+
+.gradient-error {
+  background: var(--color-error-gradient, linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%));
+  color: #ffffff;
+}
+
+/* ==================== 增强阴影系统 ==================== */
+.shadow-enhanced {
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.08),
+    0 0 1px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.02);
+}
+
+.shadow-elevated {
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.15),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-floating {
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.18),
+    0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme='dark'] .shadow-enhanced {
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='dark'] .shadow-elevated {
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.45),
+    0 6px 24px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .shadow-floating {
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.55),
+    0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+/* ==================== Focus 焦点样式增强 ==================== */
+.focus-ring:focus-visible,
+.focus-ring:focus {
+  outline: none;
+  box-shadow: var(--focus-ring-shadow, 0 0 0 2px rgba(99, 102, 241, 0.2));
+  border-color: var(--focus-ring-color, rgba(99, 102, 241, 0.5));
+}
+
+[data-theme='dark'] .focus-ring:focus-visible,
+[data-theme='dark'] .focus-ring:focus {
+  box-shadow: var(--focus-ring-shadow, 0 0 0 2px rgba(129, 140, 248, 0.3));
+  border-color: var(--focus-ring-color, rgba(129, 140, 248, 0.6));
+}
+
+/* ==================== 按钮增强效果 ==================== */
+.ant-btn-primary {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.ant-btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.4s ease, height 0.4s ease;
+}
+
+.ant-btn-primary:hover::before {
+  width: 300%;
+  height: 300%;
+}
+
+.ant-btn-primary:active:not(:disabled) {
+  transform: scale(0.97) !important;
+}
+
+.ant-btn-default:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.ant-btn-default:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+/* ==================== 卡片增强效果 ==================== */
+.ant-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border: 1px solid var(--border-color-light, #f0f0f0);
+}
+
+.ant-card:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: transparent;
+}
+
+[data-theme='dark'] .ant-card:hover {
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.4),
+    0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+/* ==================== 对话框增强效果 ==================== */
+.ant-modal-content {
+  border-radius: 12px !important;
+  overflow: hidden;
+  animation: modalSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ant-modal-header {
+  background: linear-gradient(
+    135deg,
+    var(--background-card, #fff) 0%,
+    var(--background-toolbar, #fafafa) 100%
+  );
+  border-bottom: 1px solid var(--border-color-light, #f0f0f0);
+}
+
+.ant-modal-footer {
+  border-top: 1px solid var(--border-color-light, #f0f0f0);
+  background: var(--background-toolbar, #fafafa);
+}
+
+/* ==================== 输入框增强效果 ==================== */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select-selector,
+.ant-picker {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: 6px !important;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper-focused,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused {
+  border-color: var(--color-primary, #1890ff) !important;
+  box-shadow:
+    0 0 0 2px rgba(var(--color-primary-rgb, 24, 144, 255), 0.15),
+    0 2px 8px rgba(var(--color-primary-rgb, 24, 144, 255), 0.08) !important;
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover,
+.ant-select-selector:hover,
+.ant-picker:hover {
+  border-color: var(--color-primary-hover, #40a9ff) !important;
+}
+
+/* ==================== 下拉菜单增强效果 ==================== */
+.ant-dropdown {
+  animation: dropdownFadeIn 0.2s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ant-dropdown-menu {
+  border-radius: 10px !important;
+  padding: 6px !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.15),
+    0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(12px);
+  background: var(--background-card, #fff);
+}
+
+.ant-dropdown-menu-item {
+  border-radius: 6px !important;
+  padding: 8px 12px !important;
+  margin: 2px 0 !important;
+  transition: all 0.2s ease !important;
+}
+
+.ant-dropdown-menu-item:hover {
+  background: var(--background-active, rgba(24, 144, 255, 0.08)) !important;
+  transform: translateX(2px);
+}
+
+/* ==================== 工具提示增强效果 ==================== */
+.ant-tooltip-inner {
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* ==================== 标签页增强效果 ==================== */
+.ant-tabs-tab {
+  position: relative;
+  transition: all 0.25s ease !important;
+  border-radius: 6px 6px 0 0 !important;
+}
+
+.ant-tabs-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: var(--color-primary-gradient, linear-gradient(90deg, #1890ff, #40a9ff));
+  transition: all 0.3s ease;
+  transform: translateX(-50%);
+}
+
+.ant-tabs-tab-active::after {
+  width: 80%;
+}
+
+.ant-tabs-tab:hover {
+  background: var(--background-hover, rgba(0, 0, 0, 0.03)) !important;
+  color: var(--color-primary, #1890ff) !important;
+}
+
+.ant-tabs-tab-active {
+  background: var(--background-card, #fff) !important;
+}
+
+.ant-tabs-nav::before {
+  background: var(--border-color-light, #f0f0f0) !important;
+}
+
+/* ==================== 表格增强效果 ==================== */
+.ant-table-thead > tr > th {
+  background: linear-gradient(
+    180deg,
+    var(--background-toolbar, #fafafa) 0%,
+    var(--background-hover, #f5f5f5) 100%
+  ) !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  font-size: 11px !important;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary, #666) !important;
+  border-bottom: 2px solid var(--color-primary, #1890ff) !important;
+}
+
+.ant-table-tbody > tr {
+  transition: all 0.2s ease !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: var(--background-hover, rgba(24, 144, 255, 0.04)) !important;
+}
+
+.ant-table-tbody > tr.selected-row > td {
+  background: var(--background-active, rgba(24, 144, 255, 0.08)) !important;
+}
+
+/* AG Grid 增强 */
+.ag-theme-alpine .ag-header {
+  background: linear-gradient(
+    180deg,
+    var(--background-toolbar, #fafafa) 0%,
+    var(--background-hover, #f5f5f5) 100%
+  ) !important;
+  border-bottom: 2px solid var(--color-primary, #1890ff) !important;
+}
+
+.ag-theme-alpine .ag-row:hover {
+  background: var(--background-hover, rgba(24, 144, 255, 0.04)) !important;
+}
+
+.ag-theme-alpine .ag-row-selected {
+  background: var(--background-active, rgba(24, 144, 255, 0.08)) !important;
+}
+
+/* ==================== 侧边栏增强效果 ==================== */
+.sidebar-enhanced {
+  background: linear-gradient(
+    180deg,
+    var(--background-card, #fff) 0%,
+    var(--background-toolbar, #fafafa) 100%
+  ) !important;
+  border-right: 1px solid var(--border-color-light, #f0f0f0) !important;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='dark'] .sidebar-enhanced {
+  background: linear-gradient(
+    180deg,
+    var(--background-card, #141414) 0%,
+    var(--background-toolbar, #1f1f1f) 100%
+  ) !important;
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.3);
+}
+
+.connection-tree .ant-tree-node-content-wrapper {
+  border-radius: 6px !important;
+  margin: 1px 4px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.connection-tree .ant-tree-node-content-wrapper:hover {
+  background: var(--background-hover, rgba(24, 144, 255, 0.06)) !important;
+  transform: translateX(2px);
+}
+
+.connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
+  background: var(--background-active, rgba(24, 144, 255, 0.1)) !important;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+}
+
+/* ==================== 工具栏增强效果 ==================== */
+.toolbar-enhanced {
+  background: linear-gradient(
+    180deg,
+    var(--background-toolbar, #fafafa) 0%,
+    var(--background, #f6f6f6) 100%
+  ) !important;
+  border-bottom: 1px solid var(--border-color-light, #f0f0f0) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(10px);
+}
+
+.toolbar-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: 6px !important;
+}
+
+.toolbar-btn:hover {
+  background: var(--background-active, rgba(24, 144, 255, 0.08)) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-btn:active {
+  transform: translateY(0) !important;
+}
+
+/* ==================== 状态栏增强效果 ==================== */
+.status-bar-enhanced {
+  background: linear-gradient(
+    180deg,
+    var(--background, #f6f6f6) 0%,
+    var(--background-toolbar, #fafafa) 100%
+  ) !important;
+  border-top: 1px solid var(--border-color-light, #f0f0f0) !important;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* ==================== 徽标和标签增强效果 ==================== */
+.ant-tag {
+  border-radius: 6px !important;
+  padding: 2px 8px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+}
+
+.ant-tag:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ant-badge-count {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.2s ease !important;
+}
+
+.ant-badge-count:hover {
+  transform: scale(1.1);
+}
+
+/* ==================== 消息提示增强效果 ==================== */
+.ant-message-notice {
+  animation: messageSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ant-message-custom-content {
+  border-radius: 8px !important;
+  padding: 12px 20px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* ==================== NeonCyber 主题特效增强 ==================== */
+[data-theme-preset='neonCyber'] {
+  --neon-glow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+}
+
+[data-theme-preset='neonCyber'] .ant-btn-primary {
+  animation: neonPulse 2s ease-in-out infinite;
+}
+
+@keyframes neonPulse {
+  0%, 100% {
+    box-shadow: 0 0 5px var(--color-primary), 0 0 10px var(--color-primary);
+  }
+  50% {
+    box-shadow: 0 0 10px var(--color-primary), 0 0 20px var(--color-primary), 0 0 30px var(--color-primary);
+  }
+}
+
+[data-theme-preset='neonCyber'] .ant-tabs-tab-active .ant-tabs-tab-btn {
+  text-shadow: var(--neon-glow);
+}
+
+[data-theme-preset='neonCyber'] .connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
+  box-shadow: 0 0 10px var(--color-primary), 0 0 20px var(--color-primary);
+  border: 1px solid var(--color-primary);
+}
+
+[data-theme-preset='neonCyber'] .toolbar-btn:hover {
+  box-shadow: 0 0 8px var(--color-primary), 0 0 16px var(--color-primary);
+}
+
+/* ==================== SunsetAurora 主题特效增强 ==================== */
+[data-theme-preset='sunsetAurora'] .ant-btn-primary {
+  background: var(--color-primary-gradient) !important;
+  border: none !important;
+}
+
+[data-theme-preset='sunsetAurora'] .ant-modal-header {
+  background: var(--color-primary-gradient) !important;
+  background-size: 200% 200% !important;
+  animation: auroraShift 8s ease-in-out infinite;
+}
+
+@keyframes auroraShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+[data-theme-preset='sunsetAurora'] .ant-tabs-tab-active::after {
+  background: var(--color-primary-gradient) !important;
+  background-size: 200% 200% !important;
+  animation: auroraShift 4s ease-in-out infinite;
+}
+
+/* ==================== OceanBlue 主题特效增强 ==================== */
+[data-theme-preset='oceanBlue'] .ant-table-thead > tr > th {
+  background: var(--color-primary-gradient) !important;
+  color: #fff !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme-preset='oceanBlue'] .status-bar-enhanced {
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0%,
+    transparent 50%,
+    var(--color-primary) 100%
+  ) !important;
+  background-size: 200% 100%;
+  animation: oceanWave 6s ease-in-out infinite;
+}
+
+@keyframes oceanWave {
+  0%, 100% { background-position: 0% 0%; }
+  50% { background-position: 100% 0%; }
+}
+
+/* ==================== ForestDusk 主题特效增强 ==================== */
+[data-theme-preset='forestDusk'] .connection-tree .ant-tree-node-content-wrapper:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(34, 197, 94, 0.08) 0%,
+    transparent 100%
+  ) !important;
+}
+
+[data-theme-preset='forestDusk'] .ant-tag-success,
+[data-theme-preset='forestDusk'] .ant-tag-green {
+  background: var(--color-success-gradient) !important;
+  color: #fff !important;
+  border: none !important;
+}
+
+/* ==================== NordicFrost 主题特效增强 ==================== */
+[data-theme-preset='nordicFrost'] {
+  --frost-border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+[data-theme-preset='nordicFrost'] .ant-card {
+  border: var(--frost-border) !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(8px);
+}
+
+[data-theme='dark'][data-theme-preset='nordicFrost'] .ant-card {
+  background: rgba(15, 23, 42, 0.8) !important;
+  border-color: rgba(71, 85, 105, 0.3) !important;
+}
+
+[data-theme-preset='nordicFrost'] .ant-dropdown-menu {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(16px);
+}
+
+[data-theme='dark'][data-theme-preset='nordicFrost'] .ant-dropdown-menu {
+  background: rgba(15, 23, 42, 0.9) !important;
+}
+
+/* ==================== MidnightDeep 主题特效增强 ==================== */
+[data-theme-preset='midnightDeep'] .ant-modal-mask {
+  backdrop-filter: blur(4px);
+}
+
+[data-theme-preset='midnightDeep'] .ant-modal-content {
+  background: linear-gradient(
+    180deg,
+    var(--background-card) 0%,
+    rgba(99, 102, 241, 0.05) 100%
+  ) !important;
+}
+
+[data-theme-preset='midnightDeep'] .sidebar-enhanced {
+  border-right: 2px solid var(--color-primary) !important;
+  box-shadow:
+    4px 0 20px rgba(99, 102, 241, 0.15),
+    inset -2px 0 8px rgba(99, 102, 241, 0.05) !important;
+}
+
+/* ==================== 加载动画增强 ==================== */
+.ant-spin-nested-loading > div > .ant-spin {
+  max-height: none !important;
+}
+
+.ant-spin-blur {
+  opacity: 0.6;
+  filter: blur(2px);
+  user-select: none;
+  pointer-events: none;
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    var(--background-toolbar) 0%,
+    var(--background-hover) 50%,
+    var(--background-toolbar) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerLoading 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmerLoading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ==================== 平滑滚动条 ==================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--border-color-dark, #bfbfbf) 0%,
+    var(--text-tertiary, #8c8c8c) 100%
+  );
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    var(--text-tertiary, #8c8c8c) 0%,
+    var(--text-secondary, #595959) 100%
+  );
+  background-clip: padding-box;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.35) 100%
+  );
+  background-clip: padding-box;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
+  background-clip: padding-box;
+}
+
+/* ==================== 选择文本样式增强 ==================== */
+::selection {
+  background: var(--color-primary, #1890ff);
+  color: #ffffff;
+  text-shadow: none;
+}
+
+/* ==================== 响应式优化 ==================== */
+@media (max-width: 1200px) {
+  .ant-card:hover {
+    transform: translateY(-2px);
+  }
+
+  .ant-modal-content {
+    margin: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .shadow-elevated,
+  .shadow-floating {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  .ant-dropdown-menu {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* ==================== 减少动画（无障碍）==================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .ant-btn-primary::before {
+    display: none;
+  }
+}

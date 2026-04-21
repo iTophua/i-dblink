@@ -17,25 +17,25 @@ import { useSettingsStore } from '../stores/settingsStore';
 
 const { Sider, Content } = Layout;
 
-const getStyles = (isDarkMode: boolean) => ({
+const getStyles = () => ({
   root: { height: '100vh' as const, overflow: 'hidden' as const },
   mainLayout: { flex: 1, overflow: 'hidden' as const, display: 'flex' as const },
   sider: {
-    background: isDarkMode ? '#1f1f1f' : '#fff',
-    borderRight: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+    background: 'var(--background-card)',
+    borderRight: '1px solid var(--border-color)',
   },
   siderContent: { display: 'flex' as const, flexDirection: 'column' as const, height: '100%' },
   searchContainer: { padding: '8px 8px 4px', flexShrink: 0 },
   searchInput: {
     borderRadius: 4,
-    background: isDarkMode ? '#141414' : '#fafafa',
+    background: 'var(--background-toolbar)',
   },
   connectionTreeContainer: { flex: 1, minHeight: 0, overflow: 'auto' as const, marginBottom: 0 },
   collapseButton: {
     height: 28,
     flexShrink: 0,
-    background: isDarkMode ? '#141414' : '#fafafa',
-    borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+    background: 'var(--background-toolbar)',
+    borderTop: '1px solid var(--border-color)',
     display: 'flex' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -43,7 +43,7 @@ const getStyles = (isDarkMode: boolean) => ({
     transition: 'background 0.2s ease',
   },
   collapseButtonText: {
-    color: isDarkMode ? '#bfbfbf' : '#595959',
+    color: 'var(--text-secondary)',
     fontSize: 11,
     display: 'flex' as const,
     alignItems: 'center' as const,
@@ -51,7 +51,7 @@ const getStyles = (isDarkMode: boolean) => ({
   },
   content: {
     flex: 1,
-    background: isDarkMode ? '#1f1f1f' : '#fff',
+    background: 'var(--background)',
     margin: 0,
     marginLeft: 0,
     padding: 0,
@@ -70,14 +70,14 @@ const getStyles = (isDarkMode: boolean) => ({
   },
   logPanelCollapsed: {
     height: 28,
-    borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-    background: isDarkMode ? '#141414' : '#fafafa',
+    borderTop: '1px solid var(--border-color)',
+    background: 'var(--background-toolbar)',
     padding: '0 16px',
     display: 'flex' as const,
     alignItems: 'center' as const,
     justifyContent: 'flex-end' as const,
   },
-  logLink: { fontSize: 12, color: isDarkMode ? '#177ddc' : '#1890ff' },
+  logLink: { fontSize: 12, color: 'var(--color-primary)' },
 });
 
 interface MainLayoutProps {
@@ -108,7 +108,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const styles = useMemo(() => getStyles(), []);
 
   const {
     connections,
@@ -604,9 +604,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       }
     };
 
-    window.addEventListener('menu-action' as any, handleMenuAction as any);
+    window.addEventListener('menu-action', handleMenuAction);
     return () => {
-      window.removeEventListener('menu-action' as any, handleMenuAction as any);
+      window.removeEventListener('menu-action', handleMenuAction);
     };
   }, [selectedConnectionId, selectedDatabase, loadDatabaseTables, handleConnect, handleDisconnect]);
 
@@ -621,7 +621,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           onCollapse={(value) => setCollapsed(value)}
           width={320}
           trigger={null}
-          style={styles.sider}
+          style={{ ...styles.sider }}
+          className="sidebar-enhanced"
         >
           <div style={styles.siderContent}>
             {!collapsed && (
@@ -686,10 +687,10 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
               onClick={() => setCollapsed(!collapsed)}
               style={styles.collapseButton}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = isDarkMode ? '#1f1f1f' : '#f0f0f0';
+                e.currentTarget.style.background = 'var(--background-hover)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = isDarkMode ? '#141414' : '#fafafa';
+                e.currentTarget.style.background = 'var(--background-toolbar)';
               }}
             >
               <span style={styles.collapseButtonText}>{collapsed ? '展开' : '收起'}</span>

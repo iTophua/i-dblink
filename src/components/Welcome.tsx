@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button, Card, Typography, Divider, Space, Empty } from 'antd';
 import { DatabaseOutlined, PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useAppStore, Connection } from '../stores/appStore';
+import type { DatabaseType, ConnectionStatus } from '../types/api';
 import { invoke } from '@tauri-apps/api/core';
 import { ConnectionDialog, ConnectionFormData } from './ConnectionDialog';
 
@@ -50,11 +51,11 @@ export function Welcome() {
       const appConnections = backendConnections.map((c: BackendConnection) => ({
         id: c.id,
         name: c.name,
-        db_type: c.db_type as any,
+        db_type: c.db_type as DatabaseType,
         host: c.host,
         port: c.port,
         username: c.username,
-        status: c.status as any,
+        status: c.status as ConnectionStatus,
         group_id: c.group_id
       }));
       setConnections(appConnections);
@@ -129,11 +130,11 @@ export function Welcome() {
     const appConnection: Connection = {
       id: savedConnection.id,
       name: savedConnection.name,
-      db_type: savedConnection.db_type as any,
+      db_type: savedConnection.db_type as DatabaseType,
       host: savedConnection.host,
       port: savedConnection.port,
       username: savedConnection.username,
-      status: savedConnection.status as any,
+      status: savedConnection.status as ConnectionStatus,
       group_id: savedConnection.group_id,
     };
 

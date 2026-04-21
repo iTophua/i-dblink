@@ -32,13 +32,13 @@ interface AppState {
   addConnection: (connection: Connection) => void;
   updateConnection: (id: string, connection: Partial<Connection>) => void;
   deleteConnection: (id: string) => void;
-  setConnections: (connections: Connection[]) => void;
-  setActiveConnection: (id: string | null) => void;
+  setConnections: (connections: Connection[] | ((prev: Connection[]) => Connection[])) => void;
+  setActiveConnection: (id: string | null | ((prev: string | null) => string | null)) => void;
 
   addGroup: (group: ConnectionGroup) => void;
   updateGroup: (id: string, group: Partial<ConnectionGroup>) => void;
   deleteGroup: (id: string) => void;
-  setGroups: (groups: ConnectionGroup[]) => void;
+  setGroups: (groups: ConnectionGroup[] | ((prev: ConnectionGroup[]) => ConnectionGroup[])) => void;
 
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -70,7 +70,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     connections: [...state.connections, connection]
   })),
 
-  setConnections: (connections) => set({ connections }),
+  setConnections: (connections) => set((state) => ({
+    connections: typeof connections === 'function' ? connections(state.connections) : connections,
+  })),
 
   updateConnection: (id, updated) => set((state) => ({
     connections: state.connections.map(conn =>
@@ -83,13 +85,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId
   })),
 
-  setActiveConnection: (id) => set({ activeConnectionId: id }),
+  setActiveConnection: (id) => set((state) => ({
+    activeConnectionId: typeof id === 'function' ? id(state.activeConnectionId) : id,
+  })),
 
   addGroup: (group) => set((state) => ({
     groups: [...state.groups, group]
   })),
 
-  setGroups: (groups) => set({ groups }),
+  setGroups: (groups) => set((state) => ({
+    groups: typeof groups === 'function' ? groups(state.groups) : groups,
+  })),
 
   updateGroup: (id, updated) => set((state) => ({
     groups: state.groups.map(g => g.id === id ? { ...g, ...updated } : g)

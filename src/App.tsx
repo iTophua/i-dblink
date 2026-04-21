@@ -1,15 +1,45 @@
 import { MainLayout } from './components/MainLayout';
 import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSettingsStore } from './stores/settingsStore';
-import { THEMES, getThemeConfig, ThemePreset, ThemeMode } from './styles/theme';
+import { getThemeConfig, ThemePreset, ThemeMode } from './styles/theme';
 import './style.css';
 import './App.css';
 
 function App() {
   const { settings, updateSettings } = useSettingsStore();
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('idblink-settings');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.state?.settings) {
+          const oldSettings = parsed.state.settings;
+          if (oldSettings.theme && !oldSettings.themePreset) {
+            const preset = oldSettings.theme === 'dark' ? 'midnightDeep' :
+                          oldSettings.theme === 'light' ? 'midnightDeep' : 'midnightDeep';
+            const mode = oldSettings.theme === 'system'
+              ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+              : oldSettings.theme;
+            updateSettings({
+              themePreset: preset,
+              themeMode: mode,
+              themeSyncSystem: oldSettings.theme === 'system',
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to migrate settings:', e);
+      }
+    }
+    setIsHydrated(true);
+  }, [updateSettings]);
+
   const { themePreset, themeMode, themeSyncSystem } = settings;
 
   const effectiveMode: ThemeMode = themeSyncSystem
@@ -38,19 +68,18 @@ function App() {
       }
     };
 
-    window.addEventListener('app-action' as any, handleAppAction as any);
+    window.addEventListener('app-action', handleAppAction);
     return () => {
-      window.removeEventListener('app-action' as any, handleAppAction as any);
+      window.removeEventListener('app-action', handleAppAction);
     };
   }, [effectiveMode, updateSettings]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e: MediaQueryListEvent) => {
+    const handleChange = () => {
       if (themeSyncSystem) {
-        window.dispatchEvent(new CustomEvent('app-action', {
-          detail: { action: 'system-theme-changed', isDark: e.matches }
-        }));
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        updateSettings({ themeMode: isDark ? 'dark' : 'light' });
       }
     };
 
@@ -59,6 +88,8 @@ function App() {
   }, [themeSyncSystem]);
 
   useEffect(() => {
+    if (!isHydrated) return;
+
     const themeConfig = getThemeConfig(themePreset, effectiveMode);
     const root = document.documentElement;
 
@@ -67,16 +98,55 @@ function App() {
     });
 
     Object.entries(themeConfig.neutralColors).forEach(([key, value]) => {
-      root.style.setProperty(`--${key}`, value);
+      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+      root.style.setProperty(`--${cssKey}`, value);
     });
 
     Object.entries(themeConfig.dbTypeColors).forEach(([key, value]) => {
       root.style.setProperty(`--db-color-${key}`, value);
     });
 
+    Object.entries(themeConfig.glassEffect).forEach(([key, value]) => {
+      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+      root.style.setProperty(`--glass-${cssKey}`, value);
+    });
+
+    Object.entries(themeConfig.focusStyle).forEach(([key, value]) => {
+      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+      if (typeof value === 'number') {
+        root.style.setProperty(`--focus-${cssKey}`, `${value}px`);
+      } else {
+        root.style.setProperty(`--focus-${cssKey}`, value);
+      }
+    });
+
     root.setAttribute('data-theme', effectiveMode);
     root.setAttribute('data-theme-preset', themePreset);
-  }, [themePreset, effectiveMode]);
+
+    const bgColor = themeConfig.neutralColors.windowBackground;
+    const rgb = hexToRgb(bgColor);
+    if (rgb) {
+      try {
+        const appWindow = getCurrentWindow();
+        appWindow.setBackgroundColor({ red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1 });
+      } catch (e) {
+        console.error('Failed to set window background color:', e);
+      }
+    }
+  }, [themePreset, effectiveMode, isHydrated]);
+
+  function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : null;
+  }
+
+  if (!isHydrated) {
+    return null;
+  }
 
   const themeConfig = getThemeConfig(themePreset, effectiveMode);
   const antdThemeConfig = {
@@ -93,6 +163,15 @@ function App() {
       colorErrorHover: themeConfig.colors.errorHover,
       colorInfo: themeConfig.colors.info,
       colorInfoHover: themeConfig.colors.infoHover,
+      colorBgContainer: themeConfig.neutralColors.backgroundCard,
+      colorBgElevated: themeConfig.neutralColors.backgroundCard,
+      colorBgLayout: themeConfig.neutralColors.background,
+      colorBorder: themeConfig.neutralColors.border,
+      colorBorderSecondary: themeConfig.neutralColors.borderLight,
+      colorText: themeConfig.neutralColors.textPrimary,
+      colorTextSecondary: themeConfig.neutralColors.textSecondary,
+      colorTextTertiary: themeConfig.neutralColors.textTertiary,
+      colorTextQuaternary: themeConfig.neutralColors.textDisabled,
       borderRadius: 6,
       fontSize: 14,
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
@@ -101,14 +180,19 @@ function App() {
       Layout: {
         headerBg: themeConfig.neutralColors.backgroundToolbar,
         siderBg: themeConfig.neutralColors.backgroundCard,
+        bodyBg: themeConfig.neutralColors.background,
       },
       Menu: {
         itemBg: themeConfig.neutralColors.backgroundCard,
         itemSelectedBg: themeConfig.neutralColors.backgroundActive,
         itemHoverBg: themeConfig.neutralColors.backgroundHover,
+        darkItemBg: themeConfig.neutralColors.backgroundCard,
+        darkItemSelectedBg: themeConfig.neutralColors.backgroundActive,
+        darkItemHoverBg: themeConfig.neutralColors.backgroundHover,
       },
       Tabs: {
         cardBg: themeConfig.neutralColors.backgroundCard,
+        itemSelectedColor: themeConfig.colors.primary,
       },
       Table: {
         headerBg: themeConfig.neutralColors.backgroundToolbar,
@@ -126,6 +210,9 @@ function App() {
       },
       Select: {
         colorBgContainer: themeConfig.neutralColors.backgroundCard,
+      },
+      Button: {
+        primaryColor: '#ffffff',
       },
     },
   };

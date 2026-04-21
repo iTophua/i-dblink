@@ -1,10 +1,10 @@
 use crate::db::{ConnectionGroup, ConnectionRepository, DbConnection, DbPool, GroupRepository};
 use crate::security::PasswordManager;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 /// 获取应用数据目录（区分开发和生产环境）
-fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
+fn get_data_dir(_app_handle: &AppHandle) -> PathBuf {
     // 检查是否为开发模式（debug 构建）
     #[cfg(debug_assertions)]
     {
@@ -20,7 +20,7 @@ fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
         // 创建目录（如果不存在），使用 unwrap 因为开发环境中几乎不会失败
         let _ = std::fs::create_dir_all(&dev_data_dir);
 
-        println!("Using development data directory: {:?}", dev_data_dir);
+        tracing::info!("Using development data directory: {:?}", dev_data_dir);
         dev_data_dir
     }
 
@@ -35,9 +35,9 @@ fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
         let data_dir = app_data.join("data");
         // 创建目录（如果不存在）
         let _ = std::fs::create_dir_all(&data_dir)
-            .map_err(|e| eprintln!("Warning: Failed to create data directory: {}", e));
+            .map_err(|e| tracing::warn!("Warning: Failed to create data directory: {}", e));
 
-        println!("Using production data directory: {:?}", data_dir);
+        tracing::info!("Using production data directory: {:?}", data_dir);
         data_dir
     }
 }
@@ -60,7 +60,7 @@ pub async fn init_storage(app_handle: &AppHandle) -> Result<Storage, anyhow::Err
 
     let db_path_str = db_path.to_string_lossy().to_string();
 
-    println!("Initializing database at: {}", db_path_str);
+    tracing::info!("Initializing database at: {}", db_path_str);
 
     // 创建数据库连接池
     let pool = DbPool::new(&db_path_str).await?;
@@ -100,7 +100,7 @@ impl Storage {
     ) -> Result<Option<(DbConnection, Option<String>)>, anyhow::Error> {
         let conn = self.connection_repo.get_by_id(id).await?;
         if let Some(connection) = conn {
-            let password = PasswordManager::get_password(self._pool.inner(), id).await?;
+            let password = PasswordManager::get_password(id).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
             Ok(Some((connection, password)))
         } else {
             Ok(None)
@@ -116,9 +116,8 @@ impl Storage {
         // 保存连接配置
         self.connection_repo.save(&conn).await?;
 
-        // 保存密码到数据库
         if let Some(pwd) = password {
-            PasswordManager::save_password(self._pool.inner(), &conn.id, pwd).await?;
+            PasswordManager::save_password(&conn.id, pwd).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
         }
 
         Ok(())
@@ -131,9 +130,8 @@ impl Storage {
         updated: DbConnection,
         new_password: Option<&str>,
     ) -> Result<(), anyhow::Error> {
-        // 如果提供了新密码则更新，否则保留原密码
         if let Some(pwd) = new_password {
-            PasswordManager::save_password(self._pool.inner(), id, pwd).await?;
+            PasswordManager::save_password(id, pwd).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
         }
 
         // 更新连接配置
@@ -144,8 +142,7 @@ impl Storage {
 
     /// 删除连接
     pub async fn delete_connection(&self, id: &str) -> Result<(), anyhow::Error> {
-        // 删除密码
-        PasswordManager::delete_password(self._pool.inner(), id).await?;
+        PasswordManager::delete_password(id).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
 
         // 删除连接配置
         self.connection_repo.delete(id).await?;

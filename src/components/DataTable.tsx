@@ -422,11 +422,11 @@ export const DataTable = memo(function DataTable({
 
   useEffect(() => {
     if (gridApiRef.current && columns.length > 0) {
-      const api = gridApiRef.current as any;
-      if (typeof api.setColumnDefs === 'function') {
-        api.setColumnDefs(columnDefs);
-      } else {
-        api.setGridOption('columnDefs', columnDefs);
+      const api = gridApiRef.current;
+      if (api && typeof (api as unknown as Record<string, unknown>).setColumnDefs === 'function') {
+        (api as unknown as { setColumnDefs: (defs: typeof columnDefs) => void }).setColumnDefs(columnDefs);
+      } else if (api) {
+        (api as unknown as { setGridOption: (key: string, value: unknown) => void }).setGridOption('columnDefs', columnDefs);
       }
     }
   }, [columnDefs, columns]);
@@ -526,7 +526,7 @@ export const DataTable = memo(function DataTable({
         }
 
         const primaryKeyValue = row[primaryKey.column_name];
-        const deleteSQL = `DELETE FROM \`${tableName}\` WHERE \`${primaryKey.column_name}\` = '${primaryKeyValue}'`;
+        const deleteSQL = `DELETE FROM \`${tableName}\` WHERE \`${primaryKey.column_name}\` = ${escapeSqlValue(primaryKeyValue)}`;
         const result = await executeQuery(connectionId, deleteSQL);
 
         if (result.error) {
@@ -729,7 +729,7 @@ export const DataTable = memo(function DataTable({
 
       const columns_list = Object.keys(values).filter((key) => values[key] !== undefined);
       const values_list = columns_list.map((col) =>
-        values[col] === null || values[col] === '' ? 'NULL' : `'${values[col]}'`
+        values[col] === null || values[col] === '' ? 'NULL' : escapeSqlValue(values[col])
       );
 
       const insertSQL = `INSERT INTO \`${tableName}\` (${columns_list.join(', ')}) VALUES (${values_list.join(', ')})`;
@@ -763,7 +763,7 @@ export const DataTable = memo(function DataTable({
       const updates = Object.entries(values)
         .filter(([key, value]) => key !== '__row_id__' && value !== editingRow?.[key])
         .map(
-          ([key, value]) => `\`${key}\` = ${value === null || value === '' ? 'NULL' : `'${value}'`}`
+          ([key, value]) => `\`${key}\` = ${value === null || value === '' ? 'NULL' : escapeSqlValue(value)}`
         )
         .join(', ');
 
@@ -774,7 +774,7 @@ export const DataTable = memo(function DataTable({
       }
 
       const primaryKeyValue = editingRow?.[primaryKey.column_name];
-      const updateSQL = `UPDATE \`${tableName}\` SET ${updates} WHERE \`${primaryKey.column_name}\` = '${primaryKeyValue}'`;
+      const updateSQL = `UPDATE \`${tableName}\` SET ${updates} WHERE \`${primaryKey.column_name}\` = ${escapeSqlValue(primaryKeyValue)}`;
 
       const result = await executeQuery(connectionId, updateSQL);
 
@@ -867,7 +867,7 @@ export const DataTable = memo(function DataTable({
   const handleQuickFilter = useCallback((value: string) => {
     setQuickFilter(value);
     if (gridApiRef.current) {
-      (gridApiRef.current as any).setGridOption('quickFilterText', value);
+      (gridApiRef.current as unknown as { setGridOption: (key: string, value: string) => void }).setGridOption('quickFilterText', value);
     }
   }, []);
 
@@ -971,10 +971,10 @@ export const DataTable = memo(function DataTable({
 
           for (let colOffset = 0; colOffset < values.length; colOffset++) {
             const currentColIndex = startColIndex + colOffset;
-            const col = allColumnDefs[currentColIndex] as any;
+            const col = allColumnDefs[currentColIndex] as ColDef | undefined;
             if (!col) continue;
 
-            const colName = col.field;
+            const colName = col.field as string | undefined;
             if (!colName) continue;
 
             const value = values[colOffset].trim();
@@ -1031,18 +1031,18 @@ export const DataTable = memo(function DataTable({
 
   const toolbarStyle: React.CSSProperties = {
     padding: '1px 4px',
-    borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+    borderBottom: '1px solid var(--border-color)',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    background: isDarkMode ? '#1a1a1a' : '#fafafa',
+    background: 'var(--background-toolbar)',
     flexShrink: 0,
     minHeight: 22,
   };
 
   const statusBarStyle: React.CSSProperties = {
-    borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-    background: isDarkMode ? '#1a1a1a' : '#fafafa',
+    borderTop: '1px solid var(--border-color)',
+    background: 'var(--background-toolbar)',
     padding: '1px 4px',
     display: 'flex',
     alignItems: 'center',
@@ -1055,7 +1055,7 @@ export const DataTable = memo(function DataTable({
   const dividerStyle: React.CSSProperties = {
     width: 1,
     height: 14,
-    background: isDarkMode ? '#434343' : '#d9d9d9',
+    background: 'var(--border-color)',
     margin: '0 4px',
   };
 
@@ -1065,7 +1065,7 @@ export const DataTable = memo(function DataTable({
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        background: isDarkMode ? '#141414' : '#fff',
+        background: 'var(--background-card)',
       }}
     >
       {/* 顶部工具栏 */}
@@ -1078,7 +1078,7 @@ export const DataTable = memo(function DataTable({
               style={{
                 height: 14,
                 margin: '0 4px',
-                background: isDarkMode ? '#434343' : '#d9d9d9',
+                background: 'var(--border-color)',
               }}
             />
           }
@@ -1220,15 +1220,15 @@ export const DataTable = memo(function DataTable({
         <div
           style={{
             padding: '4px 12px',
-            background: isDarkMode ? '#1a1a1a' : '#fafafa',
-            borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+            background: 'var(--background-toolbar)',
+            borderBottom: '1px solid var(--border-color)',
             flexShrink: 0,
             display: 'flex',
             gap: 12,
             alignItems: 'center',
           }}
         >
-          <span style={{ fontSize: 11, color: isDarkMode ? '#fff' : '#333', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
             WHERE
           </span>
           <SqlInput
@@ -1245,9 +1245,9 @@ export const DataTable = memo(function DataTable({
           />
           <Divider
             type="vertical"
-            style={{ height: 14, margin: 0, background: isDarkMode ? '#434343' : '#d9d9d9' }}
+            style={{ height: 14, margin: 0, background: 'var(--border-color)' }}
           />
-          <span style={{ fontSize: 11, color: isDarkMode ? '#fff' : '#333', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
             ORDER BY
           </span>
           <SqlInput
@@ -1269,13 +1269,13 @@ export const DataTable = memo(function DataTable({
         <div
           style={{
             padding: '8px 12px',
-            background: isDarkMode ? '#1a1a1a' : '#fafafa',
-            borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+            background: 'var(--background-toolbar)',
+            borderBottom: '1px solid var(--border-color)',
             flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 500, color: isDarkMode ? '#fff' : '#333' }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
               筛选条件
             </span>
             <div style={{ flex: 1 }} />
@@ -1658,7 +1658,7 @@ export const DataTable = memo(function DataTable({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: isDarkMode ? '#141414' : '#fff',
+              background: 'var(--background-card)',
             }}
           >
             <Spin size="large" description="加载中..." />
@@ -1721,12 +1721,12 @@ export const DataTable = memo(function DataTable({
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               fontSize: 11,
-              color: isDarkMode ? '#8c8c8c' : '#595959',
+              color: 'var(--text-secondary)',
               fontFamily: "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace",
               padding: '2px 6px',
-              background: isDarkMode ? '#0f0f0f' : '#f5f5f5',
+              background: 'var(--background-toolbar)',
               borderRadius: 3,
-              border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+              border: '1px solid var(--border-color)',
             }}
           >
             {currentSql}

@@ -72,7 +72,7 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
       }}>
         <Tabs
           activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as any)}
+          onChange={(key) => setActiveTab(key as 'messages' | 'errors' | 'explain')}
           size="small"
           style={{ flex: 1 }}
           tabBarStyle={{ margin: 0, borderBottom: 'none' }}
