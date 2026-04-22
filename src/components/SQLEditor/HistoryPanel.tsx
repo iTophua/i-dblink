@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { List, Tag, Typography, Empty, Button, Space, Popconfirm } from 'antd';
 import { SearchOutlined, ClearOutlined, ReloadOutlined, ClockCircleOutlined } from '@ant-design/icons';
-import { theme } from 'antd';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { GlobalInput } from '../GlobalInput';
 
 const { Text } = Typography;
@@ -22,8 +22,7 @@ interface HistoryPanelProps {
 
 export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-history' }: HistoryPanelProps) {
   const [searchText, setSearchText] = useState('');
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
 
   // 从 localStorage 加载历史记录
   const loadHistory = useCallback((): HistoryItem[] => {
@@ -87,21 +86,21 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
   }, [addHistory]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: isDarkMode ? '#1f1f1f' : '#fff' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--background-card)' }}>
       {/* 工具栏 */}
       <div style={{
         padding: '8px 12px',
-        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+        borderBottom: `1px solid var(--border)`,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: isDarkMode ? '#141414' : '#fafafa',
+        background: 'var(--background-toolbar)',
         flexShrink: 0,
       }}>
         <Space size="small">
           <GlobalInput
             placeholder="搜索 SQL..."
-            prefix={<SearchOutlined style={{ color: '#999' }} />}
+            prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             allowClear
@@ -144,10 +143,10 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
                   padding: '10px 16px',
                   cursor: 'pointer',
                   transition: 'background 0.2s',
-                  borderBottom: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
+                  borderBottom: `1px solid var(--border)`,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(24,144,255,0.1)' : '#f5f5f5';
+                  e.currentTarget.style.background = 'var(--row-hover-bg)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
@@ -158,7 +157,7 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
                     <ClockCircleOutlined
                       style={{
                         fontSize: 16,
-                        color: item.success ? '#52c41a' : '#ff4d4f',
+                        color: item.success ? 'var(--color-success)' : 'var(--color-error)',
                       }}
                     />
                   }
@@ -173,7 +172,7 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
                     </div>
                   }
                   description={
-                    <div style={{ fontSize: 11, color: '#999' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                       <Space size="small">
                         <span>{formatTime(item.timestamp)}</span>
                         {item.duration && <span>{item.duration}ms</span>}

@@ -115,8 +115,19 @@
   }
 }
 
-/* Smooth Transitions */
-* {
+/* Smooth Transitions - only on interactive elements, not global */
+button,
+input,
+select,
+textarea,
+.ant-btn,
+.ant-card,
+.ant-tabs-tab,
+.ant-tree-node-content-wrapper,
+.ant-dropdown-menu-item,
+.ant-tag,
+.toolbar-btn,
+.hover-scale {
   transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
@@ -160,11 +171,12 @@
 }
 
 .connection-tree .ant-tree-node-content-wrapper:hover {
-  background: rgba(24, 144, 255, 0.08);
+  background: var(--background-hover);
 }
 
-.connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
-  background: rgba(24, 144, 255, 0.15) !important;
+.connection-tree .ant-tree-node-content-wrapper.ant-tree-node-selected,
+.connection-tree .ant-tree-selected .ant-tree-node-content-wrapper {
+  background: var(--background-active) !important;
 }
 
 .connection-tree .ant-tree-switcher {
@@ -182,12 +194,12 @@
 }
 
 .ant-tabs-tab:hover {
-  color: #1890ff;
-  background: rgba(24, 144, 255, 0.05);
+  color: var(--color-primary);
+  background: var(--background-hover);
 }
 
 .ant-tabs-tab-active {
-  background: rgba(24, 144, 255, 0.1) !important;
+  background: var(--background-active) !important;
 }
 
 /* Button Enhancements */
@@ -218,14 +230,6 @@
   transform: translateY(-2px);
 }
 
-/* Input Enhancements */
-.ant-input:focus,
-.ant-input-focused,
-.ant-input:hover {
-  border-color: #1890ff;
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
-}
-
 /* Disable browser autocapitalize globally */
 input,
 textarea,
@@ -240,9 +244,9 @@ textarea,
 .skeleton-pulse {
   background: linear-gradient(
     90deg,
-    rgba(128, 128, 128, 0.08) 0%,
-    rgba(128, 128, 128, 0.15) 50%,
-    rgba(128, 128, 128, 0.08) 100%
+    var(--background-hover) 0%,
+    var(--background-active) 50%,
+    var(--background-hover) 100%
   );
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s ease-in-out infinite;
@@ -293,7 +297,7 @@ textarea,
 }
 
 .ant-dropdown-menu-item:hover {
-  background: rgba(24, 144, 255, 0.08);
+  background: var(--background-hover);
 }
 
 /* Tooltip Enhancements */
@@ -319,18 +323,18 @@ textarea,
 
 /* Empty State Enhancements */
 .ant-empty-description {
-  color: #8c8c8c;
+  color: var(--text-tertiary);
 }
 
 /* Data Table Row Hover */
 .ag-theme-alpine .ag-row:hover,
 .ag-theme-alpine-dark .ag-row:hover {
-  background-color: rgba(24, 144, 255, 0.05) !important;
+  background-color: var(--row-hover-bg, rgba(24, 144, 255, 0.05)) !important;
 }
 
 .ag-theme-alpine .ag-row-selected,
 .ag-theme-alpine-dark .ag-row-selected {
-  background-color: rgba(24, 144, 255, 0.1) !important;
+  background-color: var(--row-selected-bg, rgba(24, 144, 255, 0.1)) !important;
 }
 
 /* Status Bar Enhancements */
@@ -351,7 +355,7 @@ textarea,
   left: 50%;
   width: 0;
   height: 0;
-  background: rgba(24, 144, 255, 0.1);
+  background: var(--background-hover);
   border-radius: 50%;
   transform: translate(-50%, -50%);
   transition: width 0.3s ease, height 0.3s ease;
@@ -383,17 +387,17 @@ textarea,
 }
 
 .connection-status-dot.connected {
-  background: #52c41a;
+  background: var(--color-success);
   animation: pulseGlow 2s ease-in-out infinite;
 }
 
 .connection-status-dot.connecting {
-  background: #faad14;
+  background: var(--color-warning);
   animation: pulse 1s ease-in-out infinite;
 }
 
 .connection-status-dot.error {
-  background: #ff4d4f;
+  background: var(--color-error);
   animation: shake 0.5s ease-in-out;
 }
 

@@ -9,7 +9,6 @@ import {
   message,
   Modal,
   Form,
-  theme,
   Tag,
   Popconfirm,
   Select,
@@ -39,6 +38,7 @@ import {
   UpOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
+import { useThemeColors } from '../hooks/useThemeColors';
 import type { ColumnInfo } from '../types/api';
 
 interface FilterCondition {
@@ -146,8 +146,8 @@ export const DataTable = memo(function DataTable({
     onDirtyChangeRef.current?.(hasUnsavedChanges);
   }, [hasUnsavedChanges]);
 
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
+  const isDarkMode = tc.isDark;
 
   const { getColumns, executeQuery } = useDatabase();
   const loadingRef = useRef(false);
@@ -1321,7 +1321,7 @@ export const DataTable = memo(function DataTable({
                 >
                   {cond.isGroupStart && (
                     <span
-                      style={{ fontSize: 14, fontWeight: 'bold', color: '#722ed1', marginRight: 4 }}
+                      style={{ fontSize: 14, fontWeight: 'bold', color: 'var(--color-info)', marginRight: 4 }}
                     >
                       (
                     </span>
@@ -1393,7 +1393,7 @@ export const DataTable = memo(function DataTable({
                       )}
                       {['isNull', 'isNotNull'].includes(cond.operator) && (
                         <span
-                          style={{ flex: 1, fontSize: 11, color: isDarkMode ? '#8c8c8c' : '#666' }}
+                          style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)' }}
                         >
                           —
                         </span>
@@ -1402,7 +1402,7 @@ export const DataTable = memo(function DataTable({
                   )}
                   {cond.isGroupEnd && (
                     <span
-                      style={{ fontSize: 14, fontWeight: 'bold', color: '#722ed1', marginLeft: 4 }}
+                      style={{ fontSize: 14, fontWeight: 'bold', color: 'var(--color-info)', marginLeft: 4 }}
                     >
                       )
                     </span>
@@ -1425,7 +1425,7 @@ export const DataTable = memo(function DataTable({
                           });
                           setFilterConditions(newConditions);
                         }}
-                        style={{ fontSize: 10, padding: '0 2px', height: 16, color: '#1890ff' }}
+                        style={{ fontSize: 10, padding: '0 2px', height: 16, color: 'var(--color-primary)' }}
                       >
                         +同级
                       </Button>
@@ -1476,7 +1476,7 @@ export const DataTable = memo(function DataTable({
                           );
                           setFilterConditions(newConditions);
                         }}
-                        style={{ fontSize: 10, padding: '0 2px', height: 16, color: '#722ed1' }}
+                        style={{ fontSize: 10, padding: '0 2px', height: 16, color: 'var(--color-info)' }}
                       >
                         +括号
                       </Button>
@@ -1523,7 +1523,7 @@ export const DataTable = memo(function DataTable({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)',
+              background: tc.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)',
               zIndex: 10,
             }}
           >
@@ -1761,7 +1761,7 @@ export const DataTable = memo(function DataTable({
           <span
             style={{
               fontSize: 10,
-              color: isDarkMode ? '#8c8c8c' : '#595959',
+              color: 'var(--text-tertiary)',
               whiteSpace: 'nowrap',
             }}
           >
@@ -1788,6 +1788,8 @@ export const DataTable = memo(function DataTable({
         okText="保存"
         cancelText="取消"
         destroyOnHidden
+        transitionName=""
+        maskTransitionName=""
       >
         <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
           {columns.map((col) => (
@@ -1796,8 +1798,8 @@ export const DataTable = memo(function DataTable({
               label={
                 <span>
                   {col.column_name}
-                  {!col.is_nullable && <span style={{ color: '#ff4d4f' }}> *</span>}
-                  <span style={{ fontSize: 12, color: '#999', marginLeft: 8 }}>
+                  {!col.is_nullable && <span style={{ color: 'var(--color-error)' }}> *</span>}
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
                     {col.data_type}
                   </span>
                 </span>
@@ -1820,6 +1822,8 @@ export const DataTable = memo(function DataTable({
         okText="保存"
         cancelText="取消"
         destroyOnHidden
+        transitionName=""
+        maskTransitionName=""
       >
         <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
           {columns.map((col) => (
@@ -1833,7 +1837,7 @@ export const DataTable = memo(function DataTable({
                       主键
                     </Tag>
                   )}
-                  <span style={{ fontSize: 12, color: '#999', marginLeft: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
                     {col.data_type}
                   </span>
                 </span>

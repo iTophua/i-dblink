@@ -411,7 +411,7 @@ pub async fn connect_database(
     pool.validate().await?;
 
     // 性能优化：使用 RwLock 的写锁（write().await）
-    let _ = connections.write().await.add(connection_id, pool);
+    connections.write().await.add(connection_id, pool).await;
 
     tracing::info!("Connected successfully");
     Ok(true)

@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons';
 import { useAppStore } from '../stores/appStore';
 import { useDatabase } from '../hooks/useApi';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 // View mode storage key
 const VIEW_MODE_STORAGE_KEY = 'tablelist-viewmode';
@@ -65,12 +66,10 @@ const TableGridCard = React.memo(function TableGridCard({
   table,
   selected,
   onClick,
-  isDarkMode,
 }: {
   table: TableData;
   selected: boolean;
   onClick: () => void;
-  isDarkMode: boolean;
 }) {
   return (
     <div
@@ -83,16 +82,12 @@ const TableGridCard = React.memo(function TableGridCard({
         cursor: 'pointer',
         borderRadius: 3,
         userSelect: 'none',
-        background: selected
-          ? isDarkMode
-            ? 'rgba(24,144,255,0.2)'
-            : 'rgba(24,144,255,0.1)'
-          : 'transparent',
+        background: selected ? 'var(--row-selected-bg)' : 'transparent',
         transition: 'background 0.2s',
       }}
       onMouseEnter={(e) => {
         if (!selected) {
-          e.currentTarget.style.background = isDarkMode ? '#1a1a1a' : '#f5f5f5';
+          e.currentTarget.style.background = 'var(--background-hover)';
         }
       }}
       onMouseLeave={(e) => {
@@ -102,9 +97,9 @@ const TableGridCard = React.memo(function TableGridCard({
       }}
     >
       {table.table_type === 'VIEW' ? (
-        <EyeOutlined style={{ fontSize: 14, color: '#722ed1', flexShrink: 0 }} />
+        <EyeOutlined style={{ fontSize: 14, color: 'var(--db-color-sqlserver)', flexShrink: 0 }} />
       ) : (
-        <TableOutlined style={{ fontSize: 14, color: '#52c41a', flexShrink: 0 }} />
+        <TableOutlined style={{ fontSize: 14, color: 'var(--color-success)', flexShrink: 0 }} />
       )}
       <span
         title={table.table_name}
@@ -126,7 +121,6 @@ const TableGridCard = React.memo(function TableGridCard({
   return (
     prevProps.table === nextProps.table &&
     prevProps.selected === nextProps.selected &&
-    prevProps.isDarkMode === nextProps.isDarkMode &&
     prevProps.onClick === nextProps.onClick
   );
 });
@@ -136,12 +130,10 @@ const TableRow = React.memo(function TableRow({
   table,
   selected,
   onClick,
-  isDarkMode,
 }: {
   table: TableData;
   selected: boolean;
   onClick: () => void;
-  isDarkMode: boolean;
 }) {
   const rowCount = table.row_count != null ? table.row_count.toLocaleString() : '-';
   const createTime = table.create_time ? new Date(table.create_time).toLocaleDateString() : '-';
@@ -157,17 +149,13 @@ const TableRow = React.memo(function TableRow({
         alignItems: 'center',
         cursor: 'pointer',
         userSelect: 'none',
-        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
-        background: selected
-          ? isDarkMode
-            ? 'rgba(24,144,255,0.2)'
-            : 'rgba(24,144,255,0.1)'
-          : 'transparent',
+        borderBottom: '1px solid var(--border)',
+        background: selected ? 'var(--row-selected-bg)' : 'transparent',
         transition: 'background 0.2s',
       }}
       onMouseEnter={(e) => {
         if (!selected) {
-          e.currentTarget.style.background = isDarkMode ? '#1f1f1f' : '#f5f5f5';
+          e.currentTarget.style.background = 'var(--background-hover)';
         }
       }}
       onMouseLeave={(e) => {
@@ -177,30 +165,30 @@ const TableRow = React.memo(function TableRow({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <TableOutlined style={{ color: '#52c41a', flexShrink: 0, fontSize: 12 }} />
+        <TableOutlined style={{ color: 'var(--color-success)', flexShrink: 0, fontSize: 12 }} />
         <span title={table.table_name} style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none' }}>
           {table.table_name}
         </span>
       </div>
       <div style={{ minWidth: 0, paddingRight: 8, overflow: 'hidden' }}>
-        <span title={table.comment} style={{ fontSize: 11, color: table.comment ? '#999' : '#ccc', userSelect: 'none', WebkitUserSelect: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+        <span title={table.comment} style={{ fontSize: 11, color: table.comment ? 'var(--text-tertiary)' : 'var(--text-disabled)', userSelect: 'none', WebkitUserSelect: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
           {table.comment || '-'}
         </span>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 11, color: '#999', userSelect: 'none', WebkitUserSelect: 'none' }}>{rowCount}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{rowCount}</span>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 11, color: '#999', userSelect: 'none', WebkitUserSelect: 'none' }}>{table.data_size || '-'}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{table.data_size || '-'}</span>
       </div>
       <div style={{ textAlign: 'center' }}>
-        <span style={{ fontSize: 10, color: '#666', userSelect: 'none', WebkitUserSelect: 'none' }}>{table.engine || '-'}</span>
+        <span style={{ fontSize: 10, color: 'var(--text-secondary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{table.engine || '-'}</span>
       </div>
       <div>
-        <span title={table.create_time} style={{ fontSize: 10, color: '#999', userSelect: 'none', WebkitUserSelect: 'none' }}>{createTime}</span>
+        <span title={table.create_time} style={{ fontSize: 10, color: 'var(--text-tertiary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{createTime}</span>
       </div>
       <div>
-        <span title={table.update_time} style={{ fontSize: 10, color: '#999', userSelect: 'none', WebkitUserSelect: 'none' }}>{updateTime}</span>
+        <span title={table.update_time} style={{ fontSize: 10, color: 'var(--text-tertiary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{updateTime}</span>
       </div>
     </div>
   );
@@ -208,25 +196,23 @@ const TableRow = React.memo(function TableRow({
   return (
     prevProps.table === nextProps.table &&
     prevProps.selected === nextProps.selected &&
-    prevProps.isDarkMode === nextProps.isDarkMode &&
     prevProps.onClick === nextProps.onClick
   );
 });
 
 // List header component
-function ListHeader({ isDarkMode }: { isDarkMode: boolean }) {
-  const headerBg = isDarkMode ? '#1a1a1a' : '#fafafa';
+function ListHeader() {
   return (
     <div
       style={{
         display: 'grid',
         gridTemplateColumns: '400px 200px 80px 80px 70px 130px 130px',
         padding: '6px 12px',
-        background: headerBg,
-        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+        background: 'var(--header-bg)',
+        borderBottom: '1px solid var(--border)',
         fontWeight: 500,
         fontSize: 11,
-        color: isDarkMode ? '#999' : '#666',
+        color: 'var(--text-tertiary)',
         position: 'sticky',
         top: 0,
         zIndex: 1,
@@ -260,17 +246,7 @@ function TableListComponent({
   const [searchText, setSearchText] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(getInitialViewMode);
   const [localLoading, setLocalLoading] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return document.documentElement.getAttribute('data-theme') === 'dark';
-  });
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(document.documentElement.getAttribute('data-theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
-  }, []);
+  const tc = useThemeColors();
 
   const tableDataCache = useAppStore((state) => state.tableDataCache);
   const { getTables } = useDatabase();
@@ -377,10 +353,9 @@ function TableListComponent({
           table={table}
           selected={selectedRow === table.table_name}
           onClick={() => handleTableClickRef.current(table.table_name)}
-          isDarkMode={isDarkMode}
         />
       )),
-    [filteredTables, selectedRow, isDarkMode]
+    [filteredTables, selectedRow]
   );
 
   const tableGridItems = useMemo(
@@ -391,14 +366,10 @@ function TableListComponent({
           table={table}
           selected={selectedRow === table.table_name}
           onClick={() => handleTableClickRef.current(table.table_name)}
-          isDarkMode={isDarkMode}
         />
       )),
-    [filteredTables, selectedRow, isDarkMode]
+    [filteredTables, selectedRow]
   );
-
-  const toolbarBg = isDarkMode ? '#141414' : '#fafafa';
-  const borderColor = isDarkMode ? '#303030' : '#e8e8e8';
 
   return (
     <div
@@ -406,7 +377,7 @@ function TableListComponent({
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        background: isDarkMode ? '#1f1f1f' : '#fff',
+        background: 'var(--background-card)',
         overflow: 'hidden',
         minHeight: 0,
         height: '100%',
@@ -416,9 +387,9 @@ function TableListComponent({
       <div
         style={{
           flexShrink: 0,
-          borderBottom: `1px solid ${borderColor}`,
+          borderBottom: '1px solid var(--border)',
           padding: '8px 12px',
-          background: toolbarBg,
+          background: 'var(--background-toolbar)',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
@@ -429,16 +400,16 @@ function TableListComponent({
           <Tooltip title="设计表" open={!selectedRow ? false : undefined}><span><Button icon={<EditOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => selectedRow && onTableDesign?.(selectedRow, database)} /></span></Tooltip>
           <Tooltip title="新增表"><span><Button icon={<PlusOutlined />} size="small" onClick={onTableNew} /></span></Tooltip>
           <Tooltip title="删除表" open={!selectedRow ? false : undefined}><span><Button icon={<DeleteOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => { if (selectedRow) { Modal.confirm({ title: '确认删除', content: `确定要删除表 "${selectedRow}" 吗？`, okText: '删除', okType: 'danger', onOk: () => onTableDelete?.(selectedRow, database) }); }}} /></span></Tooltip>
-          <div style={{ width: 1, height: 20, background: borderColor }} />
+          <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
           <Tooltip title="导入向导"><span><Button icon={<ImportOutlined />} size="small" onClick={onImport} /></span></Tooltip>
           <Tooltip title="导出向导"><span><Button icon={<ExportOutlined />} size="small" onClick={onExport} /></span></Tooltip>
-          <div style={{ width: 1, height: 20, background: borderColor }} />
+          <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
           <Tooltip title="刷新"><span><Button icon={<ReloadOutlined />} size="small" onClick={refreshTables} loading={loading} /></span></Tooltip>
         </Space>
 
         <GlobalInput
           placeholder="搜索表名或注释..."
-          prefix={<SearchOutlined style={{ color: '#999' }} />}
+          prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
           value={searchText}
           onChange={(e) => { const val = e.target.value; setSearchText(val); handleSearch(val); }}
           allowClear
@@ -473,7 +444,7 @@ function TableListComponent({
             }}
           >
             <Spin size="large" />
-            <div style={{ marginTop: 12, fontSize: 13, color: '#999' }}>加载中...</div>
+            <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>加载中...</div>
           </div>
         ) : filteredTables.length === 0 ? (
           <div
@@ -495,8 +466,8 @@ function TableListComponent({
             <Empty description={searchText ? "未找到匹配的表" : "暂无表"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
           </div>
         ) : viewMode === 'list' ? (
-          <div style={{ background: isDarkMode ? '#1f1f1f' : '#fff' }}>
-            <ListHeader isDarkMode={isDarkMode} />
+          <div style={{ background: 'var(--background-card)' }}>
+            <ListHeader />
             {tableRowItems}
           </div>
         ) : (

@@ -156,6 +156,8 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       onCancel={handleCancel}
       confirmLoading={saving}
       width={600}
+      transitionName=""
+      maskTransitionName=""
       styles={{ body: { padding: '12px 16px' } }}
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -350,7 +352,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   </Space.Compact>
                 </Form.Item>
 
-                <Space direction="vertical" style={{ color: '#999', fontSize: 12 }}>
+                <Space direction="vertical" style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                   <span>💡 SSL 配置用于加密客户端与服务器之间的数据传输</span>
                 </Space>
               </Form>
@@ -406,7 +408,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   </Space.Compact>
                 </Form.Item>
 
-                <Space direction="vertical" style={{ color: '#999', fontSize: 12 }}>
+                <Space direction="vertical" style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                   <span>💡 SSH 隧道用于通过安全的 SSH 连接访问数据库</span>
                 </Space>
               </Form>
@@ -449,7 +451,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   </Select>
                 </Form.Item>
 
-                <Space direction="vertical" style={{ color: '#999', fontSize: 12, marginTop: 8 }}>
+                <Space direction="vertical" style={{ color: 'var(--text-tertiary)', fontSize: 12, marginTop: 8 }}>
                   <span>💡 高级配置用于优化连接性能和字符编码</span>
                 </Space>
               </Form>

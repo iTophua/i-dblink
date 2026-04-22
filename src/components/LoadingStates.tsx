@@ -1,5 +1,6 @@
 import React from 'react';
-import { Skeleton, Card, Space, Typography, Empty, Button, theme } from 'antd';
+import { Skeleton, Card, Space, Typography, Empty, Button } from 'antd';
+import { useThemeColors } from '../hooks/useThemeColors';
 import {
   DatabaseOutlined,
   TableOutlined,
@@ -37,8 +38,7 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
   secondaryAction,
   tips,
 }) => {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
 
   return (
     <div
@@ -57,17 +57,15 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
           width: 80,
           height: 80,
           borderRadius: '50%',
-          background: isDarkMode
-            ? 'linear-gradient(135deg, #177ddc20 0%, #177ddc10 100%)'
-            : 'linear-gradient(135deg, #1890ff20 0%, #1890ff10 100%)',
+          background: 'linear-gradient(135deg, var(--row-hover-bg) 0%, var(--background-card) 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 20,
-          border: `2px solid ${isDarkMode ? '#177ddc40' : '#1890ff40'}`,
+          border: `2px solid var(--row-selected-bg)`,
         }}
       >
-        {icon || <DatabaseOutlined style={{ fontSize: 36, color: '#1890ff' }} />}
+        {icon || <DatabaseOutlined style={{ fontSize: 36, color: 'var(--color-primary)' }} />}
       </div>
 
       <Title level={4} style={{ marginBottom: 8, textAlign: 'center' }}>
@@ -129,9 +127,9 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
           style={{
             marginTop: 32,
             padding: '16px 20px',
-            background: isDarkMode ? '#1a1a1a' : '#fafafa',
+            background: 'var(--background-toolbar)',
             borderRadius: 12,
-            border: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+            border: `1px solid var(--border)`,
             maxWidth: 500,
             width: '100%',
           }}
@@ -140,7 +138,7 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
             strong
             style={{
               fontSize: 12,
-              color: isDarkMode ? '#1890ff' : '#1890ff',
+              color: 'var(--color-primary)',
               display: 'block',
               marginBottom: 12,
             }}
@@ -151,7 +149,7 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
             style={{
               margin: 0,
               paddingLeft: 20,
-              color: isDarkMode ? '#8c8c8c' : '#595959',
+              color: 'var(--text-secondary)',
               fontSize: 13,
               lineHeight: 1.8,
             }}
@@ -167,8 +165,7 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
 };
 
 export const ConnectionTreeSkeleton: React.FC = () => {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
 
   return (
     <div style={{ padding: '12px 8px' }}>
@@ -183,7 +180,7 @@ export const ConnectionTreeSkeleton: React.FC = () => {
               size="small"
               style={{
                 width: 120 + Math.random() * 60,
-                background: isDarkMode ? '#262626' : '#f5f5f5',
+                background: 'var(--background-hover)',
               }}
             />
           </div>
@@ -206,7 +203,7 @@ export const ConnectionTreeSkeleton: React.FC = () => {
                 size="small"
                 style={{
                   width: 80 + Math.random() * 40,
-                  background: isDarkMode ? '#262626' : '#f5f5f5',
+                  background: 'var(--background-hover)',
                 }}
               />
             </div>
@@ -221,14 +218,13 @@ export const TableDataSkeleton: React.FC<{ rows?: number; cols?: number }> = ({
   rows = 5,
   cols = 4,
 }) => {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
 
   return (
     <div
       style={{
         padding: 16,
-        background: isDarkMode ? '#141414' : '#fff',
+        background: 'var(--background-card)',
         borderRadius: 8,
       }}
     >
@@ -238,7 +234,7 @@ export const TableDataSkeleton: React.FC<{ rows?: number; cols?: number }> = ({
           gap: 12,
           marginBottom: 16,
           paddingBottom: 12,
-          borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+          borderBottom: `1px solid var(--border)`,
         }}
       >
         {[...Array(cols)].map((_, i) => (
@@ -248,7 +244,7 @@ export const TableDataSkeleton: React.FC<{ rows?: number; cols?: number }> = ({
             size="small"
             style={{
               width: 80 + Math.random() * 60,
-              background: isDarkMode ? '#262626' : '#f5f5f5',
+              background: 'var(--background-hover)',
             }}
           />
         ))}
@@ -271,7 +267,7 @@ export const TableDataSkeleton: React.FC<{ rows?: number; cols?: number }> = ({
               size="small"
               style={{
                 width: 80 + Math.random() * 60,
-                background: isDarkMode ? '#262626' : '#f5f5f5',
+                background: 'var(--background-hover)',
               }}
             />
           ))}
@@ -282,14 +278,13 @@ export const TableDataSkeleton: React.FC<{ rows?: number; cols?: number }> = ({
 };
 
 export const QueryResultSkeleton: React.FC = () => {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
 
   return (
     <div
       style={{
         padding: 16,
-        background: isDarkMode ? '#141414' : '#fff',
+        background: 'var(--background-card)',
         borderRadius: 8,
       }}
     >
@@ -317,8 +312,7 @@ export const QuickStartGuide: React.FC<{
   onCreateConnection: () => void;
   onImportConnection: () => void;
 }> = ({ onCreateConnection, onImportConnection }) => {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
 
   return (
     <div
@@ -334,7 +328,7 @@ export const QuickStartGuide: React.FC<{
         onClick={onCreateConnection}
         style={{
           borderRadius: 12,
-          border: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+          border: `1px solid var(--border)`,
           transition: 'all 0.3s ease',
         }}
         styles={{
@@ -352,7 +346,7 @@ export const QuickStartGuide: React.FC<{
             width: 56,
             height: 56,
             borderRadius: 12,
-            background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
+            background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--primary-active) 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -373,7 +367,7 @@ export const QuickStartGuide: React.FC<{
         onClick={onImportConnection}
         style={{
           borderRadius: 12,
-          border: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+          border: `1px solid var(--border)`,
           transition: 'all 0.3s ease',
         }}
         styles={{
@@ -391,7 +385,7 @@ export const QuickStartGuide: React.FC<{
             width: 56,
             height: 56,
             borderRadius: 12,
-            background: 'linear-gradient(135deg, #52c41a 0%, #389e0d 100%)',
+            background: 'linear-gradient(135deg, var(--color-success) 0%, #389e0d 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -411,7 +405,7 @@ export const QuickStartGuide: React.FC<{
         hoverable
         style={{
           borderRadius: 12,
-          border: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+          border: `1px solid var(--border)`,
           transition: 'all 0.3s ease',
         }}
         styles={{
@@ -429,7 +423,7 @@ export const QuickStartGuide: React.FC<{
             width: 56,
             height: 56,
             borderRadius: 12,
-            background: 'linear-gradient(135deg, #faad14 0%, #d48806 100%)',
+            background: 'linear-gradient(135deg, var(--color-warning) 0%, #d48806 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

@@ -1,7 +1,7 @@
 import { MainLayout } from './components/MainLayout';
 import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSettingsStore } from './stores/settingsStore';
@@ -45,6 +45,12 @@ function App() {
   const effectiveMode: ThemeMode = themeSyncSystem
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : themeMode;
+
+  // 缓存主题配置，避免每次渲染都重新计算
+  const themeConfig = useMemo(() => 
+    getThemeConfig(themePreset, effectiveMode), 
+    [themePreset, effectiveMode]
+  );
 
   useEffect(() => {
     const unlisten = listen<string>('menu-action', (event) => {
@@ -90,38 +96,41 @@ function App() {
   useEffect(() => {
     if (!isHydrated) return;
 
-    const themeConfig = getThemeConfig(themePreset, effectiveMode);
     const root = document.documentElement;
 
-    Object.entries(themeConfig.colors).forEach(([key, value]) => {
-      root.style.setProperty(`--color-${key}`, value);
-    });
+    const applyVars = () => {
+      Object.entries(themeConfig.colors).forEach(([key, value]) => {
+        root.style.setProperty(`--color-${key}`, value);
+      });
 
-    Object.entries(themeConfig.neutralColors).forEach(([key, value]) => {
-      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-      root.style.setProperty(`--${cssKey}`, value);
-    });
+      Object.entries(themeConfig.neutralColors).forEach(([key, value]) => {
+        const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+        root.style.setProperty(`--${cssKey}`, value);
+      });
 
-    Object.entries(themeConfig.dbTypeColors).forEach(([key, value]) => {
-      root.style.setProperty(`--db-color-${key}`, value);
-    });
+      Object.entries(themeConfig.dbTypeColors).forEach(([key, value]) => {
+        root.style.setProperty(`--db-color-${key}`, value);
+      });
 
-    Object.entries(themeConfig.glassEffect).forEach(([key, value]) => {
-      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-      root.style.setProperty(`--glass-${cssKey}`, value);
-    });
+      Object.entries(themeConfig.glassEffect).forEach(([key, value]) => {
+        const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+        root.style.setProperty(`--glass-${cssKey}`, value);
+      });
 
-    Object.entries(themeConfig.focusStyle).forEach(([key, value]) => {
-      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-      if (typeof value === 'number') {
-        root.style.setProperty(`--focus-${cssKey}`, `${value}px`);
-      } else {
-        root.style.setProperty(`--focus-${cssKey}`, value);
-      }
-    });
+      Object.entries(themeConfig.focusStyle).forEach(([key, value]) => {
+        const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+        if (typeof value === 'number') {
+          root.style.setProperty(`--focus-${cssKey}`, `${value}px`);
+        } else {
+          root.style.setProperty(`--focus-${cssKey}`, value);
+        }
+      });
 
-    root.setAttribute('data-theme', effectiveMode);
-    root.setAttribute('data-theme-preset', themePreset);
+      root.setAttribute('data-theme', effectiveMode);
+      root.setAttribute('data-theme-preset', themePreset);
+    };
+
+    requestAnimationFrame(applyVars);
 
     const bgColor = themeConfig.neutralColors.windowBackground;
     const rgb = hexToRgb(bgColor);
@@ -148,7 +157,6 @@ function App() {
     return null;
   }
 
-  const themeConfig = getThemeConfig(themePreset, effectiveMode);
   const antdThemeConfig = {
     algorithm: effectiveMode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
     token: {
@@ -213,6 +221,28 @@ function App() {
       },
       Button: {
         primaryColor: '#ffffff',
+      },
+      Form: {
+        labelColor: themeConfig.neutralColors.textPrimary,
+        labelRequiredMarkColor: themeConfig.colors.error,
+        itemMarginBottom: 24,
+      },
+      Dropdown: {
+        colorBgElevated: themeConfig.neutralColors.backgroundCard,
+      },
+      Tooltip: {
+        colorBgSpotlight: themeConfig.neutralColors.backgroundCard,
+        colorTextLightSolid: themeConfig.neutralColors.textPrimary,
+      },
+      Tag: {
+        defaultBg: themeConfig.neutralColors.backgroundHover,
+        defaultColor: themeConfig.neutralColors.textPrimary,
+      },
+      Typography: {
+        colorTextHeading: themeConfig.neutralColors.textPrimary,
+        colorTextLabel: themeConfig.neutralColors.textSecondary,
+        colorTextDescription: themeConfig.neutralColors.textTertiary,
+        colorTextDisabled: themeConfig.neutralColors.textDisabled,
       },
     },
   };

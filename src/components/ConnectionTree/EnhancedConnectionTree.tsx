@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useMemo, useEffect, ChangeEvent, MouseEvent } from 'react';
-import { Tree, Spin, Dropdown, Badge, Modal, message, Tooltip, theme } from 'antd';
+import { Tree, Spin, Dropdown, Badge, Modal, message, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   DatabaseOutlined,
@@ -21,20 +21,20 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import type { Connection, ConnectionGroup } from '../../stores/appStore';
-import { useAppStore } from '../../stores/appStore';
 import type { TableInfo } from '../../types/api';
 import { GroupDialog } from './GroupDialog';
 import { EnhancedEmptyState } from '../LoadingStates';
 import { GlobalInput } from '../GlobalInput';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 const DB_TYPE_COLORS: Record<string, string> = {
-  mysql: '#1890ff',
-  postgresql: '#52c41a',
-  sqlite: '#faad14',
-  sqlserver: '#eb2f96',
-  oracle: '#fa8c16',
-  mariadb: '#13c2c2',
-  dameng: '#722ed1',
+  mysql: 'var(--db-color-mysql)',
+  postgresql: 'var(--db-color-postgresql)',
+  sqlite: 'var(--db-color-sqlite)',
+  sqlserver: 'var(--db-color-sqlserver)',
+  oracle: 'var(--db-color-oracle)',
+  mariadb: 'var(--db-color-mariadb)',
+  dameng: 'var(--db-color-dameng)',
 };
 
 const isBaseTable = (tableType: string): boolean => {
@@ -74,15 +74,11 @@ const TABLE_NODE_STYLE = {
   transition: 'all 0.2s ease',
 };
 
-const SELECTED_BG_DARK = 'rgba(24, 144, 255, 0.2)';
-const SELECTED_BG_LIGHT = 'rgba(24, 144, 255, 0.1)';
-
 interface QuickActionButtonProps {
   icon: React.ReactNode;
   tooltip: string;
   onClick: (e: React.MouseEvent) => void;
   visible: boolean;
-  isDarkMode: boolean;
 }
 
 const QuickActionButton: React.FC<QuickActionButtonProps> = ({
@@ -90,7 +86,6 @@ const QuickActionButton: React.FC<QuickActionButtonProps> = ({
   tooltip,
   onClick,
   visible,
-  isDarkMode,
 }) => {
   if (!visible) return null;
 
@@ -132,7 +127,6 @@ interface TableNodeProps {
   database: string;
   table: TableInfo;
   selectedTableId: string | null;
-  isDarkMode: boolean;
   onTableClick: (tableName: string, database: string) => void;
   onTableOpen: (tableName: string, database: string) => void;
   onContextMenu: (connId: string, tableName: string, database?: string) => MenuProps;
@@ -144,7 +138,6 @@ const TableNode = React.memo<TableNodeProps>(({
   database,
   table,
   selectedTableId,
-  isDarkMode,
   onTableClick,
   onTableOpen,
   onContextMenu,
@@ -153,9 +146,9 @@ const TableNode = React.memo<TableNodeProps>(({
   const [hovered, setHovered] = useState(false);
   const isSelected = selectedTableId === table.table_name;
   const backgroundColor = isSelected
-    ? isDarkMode ? SELECTED_BG_DARK : SELECTED_BG_LIGHT
+    ? 'var(--row-selected-bg)'
     : hovered
-    ? isDarkMode ? 'rgba(24, 144, 255, 0.1)' : 'rgba(24, 144, 255, 0.05)'
+    ? 'var(--row-hover-bg)'
     : 'transparent';
 
   return (
@@ -164,7 +157,7 @@ const TableNode = React.memo<TableNodeProps>(({
         style={{
           ...TABLE_NODE_STYLE,
           background: backgroundColor,
-          border: isSelected ? `1px solid ${isDarkMode ? '#177ddc60' : '#1890ff60'}` : '1px solid transparent',
+          border: isSelected ? '1px solid var(--row-selected-bg)' : '1px solid transparent',
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -177,7 +170,7 @@ const TableNode = React.memo<TableNodeProps>(({
           onTableOpen(table.table_name, database);
         }}
       >
-        <TableOutlined style={{ color: '#52c41a', fontSize: 11 }} />
+        <TableOutlined style={{ color: 'var(--color-success)', fontSize: 11 }} />
         <span style={{ fontSize: 12 }}>{table.table_name}</span>
         {hovered && (
           <>
@@ -185,7 +178,6 @@ const TableNode = React.memo<TableNodeProps>(({
               icon={<PlayCircleOutlined />}
               tooltip="新建查询"
               visible={hovered}
-              isDarkMode={isDarkMode}
               onClick={(e) => {
                 e.stopPropagation();
                 onNewQuery(connId);
@@ -195,7 +187,6 @@ const TableNode = React.memo<TableNodeProps>(({
               icon={<SwapOutlined style={{ fontSize: 10 }} />}
               tooltip="查看数据"
               visible={hovered}
-              isDarkMode={isDarkMode}
               onClick={(e) => {
                 e.stopPropagation();
                 onTableOpen(table.table_name, database);
@@ -213,7 +204,6 @@ interface ViewNodeProps {
   database: string;
   view: TableInfo;
   selectedTableId: string | null;
-  isDarkMode: boolean;
   onTableClick: (tableName: string, database: string) => void;
   onTableOpen: (tableName: string, database: string) => void;
   onContextMenu: (connId: string, tableName: string, database?: string) => MenuProps;
@@ -225,7 +215,6 @@ const ViewNode = React.memo<ViewNodeProps>(({
   database,
   view,
   selectedTableId,
-  isDarkMode,
   onTableClick,
   onTableOpen,
   onContextMenu,
@@ -234,9 +223,9 @@ const ViewNode = React.memo<ViewNodeProps>(({
   const [hovered, setHovered] = useState(false);
   const isSelected = selectedTableId === view.table_name;
   const backgroundColor = isSelected
-    ? isDarkMode ? SELECTED_BG_DARK : SELECTED_BG_LIGHT
+    ? 'var(--row-selected-bg)'
     : hovered
-    ? isDarkMode ? 'rgba(24, 144, 255, 0.1)' : 'rgba(24, 144, 255, 0.05)'
+    ? 'var(--row-hover-bg)'
     : 'transparent';
 
   return (
@@ -245,7 +234,7 @@ const ViewNode = React.memo<ViewNodeProps>(({
         style={{
           ...TABLE_NODE_STYLE,
           background: backgroundColor,
-          border: isSelected ? `1px solid ${isDarkMode ? '#177ddc60' : '#1890ff60'}` : '1px solid transparent',
+          border: isSelected ? '1px solid var(--row-selected-bg)' : '1px solid transparent',
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -258,14 +247,13 @@ const ViewNode = React.memo<ViewNodeProps>(({
           onTableOpen(view.table_name, database);
         }}
       >
-        <EyeOutlined style={{ color: '#1890ff', fontSize: 11 }} />
+        <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 11 }} />
         <span style={{ fontSize: 12 }}>{view.table_name}</span>
         {hovered && (
           <QuickActionButton
             icon={<PlayCircleOutlined />}
             tooltip="新建查询"
             visible={hovered}
-            isDarkMode={isDarkMode}
             onClick={(e) => {
               e.stopPropagation();
               onNewQuery(connId);
@@ -356,8 +344,7 @@ export function EnhancedConnectionTree({
   onDeleteGroup,
   onCreateConnection,
 }: ConnectionTreeProps) {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
@@ -901,13 +888,13 @@ export function EnhancedConnectionTree({
       const tablesNode = {
         key: tablesFolderKey,
         title: isLoading ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#999' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}>
             <Spin size="small" />
             <span>表 (加载中...)</span>
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <TableOutlined style={{ color: '#52c41a', fontSize: 12 }} />
+            <TableOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
             <span>表 ({tableItems.length})</span>
           </span>
         ),
@@ -916,7 +903,7 @@ export function EnhancedConnectionTree({
           ? [
               {
                 key: `init-tables::${connId}::${db.database}`,
-                title: <span style={{ color: '#999', fontSize: 11 }}>点击展开加载表...</span>,
+                title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>点击展开加载表...</span>,
                 isLeaf: true,
                 selectable: false,
               },
@@ -931,7 +918,6 @@ export function EnhancedConnectionTree({
                     database={db.database}
                     table={table}
                     selectedTableId={selectedTableId}
-                    isDarkMode={isDarkMode}
                     onTableClick={handleTableClick}
                     onTableOpen={onTableOpen}
                     onContextMenu={getTableMenu}
@@ -944,7 +930,7 @@ export function EnhancedConnectionTree({
               : [
                   {
                     key: `no-tables::${connId}::${db.database}`,
-                    title: <span style={{ color: '#999', fontSize: 11 }}>暂无表</span>,
+                    title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无表</span>,
                     isLeaf: true,
                     selectable: false,
                   },
@@ -954,13 +940,13 @@ export function EnhancedConnectionTree({
       const viewsNode = {
         key: viewsFolderKey,
         title: isLoading ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#999', userSelect: 'none' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)', userSelect: 'none' }}>
             <Spin size="small" />
             <span>视图 (加载中...)</span>
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-            <EyeOutlined style={{ color: '#1890ff', fontSize: 12 }} />
+            <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
             <span>视图 ({viewItems.length})</span>
           </span>
         ),
@@ -969,7 +955,7 @@ export function EnhancedConnectionTree({
           ? [
               {
                 key: `init-views::${connId}::${db.database}`,
-                title: <span style={{ color: '#999', fontSize: 11 }}>点击展开加载视图...</span>,
+                title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>点击展开加载视图...</span>,
                 isLeaf: true,
                 selectable: false,
               },
@@ -984,7 +970,6 @@ export function EnhancedConnectionTree({
                     database={db.database}
                     view={view}
                     selectedTableId={selectedTableId}
-                    isDarkMode={isDarkMode}
                     onTableClick={handleTableClick}
                     onTableOpen={onTableOpen}
                     onContextMenu={getViewMenu}
@@ -997,7 +982,7 @@ export function EnhancedConnectionTree({
               : [
                   {
                     key: `no-views::${connId}::${db.database}`,
-                    title: <span style={{ color: '#999', fontSize: 11 }}>暂无视图</span>,
+                    title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无视图</span>,
                     isLeaf: true,
                     selectable: false,
                   },
@@ -1008,7 +993,7 @@ export function EnhancedConnectionTree({
         key: `procedures::${connId}::${db.database}`,
         title: (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-            <ThunderboltOutlined style={{ color: '#faad14', fontSize: 12 }} />
+            <ThunderboltOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
             存储过程
           </span>
         ),
@@ -1017,7 +1002,7 @@ export function EnhancedConnectionTree({
         children: [
           {
             key: `no-procedures::${connId}::${db.database}`,
-            title: <span style={{ color: '#999', fontSize: 11 }}>暂无存储过程</span>,
+            title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无存储过程</span>,
             isLeaf: true,
             selectable: false,
           },
@@ -1028,7 +1013,7 @@ export function EnhancedConnectionTree({
         key: `functions::${connId}::${db.database}`,
         title: (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-            <FunctionOutlined style={{ color: '#722ed1', fontSize: 12 }} />
+            <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
             函数
           </span>
         ),
@@ -1037,7 +1022,7 @@ export function EnhancedConnectionTree({
         children: [
           {
             key: `no-functions::${connId}::${db.database}`,
-            title: <span style={{ color: '#999', fontSize: 11 }}>暂无函数</span>,
+            title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无函数</span>,
             isLeaf: true,
             selectable: false,
           },
@@ -1074,13 +1059,13 @@ export function EnhancedConnectionTree({
               >
                 <DatabaseOutlined
                   style={{
-                    color: db.loaded ? '#52c41a' : '#1890ff',
+                    color: db.loaded ? 'var(--color-success)' : 'var(--color-primary)',
                     fontSize: 12,
                   }}
                 />
                 <span
                   style={{
-                    color: db.loaded ? '#52c41a' : undefined,
+                    color: db.loaded ? 'var(--color-success)' : undefined,
                     fontWeight: db.loaded ? 500 : undefined,
                     userSelect: 'none',
                   }}
@@ -1146,7 +1131,7 @@ export function EnhancedConnectionTree({
               {getConnIcon(conn.db_type)}
               <span
                 style={{
-                  color: conn.status === 'connected' ? '#52c41a' : undefined,
+                  color: conn.status === 'connected' ? 'var(--color-success)' : undefined,
                   fontWeight: conn.status === 'connected' ? 500 : undefined,
                   userSelect: 'none',
                 }}
@@ -1160,7 +1145,7 @@ export function EnhancedConnectionTree({
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: '#52c41a',
+                      background: 'var(--color-success)',
                       animation: 'pulse 2s infinite',
                     }}
                   />
@@ -1173,14 +1158,14 @@ export function EnhancedConnectionTree({
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: '#faad14',
+                      background: 'var(--color-warning)',
                       animation: 'pulse 1s infinite',
                     }}
                   />
                 </Tooltip>
               )}
               {conn.database && (
-                <span style={{ color: '#999', fontSize: 11 }}>({conn.database})</span>
+                <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>({conn.database})</span>
               )}
             </div>
           </Dropdown>
@@ -1198,7 +1183,7 @@ export function EnhancedConnectionTree({
               : [
                   {
                     key: `loading::${conn.id}`,
-                    title: <span style={{ color: '#999', fontSize: 11 }}>暂无数据库</span>,
+                    title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无数据库</span>,
                     isLeaf: true,
                     selectable: false,
                   },
@@ -1294,7 +1279,6 @@ export function EnhancedConnectionTree({
     connectionDatabases,
     expandedKeys,
     selectedTableId,
-    isDarkMode,
     renamingKey,
     renameValue,
     handleTableClick,
@@ -1538,9 +1522,7 @@ export function EnhancedConnectionTree({
                   cursor: 'pointer',
                   background:
                     selectedId === conn.id
-                      ? isDarkMode
-                        ? 'rgba(24, 144, 255, 0.2)'
-                        : 'rgba(24, 144, 255, 0.1)'
+                      ? 'var(--row-selected-bg)'
                       : 'transparent',
                   display: 'flex',
                   alignItems: 'center',

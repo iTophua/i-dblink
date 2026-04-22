@@ -5,7 +5,7 @@
  */
 
 export type ThemeMode = 'light' | 'dark';
-export type ThemePreset = 'neonCyber' | 'midnightDeep' | 'forestDusk' | 'oceanBlue' | 'sunsetAurora' | 'nordicFrost';
+export type ThemePreset = 'neonCyber' | 'midnightDeep' | 'oceanBlue' | 'nordicFrost';
 
 export interface ThemeColorScheme {
   primary: string;
@@ -45,6 +45,14 @@ export interface NeutralColors {
   backgroundActive: string;
   mask: string;
   windowBackground: string;
+  // 语义扩展 — 数据密集场景专用
+  rowHoverBg: string;
+  rowSelectedBg: string;
+  rowStripeBg: string;
+  headerBg: string;
+  surfaceElevated: string;
+  scrollbarThumb: string;
+  scrollbarTrack: string;
 }
 
 export interface GlassEffect {
@@ -334,52 +342,73 @@ export const FOCUS_STYLES = {
 
 // ==================== 主题配色方案 ====================
 
-// 1. NeonCyber - 赛博朋克霓虹风格（深色主题为主）
-const NEON_CYBER_LIGHT = {
-  primary: '#00e5ff',
-  primaryHover: '#33ebff',
-  primaryActive: '#00b8cc',
-  primaryGradient: 'linear-gradient(135deg, #00e5ff 0%, #33ebff 100%)',
-  success: '#00ff55',
-  successHover: '#33ff77',
-  successActive: '#00cc44',
-  successGradient: 'linear-gradient(135deg, #00ff55 0%, #33ff77 100%)',
-  warning: '#ff00ff',
-  warningHover: '#ff33ff',
-  warningActive: '#cc00cc',
-  warningGradient: 'linear-gradient(135deg, #ff00ff 0%, #ff33ff 100%)',
-  error: '#ff3366',
-  errorHover: '#ff6699',
-  errorActive: '#cc2952',
-  errorGradient: 'linear-gradient(135deg, #ff3366 0%, #ff6699 100%)',
-  info: '#00e5ff',
-  infoHover: '#33ebff',
-  infoActive: '#00b8cc',
-  infoGradient: 'linear-gradient(135deg, #00e5ff 0%, #33ebff 100%)',
-};
+// 工厂函数：自动生成渐变
+function createGradient(from: string, to: string): string {
+  return `linear-gradient(135deg, ${from} 0%, ${to} 100%)`;
+}
 
-const NEON_CYBER_DARK = {
-  primary: '#00f5ff',
-  primaryHover: '#33f7ff',
-  primaryActive: '#00c4cc',
-  primaryGradient: 'linear-gradient(135deg, #00f5ff 0%, #33f7ff 100%)',
-  success: '#39ff14',
-  successHover: '#5fff3d',
-  successActive: '#2ecc0f',
-  successGradient: 'linear-gradient(135deg, #39ff14 0%, #5fff3d 100%)',
-  warning: '#ff00ff',
-  warningHover: '#ff33ff',
-  warningActive: '#cc00cc',
-  warningGradient: 'linear-gradient(135deg, #ff00ff 0%, #ff33ff 100%)',
-  error: '#ff3366',
-  errorHover: '#ff6699',
-  errorActive: '#cc2952',
-  errorGradient: 'linear-gradient(135deg, #ff3366 0%, #ff6699 100%)',
-  info: '#00f5ff',
-  infoHover: '#33f7ff',
-  infoActive: '#00c4cc',
-  infoGradient: 'linear-gradient(135deg, #00f5ff 0%, #33f7ff 100%)',
-};
+// 工厂函数：根据基础色值构建完整配色方案（自动生成渐变）
+function createColorScheme(base: {
+  primary: string; primaryHover: string; primaryActive: string;
+  success: string; successHover: string; successActive: string;
+  warning: string; warningHover: string; warningActive: string;
+  error: string; errorHover: string; errorActive: string;
+  info: string; infoHover: string; infoActive: string;
+}): ThemeColorScheme {
+  return {
+    ...base,
+    primaryGradient: createGradient(base.primary, base.primaryHover),
+    successGradient: createGradient(base.success, base.successHover),
+    warningGradient: createGradient(base.warning, base.warningHover),
+    errorGradient: createGradient(base.error, base.errorHover),
+    infoGradient: createGradient(base.info, base.infoHover),
+  };
+}
+
+// 工厂函数：根据主题名和色值构建完整主题配置（自动填充不变的共享配置）
+function createThemeConfig(
+  name: string,
+  description: string,
+  mode: ThemeMode,
+  colors: ThemeColorScheme,
+  neutralColors: NeutralColors,
+): ThemeConfig {
+  return {
+    name,
+    description,
+    mode,
+    colors,
+    neutralColors,
+    glassEffect: GLASS_EFFECTS[mode],
+    focusStyle: FOCUS_STYLES[mode],
+    dbTypeColors: DB_TYPE_COLORS,
+    typography: TYPOGRAPHY,
+    spacing: SPACING,
+    sizes: SIZES,
+    borderRadius: BORDER_RADIUS,
+    shadows: SHADOWS,
+    animation: ANIMATION,
+    breakpoints: BREAKPOINTS,
+    zIndex: Z_INDEX,
+  };
+}
+
+// 1. NeonCyber - 赛博朋克霓虹风格（深色主题为主）
+const NEON_CYBER_LIGHT = createColorScheme({
+  primary: '#00e5ff', primaryHover: '#33ebff', primaryActive: '#00b8cc',
+  success: '#00ff55', successHover: '#33ff77', successActive: '#00cc44',
+  warning: '#d946ff', warningHover: '#e879f9', warningActive: '#c026d3',
+  error: '#f43f5e', errorHover: '#fb7185', errorActive: '#e11d48',
+  info: '#00e5ff', infoHover: '#33ebff', infoActive: '#00b8cc',
+});
+
+const NEON_CYBER_DARK = createColorScheme({
+  primary: '#00f5ff', primaryHover: '#33f7ff', primaryActive: '#00c4cc',
+  success: '#39ff14', successHover: '#5fff3d', successActive: '#2ecc0f',
+  warning: '#e879f9', warningHover: '#f0abfc', warningActive: '#d946ff',
+  error: '#fb7185', errorHover: '#fda4af', errorActive: '#f43f5e',
+  info: '#00f5ff', infoHover: '#33f7ff', infoActive: '#00c4cc',
+});
 
 const NEON_CYBER_LIGHT_NEUTRAL: NeutralColors = {
   textPrimary: '#0a0a0f',
@@ -396,71 +425,55 @@ const NEON_CYBER_LIGHT_NEUTRAL: NeutralColors = {
   backgroundActive: '#00e5ff15',
   mask: 'rgba(0, 0, 0, 0.45)',
   windowBackground: '#f0f0f8',
+  rowHoverBg: 'rgba(0, 229, 255, 0.05)',
+  rowSelectedBg: 'rgba(0, 229, 255, 0.10)',
+  rowStripeBg: '#f8f8ff',
+  headerBg: '#e8e8f0',
+  surfaceElevated: '#ffffff',
+  scrollbarThumb: 'rgba(0, 0, 0, 0.25)',
+  scrollbarTrack: 'rgba(0, 0, 0, 0.04)',
 };
 
 const NEON_CYBER_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#e8e8ff',
-  textSecondary: '#a0a0c0',
-  textTertiary: '#707090',
-  textDisabled: '#505070',
-  border: '#2a2a4a',
+  textPrimary: '#f0f0ff',
+  textSecondary: '#b8b8e0',
+  textTertiary: '#8080b0',
+  textDisabled: '#585878',
+  border: '#404070',
   borderLight: '#1a1a3a',
-  borderDark: '#3a3a5a',
+  borderDark: '#505090',
   background: '#08080f',
-  backgroundCard: '#0d0d18',
-  backgroundToolbar: '#050508',
-  backgroundHover: '#12121f',
+  backgroundCard: '#14142a',
+  backgroundToolbar: '#101020',
+  backgroundHover: '#1c1c35',
   backgroundActive: '#00f5ff20',
   mask: 'rgba(0, 0, 0, 0.8)',
   windowBackground: '#08080f',
+  rowHoverBg: 'rgba(0, 245, 255, 0.15)',
+  rowSelectedBg: 'rgba(0, 245, 255, 0.24)',
+  rowStripeBg: '#1a1a32',
+  headerBg: '#1c1c35',
+  surfaceElevated: '#1f1f3d',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.25)',
+  scrollbarTrack: 'rgba(255, 255, 255, 0.04)',
 };
 
 // 2. MidnightDeep - 深夜深蓝风格
-const MIDNIGHT_DEEP_LIGHT = {
-  primary: '#6366f1',
-  primaryHover: '#818cf8',
-  primaryActive: '#4f46e5',
-  primaryGradient: 'linear-gradient(135deg, #6366f1 0%, #818cf8 100%)',
-  success: '#10b981',
-  successHover: '#34d399',
-  successActive: '#059669',
-  successGradient: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
-  warning: '#f59e0b',
-  warningHover: '#fbbf24',
-  warningActive: '#d97706',
-  warningGradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-  error: '#ef4444',
-  errorHover: '#f87171',
-  errorActive: '#dc2626',
-  errorGradient: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-  info: '#6366f1',
-  infoHover: '#818cf8',
-  infoActive: '#4f46e5',
-  infoGradient: 'linear-gradient(135deg, #6366f1 0%, #818cf8 100%)',
-};
+const MIDNIGHT_DEEP_LIGHT = createColorScheme({
+  primary: '#6366f1', primaryHover: '#818cf8', primaryActive: '#4f46e5',
+  success: '#10b981', successHover: '#34d399', successActive: '#059669',
+  warning: '#f59e0b', warningHover: '#fbbf24', warningActive: '#d97706',
+  error: '#ef4444', errorHover: '#f87171', errorActive: '#dc2626',
+  info: '#6366f1', infoHover: '#818cf8', infoActive: '#4f46e5',
+});
 
-const MIDNIGHT_DEEP_DARK = {
-  primary: '#818cf8',
-  primaryHover: '#a5b4fc',
-  primaryActive: '#6366f1',
-  primaryGradient: 'linear-gradient(135deg, #818cf8 0%, #a5b4fc 100%)',
-  success: '#34d399',
-  successHover: '#6ee7b7',
-  successActive: '#10b981',
-  successGradient: 'linear-gradient(135deg, #34d399 0%, #6ee7b7 100%)',
-  warning: '#fbbf24',
-  warningHover: '#fcd34d',
-  warningActive: '#f59e0b',
-  warningGradient: 'linear-gradient(135deg, #fbbf24 0%, #fcd34d 100%)',
-  error: '#f87171',
-  errorHover: '#fca5a5',
-  errorActive: '#ef4444',
-  errorGradient: 'linear-gradient(135deg, #f87171 0%, #fca5a5 100%)',
-  info: '#818cf8',
-  infoHover: '#a5b4fc',
-  infoActive: '#6366f1',
-  infoGradient: 'linear-gradient(135deg, #818cf8 0%, #a5b4fc 100%)',
-};
+const MIDNIGHT_DEEP_DARK = createColorScheme({
+  primary: '#818cf8', primaryHover: '#a5b4fc', primaryActive: '#6366f1',
+  success: '#34d399', successHover: '#6ee7b7', successActive: '#10b981',
+  warning: '#fbbf24', warningHover: '#fcd34d', warningActive: '#f59e0b',
+  error: '#f87171', errorHover: '#fca5a5', errorActive: '#ef4444',
+  info: '#818cf8', infoHover: '#a5b4fc', infoActive: '#6366f1',
+});
 
 const MIDNIGHT_DEEP_LIGHT_NEUTRAL: NeutralColors = {
   textPrimary: '#1e293b',
@@ -477,6 +490,13 @@ const MIDNIGHT_DEEP_LIGHT_NEUTRAL: NeutralColors = {
   backgroundActive: '#6366f115',
   mask: 'rgba(0, 0, 0, 0.5)',
   windowBackground: '#f8fafc',
+  rowHoverBg: 'rgba(99, 102, 241, 0.05)',
+  rowSelectedBg: 'rgba(99, 102, 241, 0.10)',
+  rowStripeBg: '#fafbff',
+  headerBg: '#f1f5f9',
+  surfaceElevated: '#ffffff',
+  scrollbarThumb: 'rgba(0, 0, 0, 0.25)',
+  scrollbarTrack: 'rgba(0, 0, 0, 0.04)',
 };
 
 const MIDNIGHT_DEEP_DARK_NEUTRAL: NeutralColors = {
@@ -494,135 +514,31 @@ const MIDNIGHT_DEEP_DARK_NEUTRAL: NeutralColors = {
   backgroundActive: '#6366f130',
   mask: 'rgba(0, 0, 0, 0.75)',
   windowBackground: '#020617',
+  rowHoverBg: 'rgba(129, 140, 248, 0.15)',
+  rowSelectedBg: 'rgba(129, 140, 248, 0.24)',
+  rowStripeBg: '#131c2e',
+  headerBg: '#131c2e',
+  surfaceElevated: '#1a2438',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.25)',
+  scrollbarTrack: 'rgba(255, 255, 255, 0.04)',
 };
 
-// 3. ForestDusk - 森林暮光风格
-const FOREST_DUSK_LIGHT = {
-  primary: '#22c55e',
-  primaryHover: '#4ade80',
-  primaryActive: '#16a34a',
-  primaryGradient: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-  success: '#84cc16',
-  successHover: '#a3e635',
-  successActive: '#65a30d',
-  successGradient: 'linear-gradient(135deg, #84cc16 0%, #a3e635 100%)',
-  warning: '#f97316',
-  warningHover: '#fb923c',
-  warningActive: '#ea580c',
-  warningGradient: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
-  error: '#ef4444',
-  errorHover: '#f87171',
-  errorActive: '#dc2626',
-  errorGradient: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-  info: '#06b6d4',
-  infoHover: '#22d3ee',
-  infoActive: '#0891b2',
-  infoGradient: 'linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)',
-};
+// 3. OceanBlue - 海洋蓝色风格
+const OCEAN_BLUE_LIGHT = createColorScheme({
+  primary: '#0ea5e9', primaryHover: '#38bdf8', primaryActive: '#0284c7',
+  success: '#14b8a6', successHover: '#2dd4bf', successActive: '#0d9488',
+  warning: '#f59e0b', warningHover: '#fbbf24', warningActive: '#d97706',
+  error: '#f43f5e', errorHover: '#fb7185', errorActive: '#e11d48',
+  info: '#0ea5e9', infoHover: '#38bdf8', infoActive: '#0284c7',
+});
 
-const FOREST_DUSK_DARK = {
-  primary: '#4ade80',
-  primaryHover: '#86efac',
-  primaryActive: '#22c55e',
-  primaryGradient: 'linear-gradient(135deg, #4ade80 0%, #86efac 100%)',
-  success: '#a3e635',
-  successHover: '#d9f99d',
-  successActive: '#84cc16',
-  successGradient: 'linear-gradient(135deg, #a3e635 0%, #d9f99d 100%)',
-  warning: '#fb923c',
-  warningHover: '#fdba74',
-  warningActive: '#f97316',
-  warningGradient: 'linear-gradient(135deg, #fb923c 0%, #fdba74 100%)',
-  error: '#f87171',
-  errorHover: '#fca5a5',
-  errorActive: '#ef4444',
-  errorGradient: 'linear-gradient(135deg, #f87171 0%, #fca5a5 100%)',
-  info: '#22d3ee',
-  infoHover: '#67e8f9',
-  infoActive: '#06b6d4',
-  infoGradient: 'linear-gradient(135deg, #22d3ee 0%, #67e8f9 100%)',
-};
-
-const FOREST_DUSK_LIGHT_NEUTRAL: NeutralColors = {
-  textPrimary: '#14532d',
-  textSecondary: '#166534',
-  textTertiary: '#22c55e',
-  textDisabled: '#86efac',
-  border: '#bbf7d0',
-  borderLight: '#dcfce7',
-  borderDark: '#86efac',
-  background: '#f0fdf4',
-  backgroundCard: '#ffffff',
-  backgroundToolbar: '#dcfce7',
-  backgroundHover: '#dcfce7',
-  backgroundActive: '#22c55e15',
-  mask: 'rgba(0, 0, 0, 0.5)',
-  windowBackground: '#f0fdf4',
-};
-
-const FOREST_DUSK_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#ecfdf5',
-  textSecondary: '#86efac',
-  textTertiary: '#4ade80',
-  textDisabled: '#22c55e',
-  border: '#14532d',
-  borderLight: '#0f172a',
-  borderDark: '#166534',
-  background: '#052e16',
-  backgroundCard: '#0a1f0d',
-  backgroundToolbar: '#041a0a',
-  backgroundHover: '#0f2816',
-  backgroundActive: '#22c55e25',
-  mask: 'rgba(0, 0, 0, 0.7)',
-  windowBackground: '#052e16',
-};
-
-// 4. OceanBlue - 海洋蓝色风格
-const OCEAN_BLUE_LIGHT = {
-  primary: '#0ea5e9',
-  primaryHover: '#38bdf8',
-  primaryActive: '#0284c7',
-  primaryGradient: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)',
-  success: '#14b8a6',
-  successHover: '#2dd4bf',
-  successActive: '#0d9488',
-  successGradient: 'linear-gradient(135deg, #14b8a6 0%, #2dd4bf 100%)',
-  warning: '#f59e0b',
-  warningHover: '#fbbf24',
-  warningActive: '#d97706',
-  warningGradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-  error: '#f43f5e',
-  errorHover: '#fb7185',
-  errorActive: '#e11d48',
-  errorGradient: 'linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)',
-  info: '#0ea5e9',
-  infoHover: '#38bdf8',
-  infoActive: '#0284c7',
-  infoGradient: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)',
-};
-
-const OCEAN_BLUE_DARK = {
-  primary: '#38bdf8',
-  primaryHover: '#7dd3fc',
-  primaryActive: '#0ea5e9',
-  primaryGradient: 'linear-gradient(135deg, #38bdf8 0%, #7dd3fc 100%)',
-  success: '#2dd4bf',
-  successHover: '#5eead4',
-  successActive: '#14b8a6',
-  successGradient: 'linear-gradient(135deg, #2dd4bf 0%, #5eead4 100%)',
-  warning: '#fbbf24',
-  warningHover: '#fcd34d',
-  warningActive: '#f59e0b',
-  warningGradient: 'linear-gradient(135deg, #fbbf24 0%, #fcd34d 100%)',
-  error: '#fb7185',
-  errorHover: '#fda4af',
-  errorActive: '#f43f5e',
-  errorGradient: 'linear-gradient(135deg, #fb7185 0%, #fda4af 100%)',
-  info: '#38bdf8',
-  infoHover: '#7dd3fc',
-  infoActive: '#0ea5e9',
-  infoGradient: 'linear-gradient(135deg, #38bdf8 0%, #7dd3fc 100%)',
-};
+const OCEAN_BLUE_DARK = createColorScheme({
+  primary: '#38bdf8', primaryHover: '#7dd3fc', primaryActive: '#0ea5e9',
+  success: '#2dd4bf', successHover: '#5eead4', successActive: '#14b8a6',
+  warning: '#fbbf24', warningHover: '#fcd34d', warningActive: '#f59e0b',
+  error: '#fb7185', errorHover: '#fda4af', errorActive: '#f43f5e',
+  info: '#38bdf8', infoHover: '#7dd3fc', infoActive: '#0ea5e9',
+});
 
 const OCEAN_BLUE_LIGHT_NEUTRAL: NeutralColors = {
   textPrimary: '#0c4a6e',
@@ -639,152 +555,55 @@ const OCEAN_BLUE_LIGHT_NEUTRAL: NeutralColors = {
   backgroundActive: '#0ea5e915',
   mask: 'rgba(0, 0, 0, 0.5)',
   windowBackground: '#f0f9ff',
+  rowHoverBg: 'rgba(14, 165, 233, 0.05)',
+  rowSelectedBg: 'rgba(14, 165, 233, 0.10)',
+  rowStripeBg: '#f5fbff',
+  headerBg: '#e0f2fe',
+  surfaceElevated: '#ffffff',
+  scrollbarThumb: 'rgba(0, 0, 0, 0.25)',
+  scrollbarTrack: 'rgba(0, 0, 0, 0.04)',
 };
 
 const OCEAN_BLUE_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#f0f9ff',
-  textSecondary: '#8ed4f8',
-  textTertiary: '#5ab8e8',
-  textDisabled: '#38bdf8',
-  border: '#0c4a6e',
-  borderLight: '#082f49',
-  borderDark: '#0369a1',
+  textPrimary: '#f5fbff',
+  textSecondary: '#b0e3fc',
+  textTertiary: '#7ecaf5',
+  textDisabled: '#3aa8e0',
+  border: '#1a7ab0',
+  borderLight: '#0e507a',
+  borderDark: '#0c7bc8',
   background: '#0c4a6e',
-  backgroundCard: '#0a3d5c',
-  backgroundToolbar: '#063549',
-  backgroundHover: '#0c4a6e',
+  backgroundCard: '#11557d',
+  backgroundToolbar: '#0a3d5c',
+  backgroundHover: '#1470a0',
   backgroundActive: '#0ea5e920',
   mask: 'rgba(0, 0, 0, 0.6)',
   windowBackground: '#0c4a6e',
+  rowHoverBg: 'rgba(56, 189, 248, 0.15)',
+  rowSelectedBg: 'rgba(56, 189, 248, 0.24)',
+  rowStripeBg: '#0e507a',
+  headerBg: '#0e507a',
+  surfaceElevated: '#1470a0',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.25)',
+  scrollbarTrack: 'rgba(255, 255, 255, 0.04)',
 };
 
-// 5. SunsetAurora - 极光风格
-const SUNSET_AURORA_LIGHT = {
-  primary: '#a855f7',
-  primaryHover: '#c084fc',
-  primaryActive: '#9333ea',
-  primaryGradient: 'linear-gradient(135deg, #a855f7 0%, #c084fc 100%)',
-  success: '#22c55e',
-  successHover: '#4ade80',
-  successActive: '#16a34a',
-  successGradient: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-  warning: '#f97316',
-  warningHover: '#fb923c',
-  warningActive: '#ea580c',
-  warningGradient: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
-  error: '#ec4899',
-  errorHover: '#f472b6',
-  errorActive: '#db2777',
-  errorGradient: 'linear-gradient(135deg, #ec4899 0%, #f472b6 100%)',
-  info: '#06b6d4',
-  infoHover: '#22d3ee',
-  infoActive: '#0891b2',
-  infoGradient: 'linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)',
-};
+// 4. NordicFrost - 北欧冷淡风格
+const NORDIC_FROST_LIGHT = createColorScheme({
+  primary: '#64748b', primaryHover: '#94a3b8', primaryActive: '#475569',
+  success: '#22c55e', successHover: '#4ade80', successActive: '#16a34a',
+  warning: '#f59e0b', warningHover: '#fbbf24', warningActive: '#d97706',
+  error: '#ef4444', errorHover: '#f87171', errorActive: '#dc2626',
+  info: '#64748b', infoHover: '#94a3b8', infoActive: '#475569',
+});
 
-const SUNSET_AURORA_DARK = {
-  primary: '#c084fc',
-  primaryHover: '#d8b4fe',
-  primaryActive: '#a855f7',
-  primaryGradient: 'linear-gradient(135deg, #c084fc 0%, #d8b4fe 100%)',
-  success: '#4ade80',
-  successHover: '#86efac',
-  successActive: '#22c55e',
-  successGradient: 'linear-gradient(135deg, #4ade80 0%, #86efac 100%)',
-  warning: '#fb923c',
-  warningHover: '#fdc978',
-  warningActive: '#f97316',
-  warningGradient: 'linear-gradient(135deg, #fb923c 0%, #fdc978 100%)',
-  error: '#f472b6',
-  errorHover: '#f9a8d4',
-  errorActive: '#ec4899',
-  errorGradient: 'linear-gradient(135deg, #f472b6 0%, #f9a8d4 100%)',
-  info: '#22d3ee',
-  infoHover: '#67e8f9',
-  infoActive: '#06b6d4',
-  infoGradient: 'linear-gradient(135deg, #22d3ee 0%, #67e8f9 100%)',
-};
-
-const SUNSET_AURORA_LIGHT_NEUTRAL: NeutralColors = {
-  textPrimary: '#581c87',
-  textSecondary: '#7e22ce',
-  textTertiary: '#a855f7',
-  textDisabled: '#c084fc',
-  border: '#e9d5ff',
-  borderLight: '#f5f3ff',
-  borderDark: '#c084fc',
-  background: '#faf5ff',
-  backgroundCard: '#ffffff',
-  backgroundToolbar: '#f3e8ff',
-  backgroundHover: '#f3e8ff',
-  backgroundActive: '#a855f715',
-  mask: 'rgba(0, 0, 0, 0.5)',
-  windowBackground: '#faf5ff',
-};
-
-const SUNSET_AURORA_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#faf5ff',
-  textSecondary: '#c084fc',
-  textTertiary: '#a855f7',
-  textDisabled: '#7e22ce',
-  border: '#581c87',
-  borderLight: '#3b0764',
-  borderDark: '#7e22ce',
-  background: '#3b0764',
-  backgroundCard: '#4a148c',
-  backgroundToolbar: '#2d0a5e',
-  backgroundHover: '#4a148c',
-  backgroundActive: '#a855f720',
-  mask: 'rgba(0, 0, 0, 0.65)',
-  windowBackground: '#3b0764',
-};
-
-// 6. NordicFrost - 北欧冷淡风格
-const NORDIC_FROST_LIGHT = {
-  primary: '#64748b',
-  primaryHover: '#94a3b8',
-  primaryActive: '#475569',
-  primaryGradient: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
-  success: '#22c55e',
-  successHover: '#4ade80',
-  successActive: '#16a34a',
-  successGradient: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-  warning: '#f59e0b',
-  warningHover: '#fbbf24',
-  warningActive: '#d97706',
-  warningGradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-  error: '#ef4444',
-  errorHover: '#f87171',
-  errorActive: '#dc2626',
-  errorGradient: 'linear-gradient(135deg, #ef4444 0%,#f87171 100%)',
-  info: '#64748b',
-  infoHover: '#94a3b8',
-  infoActive: '#475569',
-  infoGradient: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
-};
-
-const NORDIC_FROST_DARK = {
-  primary: '#94a3b8',
-  primaryHover: '#cbd5e1',
-  primaryActive: '#64748b',
-  primaryGradient: 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)',
-  success: '#4ade80',
-  successHover: '#86efac',
-  successActive: '#22c55e',
-  successGradient: 'linear-gradient(135deg, #4ade80 0%, #86efac 100%)',
-  warning: '#fbbf24',
-  warningHover: '#fcd34d',
-  warningActive: '#f59e0b',
-  warningGradient: 'linear-gradient(135deg, #fbbf24 0%, #fcd34d 100%)',
-  error: '#f87171',
-  errorHover: '#fca5a5',
-  errorActive: '#ef4444',
-  errorGradient: 'linear-gradient(135deg, #f87171 0%, #fca5a5 100%)',
-  info: '#94a3b8',
-  infoHover: '#cbd5e1',
-  infoActive: '#64748b',
-  infoGradient: 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)',
-};
+const NORDIC_FROST_DARK = createColorScheme({
+  primary: '#94a3b8', primaryHover: '#cbd5e1', primaryActive: '#64748b',
+  success: '#4ade80', successHover: '#86efac', successActive: '#22c55e',
+  warning: '#fbbf24', warningHover: '#fcd34d', warningActive: '#f59e0b',
+  error: '#f87171', errorHover: '#fca5a5', errorActive: '#ef4444',
+  info: '#94a3b8', infoHover: '#cbd5e1', infoActive: '#64748b',
+});
 
 const NORDIC_FROST_LIGHT_NEUTRAL: NeutralColors = {
   textPrimary: '#334155',
@@ -801,255 +620,57 @@ const NORDIC_FROST_LIGHT_NEUTRAL: NeutralColors = {
   backgroundActive: '#64748b15',
   mask: 'rgba(0, 0, 0, 0.5)',
   windowBackground: '#f8fafc',
+  rowHoverBg: 'rgba(100, 116, 139, 0.05)',
+  rowSelectedBg: 'rgba(100, 116, 139, 0.10)',
+  rowStripeBg: '#fafbfc',
+  headerBg: '#f1f5f9',
+  surfaceElevated: '#ffffff',
+  scrollbarThumb: 'rgba(0, 0, 0, 0.25)',
+  scrollbarTrack: 'rgba(0, 0, 0, 0.04)',
 };
 
 const NORDIC_FROST_DARK_NEUTRAL: NeutralColors = {
   textPrimary: '#f8fafc',
   textSecondary: '#cbd5e1',
-  textTertiary: '#94a3b8',
-  textDisabled: '#64748b',
+  textTertiary: '#a5b4cc',
+  textDisabled: '#6b7a8f',
   border: '#475569',
   borderLight: '#1e293b',
   borderDark: '#64748b',
   background: '#020617',
   backgroundCard: '#0f172a',
-  backgroundToolbar: '#020617',
-  backgroundHover: '#1e293b',
+  backgroundToolbar: '#0f172a',
+  backgroundHover: '#26354d',
   backgroundActive: '#94a3b820',
   mask: 'rgba(0, 0, 0, 0.6)',
   windowBackground: '#020617',
+  rowHoverBg: 'rgba(148, 163, 184, 0.15)',
+  rowSelectedBg: 'rgba(148, 163, 184, 0.24)',
+  rowStripeBg: '#131c2e',
+  headerBg: '#131c2e',
+  surfaceElevated: '#1a2438',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.25)',
+  scrollbarTrack: 'rgba(255, 255, 255, 0.04)',
 };
 
 // ==================== 导出所有主题配置 ====================
 
 export const THEMES: Record<ThemePreset, { light: ThemeConfig; dark: ThemeConfig }> = {
   neonCyber: {
-    light: {
-      name: 'NeonCyber',
-      description: '赛博朋克霓虹风格',
-      mode: 'light',
-      colors: NEON_CYBER_LIGHT,
-      neutralColors: NEON_CYBER_LIGHT_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.light,
-      focusStyle: FOCUS_STYLES.light,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
-    dark: {
-      name: 'NeonCyber',
-      description: '赛博朋克霓虹风格',
-      mode: 'dark',
-      colors: NEON_CYBER_DARK,
-      neutralColors: NEON_CYBER_DARK_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.dark,
-      focusStyle: FOCUS_STYLES.dark,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
+    light: createThemeConfig('NeonCyber', '赛博朋克霓虹风格', 'light', NEON_CYBER_LIGHT, NEON_CYBER_LIGHT_NEUTRAL),
+    dark: createThemeConfig('NeonCyber', '赛博朋克霓虹风格', 'dark', NEON_CYBER_DARK, NEON_CYBER_DARK_NEUTRAL),
   },
   midnightDeep: {
-    light: {
-      name: 'MidnightDeep',
-      description: '深夜深蓝风格',
-      mode: 'light',
-      colors: MIDNIGHT_DEEP_LIGHT,
-      neutralColors: MIDNIGHT_DEEP_LIGHT_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.light,
-      focusStyle: FOCUS_STYLES.light,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
-    dark: {
-      name: 'MidnightDeep',
-      description: '深夜深蓝风格',
-      mode: 'dark',
-      colors: MIDNIGHT_DEEP_DARK,
-      neutralColors: MIDNIGHT_DEEP_DARK_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.dark,
-      focusStyle: FOCUS_STYLES.dark,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
-  },
-  forestDusk: {
-    light: {
-      name: 'ForestDusk',
-      description: '森林暮光风格',
-      mode: 'light',
-      colors: FOREST_DUSK_LIGHT,
-      neutralColors: FOREST_DUSK_LIGHT_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.light,
-      focusStyle: FOCUS_STYLES.light,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
-    dark: {
-      name: 'ForestDusk',
-      description: '森林暮光风格',
-      mode: 'dark',
-      colors: FOREST_DUSK_DARK,
-      neutralColors: FOREST_DUSK_DARK_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.dark,
-      focusStyle: FOCUS_STYLES.dark,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
+    light: createThemeConfig('MidnightDeep', '深夜深蓝风格', 'light', MIDNIGHT_DEEP_LIGHT, MIDNIGHT_DEEP_LIGHT_NEUTRAL),
+    dark: createThemeConfig('MidnightDeep', '深夜深蓝风格', 'dark', MIDNIGHT_DEEP_DARK, MIDNIGHT_DEEP_DARK_NEUTRAL),
   },
   oceanBlue: {
-    light: {
-      name: 'OceanBlue',
-      description: '海洋蓝色风格',
-      mode: 'light',
-      colors: OCEAN_BLUE_LIGHT,
-      neutralColors: OCEAN_BLUE_LIGHT_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.light,
-      focusStyle: FOCUS_STYLES.light,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
-    dark: {
-      name: 'OceanBlue',
-      description: '海洋蓝色风格',
-      mode: 'dark',
-      colors: OCEAN_BLUE_DARK,
-      neutralColors: OCEAN_BLUE_DARK_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.dark,
-      focusStyle: FOCUS_STYLES.dark,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
-  },
-  sunsetAurora: {
-    light: {
-      name: 'SunsetAurora',
-      description: '极光风格',
-      mode: 'light',
-      colors: SUNSET_AURORA_LIGHT,
-      neutralColors: SUNSET_AURORA_LIGHT_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.light,
-      focusStyle: FOCUS_STYLES.light,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
-    dark: {
-      name: 'SunsetAurora',
-      description: '极光风格',
-      mode: 'dark',
-      colors: SUNSET_AURORA_DARK,
-      neutralColors: SUNSET_AURORA_DARK_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.dark,
-      focusStyle: FOCUS_STYLES.dark,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
+    light: createThemeConfig('OceanBlue', '海洋蓝色风格', 'light', OCEAN_BLUE_LIGHT, OCEAN_BLUE_LIGHT_NEUTRAL),
+    dark: createThemeConfig('OceanBlue', '海洋蓝色风格', 'dark', OCEAN_BLUE_DARK, OCEAN_BLUE_DARK_NEUTRAL),
   },
   nordicFrost: {
-    light: {
-      name: 'NordicFrost',
-      description: '北欧冷淡风格',
-      mode: 'light',
-      colors: NORDIC_FROST_LIGHT,
-      neutralColors: NORDIC_FROST_LIGHT_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.light,
-      focusStyle: FOCUS_STYLES.light,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
-    dark: {
-      name: 'NordicFrost',
-      description: '北欧冷淡风格',
-      mode: 'dark',
-      colors: NORDIC_FROST_DARK,
-      neutralColors: NORDIC_FROST_DARK_NEUTRAL,
-      glassEffect: GLASS_EFFECTS.dark,
-      focusStyle: FOCUS_STYLES.dark,
-      dbTypeColors: DB_TYPE_COLORS,
-      typography: TYPOGRAPHY,
-      spacing: SPACING,
-      sizes: SIZES,
-      borderRadius: BORDER_RADIUS,
-      shadows: SHADOWS,
-      animation: ANIMATION,
-      breakpoints: BREAKPOINTS,
-      zIndex: Z_INDEX,
-    },
+    light: createThemeConfig('NordicFrost', '北欧冷淡风格', 'light', NORDIC_FROST_LIGHT, NORDIC_FROST_LIGHT_NEUTRAL),
+    dark: createThemeConfig('NordicFrost', '北欧冷淡风格', 'dark', NORDIC_FROST_DARK, NORDIC_FROST_DARK_NEUTRAL),
   },
 };
 
@@ -1057,62 +678,7 @@ export function getThemeConfig(preset: ThemePreset, mode: ThemeMode): ThemeConfi
   return THEMES[preset][mode];
 }
 
-export function getCSSVariables(config: ThemeConfig): string {
-  const vars: Record<string, string> = {};
 
-  Object.entries(config.colors).forEach(([key, value]) => {
-    vars[`--color-${key}`] = String(value);
-  });
-
-  Object.entries(config.neutralColors).forEach(([key, value]) => {
-    const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-    vars[`--${cssKey}`] = String(value);
-  });
-
-  Object.entries(config.dbTypeColors).forEach(([key, value]) => {
-    vars[`--db-color-${key}`] = String(value);
-  });
-
-  Object.entries(config.glassEffect).forEach(([key, value]) => {
-    const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-    vars[`--glass-${cssKey}`] = String(value);
-  });
-
-  Object.entries(config.focusStyle).forEach(([key, value]) => {
-    const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-    if (typeof value === 'number') {
-      vars[`--focus-${cssKey}`] = `${value}px`;
-    } else {
-      vars[`--focus-${cssKey}`] = String(value);
-    }
-  });
-
-  Object.entries(config.spacing).forEach(([key, value]) => {
-    if (typeof value === 'number') {
-      vars[`--spacing-${key}`] = `${value}px`;
-    }
-  });
-
-  Object.entries(config.sizes).forEach(([key, value]) => {
-    if (typeof value === 'number') {
-      vars[`--size-${key}`] = `${value}px`;
-    }
-  });
-
-  Object.entries(config.borderRadius).forEach(([key, value]) => {
-    if (typeof value === 'number') {
-      vars[`--radius-${key}`] = `${value}px`;
-    }
-  });
-
-  Object.entries(config.zIndex).forEach(([key, value]) => {
-    vars[`--z-${key}`] = String(value);
-  });
-
-  return Object.entries(vars)
-    .map(([key, value]) => `  ${key}: ${value};`)
-    .join('\n');
-}
 
 export const THEME_PRESETS_LIST = Object.entries(THEMES).map(([key, value]) => ({
   value: key as ThemePreset,

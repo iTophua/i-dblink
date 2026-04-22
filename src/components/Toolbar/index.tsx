@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { Layout, Button, Dropdown, theme, Tooltip } from 'antd';
+import { Layout, Button, Dropdown, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   PlusOutlined,
   ReloadOutlined,
@@ -35,8 +36,8 @@ const isMacOS = typeof navigator !== 'undefined' && (
 );
 
 export function Toolbar(): JSX.Element {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
+  const isDarkMode = tc.isDark;
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
   const handleMenuAction = useCallback((action: string) => {

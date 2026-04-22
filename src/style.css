@@ -6,6 +6,7 @@
 
 /* ==================== CSS 变量定义 ==================== */
 :root {
+  /* Fallback values - will be overridden by dynamic theme variables from App.tsx */
   --color-primary: #1890ff;
   --color-primary-hover: #40a9ff;
   --color-primary-active: #096dd9;
@@ -34,6 +35,14 @@
   --background-toolbar: #fafafa;
   --background-hover: #f5f5f5;
   --background-active: #e6f7ff;
+
+  --row-hover-bg: rgba(24, 144, 255, 0.04);
+  --row-selected-bg: rgba(24, 144, 255, 0.08);
+  --row-stripe-bg: rgba(0, 0, 0, 0.02);
+  --header-bg: #fafafa;
+  --surface-elevated: #ffffff;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-track: rgba(0, 0, 0, 0.03);
 
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-family-code: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
@@ -125,19 +134,8 @@ select {
   font-family: inherit;
   font-size: inherit;
   outline: none;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
   color: var(--text-primary);
   background-color: var(--background-card);
-  transition: border-color var(--transition-normal) ease;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
 }
 
 input::placeholder,
@@ -531,13 +529,13 @@ tbody tr:hover {
 
 /* ==================== AG Grid NULL 单元格样式 ==================== */
 .null-cell {
-  color: #999 !important;
+  color: var(--text-tertiary) !important;
   font-style: italic !important;
 }
 
 .ag-theme-alpine-dark .null-cell,
 .ag-theme-alpine .null-cell {
-  color: #888 !important;
+  color: var(--text-tertiary) !important;
   font-style: italic !important;
 }
 
@@ -549,26 +547,26 @@ tbody tr:hover {
   --ag-header-height: 24px;
   --ag-cell-horizontal-padding: 6px;
   --ag-borders: solid 1px;
-  --ag-border-color: var(--ag-border-color, #d9d9d9);
+  --ag-border-color: var(--border-color);
   --ag-grid-size: 4px;
   --ag-row-animation-speed: 0s;
 }
 
 .ag-theme-compact .ag-cell {
-  border-right: 1px solid #e8e8e8;
+  border-right: 1px solid var(--border-color-light);
   will-change: auto;
 }
 
 .ag-theme-compact .ag-header-cell {
-  border-right: 1px solid #d9d9d9;
+  border-right: 1px solid var(--border-color);
 }
 
 .ag-theme-compact.ag-theme-alpine-dark .ag-cell {
-  border-right: 1px solid #303030;
+  border-right: 1px solid var(--border-color);
 }
 
 .ag-theme-compact.ag-theme-alpine-dark .ag-header-cell {
-  border-right: 1px solid #434343;
+  border-right: 1px solid var(--border-color-dark);
 }
 
 .ag-theme-compact .ag-cell-last-in-row,
@@ -587,11 +585,11 @@ tbody tr:hover {
 }
 
 .ag-theme-compact .ag-row-selected {
-  background-color: rgba(24, 144, 255, 0.08) !important;
+  background-color: var(--row-selected-bg) !important;
 }
 
 .ag-theme-compact.ag-theme-alpine-dark .ag-row-selected {
-  background-color: rgba(24, 144, 255, 0.15) !important;
+  background-color: var(--row-selected-bg) !important;
 }
 
 .ag-theme-compact .ag-row-hover {
@@ -600,7 +598,7 @@ tbody tr:hover {
 }
 
 .ag-theme-compact.ag-theme-alpine-dark .ag-row-hover {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--row-hover-bg);
   transition: none !important;
 }
 

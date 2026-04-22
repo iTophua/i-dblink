@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Tabs, Empty, Breadcrumb, theme, Dropdown, Menu, message, Modal, Tooltip } from 'antd';
-import type { MenuProps, TabsProps } from 'antd';
+import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { Tabs, Empty, Breadcrumb, Menu, message, Modal, Tooltip } from 'antd';
+import type { TabsProps } from 'antd';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   DatabaseOutlined,
   TableOutlined,
@@ -35,7 +36,22 @@ interface OpenedTable {
   isDirty?: boolean; // 是否有未保存的更改
 }
 
-export function TabPanel({
+interface OpenedSqlTab {
+  key: string;
+  title: string;
+  connectionId?: string;
+}
+
+export interface TabPanelRef {
+  hasConnectionTabs: (connectionId: string) => boolean;
+  hasDatabaseTabs: (connectionId: string, database: string) => boolean;
+  closeConnectionTabs: (connectionId: string) => void;
+  closeDatabaseTabs: (connectionId: string, database: string) => void;
+  getConnectionTabInfo: (connectionId: string) => { dataTabCount: number; sqlTabCount: number };
+  getDatabaseTabInfo: (connectionId: string, database: string) => { dataTabCount: number };
+}
+
+export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanelInner({
   selectedConnectionId,
   selectedConnectionName,
   selectedTable,
@@ -44,15 +60,75 @@ export function TabPanel({
   tableToOpen,
   onSqlTabCountChange,
   pageSize,
-}: TabPanelProps) {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+}, ref) {
+  const tc = useThemeColors();
 
   // 已打开的数据浏览 Tab 列表
   const [openedTables, setOpenedTables] = useState<OpenedTable[]>([]);
   // SQL 查询 Tab 列表（动态添加/删除）
-  const [openedSqlTabs, setOpenedSqlTabs] = useState<{ key: string; title: string }[]>([]);
+  const [openedSqlTabs, setOpenedSqlTabs] = useState<OpenedSqlTab[]>([]);
   const [activeKey, setActiveKey] = useState('objects');
+
+  useImperativeHandle(ref, () => ({
+    hasConnectionTabs: (connectionId: string) => {
+      const hasDataTabs = openedTables.some((t) => t.connectionId === connectionId);
+      const hasSqlTabs = openedSqlTabs.some((t) => t.connectionId === connectionId);
+      return hasDataTabs || hasSqlTabs;
+    },
+    hasDatabaseTabs: (connectionId: string, database: string) => {
+      return openedTables.some(
+        (t) => t.connectionId === connectionId && t.database === database
+      );
+    },
+    closeConnectionTabs: (connectionId: string) => {
+      const tablesToClose = openedTables.filter((t) => t.connectionId === connectionId);
+      const sqlTabsToClose = openedSqlTabs.filter((t) => t.connectionId === connectionId);
+      const closedDataKeys = new Set(
+        tablesToClose.map((t) => {
+          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
+          return `${baseKey}-data`;
+        })
+      );
+      const closedSqlKeys = new Set(sqlTabsToClose.map((t) => t.key));
+      setOpenedTables((prev) => prev.filter((t) => t.connectionId !== connectionId));
+      setOpenedSqlTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
+      setActiveKey((current) => {
+        if (closedDataKeys.has(current) || closedSqlKeys.has(current)) {
+          return 'objects';
+        }
+        return current;
+      });
+    },
+    closeDatabaseTabs: (connectionId: string, database: string) => {
+      const tablesToClose = openedTables.filter(
+        (t) => t.connectionId === connectionId && t.database === database
+      );
+      const closedDataKeys = new Set(
+        tablesToClose.map((t) => {
+          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
+          return `${baseKey}-data`;
+        })
+      );
+      setOpenedTables((prev) =>
+        prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
+      );
+      setActiveKey((current) => {
+        if (closedDataKeys.has(current)) {
+          return 'objects';
+        }
+        return current;
+      });
+    },
+    getConnectionTabInfo: (connectionId: string) => ({
+      dataTabCount: openedTables.filter((t) => t.connectionId === connectionId).length,
+      sqlTabCount: openedSqlTabs.filter((t) => t.connectionId === connectionId).length,
+    }),
+    getDatabaseTabInfo: (connectionId: string, database: string) => ({
+      dataTabCount: openedTables.filter(
+        (t) => t.connectionId === connectionId && t.database === database
+      ).length,
+    }),
+  }));
 
   // 通知父组件 SQL Tab 数量变化
   useEffect(() => {
@@ -75,7 +151,10 @@ export function TabPanel({
       const { action } = event.detail;
       if (action === 'new-sql-tab') {
         const newSqlKey = `sql-${Date.now()}`;
-        setOpenedSqlTabs((prev) => [...prev, { key: newSqlKey, title: 'SQL 查询' }]);
+        setOpenedSqlTabs((prev) => [
+          ...prev,
+          { key: newSqlKey, title: 'SQL 查询', connectionId: selectedConnectionId || undefined },
+        ]);
         setActiveKey(newSqlKey);
       } else if (action === 'close-tab') {
         if (activeKey.startsWith('sql-')) {
@@ -90,7 +169,7 @@ export function TabPanel({
     return () => {
       window.removeEventListener('tab-action', handleTabAction as EventListener);
     };
-  }, [activeKey]);
+  }, [activeKey, selectedConnectionId]);
 
   // 双击表时调用（来自树或表列表），打开新的数据浏览 Tab
   const openTableTab = useCallback(
@@ -333,8 +412,8 @@ export function TabPanel({
             <div
               style={{
                 padding: '8px 12px',
-                borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
-                background: isDarkMode ? '#141414' : '#fafafa',
+                borderBottom: `1px solid var(--border)`,
+                background: 'var(--background-toolbar)',
                 flexShrink: 0,
               }}
             >
@@ -385,7 +464,7 @@ export function TabPanel({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: isDarkMode ? '#8c8c8c' : '#bfbfbf',
+                color: 'var(--text-tertiary)',
               }}
             >
               <Empty description="请从左侧选择一个连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -423,7 +502,7 @@ export function TabPanel({
                 >
                   {table.name}
                 </span>
-                {table.isDirty && <span style={{ color: '#ff4d4f', marginLeft: 4 }}>*</span>}
+                {table.isDirty && <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>}
               </span>
             </Tooltip>
           ),
@@ -502,8 +581,8 @@ export function TabPanel({
             left: contextMenu.x,
             top: contextMenu.y,
             zIndex: 1000,
-            background: isDarkMode ? '#1f1f1f' : '#fff',
-            border: `1px solid ${isDarkMode ? '#434343' : '#d9d9d9'}`,
+            background: 'var(--background-card)',
+            border: `1px solid var(--border-dark)`,
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             padding: '4px 0',
@@ -524,6 +603,6 @@ export function TabPanel({
       )}
     </div>
   );
-}
+});
 
 export default TabPanel;

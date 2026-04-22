@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
-import { Button, Space, message, Tabs, theme, Tag, Tooltip, Dropdown, Empty, Spin, Table, Drawer } from 'antd';
+import { Button, Space, message, Tabs, Tag, Tooltip, Dropdown, Empty, Spin, Table, Drawer } from 'antd';
 import {
   PlayCircleOutlined,
   SaveOutlined,
@@ -23,6 +23,7 @@ import {
   DownloadOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
+import { useThemeColors } from '../hooks/useThemeColors';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import type { QueryResult } from '../types/api';
 
@@ -48,8 +49,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
   const editorRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
   
   const { executeQuery: executeQueryApi } = useDatabase();
 
@@ -330,7 +330,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       key: col,
       width: 120,
       ellipsis: true,
-      render: (val: any) => val === null || val === undefined ? <span style={{ color: '#999', fontStyle: 'italic' }}>NULL</span> : String(val),
+      render: (val: any) => val === null || val === undefined ? <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>NULL</span> : String(val),
     }));
     
     const dataSource = queryResult.rows.map((row, i) => {
@@ -371,9 +371,9 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: isDarkMode ? '#141414' : '#fafafa', position: 'sticky', top: 0, zIndex: 1 }}>
+            <tr style={{ background: 'var(--header-bg)', position: 'sticky', top: 0, zIndex: 1 }}>
               {result.columns.map((col, i) => (
-                <th key={i} style={{ padding: '4px 8px', textAlign: 'left', borderBottom: `2px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`, fontWeight: 600, color: isDarkMode ? '#f6f6f6' : '#0f0f0f' }}>
+                <th key={i} style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '2px solid var(--border)', fontWeight: 600, color: 'var(--text-primary)' }}>
                   {col}
                 </th>
               ))}
@@ -381,11 +381,11 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
           </thead>
           <tbody>
             {result.rows.map((row, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? (isDarkMode ? '#1f1f1f' : '#fff') : (isDarkMode ? '#141414' : '#fafafa') }}>
+              <tr key={i} style={{ background: i % 2 === 0 ? 'var(--background-card)' : 'var(--row-stripe-bg)' }}>
                 {row.map((cell, j) => (
-                  <td key={j} style={{ padding: '3px 8px', borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`, color: isDarkMode ? '#bfbfbf' : '#595959' }}>
+                  <td key={j} style={{ padding: '3px 8px', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
                     {cell === null || cell === undefined ? (
-                      <span style={{ color: '#999', fontStyle: 'italic' }}>NULL</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>NULL</span>
                     ) : (
                       String(cell)
                     )}
@@ -397,7 +397,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
         </table>
       )}
     </div>
-  ), [loading, connectionId, result, isDarkMode]);
+  ), [loading, connectionId, result, tc.isDark]);
 
   return (
     <div style={{ 
@@ -405,15 +405,15 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       flexDirection: 'column', 
       height: '100%',
       minHeight: 0,
-      background: isDarkMode ? '#1f1f1f' : '#fff'
+      background: 'var(--background-card)'
     }}>
       <div style={{ 
         padding: '4px 8px', 
-        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+        borderBottom: '1px solid var(--border)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: isDarkMode ? '#141414' : '#fafafa',
+        background: 'var(--background-toolbar)',
       }}>
         <Space size="small">
           <Button 
@@ -444,7 +444,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
           <div style={{ 
             width: 1, 
             height: 16, 
-            background: isDarkMode ? '#434343' : '#d9d9d9',
+            background: 'var(--border)',
             margin: '0 4px'
           }} />
           
@@ -517,7 +517,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       <div style={{ 
         flex: '2 1 0',
         minHeight: 150,
-        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+        borderBottom: '1px solid var(--border)',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
@@ -525,7 +525,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
         <Editor
           height="100%"
           language="sql"
-          theme={isDarkMode ? 'vs-dark' : 'vs-light'}
+          theme={tc.isDark ? 'vs-dark' : 'vs-light'}
           value={sql}
           onChange={(value) => setSql(value || '')}
           onMount={handleEditorMount}
@@ -559,7 +559,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
           onChange={(key) => setActiveTab(key as 'result' | 'results' | 'messages' | 'explain')}
           size="small"
           style={{
-            background: isDarkMode ? '#1f1f1f' : '#fff',
+            background: 'var(--background-card)',
             padding: '0 8px'
           }}
           items={(() => {
@@ -613,7 +613,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                     <Empty description="暂无消息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                   ) : (
                     messages.map((msg, i) => (
-                      <div key={i} style={{ padding: '4px 0', color: msg.startsWith('✗') ? '#ff4d4f' : msg.startsWith('⚠') ? '#faad14' : '#52c41a' }}>
+                      <div key={i} style={{ padding: '4px 0', color: msg.startsWith('✗') ? 'var(--color-error)' : msg.startsWith('⚠') ? 'var(--color-warning)' : 'var(--color-success)' }}>
                         {msg}
                       </div>
                     ))
@@ -637,9 +637,9 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                   ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
-                        <tr style={{ background: isDarkMode ? '#141414' : '#fafafa', position: 'sticky', top: 0 }}>
+                        <tr style={{ background: 'var(--header-bg)', position: 'sticky', top: 0 }}>
                           {Object.keys(explainPlan[0] || {}).map((key, i) => (
-                            <th key={i} style={{ padding: '4px 8px', textAlign: 'left', borderBottom: `2px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`, fontWeight: 600 }}>
+                            <th key={i} style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '2px solid var(--border)', fontWeight: 600 }}>
                               {key}
                             </th>
                           ))}
@@ -647,9 +647,9 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
                       </thead>
                       <tbody>
                         {explainPlan.map((row, i) => (
-                          <tr key={i} style={{ background: i % 2 === 0 ? (isDarkMode ? '#1f1f1f' : '#fff') : (isDarkMode ? '#141414' : '#fafafa') }}>
+                          <tr key={i} style={{ background: i % 2 === 0 ? 'var(--background-card)' : 'var(--row-stripe-bg)' }}>
                             {Object.values(row).map((cell: any, j) => (
-                              <td key={j} style={{ padding: '3px 8px', borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}` }}>
+                              <td key={j} style={{ padding: '3px 8px', borderBottom: '1px solid var(--border)' }}>
                                 {String(cell || 'NULL')}
                               </td>
                             ))}

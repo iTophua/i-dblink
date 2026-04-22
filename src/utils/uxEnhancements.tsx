@@ -109,6 +109,8 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ 
       footer={null}
       width={680}
       centered
+      transitionName=""
+      maskTransitionName=""
     >
       <div
         style={{
@@ -123,7 +125,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ 
               strong
               style={{
                 fontSize: 13,
-                color: isDarkMode ? '#1890ff' : '#1890ff',
+                color: 'var(--color-primary)',
                 marginBottom: 8,
                 display: 'block',
               }}
@@ -145,9 +147,9 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ 
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '6px 10px',
-                    background: isDarkMode ? '#141414' : '#fafafa',
+                    background: 'var(--background-toolbar)',
                     borderRadius: 6,
-                    border: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+                    border: '1px solid var(--border)',
                   }}
                 >
                   <Space size={4}>
@@ -163,14 +165,14 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ 
                             padding: '0 6px',
                             fontSize: 11,
                             fontFamily: 'SF Mono, Monaco, Inconsolata, monospace',
-                            background: isDarkMode ? '#262626' : '#fff',
-                            border: `1px solid ${isDarkMode ? '#434343' : '#d9d9d9'}`,
+                            background: 'var(--background-card)',
+                            border: '1px solid var(--border-light)',
                           }}
                         >
                           {key}
                         </Tag>
                         {keyIndex < shortcut.keys.length - 1 && (
-                          <span style={{ color: '#999', fontSize: 10 }}>+</span>
+                          <span style={{ color: 'var(--text-tertiary)', fontSize: 10 }}>+</span>
                         )}
                       </React.Fragment>
                     ))}
@@ -240,19 +242,16 @@ export const useConnectionAnimation = () => {
 export const ConnectionStatusIndicator: React.FC<{ status: 'idle' | 'connecting' | 'success' | 'error' }> = ({
   status,
 }) => {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
-
   const getStatusColor = () => {
     switch (status) {
       case 'connecting':
-        return '#faad14';
+        return 'var(--color-warning)';
       case 'success':
-        return '#52c41a';
+        return 'var(--color-success)';
       case 'error':
-        return '#ff4d4f';
+        return 'var(--color-error)';
       default:
-        return '#8c8c8c';
+        return 'var(--text-disabled)';
     }
   };
 
@@ -278,7 +277,7 @@ export const ConnectionStatusIndicator: React.FC<{ status: 'idle' | 'connecting'
         alignItems: 'center',
         gap: 6,
         padding: '4px 12px',
-        background: isDarkMode ? '#141414' : '#fafafa',
+        background: 'var(--background-toolbar)',
         borderRadius: 16,
         border: `1px solid ${getStatusColor()}`,
         animation: 'fadeIn 0.3s ease',

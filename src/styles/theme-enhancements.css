@@ -210,21 +210,8 @@
 }
 
 /* ==================== 下拉菜单增强效果 ==================== */
-.ant-dropdown {
-  animation: dropdownFadeIn 0.2s ease;
-}
-
-@keyframes dropdownFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
+/* 注：不覆盖 .ant-dropdown 的动画，Antd 自带的 slide-up 动画负责显示/隐藏；
+   此前 .ant-dropdown 上自定义的 dropdownFadeIn 动画已移除，避免与默认动画叠加导致闪烁 */
 .ant-dropdown-menu {
   border-radius: 10px !important;
   padding: 6px !important;
@@ -490,29 +477,6 @@
   box-shadow: 0 0 8px var(--color-primary), 0 0 16px var(--color-primary);
 }
 
-/* ==================== SunsetAurora 主题特效增强 ==================== */
-[data-theme-preset='sunsetAurora'] .ant-btn-primary {
-  background: var(--color-primary-gradient) !important;
-  border: none !important;
-}
-
-[data-theme-preset='sunsetAurora'] .ant-modal-header {
-  background: var(--color-primary-gradient) !important;
-  background-size: 200% 200% !important;
-  animation: auroraShift 8s ease-in-out infinite;
-}
-
-@keyframes auroraShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-[data-theme-preset='sunsetAurora'] .ant-tabs-tab-active::after {
-  background: var(--color-primary-gradient) !important;
-  background-size: 200% 200% !important;
-  animation: auroraShift 4s ease-in-out infinite;
-}
-
 /* ==================== OceanBlue 主题特效增强 ==================== */
 [data-theme-preset='oceanBlue'] .ant-table-thead > tr > th {
   background: var(--color-primary-gradient) !important;
@@ -534,22 +498,6 @@
 @keyframes oceanWave {
   0%, 100% { background-position: 0% 0%; }
   50% { background-position: 100% 0%; }
-}
-
-/* ==================== ForestDusk 主题特效增强 ==================== */
-[data-theme-preset='forestDusk'] .connection-tree .ant-tree-node-content-wrapper:hover {
-  background: linear-gradient(
-    90deg,
-    rgba(34, 197, 94, 0.08) 0%,
-    transparent 100%
-  ) !important;
-}
-
-[data-theme-preset='forestDusk'] .ant-tag-success,
-[data-theme-preset='forestDusk'] .ant-tag-green {
-  background: var(--color-success-gradient) !important;
-  color: #fff !important;
-  border: none !important;
 }
 
 /* ==================== NordicFrost 主题特效增强 ==================== */

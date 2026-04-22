@@ -4,13 +4,12 @@ import { CheckCircleOutlined } from '@ant-design/icons';
 import type { Connection } from '../../stores/appStore';
 
 type StatusBarProps = {
-  isDarkMode: boolean;
   selectedConnectionId: string | null;
   connections: Connection[];
   selectedTable: string | null;
 };
 
-export function StatusBar({ isDarkMode, selectedConnectionId, connections, selectedTable }: StatusBarProps) {
+export function StatusBar({ selectedConnectionId, connections, selectedTable }: StatusBarProps) {
   const { Footer } = Layout;
   const { Text } = Typography;
 
@@ -34,7 +33,7 @@ export function StatusBar({ isDarkMode, selectedConnectionId, connections, selec
         <Text>
           {selectedConnectionId ? (
             <span>
-              <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+              <CheckCircleOutlined style={{ color: 'var(--color-success)', marginRight: 4 }} />
               已连接：{connections.find(c => c.id === selectedConnectionId)?.name || '未知'}
             </span>
           ) : (

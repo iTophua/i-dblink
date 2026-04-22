@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Tabs, Button, Space } from 'antd';
 import { InfoCircleOutlined, WarningOutlined, LineChartOutlined, ClearOutlined, DownloadOutlined } from '@ant-design/icons';
-import { theme } from 'antd';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 export interface LogEntry {
   id: string;
@@ -23,9 +23,7 @@ const initialLogs: LogEntry[] = [
 export function LogPanel({ onCollapse }: LogPanelProps) {
   const [activeTab, setActiveTab] = useState<'messages' | 'errors' | 'explain'>('messages');
   const [logs, setLogs] = useState<LogEntry[]>(initialLogs);
-
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
+  const tc = useThemeColors();
 
   const filteredLogs = logs.filter(log => {
     if (activeTab === 'errors') return log.level === 'ERROR' || log.level === 'WARN';
@@ -35,10 +33,10 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
 
   const levelColor = (level: string) => {
     switch (level) {
-      case 'ERROR': return '#ff4d4f';
-      case 'WARN': return '#faad14';
-      case 'OK': return '#52c41a';
-      default: return isDarkMode ? '#bfbfbf' : '#595959';
+      case 'ERROR': return tc.error;
+      case 'WARN': return tc.warning;
+      case 'OK': return tc.success;
+      default: return tc.textTertiary;
     }
   };
 
@@ -57,18 +55,18 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
   return (
     <div style={{
       height: 130,
-      borderTop: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+      borderTop: `1px solid ${tc.border}`,
       display: 'flex',
       flexDirection: 'column',
     }}>
       <div style={{
         height: 28,
-        borderBottom: `1px solid ${isDarkMode ? '#303030' : '#e8e8e8'}`,
+        borderBottom: `1px solid ${tc.border}`,
         padding: '0 8px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        background: isDarkMode ? '#141414' : '#fafafa',
+        background: tc.backgroundToolbar,
       }}>
         <Tabs
           activeKey={activeTab}
@@ -85,7 +83,7 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
         <Space size="small">
           <Button icon={<ClearOutlined />} size="small" type="text" onClick={handleClear} />
           <Button icon={<DownloadOutlined />} size="small" type="text" onClick={handleExport} />
-          <a onClick={onCollapse} style={{ fontSize: 12, color: isDarkMode ? '#177ddc' : '#1890ff' }}>隐藏</a>
+          <a onClick={onCollapse} style={{ fontSize: 12, color: tc.primary }}>隐藏</a>
         </Space>
       </div>
       <div style={{
@@ -93,10 +91,10 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
         padding: '2px 8px',
         overflow: 'auto',
         fontSize: 11,
-        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+        fontFamily: tc.isDark ? "'JetBrains Mono', 'Fira Code', monospace" : undefined,
       }}>
         {filteredLogs.length === 0 ? (
-          <div style={{ color: isDarkMode ? '#595959' : '#bfbfbf', padding: '8px 0', textAlign: 'center' }}>
+          <div style={{ color: tc.textDisabled, padding: '8px 0', textAlign: 'center' }}>
             暂无日志
           </div>
         ) : (

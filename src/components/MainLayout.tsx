@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Layout, theme } from 'antd';
+import { Layout, theme, Modal } from 'antd';
 import { GlobalSearch } from './GlobalInput';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
 import { Toolbar } from './Toolbar';
 import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
-import { TabPanel } from './TabPanel';
+import { TabPanel, type TabPanelRef } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
 import { LogPanel } from './LogPanel';
@@ -105,6 +105,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<ConnectionFormData | undefined>();
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const tabPanelRef = useRef<TabPanelRef>(null);
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
@@ -352,36 +353,59 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
   const handleDatabaseClose = useCallback(
     (connectionId: string, database: string) => {
-      setConnectionDatabases((prev) => {
-        const newData = { ...prev };
-        if (newData[connectionId]) {
-          newData[connectionId] = newData[connectionId].map((db) =>
-            db.database === database ? { ...db, loaded: false, tables: [] } : db
-          );
-        }
-        return newData;
-      });
-      setExpandedKeys((prev) =>
-        prev.filter(
-          (key) =>
-            !key.startsWith(`db::${connectionId}::${database}`) &&
-            !key.startsWith(`tables::${connectionId}::${database}`) &&
-            !key.startsWith(`views::${connectionId}::${database}`) &&
-            !key.startsWith(`table::${connectionId}::${database}`) &&
-            !key.startsWith(`view::${connectionId}::${database}`)
-        )
-      );
-      setTableStructures((prev) => {
-        const newData = { ...prev };
-        const keysToDelete = Object.keys(newData).filter(
-          (key) => key.startsWith(`${connectionId}::${database}::`)
+      const hasTabs = tabPanelRef.current?.hasDatabaseTabs(connectionId, database);
+      const tabInfo = tabPanelRef.current?.getDatabaseTabInfo(connectionId, database);
+
+      const doClose = () => {
+        setConnectionDatabases((prev) => {
+          const newData = { ...prev };
+          if (newData[connectionId]) {
+            newData[connectionId] = newData[connectionId].map((db) =>
+              db.database === database ? { ...db, loaded: false, tables: [] } : db
+            );
+          }
+          return newData;
+        });
+        setExpandedKeys((prev) =>
+          prev.filter(
+            (key) =>
+              !key.startsWith(`db::${connectionId}::${database}`) &&
+              !key.startsWith(`tables::${connectionId}::${database}`) &&
+              !key.startsWith(`views::${connectionId}::${database}`) &&
+              !key.startsWith(`table::${connectionId}::${database}`) &&
+              !key.startsWith(`view::${connectionId}::${database}`)
+          )
         );
-        keysToDelete.forEach((key) => delete newData[key]);
-        return newData;
-      });
-      if (selectedConnectionId === connectionId && selectedDatabase === database) {
-        setSelectedTable(null);
-        setSelectedDatabase(undefined);
+        setTableStructures((prev) => {
+          const newData = { ...prev };
+          const keysToDelete = Object.keys(newData).filter(
+            (key) => key.startsWith(`${connectionId}::${database}::`)
+          );
+          keysToDelete.forEach((key) => delete newData[key]);
+          return newData;
+        });
+        if (selectedConnectionId === connectionId && selectedDatabase === database) {
+          setSelectedTable(null);
+          setSelectedDatabase(undefined);
+        }
+      };
+
+      if (hasTabs && tabInfo && tabInfo.dataTabCount > 0) {
+        Modal.confirm({
+          title: '关闭关联标签页',
+          content: `该数据库下还有 ${tabInfo.dataTabCount} 个数据表标签页处于打开状态，关闭数据库时是否一并关闭？`,
+          okText: '关闭并关闭数据库',
+          cancelText: '仅关闭数据库',
+          onOk: () => {
+            tabPanelRef.current?.closeDatabaseTabs(connectionId, database);
+            doClose();
+          },
+          onCancel: () => {
+            doClose();
+          },
+        });
+      } else {
+        doClose();
       }
     },
     [selectedConnectionId, selectedDatabase]
@@ -434,15 +458,70 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
   const handleDisconnect = useCallback(
     (connectionId: string) => {
-      disconnect(connectionId);
-      setConnectionDatabases((prev) => {
-        const next = { ...prev };
-        delete next[connectionId];
-        return next;
-      });
-      setExpandedKeys((prev) => prev.filter((k) => k !== connectionId));
+      const tabInfo = tabPanelRef.current?.getConnectionTabInfo(connectionId);
+      const hasTabs = tabPanelRef.current?.hasConnectionTabs(connectionId);
+
+      const doDisconnect = () => {
+        setConnectionDatabases((prev) => {
+          const next = { ...prev };
+          delete next[connectionId];
+          return next;
+        });
+        setExpandedKeys((prev) =>
+          prev.filter((k) => {
+            if (k === connectionId) return false;
+            if (k.startsWith(`db::${connectionId}::`)) return false;
+            if (k.startsWith(`tables::${connectionId}::`)) return false;
+            if (k.startsWith(`views::${connectionId}::`)) return false;
+            if (k.startsWith(`table::${connectionId}::`)) return false;
+            if (k.startsWith(`view::${connectionId}::`)) return false;
+            if (k.startsWith(`procedures::${connectionId}::`)) return false;
+            if (k.startsWith(`functions::${connectionId}::`)) return false;
+            return true;
+          })
+        );
+        setTableStructures((prev) => {
+          const next = { ...prev };
+          const keysToDelete = Object.keys(next).filter((key) =>
+            key.startsWith(`${connectionId}::`)
+          );
+          keysToDelete.forEach((key) => delete next[key]);
+          return next;
+        });
+        if (selectedConnectionId === connectionId) {
+          setSelectedConnectionId(null);
+          setSelectedTable(null);
+          setSelectedDatabase(undefined);
+          setActiveConnection(null);
+        }
+        disconnect(connectionId);
+      };
+
+      if (hasTabs && tabInfo && (tabInfo.dataTabCount > 0 || tabInfo.sqlTabCount > 0)) {
+        const tabDesc = [
+          tabInfo.dataTabCount > 0 ? `${tabInfo.dataTabCount} 个数据表` : '',
+          tabInfo.sqlTabCount > 0 ? `${tabInfo.sqlTabCount} 个 SQL 查询` : '',
+        ]
+          .filter(Boolean)
+          .join('、');
+        Modal.confirm({
+          title: '关闭关联标签页',
+          content: `该连接下还有 ${tabDesc} 标签页处于打开状态，断开连接时是否一并关闭？`,
+          okText: '关闭并断开',
+          cancelText: '仅断开',
+          onOk: () => {
+            tabPanelRef.current?.closeConnectionTabs(connectionId);
+            doDisconnect();
+          },
+          onCancel: () => {
+            doDisconnect();
+          },
+        });
+      } else {
+        doDisconnect();
+      }
     },
-    [disconnect]
+    [disconnect, selectedConnectionId, setActiveConnection]
   );
 
   const handleEditConnection = useCallback((connection: Connection) => {
@@ -701,6 +780,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         <Content style={styles.content}>
           <div style={styles.tabPanelContainer}>
             <TabPanel
+              ref={tabPanelRef}
               selectedConnectionId={selectedConnectionId}
               selectedConnectionName={
                 selectedConnectionId
@@ -732,7 +812,6 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       </Layout>
 
       <StatusBar
-        isDarkMode={isDarkMode}
         selectedConnectionId={selectedConnectionId}
         connections={connections}
         selectedTable={selectedTable}

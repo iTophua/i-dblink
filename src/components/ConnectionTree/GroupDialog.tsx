@@ -94,6 +94,8 @@ export function GroupDialog({ open, editingGroup, parentGroupId, onCancel, onSav
       onCancel={onCancel}
       confirmLoading={saving}
       width={420}
+      transitionName=""
+      maskTransitionName=""
       okText={editingGroup ? '保存' : '创建'}
       cancelText="取消"
     >

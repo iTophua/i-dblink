@@ -150,7 +150,7 @@ export function Welcome() {
   return (
     <div style={{ padding: '24px', maxWidth: '1000px', margin: '0 auto' }}>
       <Title level={3} style={{ marginBottom: '1rem' }}>
-        <DatabaseOutlined style={{ marginRight: '0.5rem', color: '#1890ff' }} />
+        <DatabaseOutlined style={{ marginRight: '0.5rem', color: 'var(--color-primary)' }} />
         iDBLink - 数据库管理工具
       </Title>
 
@@ -188,12 +188,12 @@ export function Welcome() {
                 <Card.Meta
                   title={
                     <Space>
-                      <DatabaseOutlined style={{ color: '#1890ff' }} />
+                      <DatabaseOutlined style={{ color: 'var(--color-primary)' }} />
                       {conn.name}
                     </Space>
                   }
                   description={
-                    <div style={{ fontSize: 12, color: '#666' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                       <div>{conn.db_type.toUpperCase()}</div>
                       <div>{conn.host}:{conn.port}</div>
                       <div>{conn.username}</div>
