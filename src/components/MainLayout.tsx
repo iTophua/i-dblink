@@ -28,13 +28,13 @@ const getStyles = () => ({
   searchContainer: { padding: '8px 8px 4px', flexShrink: 0 },
   searchInput: {
     borderRadius: 4,
-    background: 'var(--background-toolbar)',
+    background: 'var(--background-card)',
   },
   connectionTreeContainer: { flex: 1, minHeight: 0, overflow: 'auto' as const, marginBottom: 0 },
   collapseButton: {
     height: 28,
     flexShrink: 0,
-    background: 'var(--background-toolbar)',
+    background: 'var(--background-card)',
     borderTop: '1px solid var(--border-color)',
     display: 'flex' as const,
     alignItems: 'center' as const,
@@ -97,7 +97,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [searchText, setSearchText] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [connectionDatabases, setConnectionDatabases] = useState<
-    Record<string, { database: string; tables: TableInfo[]; loaded: boolean }[]>
+    Record<string, { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean }[]>
   >({});
   const [tableStructures, setTableStructures] = useState<
     Record<string, { columns: ColumnInfo[]; indexes: IndexInfo[]; loaded: boolean }>
@@ -252,9 +252,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       const cacheKey = `${connectionId}::${database || ''}`;
       const { setTableDataLoading } = useAppStore.getState();
 
-      try {
-        setTableDataLoading(cacheKey, true);
+      setTableDataLoading(cacheKey, true);
 
+      try {
         const tables = await getTables(connectionId, database, forceRefresh);
 
         setConnectionDatabases((prev) => {
@@ -263,7 +263,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
           if (dbIndex >= 0) {
             const newDbList = [...dbList];
-            newDbList[dbIndex] = { ...dbList[dbIndex], tables, loaded: true };
+            newDbList[dbIndex] = { ...newDbList[dbIndex], tables, loaded: true, loadFailed: false };
             return {
               ...prev,
               [connectionId]: newDbList,
@@ -271,20 +271,18 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           } else {
             return {
               ...prev,
-              [connectionId]: [...dbList, { database, tables, loaded: true }],
+              [connectionId]: [...dbList, { database, tables, loaded: true, loadFailed: false }],
             };
           }
         });
-      } catch (error) {
-        console.error(`Failed to load tables for ${database}:`, error);
-        // 即使加载失败也要设置 loaded 为 true，避免一直显示"加载中"
+      } catch {
         setConnectionDatabases((prev) => {
           const dbList = prev[connectionId] || [];
           const dbIndex = dbList.findIndex((db) => db.database === database);
 
           if (dbIndex >= 0) {
             const newDbList = [...dbList];
-            newDbList[dbIndex] = { ...dbList[dbIndex], loaded: true };
+            newDbList[dbIndex] = { ...newDbList[dbIndex], loaded: true, loadFailed: true };
             return {
               ...prev,
               [connectionId]: newDbList,
@@ -292,7 +290,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           } else {
             return {
               ...prev,
-              [connectionId]: [...dbList, { database, tables: [], loaded: true }],
+              [connectionId]: [...dbList, { database, tables: [], loaded: true, loadFailed: true }],
             };
           }
         });
@@ -318,6 +316,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
   const handleConnect = useCallback(
     async (connectionId: string) => {
+      const { setLoading, clearTableData, setConnections, setError } = useAppStore.getState();
       try {
         await connect(connectionId);
         const databases = await getDatabases(connectionId);
@@ -327,8 +326,25 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           [connectionId]: dbList,
         }));
         setExpandedKeys((prev) => [...prev, connectionId]);
-      } catch (error) {
-        // 连接失败时静默处理或显示消息
+      } catch (err) {
+        // 连接失败时，彻底清理所有相关状态
+        setConnectionDatabases((prev) => {
+          const next = { ...prev };
+          delete next[connectionId];
+          return next;
+        });
+        // 清理表数据缓存（包括 loading 状态）
+        clearTableData(connectionId);
+        // 重置连接状态为断开
+        setConnections((prev) =>
+          prev.map((c) =>
+            c.id === connectionId ? { ...c, status: 'disconnected' as const } : c
+          )
+        );
+        // 确保全局 loading 状态被重置
+        setLoading(false);
+        setError(null);
+        throw err;
       }
     },
     [connect, getDatabases]
@@ -338,10 +354,14 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     async (connectionId: string, database: string) => {
       setSelectedConnectionId(connectionId);
       setSelectedDatabase(database);
+      // 检查是否已加载失败，避免不断重试导致错误提示
+      const dbList = connectionDatabases[connectionId] || [];
+      const db = dbList.find((d) => d.database === database);
+      if (db?.loadFailed) return;
       // 始终强制刷新，因为展开数据库时需要最新数据
       await loadDatabaseTables(connectionId, database, true);
     },
-    [loadDatabaseTables]
+    [loadDatabaseTables, connectionDatabases]
   );
 
   const handleDatabaseRefresh = useCallback(
@@ -703,9 +723,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           style={{ ...styles.sider }}
           className="sidebar-enhanced"
         >
-          <div style={styles.siderContent}>
+          <div style={styles.siderContent} className="sidebar-content">
             {!collapsed && (
-              <div style={styles.searchContainer}>
+              <div style={styles.searchContainer} className="search-container">
                 <GlobalSearch
                   placeholder="搜索..."
                   value={searchText}
@@ -717,7 +737,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
               </div>
             )}
 
-            <div style={styles.connectionTreeContainer}>
+            <div style={styles.connectionTreeContainer} className="connection-tree-container">
               <EnhancedConnectionTree
                 connections={connections}
                 groups={groups}
@@ -765,11 +785,12 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
             <div
               onClick={() => setCollapsed(!collapsed)}
               style={styles.collapseButton}
+              className="collapse-button"
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'var(--background-hover)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--background-toolbar)';
+                e.currentTarget.style.background = 'var(--background-card)';
               }}
             >
               <span style={styles.collapseButtonText}>{collapsed ? '展开' : '收起'}</span>

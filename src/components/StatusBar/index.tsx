@@ -13,6 +13,11 @@ export function StatusBar({ selectedConnectionId, connections, selectedTable }: 
   const { Footer } = Layout;
   const { Text } = Typography;
 
+  const selectedConnection = selectedConnectionId
+    ? connections.find(c => c.id === selectedConnectionId)
+    : null;
+  const isConnected = selectedConnection?.status === 'connected';
+
   return (
     <Footer
       style={{
@@ -31,10 +36,14 @@ export function StatusBar({ selectedConnectionId, connections, selectedTable }: 
     >
       <Space>
         <Text>
-          {selectedConnectionId ? (
+          {isConnected ? (
             <span>
               <CheckCircleOutlined style={{ color: 'var(--color-success)', marginRight: 4 }} />
-              已连接：{connections.find(c => c.id === selectedConnectionId)?.name || '未知'}
+              已连接：{selectedConnection?.name || '未知'}
+            </span>
+          ) : selectedConnection ? (
+            <span style={{ color: 'var(--text-tertiary)' }}>
+              未连接：{selectedConnection.name}
             </span>
           ) : (
             '未连接'

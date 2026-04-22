@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { App } from 'antd';
+import { message } from 'antd';
 import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
@@ -7,6 +7,9 @@ import type { ConnectionInput, GroupInput } from '../types/api';
 const escapeSqlString = (value: string): string => value.replace(/\\/g, '\\\\').replace(/'/g, "''");
 
 const escapeSqlIdentifier = (value: string): string => value.replace(/`/g, '``');
+
+// 防重复调用：跟踪正在加载的 cacheKey
+const loadingTablesKeys = new Set<string>();
 
 // 性能优化：带 TTL 的 LRU 缓存
 interface CacheEntry<T> {
@@ -73,7 +76,6 @@ class TTLCache<T> {
 const structureCache = new TTLCache<Promise<import('../api').TableStructure>>(100, 10 * 60 * 1000);
 
 export const useConnections = () => {
-  const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
   const groups = useAppStore((state) => state.groups);
   const activeConnectionId = useAppStore((state) => state.activeConnectionId);
@@ -234,7 +236,6 @@ export const useConnections = () => {
 };
 
 export const useGroups = () => {
-  const { message } = App.useApp();
   const groups = useAppStore((state) => state.groups);
   const isLoading = useAppStore((state) => state.isLoading);
   const setGroups = useAppStore((state) => state.setGroups);
@@ -290,47 +291,68 @@ export const useGroups = () => {
   };
 };
 
+// 性能优化：Promise 锁，防止同一 cacheKey 的并发请求重复发送
+const tableLoadingPromises = new Map<string, Promise<import('../types/api').TableInfo[]>>();
+
 export const useDatabase = () => {
-  const { message } = App.useApp();
-  const { setLoading, setError, setTableData, setTableDataLoading, getTableData, clearTableData } =
+  const { setLoading, setError, setTableData, setTableDataLoading, setTableDataFailed, getTableData, clearTableData } =
     useAppStore();
 
   const getTables = useCallback(
     async (connectionId: string, database?: string, forceRefresh = false, search?: string) => {
       const cacheKey = `${connectionId}::${database || ''}`;
 
-      // If force refresh, clear cache first
-      if (forceRefresh) {
-        clearTableData(connectionId);
+      // 如果已有正在进行的请求，复用该 Promise
+      const existingPromise = tableLoadingPromises.get(cacheKey);
+      if (existingPromise) {
+        return existingPromise;
       }
 
-      // Check if we have cached data (for non-search requests)
+      // 防重复调用：如果正在加载中，直接返回
+      if (loadingTablesKeys.has(cacheKey)) {
+        // 等待现有请求完成，返回缓存的数据（如果有）
+        const cached = getTableData(cacheKey);
+        return cached?.tables || [];
+      }
+
       const cached = getTableData(cacheKey);
       if (cached && cached.loaded && !cached.loading && !forceRefresh && !search) {
         return cached.tables;
       }
 
-      // If already loading, don't start another request
+      // 如果正在加载中且非强制刷新，直接返回
       if (cached?.loading && !forceRefresh) {
         return cached.tables;
       }
 
-      try {
-        setTableDataLoading(cacheKey, true);
-        const result = await api.getTablesCategorized(connectionId, database, search);
-        const allTables = [...result.tables, ...result.views];
-        setTableData(cacheKey, allTables);
-        return allTables;
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '获取表列表失败';
-        setError(errorMsg);
-        message.error(errorMsg);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
+      // 标记正在加载
+      loadingTablesKeys.add(cacheKey);
+
+      const promise = (async () => {
+        try {
+          setTableDataLoading(cacheKey, true);
+          const result = await api.getTablesCategorized(connectionId, database, search);
+          const allTables = [...result.tables, ...result.views];
+          setTableData(cacheKey, allTables);
+          return allTables;
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : '获取表列表失败';
+          setError(errorMsg);
+          message.error(errorMsg);
+          setTableDataFailed(cacheKey, true);
+          return [];
+        } finally {
+          // 移除加载标记
+          loadingTablesKeys.delete(cacheKey);
+          tableLoadingPromises.delete(cacheKey);
+          setLoading(false);
+        }
+      })();
+
+      tableLoadingPromises.set(cacheKey, promise);
+      return promise;
     },
-    [setLoading, setError, setTableData, setTableDataLoading, getTableData, clearTableData]
+    [setLoading, setError, setTableData, setTableDataLoading, setTableDataFailed, getTableData]
   );
 
   const refreshTables = useCallback(

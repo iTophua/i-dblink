@@ -130,18 +130,16 @@ function App() {
       root.setAttribute('data-theme-preset', themePreset);
     };
 
-    requestAnimationFrame(applyVars);
+    requestAnimationFrame(() => {
+      applyVars();
 
-    const bgColor = themeConfig.neutralColors.windowBackground;
-    const rgb = hexToRgb(bgColor);
-    if (rgb) {
       try {
         const appWindow = getCurrentWindow();
-        appWindow.setBackgroundColor({ red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1 });
+        appWindow.setTheme(effectiveMode === 'dark' ? 'dark' : 'light');
       } catch (e) {
-        console.error('Failed to set window background color:', e);
+        console.error('Failed to set window theme:', e);
       }
-    }
+    });
   }, [themePreset, effectiveMode, isHydrated]);
 
   function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -243,6 +241,10 @@ function App() {
         colorTextLabel: themeConfig.neutralColors.textSecondary,
         colorTextDescription: themeConfig.neutralColors.textTertiary,
         colorTextDisabled: themeConfig.neutralColors.textDisabled,
+      },
+      Message: {
+        colorBgElevated: themeConfig.neutralColors.backgroundCard,
+        colorText: themeConfig.neutralColors.textPrimary,
       },
     },
   };

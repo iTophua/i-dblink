@@ -31,10 +31,16 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
 
   useEffect(() => {
     if (open) {
+      const savedTab = useSettingsStore.getState().settings.settingsActiveTab || 'general';
       form.setFieldsValue(useSettingsStore.getState().settings);
-      setActiveTab('general');
+      setActiveTab(savedTab);
     }
   }, [open, form]);
+
+  const handleTabChange = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    updateSettings({ settingsActiveTab: tab });
+  };
 
   const handleSave = async () => {
     try {
@@ -117,7 +123,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
           <Menu
             mode="inline"
             selectedKeys={[activeTab]}
-            onClick={({ key }) => setActiveTab(key as SettingsTab)}
+            onClick={({ key }) => handleTabChange(key as SettingsTab)}
             style={{
               background: 'transparent',
               border: 'none',
@@ -217,7 +223,11 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                   tooltip="开启后主题将跟随系统设置自动切换"
                 >
                   <Space>
-                    <Switch checked={themeSyncSystem} size="small" />
+                    <Switch
+                      checked={themeSyncSystem}
+                      size="small"
+                      onChange={(checked) => form.setFieldsValue({ themeSyncSystem: checked })}
+                    />
                     <span>跟随系统主题</span>
                   </Space>
                 </Form.Item>

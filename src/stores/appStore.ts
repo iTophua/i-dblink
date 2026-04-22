@@ -16,6 +16,7 @@ interface TableDataCache {
   tables: TableInfo[];
   loaded: boolean;
   loading: boolean;
+  loadFailed?: boolean;
   lastUpdated?: number;
 }
 
@@ -46,6 +47,7 @@ interface AppState {
   // Table data cache methods
   setTableData: (key: string, tables: TableInfo[]) => void;
   setTableDataLoading: (key: string, loading: boolean) => void;
+  setTableDataFailed: (key: string, failed: boolean) => void;
   getTableData: (key: string) => TableDataCache | undefined;
   clearTableData: (connectionId?: string) => void;
 }
@@ -131,7 +133,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
   })),
-  
+
+  setTableDataFailed: (key, failed) => set((state) => ({
+    tableDataCache: {
+      ...state.tableDataCache,
+      [key]: {
+        ...(state.tableDataCache[key] || { tables: [], loaded: false }),
+        loadFailed: failed,
+        loading: false,  // 失败时重置 loading 状态
+      }
+    }
+  })),
+
   getTableData: (key) => {
     const state = get();
     return state.tableDataCache[key];

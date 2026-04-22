@@ -268,16 +268,18 @@ function TableListComponent({
 
   useEffect(() => {
     const currentCacheKey = `${connectionId}::${database || ''}`;
-    if (currentCacheKey !== prevCacheKeyRef.current || !cacheData?.loaded) {
+    // 只在 connectionId/database 真正变化时（或组件重新挂载时）自动加载，
+    // 避免 clearTableData 清除缓存后触发重复请求和重复 toast
+    if (currentCacheKey !== prevCacheKeyRef.current) {
       prevCacheKeyRef.current = currentCacheKey;
-      if (!cacheData?.loaded && !cacheData?.loading) {
+      if (!cacheData?.loaded && !cacheData?.loading && !cacheData?.loadFailed) {
         setLocalLoading(true);
         getTables(connectionId, database).finally(() => {
           setLocalLoading(false);
         });
       }
     }
-  }, [connectionId, database, cacheData?.loaded, cacheData?.loading, getTables]);
+  }, [connectionId, database]);
 
   const handleTableClick = useCallback(
     (tableName: string) => {

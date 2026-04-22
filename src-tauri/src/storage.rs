@@ -130,8 +130,11 @@ impl Storage {
         updated: DbConnection,
         new_password: Option<&str>,
     ) -> Result<(), anyhow::Error> {
+        // 只有当新密码非空时才更新密码，否则保留旧密码
         if let Some(pwd) = new_password {
-            PasswordManager::save_password(id, pwd).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
+            if !pwd.is_empty() {
+                PasswordManager::save_password(id, pwd).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
+            }
         }
 
         // 更新连接配置

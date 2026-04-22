@@ -279,9 +279,9 @@ type ConnectionTreeProps = {
   searchText: string;
   expandedKeys: string[];
   onExpandKeys: (keys: string[]) => void;
-  connectionDatabases: Record<string, { database: string; tables: TableInfo[]; loaded: boolean }[]>;
+  connectionDatabases: Record<string, { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean }[]>;
   isLoading: boolean;
-  onConnect: (connectionId: string) => void;
+  onConnect: (connectionId: string) => Promise<void> | void;
   onDisconnect: (connectionId: string) => void;
   onEditConnection: (connection: Connection) => void;
   onDeleteConnection: (connectionId: string) => void;
@@ -472,9 +472,9 @@ export function EnhancedConnectionTree({
               { type: 'divider' },
               { key: 'delete', label: '删除连接', icon: <DeleteOutlined />, danger: true },
             ],
-      onClick: ({ key }) => {
+      onClick: async ({ key }) => {
         if (key === 'connect') {
-          onConnect(conn.id);
+          await onConnect(conn.id);
         } else if (key === 'disconnect') {
           onDisconnect(conn.id);
         } else if (key === 'refresh') {
@@ -779,7 +779,7 @@ export function EnhancedConnectionTree({
   );
 
   const handleDoubleClick = useCallback(
-    (key: string) => {
+    async (key: string) => {
       if (key.startsWith('table::')) {
         const parts = key.split('::');
         if (parts.length >= 4) {
@@ -806,9 +806,12 @@ export function EnhancedConnectionTree({
           if (isExpanded) {
             onExpandKeys(expandedKeysRef.current.filter((k) => !k.startsWith(dbKey)));
           } else {
-            // 展开数据库时加载数据
             const dbList = connectionDatabasesRef.current[connectionId] || [];
             const db = dbList.find((d) => d.database === database);
+            if (db?.loadFailed) {
+              onExpandKeys([...expandedKeysRef.current, dbKey]);
+              return;
+            }
             if (!db || !db.loaded || db.tables.length === 0) {
               onDatabaseExpand(connectionId, database);
             }
@@ -834,7 +837,7 @@ export function EnhancedConnectionTree({
         if (!conn) return;
 
         if (conn.status !== 'connected') {
-          onConnect(key);
+          await onConnect(key);
         } else {
           const isExpanded = expandedKeysRef.current.includes(key);
           if (isExpanded) {
@@ -862,7 +865,7 @@ export function EnhancedConnectionTree({
 
     const buildTableNodes = (
       connId: string,
-      db: { database: string; tables: TableInfo[]; loaded: boolean },
+      db: { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean },
       allTableItems: TableInfo[] | undefined,
       allViewItems: TableInfo[] | undefined,
       isDbExpanded: boolean
@@ -1343,7 +1346,7 @@ export function EnhancedConnectionTree({
   }, [searchText, filteredConnections, connectionDatabases, onExpandKeys]);
 
   const handleExpand = useCallback(
-    (keys: React.Key[], info: { node: any; expanded: boolean }) => {
+    async (keys: React.Key[], info: { node: any; expanded: boolean }) => {
       const strKeys = keys as string[];
       onExpandKeys(strKeys);
 
@@ -1360,7 +1363,7 @@ export function EnhancedConnectionTree({
       ) {
         const conn = connections.find((c) => c.id === key);
         if (info.expanded && conn && conn.status !== 'connected') {
-          onConnect(key);
+          await onConnect(key);
         } else if (info.expanded && conn && conn.status === 'connected') {
           const dbList = connectionDatabases[key] || [];
           if (dbList.length === 0 && onLoadDatabases) {
@@ -1371,13 +1374,13 @@ export function EnhancedConnectionTree({
       }
 
       if (key.startsWith('db::') && info.expanded) {
-        // 展开数据库时加载表数据
         const parts = key.split('::');
         if (parts.length >= 3) {
           const connectionId = parts[1];
           const database = parts[2];
           const dbList = connectionDatabasesRef.current[connectionId] || [];
           const db = dbList.find((d) => d.database === database);
+          if (db?.loadFailed) return;
           if (!db || !db.loaded || db.tables.length === 0) {
             onDatabaseExpand(connectionId, database);
           }
@@ -1385,14 +1388,13 @@ export function EnhancedConnectionTree({
       }
 
       if (key.startsWith('tables::') && info.expanded) {
-        // 展开"表"文件夹时加载表数据
         const parts = key.split('::');
         if (parts.length >= 3) {
           const connectionId = parts[1];
           const database = parts[2];
-          // 检查是否已加载
           const dbList = connectionDatabasesRef.current[connectionId] || [];
           const db = dbList.find((d) => d.database === database);
+          if (db?.loadFailed) return;
           if (!db || !db.loaded || db.tables.length === 0) {
             onDatabaseExpand(connectionId, database);
           }
@@ -1400,13 +1402,13 @@ export function EnhancedConnectionTree({
       }
 
       if (key.startsWith('views::') && info.expanded) {
-        // 展开"视图"文件夹时也加载表数据（视图和表从同一接口获取）
         const parts = key.split('::');
         if (parts.length >= 3) {
           const connectionId = parts[1];
           const database = parts[2];
           const dbList = connectionDatabasesRef.current[connectionId] || [];
           const db = dbList.find((d) => d.database === database);
+          if (db?.loadFailed) return;
           if (!db || !db.loaded || db.tables.length === 0) {
             onDatabaseExpand(connectionId, database);
           }

@@ -10,6 +10,7 @@ export interface AppSettings {
   themeMode: ThemeMode;
   themeSyncSystem: boolean;
   language: 'zh-CN' | 'en-US';
+  settingsActiveTab?: 'general' | 'appearance' | 'language';
 }
 
 interface SettingsState {

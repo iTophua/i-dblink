@@ -181,7 +181,7 @@ export const DataTable = memo(function DataTable({
       query += ` LIMIT ${size} OFFSET ${offset}`;
       return query;
     },
-    [tableName, database, whereClause, orderByClause]
+    [tableName, database]
   );
 
   const buildWhereClause = useCallback((conditions: FilterCondition[]): string => {
@@ -362,7 +362,7 @@ export const DataTable = memo(function DataTable({
         loadingRef.current = false;
       }
     },
-    [connectionId, tableName, database, currentPage, pageSize, sortModel, whereClause]
+    [connectionId, tableName, database, currentPage, pageSize, sortModel]
   );
 
   loadDataRef.current = loadData;
@@ -448,7 +448,7 @@ export const DataTable = memo(function DataTable({
         console.error('Failed to load count:', error);
       }
     },
-    [connectionId, tableName, database, whereClause, executeQuery]
+    [connectionId, tableName, database, executeQuery]
   );
 
   loadCountRef.current = loadCount;

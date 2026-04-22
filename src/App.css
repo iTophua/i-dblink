@@ -261,8 +261,8 @@ textarea,
   }
 }
 
-/* Toast Notifications */
-.ant-message {
+/* Toast Notifications - 动画作用在单个 notice 上，避免影响 holder 容器的 transform 定位 */
+.ant-message-notice-content {
   animation: fadeSlideDown 0.3s ease;
 }
 

@@ -88,8 +88,10 @@
 
 [data-theme='dark'] .focus-ring:focus-visible,
 [data-theme='dark'] .focus-ring:focus {
-  box-shadow: var(--focus-ring-shadow, 0 0 0 2px rgba(129, 140, 248, 0.3));
-  border-color: var(--focus-ring-color, rgba(129, 140, 248, 0.6));
+  box-shadow:
+    0 0 0 2px rgba(129, 140, 248, 0.15),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+  border-color: rgba(129, 140, 248, 0.4);
 }
 
 /* ==================== 按钮增强效果 ==================== */
@@ -106,7 +108,7 @@
   left: 50%;
   width: 0;
   height: 0;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 50%;
   transform: translate(-50%, -50%);
   transition: width 0.4s ease, height 0.4s ease;
@@ -130,6 +132,29 @@
   transform: translateY(0) !important;
 }
 
+[data-theme='dark'] .ant-btn-primary {
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] .ant-btn-primary:hover {
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .ant-btn-default {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+[data-theme='dark'] .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
 /* ==================== 卡片增强效果 ==================== */
 .ant-card {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -144,10 +169,25 @@
   border-color: transparent;
 }
 
+[data-theme='dark'] .ant-card {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(30, 35, 50, 0.95) 0%,
+    rgba(25, 30, 42, 0.98) 100%
+  ) !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
 [data-theme='dark'] .ant-card:hover {
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.4),
-    0 6px 20px rgba(0, 0, 0, 0.25);
+    0 16px 40px rgba(0, 0, 0, 0.45),
+    0 6px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* ==================== 对话框增强效果 ==================== */
@@ -182,6 +222,42 @@
   background: var(--background-toolbar, #fafafa);
 }
 
+[data-theme='dark'] .ant-modal-content {
+  background: linear-gradient(
+    180deg,
+    rgba(28, 33, 48, 0.98) 0%,
+    rgba(22, 27, 40, 0.99) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.5),
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme='dark'] .ant-modal-header {
+  background: linear-gradient(
+    180deg,
+    rgba(30, 35, 50, 0.9) 0%,
+    rgba(25, 30, 42, 0.95) 100%
+  ) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme='dark'] .ant-modal-footer {
+  background: linear-gradient(
+    180deg,
+    rgba(25, 30, 42, 0.95) 0%,
+    rgba(22, 27, 38, 0.98) 100%
+  ) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme='dark'] .ant-modal-mask {
+  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.65) !important;
+}
+
 /* ==================== 输入框增强效果 ==================== */
 .ant-input,
 .ant-input-affix-wrapper,
@@ -209,6 +285,40 @@
   border-color: var(--color-primary-hover, #40a9ff) !important;
 }
 
+[data-theme='dark'] .ant-input,
+[data-theme='dark'] .ant-input-affix-wrapper,
+[data-theme='dark'] .ant-select-selector,
+[data-theme='dark'] .ant-picker {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e4e4ed !important;
+}
+
+[data-theme='dark'] .ant-input::placeholder,
+[data-theme='dark'] .ant-input-affix-wrapper::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+[data-theme='dark'] .ant-input:hover,
+[data-theme='dark'] .ant-input-affix-wrapper:hover,
+[data-theme='dark'] .ant-select-selector:hover,
+[data-theme='dark'] .ant-picker:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+[data-theme='dark'] .ant-input:focus,
+[data-theme='dark'] .ant-input-focused,
+[data-theme='dark'] .ant-input-affix-wrapper-focused,
+[data-theme='dark'] .ant-select-focused .ant-select-selector,
+[data-theme='dark'] .ant-picker-focused {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--color-primary) !important;
+  box-shadow:
+    0 0 0 2px rgba(99, 102, 241, 0.15),
+    0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
 /* ==================== 下拉菜单增强效果 ==================== */
 /* 注：不覆盖 .ant-dropdown 的动画，Antd 自带的 slide-up 动画负责显示/隐藏；
    此前 .ant-dropdown 上自定义的 dropdownFadeIn 动画已移除，避免与默认动画叠加导致闪烁 */
@@ -232,6 +342,29 @@
 .ant-dropdown-menu-item:hover {
   background: var(--background-active, rgba(24, 144, 255, 0.08)) !important;
   transform: translateX(2px);
+}
+
+[data-theme='dark'] .ant-dropdown-menu {
+  background: rgba(22, 27, 40, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.5),
+    0 8px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: blur(20px);
+}
+
+[data-theme='dark'] .ant-dropdown-menu-item {
+  color: #e2e5f0 !important;
+}
+
+[data-theme='dark'] .ant-dropdown-menu-item:hover {
+  background: rgba(99, 102, 241, 0.15) !important;
+  color: #a5b4fc !important;
+}
+
+[data-theme='dark'] .ant-dropdown-menu-item-disabled {
+  color: rgba(255, 255, 255, 0.3) !important;
 }
 
 /* ==================== 工具提示增强效果 ==================== */
@@ -279,6 +412,33 @@
   background: var(--border-color-light, #f0f0f0) !important;
 }
 
+[data-theme='dark'] .ant-tabs-tab {
+  color: #8b95b0 !important;
+}
+
+[data-theme='dark'] .ant-tabs-tab:hover {
+  color: #a5b4fc !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+[data-theme='dark'] .ant-tabs-tab-active {
+  color: #a5b4fc !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme='dark'] .ant-tabs-tab-active::after {
+  background: linear-gradient(90deg, #818cf8, #a5b4fc) !important;
+  box-shadow: 0 0 8px rgba(129, 140, 248, 0.5);
+}
+
+[data-theme='dark'] .ant-tabs-nav::before {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme='dark'] .ant-tabs-ink-bar {
+  background: linear-gradient(90deg, #818cf8, #a5b4fc) !important;
+}
+
 /* ==================== 表格增强效果 ==================== */
 .ant-table-thead > tr > th {
   background: linear-gradient(
@@ -306,6 +466,44 @@
   background: var(--background-active, rgba(24, 144, 255, 0.08)) !important;
 }
 
+[data-theme='dark'] .ant-table {
+  background: transparent !important;
+  color: #e2e5f0 !important;
+}
+
+[data-theme='dark'] .ant-table-thead > tr > th {
+  background: linear-gradient(
+    180deg,
+    rgba(25, 30, 42, 0.98) 0%,
+    rgba(22, 27, 38, 0.95) 100%
+  ) !important;
+  color: #8b95b0 !important;
+  border-bottom: 2px solid rgba(99, 102, 241, 0.5) !important;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+}
+
+[data-theme='dark'] .ant-table-tbody > tr > td {
+  background: transparent !important;
+  border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+  color: #e2e5f0 !important;
+}
+
+[data-theme='dark'] .ant-table-tbody > tr:hover > td {
+  background: rgba(99, 102, 241, 0.06) !important;
+}
+
+[data-theme='dark'] .ant-table-tbody > tr.selected-row > td {
+  background: rgba(99, 102, 241, 0.12) !important;
+}
+
+[data-theme='dark'] .ant-table-wrapper .ant-table-row-cell-break-word {
+  color: #e2e5f0 !important;
+}
+
+[data-theme='dark'] .ant-empty-description {
+  color: #5a6480 !important;
+}
+
 /* AG Grid 增强 */
 .ag-theme-alpine .ag-header {
   background: linear-gradient(
@@ -324,6 +522,55 @@
   background: var(--background-active, rgba(24, 144, 255, 0.08)) !important;
 }
 
+[data-theme='dark'] .ag-theme-alpine .ag-header {
+  background: linear-gradient(
+    180deg,
+    rgba(25, 30, 42, 0.98) 0%,
+    rgba(22, 27, 38, 0.95) 100%
+  ) !important;
+  border-bottom: 2px solid rgba(99, 102, 241, 0.5) !important;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-root-wrapper {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-row {
+  background: transparent !important;
+  border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+  color: #e2e5f0 !important;
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-row:hover {
+  background: rgba(99, 102, 241, 0.06) !important;
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-row-selected {
+  background: rgba(99, 102, 241, 0.12) !important;
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-cell {
+  color: #e2e5f0 !important;
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-header-cell {
+  color: #8b95b0 !important;
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-row-even {
+  background: rgba(255, 255, 255, 0.01) !important;
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-row-odd {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .ag-theme-alpine .ag-border-right {
+  border-right-color: rgba(255, 255, 255, 0.06) !important;
+}
+
 /* ==================== 侧边栏增强效果 ==================== */
 .sidebar-enhanced {
   background: linear-gradient(
@@ -338,10 +585,64 @@
 [data-theme='dark'] .sidebar-enhanced {
   background: linear-gradient(
     180deg,
-    var(--background-card, #141414) 0%,
-    var(--background-toolbar, #1f1f1f) 100%
+    rgba(20, 24, 38, 0.98) 0%,
+    rgba(17, 21, 32, 0.99) 100%
   ) !important;
-  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.3);
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow:
+    2px 0 20px rgba(0, 0, 0, 0.3),
+    inset -1px 0 0 rgba(255, 255, 255, 0.02);
+}
+
+/* 侧边栏内容容器统一背景 */
+[data-theme='dark'] .sidebar-enhanced .ant-layout-sider-children {
+  background: transparent !important;
+}
+
+/* 搜索容器与侧边栏融合 */
+[data-theme='dark'] .sidebar-enhanced .search-container {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+[data-theme='dark'] .sidebar-enhanced .ant-input-affix-wrapper {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme='dark'] .sidebar-enhanced .ant-input-affix-wrapper:hover,
+[data-theme='dark'] .sidebar-enhanced .ant-input-affix-wrapper:focus,
+[data-theme='dark'] .sidebar-enhanced .ant-input-affix-wrapper-focused {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme='dark'] .sidebar-enhanced .ant-input {
+  background: transparent !important;
+  color: #c0c5d5 !important;
+}
+
+[data-theme='dark'] .sidebar-enhanced .ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* 连接树容器统一背景 */
+[data-theme='dark'] .connection-tree-container,
+[data-theme='dark'] .sidebar-enhanced > .ant-layout-sider-children > div {
+  background: transparent !important;
+}
+
+/* 收起按钮与侧边栏融合 */
+[data-theme='dark'] .collapse-button,
+[data-theme='dark'] .sidebar-enhanced .collapse-button {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
+  color: #5a6480 !important;
+}
+
+[data-theme='dark'] .collapse-button:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #8b95b0 !important;
 }
 
 .connection-tree .ant-tree-node-content-wrapper {
@@ -360,6 +661,63 @@
   box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
 }
 
+[data-theme='dark'] .connection-tree {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .connection-tree .ant-tree-treenode {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .connection-tree .ant-tree-node-content-wrapper {
+  color: #c0c5d5 !important;
+}
+
+[data-theme='dark'] .connection-tree .ant-tree-node-content-wrapper:hover {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: #a5b4fc !important;
+}
+
+[data-theme='dark'] .connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
+  background: rgba(99, 102, 241, 0.15) !important;
+  color: #a5b4fc !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+[data-theme='dark'] .connection-tree .ant-tree-switcher {
+  color: #5a6480 !important;
+}
+
+[data-theme='dark'] .connection-tree .ant-tree-iconEle {
+  color: #8b95b0 !important;
+}
+
+[data-theme='dark'] .connection-tree .ant-tree-node-content-wrapper:hover .ant-tree-iconEle {
+  color: #a5b4fc !important;
+}
+
+/* 连接树滚动条 */
+[data-theme='dark'] .connection-tree-container::-webkit-scrollbar,
+[data-theme='dark'] .sidebar-enhanced ::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-theme='dark'] .connection-tree-container::-webkit-scrollbar-track,
+[data-theme='dark'] .sidebar-enhanced ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme='dark'] .connection-tree-container::-webkit-scrollbar-thumb,
+[data-theme='dark'] .sidebar-enhanced ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+[data-theme='dark'] .connection-tree-container::-webkit-scrollbar-thumb:hover,
+[data-theme='dark'] .sidebar-enhanced ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 /* ==================== 工具栏增强效果 ==================== */
 .toolbar-enhanced {
   background: linear-gradient(
@@ -370,6 +728,18 @@
   border-bottom: 1px solid var(--border-color-light, #f0f0f0) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   backdrop-filter: blur(10px);
+}
+
+[data-theme='dark'] .toolbar-enhanced {
+  background: linear-gradient(
+    180deg,
+    rgba(22, 27, 40, 0.95) 0%,
+    rgba(18, 22, 34, 0.98) 100%
+  ) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.25),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .toolbar-btn {
@@ -389,6 +759,17 @@
   transform: translateY(0) !important;
 }
 
+[data-theme='dark'] .toolbar-btn {
+  color: #8b95b0 !important;
+  background: transparent !important;
+}
+
+[data-theme='dark'] .toolbar-btn:hover {
+  background: rgba(99, 102, 241, 0.12) !important;
+  color: #a5b4fc !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 /* ==================== 状态栏增强效果 ==================== */
 .status-bar-enhanced {
   background: linear-gradient(
@@ -399,6 +780,18 @@
   border-top: 1px solid var(--border-color-light, #f0f0f0) !important;
   backdrop-filter: blur(12px);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme='dark'] .status-bar-enhanced {
+  background: linear-gradient(
+    180deg,
+    rgba(17, 21, 32, 0.95) 0%,
+    rgba(20, 24, 38, 0.98) 100%
+  ) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
+  box-shadow:
+    0 -2px 12px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 /* ==================== 徽标和标签增强效果 ==================== */
@@ -423,6 +816,21 @@
   transform: scale(1.1);
 }
 
+[data-theme='dark'] .ant-tag {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #a5b0c5 !important;
+}
+
+[data-theme='dark'] .ant-tag:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+[data-theme='dark'] .ant-badge-count {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
 /* ==================== 消息提示增强效果 ==================== */
 .ant-message-notice {
   animation: messageSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -439,11 +847,106 @@
   }
 }
 
-.ant-message-custom-content {
-  border-radius: 8px !important;
+[data-theme='dark'] .ant-message {
+  color: #e2e5f0 !important;
+  font-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme='dark'] .ant-message-notice-content {
+  background: linear-gradient(
+    135deg,
+    rgba(28, 33, 48, 0.98) 0%,
+    rgba(22, 27, 40, 0.99) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.5),
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(20px);
   padding: 12px 20px !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
-  backdrop-filter: blur(8px);
+}
+
+[data-theme='dark'] .ant-message-success .ant-message-content {
+  color: #6ee7b7 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme='dark'] .ant-message-error .ant-message-content {
+  color: #fda4af !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme='dark'] .ant-message-warning .ant-message-content {
+  color: #fcd34d !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme='dark'] .ant-message-info .ant-message-content {
+  color: #7dd3fc !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme='dark'] .ant-message .anticon {
+  color: #a5b4fc !important;
+}
+
+[data-theme='dark'] .ant-message-success .anticon {
+  color: #6ee7b7 !important;
+}
+
+[data-theme='dark'] .ant-message-error .anticon {
+  color: #fda4af !important;
+}
+
+[data-theme='dark'] .ant-message-warning .anticon {
+  color: #fcd34d !important;
+}
+
+[data-theme='dark'] .ant-message-info .anticon {
+  color: #7dd3fc !important;
+}
+
+/* ==================== 通知提醒增强效果 ==================== */
+[data-theme='dark'] .ant-notification {
+  color: #e2e5f0 !important;
+}
+
+[data-theme='dark'] .ant-notification-notice {
+  background: linear-gradient(
+    135deg,
+    rgba(28, 33, 48, 0.98) 0%,
+    rgba(22, 27, 40, 0.99) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 16px 64px rgba(0, 0, 0, 0.5),
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(20px);
+}
+
+[data-theme='dark'] .ant-notification-notice-message {
+  color: #e2e5f0 !important;
+  font-weight: 600 !important;
+}
+
+[data-theme='dark'] .ant-notification-notice-description {
+  color: #a5b0c5 !important;
+}
+
+[data-theme='dark'] .ant-notification-notice-close {
+  color: #5a6480 !important;
+}
+
+[data-theme='dark'] .ant-notification-notice-close:hover {
+  color: #8b95b0 !important;
+}
+
+[data-theme='dark'] .ant-notification .anticon {
+  color: #a5b4fc !important;
 }
 
 /* ==================== NeonCyber 主题特效增强 ==================== */
@@ -477,6 +980,29 @@
   box-shadow: 0 0 8px var(--color-primary), 0 0 16px var(--color-primary);
 }
 
+[data-theme='dark'][data-theme-preset='neonCyber'] .neon-glow-subtle {
+  text-shadow: 0 0 8px rgba(0, 245, 255, 0.5);
+}
+
+[data-theme='dark'][data-theme-preset='neonCyber'] .ant-btn-primary {
+  box-shadow:
+    0 0 15px rgba(0, 245, 255, 0.3),
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'][data-theme-preset='neonCyber'] .sidebar-enhanced {
+  border-right: 1px solid rgba(0, 245, 255, 0.2) !important;
+  box-shadow:
+    4px 0 24px rgba(0, 245, 255, 0.15),
+    inset -2px 0 12px rgba(0, 245, 255, 0.05) !important;
+}
+
+[data-theme='dark'][data-theme-preset='neonCyber'] .ant-tabs-tab-active::after {
+  background: linear-gradient(90deg, #00f5ff, #33f7ff) !important;
+  box-shadow: 0 0 12px rgba(0, 245, 255, 0.6);
+}
+
 /* ==================== OceanBlue 主题特效增强 ==================== */
 [data-theme-preset='oceanBlue'] .ant-table-thead > tr > th {
   background: var(--color-primary-gradient) !important;
@@ -500,6 +1026,25 @@
   50% { background-position: 100% 0%; }
 }
 
+[data-theme='dark'][data-theme-preset='oceanBlue'] .ant-btn-primary {
+  box-shadow:
+    0 0 15px rgba(56, 189, 248, 0.25),
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'][data-theme-preset='oceanBlue'] .sidebar-enhanced {
+  border-right: 1px solid rgba(56, 189, 248, 0.2) !important;
+  box-shadow:
+    4px 0 24px rgba(56, 189, 248, 0.12),
+    inset -2px 0 12px rgba(56, 189, 248, 0.05) !important;
+}
+
+[data-theme='dark'][data-theme-preset='oceanBlue'] .ant-tabs-tab-active::after {
+  background: linear-gradient(90deg, #38bdf8, #7dd3fc) !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
 /* ==================== NordicFrost 主题特效增强 ==================== */
 [data-theme-preset='nordicFrost'] {
   --frost-border: 1px solid rgba(148, 163, 184, 0.2);
@@ -512,8 +1057,11 @@
 }
 
 [data-theme='dark'][data-theme-preset='nordicFrost'] .ant-card {
-  background: rgba(15, 23, 42, 0.8) !important;
-  border-color: rgba(71, 85, 105, 0.3) !important;
+  background: rgba(17, 21, 32, 0.85) !important;
+  border-color: rgba(148, 163, 184, 0.15) !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
 }
 
 [data-theme-preset='nordicFrost'] .ant-dropdown-menu {
@@ -522,7 +1070,21 @@
 }
 
 [data-theme='dark'][data-theme-preset='nordicFrost'] .ant-dropdown-menu {
-  background: rgba(15, 23, 42, 0.9) !important;
+  background: rgba(17, 21, 32, 0.92) !important;
+}
+
+[data-theme='dark'][data-theme-preset='nordicFrost'] .ant-btn-primary {
+  box-shadow:
+    0 2px 8px rgba(148, 163, 184, 0.2),
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'][data-theme-preset='nordicFrost'] .sidebar-enhanced {
+  border-right: 1px solid rgba(148, 163, 184, 0.1) !important;
+  box-shadow:
+    2px 0 16px rgba(0, 0, 0, 0.2),
+    inset -1px 0 0 rgba(255, 255, 255, 0.02) !important;
 }
 
 /* ==================== MidnightDeep 主题特效增强 ==================== */
@@ -543,6 +1105,24 @@
   box-shadow:
     4px 0 20px rgba(99, 102, 241, 0.15),
     inset -2px 0 8px rgba(99, 102, 241, 0.05) !important;
+}
+
+[data-theme='dark'][data-theme-preset='midnightDeep'] .sidebar-enhanced {
+  border-right: 2px solid rgba(99, 102, 241, 0.4) !important;
+  box-shadow:
+    4px 0 24px rgba(99, 102, 241, 0.2),
+    inset -2px 0 12px rgba(99, 102, 241, 0.08) !important;
+}
+
+[data-theme='dark'][data-theme-preset='midnightDeep'] .ant-tabs-tab-active::after {
+  box-shadow: 0 0 12px rgba(129, 140, 248, 0.6);
+}
+
+[data-theme='dark'][data-theme-preset='midnightDeep'] .ant-btn-primary {
+  box-shadow:
+    0 2px 8px rgba(99, 102, 241, 0.25),
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 /* ==================== 加载动画增强 ==================== */
@@ -597,6 +1177,17 @@
   background-clip: padding-box;
 }
 
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--border-color-dark, #bfbfbf) 0%,
+    var(--text-tertiary, #8c8c8c) 100%
+  );
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(
     180deg,
@@ -606,20 +1197,32 @@
   background-clip: padding-box;
 }
 
+[data-theme='dark'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+
 [data-theme='dark'] ::-webkit-scrollbar-thumb {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.2) 0%,
-    rgba(255, 255, 255, 0.35) 100%
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.25) 100%
   );
+  border-radius: 4px;
+  border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 [data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.35) 0%,
-    rgba(255, 255, 255, 0.5) 100%
+    rgba(255, 255, 255, 0.25) 0%,
+    rgba(255, 255, 255, 0.4) 100%
   );
   background-clip: padding-box;
 }
@@ -666,4 +1269,66 @@
   .ant-btn-primary::before {
     display: none;
   }
+}
+
+/* ==================== 暗色模式全局增强 ==================== */
+[data-theme='dark'] body {
+  background: linear-gradient(
+    180deg,
+    #0a0f1f 0%,
+    #0d1225 50%,
+    #0a0f1f 100%
+  );
+  background-attachment: fixed;
+}
+
+[data-theme='dark'] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  z-index: 9999;
+}
+
+[data-theme='dark'] .ant-layout {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .ant-layout-content {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .ant-layout-footer {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .ant-pro-layout {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .ant-pro-sider {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .ant-segmented {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme='dark'] .ant-segmented-item {
+  color: #8b95b0 !important;
+}
+
+[data-theme='dark'] .ant-segmented-item-selected {
+  background: rgba(99, 102, 241, 0.15) !important;
+  color: #a5b4fc !important;
+}
+
+[data-theme='dark'] .ant-segmented-thumb {
+  background: rgba(99, 102, 241, 0.2) !important;
 }
