@@ -1,4 +1,4 @@
-export type DatabaseType = 'mysql' | 'postgresql' | 'sqlite' | 'sqlserver' | 'oracle' | 'mariadb' | 'dameng';
+export type DatabaseType = 'mysql' | 'postgresql' | 'sqlite' | 'sqlserver' | 'oracle' | 'mariadb' | 'dameng' | 'kingbase' | 'highgo' | 'vastbase';
 
 export type ConnectionStatus = 'connected' | 'disconnected' | 'loading';
 
@@ -58,7 +58,7 @@ export interface TableInfo {
 export interface ColumnInfo {
   column_name: string;
   data_type: string;
-  is_nullable: boolean;
+  is_nullable: string;
   column_key?: string;
   column_default?: string;
   extra?: string;

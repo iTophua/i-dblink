@@ -4,6 +4,13 @@ import { ThemePreset } from '../styles/theme';
 
 export type ThemeMode = 'light' | 'dark';
 
+export interface ShortcutConfig {
+  id: string;
+  keys: string;
+  description: string;
+  category: 'file' | 'edit' | 'view' | 'connection' | 'tools' | 'window' | 'help';
+}
+
 export interface AppSettings {
   pageSize: number;
   themePreset: ThemePreset;
@@ -11,6 +18,7 @@ export interface AppSettings {
   themeSyncSystem: boolean;
   language: 'zh-CN' | 'en-US';
   settingsActiveTab?: 'general' | 'appearance' | 'language';
+  shortcuts: Record<string, string>; // id -> keys
 }
 
 interface SettingsState {
@@ -25,6 +33,7 @@ const defaultSettings: AppSettings = {
   themeMode: 'dark',
   themeSyncSystem: true,
   language: 'zh-CN',
+  shortcuts: {},
 };
 
 export const useSettingsStore = create<SettingsState>()(

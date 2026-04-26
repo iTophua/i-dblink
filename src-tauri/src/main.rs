@@ -5,14 +5,16 @@
 
 mod commands;
 mod db;
-mod drivers;
 mod security;
+mod sidecar;
 mod storage;
 
 use commands::ActiveConnections;
+use sidecar::{SidecarManager, SidecarState};
+use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex as TokioMutex, Mutex as AsyncMutex, RwLock};
 
 // 创建文件菜单
 fn create_file_menu<R: tauri::Runtime>(
@@ -241,27 +243,85 @@ fn create_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Menu<R>, 
 }
 
 fn main() {
+    eprintln!("DEBUG: main() started");
     tauri::Builder::default()
         .setup(|app| {
+            eprintln!("DEBUG: setup() started");
             // 创建并设置菜单
             let menu = create_menu(&app.handle())?;
             app.set_menu(menu)?;
+            eprintln!("DEBUG: menu created");
 
-            // 在 setup 中同步初始化存储
+            // 初始化存储 — 在独立的新 tokio runtime 上同步执行
+            // 注意：.setup() 不在 Tauri 的 tokio runtime 上下文中，不能直接用 Handle::current()
             let app_handle = app.handle().clone();
-            let rt = tokio::runtime::Runtime::new()
-                .expect("Failed to create Tokio runtime - system resources may be exhausted");
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
+            eprintln!("DEBUG: tokio runtime created");
             let storage = rt.block_on(async {
-                storage::init_storage(&app_handle)
-                    .await
-                    .expect("Failed to initialize storage")
+                eprintln!("DEBUG: storage init started");
+                storage::init_storage(&app_handle).await
             });
+            eprintln!("DEBUG: storage init completed");
 
-            app.manage(Mutex::new(Some(storage)));
-            // 性能优化：使用 RwLock 替代 Mutex 提升并发性能
+            let storage = match storage {
+                Ok(s) => {
+                    tracing::info!("Storage initialized successfully");
+                    s
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize storage: {}. App will continue with limited functionality.", e);
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Storage init failed: {}", e),
+                    )) as Box<dyn std::error::Error>);
+                }
+            };
+
+            // Sidecar 占位状态 — 使用 SidecarState 包装 Arc，供后续更新
+            let sidecar_state = SidecarState(Arc::new(AsyncMutex::new(None)));
+            let sidecar_state_clone = sidecar_state.0.clone();
+            app.manage(sidecar_state);
+
+            // Sidecar 在后台异步启动
+            // 注意：需要用 multi_thread runtime 才能 spawn 任务
+            eprintln!("DEBUG: Creating sidecar runtime...");
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| format!("Failed to create tokio runtime for sidecar: {}", e))?;
+            eprintln!("DEBUG: Sidecar runtime created, spawning task...");
+            tracing::info!("Starting sidecar spawn...");
+            rt.spawn(async move {
+                eprintln!("DEBUG: Sidecar task started!");
+                tracing::info!("Sidecar spawn task started, calling spawn_blocking...");
+                let result = tokio::task::spawn_blocking(SidecarManager::start).await;
+
+                match result {
+                    Ok(Ok(sidecar)) => {
+                        tracing::info!("Go sidecar started successfully");
+                        let mut guard = sidecar_state_clone.lock().await;
+                        *guard = Some(sidecar);
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("Failed to start Go sidecar: {}. Sidecar features will be unavailable.", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("Sidecar start task panicked: {}. Sidecar features will be unavailable.", e);
+                    }
+                }
+            });
+            eprintln!("DEBUG: Sidecar task spawned, keeping runtime alive");
+            tracing::info!("Sidecar spawn call completed, keeping runtime alive");
+            // 保持 runtime 存活（drop 后 runtime 才真正关闭）
+            std::mem::forget(rt);
+
+            app.manage(TokioMutex::new(Some(storage)));
             app.manage(RwLock::new(ActiveConnections::new()));
 
-            tracing::info!("Storage and menu initialized successfully");
+            tracing::info!("App setup completed successfully");
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -308,7 +368,9 @@ fn main() {
             commands::get_columns,
             commands::get_indexes,
             commands::get_foreign_keys,
-            commands::execute_query
+            commands::execute_query,
+            commands::get_routines,
+            commands::update_connection_password
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

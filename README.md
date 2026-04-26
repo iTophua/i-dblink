@@ -14,13 +14,22 @@
 ## 功能特性
 
 - ✅ 跨平台支持（Windows、macOS、Linux）
-- ✅ 多数据库类型支持
+- ✅ 多数据库类型支持（MySQL、PostgreSQL、SQLite）
 - ✅ 自定义连接分组
-- ✅ 可视化数据浏览和编辑
+- ✅ 可视化数据浏览和编辑（AG Grid）
 - ✅ SQL 查询编辑器（Monaco Editor）
-- ✅ ER 图与模型设计
+- ✅ 表设计器（可视化创建/修改表）
+- ✅ SQL 执行历史记录
+- ✅ SQL 多结果集显示
+- ✅ 执行计划（EXPLAIN）
 - ✅ 数据导入导出
 - ✅ 密码加密存储（系统密钥链）
+- ✅ 快捷键系统
+- ✅ 多查询标签页
+- ✅ 右键上下文菜单
+- 🔄 SSH 隧道配置（UI 存在）
+- 🔄 SSL/TLS 配置（UI 存在）
+- ⏳ ER 图与模型设计（计划中）
 
 ## 开发指南
 
@@ -63,20 +72,23 @@ pnpm tauri build
 
 ```
 i-dblink/
-├── src/                      # 前端源码
-│   ├── components/           # React 组件
-│   ├── hooks/                # Custom Hooks
-│   ├── stores/               # Zustand Stores
+├── src/                      # 前端源码 (TypeScript/React)
+│   ├── components/           # React 组件 (20+ 文件)
+│   ├── hooks/                # 自定义 Hooks (useApi, useMenuShortcuts)
+│   ├── stores/               # Zustand 状态管理
 │   ├── types/                # TypeScript 类型定义
-│   ├── utils/                # 工具函数
-│   └── styles/               # 全局样式
+│   ├── api/                  # Tauri invoke API 封装
+│   ├── constants/            # 快捷键配置
+│   └── styles/               # Ant Design 主题配置
 ├── src-tauri/                # Rust 后端
 │   ├── src/
-│   │   ├── commands/         # Tauri Commands
-│   │   ├── drivers/          # 数据库驱动
-│   │   ├── models/           # 数据模型
-│   │   └── utils/            # 工具函数
-│   └── Cargo.toml
+│   │   ├── db/              # 数据库模块 (pool, models, query, repository)
+│   │   ├── drivers/         # 数据库驱动抽象 (MySQL, PostgreSQL, SQLite)
+│   │   ├── commands.rs       # Tauri 命令
+│   │   ├── main.rs          # Rust 入口
+│   │   ├── security.rs       # 密钥链安全
+│   │   └── storage.rs        # 本地存储
+│   └── icons/               # 应用图标
 ├── doc/                      # 项目文档
 └── package.json
 ```
@@ -85,9 +97,9 @@ i-dblink/
 
 | 数据库 | 状态 | 驱动 |
 |--------|------|------|
-| MySQL | 🟢 开发中 | sqlx |
-| PostgreSQL | 🟢 开发中 | sqlx |
-| SQLite | 🟢 开发中 | sqlx |
+| MySQL | 🟢 已实现 | sqlx |
+| PostgreSQL | 🟢 已实现 | sqlx |
+| SQLite | 🟢 已实现 | sqlx |
 | SQL Server | 🟡 计划中 | tiberius |
 | Oracle | 🟡 计划中 | rust-oracle / ODBC |
 | MariaDB | 🟡 计划中 | sqlx |
@@ -95,27 +107,33 @@ i-dblink/
 
 ## 路线图
 
-### Phase 1: MVP (8 周)
+### Phase 1: MVP
 - [x] 项目初始化
-- [ ] 基础连接管理
-- [ ] MySQL/PostgreSQL/SQLite支持
-- [ ] 数据浏览
-- [ ] SQL 编辑器基础功能
+- [x] 基础连接管理
+- [x] MySQL/PostgreSQL/SQLite 支持
+- [x] 数据浏览
+- [x] SQL 编辑器基础功能
+- [x] 表设计器
+- [x] SQL 执行历史
+- [x] 快捷键系统
+- [x] 多查询标签页
+- [x] 右键上下文菜单
 
-### Phase 2: 功能完善 (10 周)
-- [ ] 完整数据库对象管理
+### Phase 2: 功能完善
+- [ ] 完整数据库对象管理（视图、存储过程）
 - [ ] 数据导入导出
 - [ ] ER 图生成
-- [ ] SQL Server/Oracle/MariaDB支持
+- [ ] SSH/SSL 隧道
+- [ ] SQL Server/Oracle/MariaDB 支持
 - [ ] 达梦数据库支持
 
-### Phase 3: 高级功能 (8 周)
+### Phase 3: 高级功能
 - [ ] 数据库同步
 - [ ] 备份恢复
 - [ ] 模型设计器
 - [ ] 智能 SQL 辅助
 
-### Phase 4: 优化发布 (4 周)
+### Phase 4: 优化发布
 - [ ] 性能优化
 - [ ] 全面测试
 - [ ] 文档完善
@@ -125,8 +143,8 @@ i-dblink/
 
 - [需求规格说明书](./doc/01-requirements.md)
 - [UI 设计文档](./doc/02-ui-design.md)
-- [跨平台菜单栏实现指南](./doc/03-cross-platform-menu.md)
-- [技术选型文档](./doc/04-tech-stack.md)
+- [交互操作设计文档](./doc/03-interaction-design.md)
+- [功能更新报告 v0.2.0](./doc/FEATURES_UPDATE_REPORT_v0.2.0.md)
 
 ## 许可证
 
@@ -135,7 +153,3 @@ MIT License
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！
-
----
-
-**注意**: 当前版本处于早期开发阶段，许多功能尚未实现。

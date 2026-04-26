@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { Tabs, Empty, Breadcrumb, Menu, message, Modal, Tooltip } from 'antd';
+import { Tabs, Empty, Breadcrumb, Menu, App, Modal, Tooltip } from 'antd';
 import type { TabsProps } from 'antd';
-import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   DatabaseOutlined,
   TableOutlined,
@@ -13,6 +12,7 @@ import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
 import { TableList } from '../TableList';
 import { TableStructure } from '../TableStructure';
+import type { TableInfo } from '../../types/api';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
@@ -26,6 +26,8 @@ interface TabPanelProps {
   onSqlTabCountChange?: (count: number) => void;
   /** 分页大小 */
   pageSize?: number;
+  /** 当前连接的数据库列表 */
+  connectionDatabases?: Record<string, { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean }[]>;
 }
 
 interface OpenedTable {
@@ -40,6 +42,7 @@ interface OpenedSqlTab {
   key: string;
   title: string;
   connectionId?: string;
+  database?: string;
 }
 
 export interface TabPanelRef {
@@ -60,9 +63,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   tableToOpen,
   onSqlTabCountChange,
   pageSize,
+  connectionDatabases,
 }, ref) {
-  const tc = useThemeColors();
-
+  const { message } = App.useApp();
   // 已打开的数据浏览 Tab 列表
   const [openedTables, setOpenedTables] = useState<OpenedTable[]>([]);
   // SQL 查询 Tab 列表（动态添加/删除）
@@ -147,13 +150,16 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
   // 监听 tab-action 事件（来自菜单或工具栏）
   useEffect(() => {
-    const handleTabAction = (event: CustomEvent<{ action: string }>) => {
-      const { action } = event.detail;
+    const handleTabAction = (event: CustomEvent<{ action: string; connectionId?: string; database?: string }>) => {
+      const { action, connectionId: eventConnId, database: eventDb } = event.detail;
       if (action === 'new-sql-tab') {
         const newSqlKey = `sql-${Date.now()}`;
+        const connId = eventConnId || selectedConnectionId;
+        // 如果传入了数据库，使用传入的；否则使用当前选中的数据库
+        const dbName = eventDb || selectedDatabase;
         setOpenedSqlTabs((prev) => [
           ...prev,
-          { key: newSqlKey, title: 'SQL 查询', connectionId: selectedConnectionId || undefined },
+          { key: newSqlKey, title: 'SQL 查询', connectionId: connId || undefined, database: dbName },
         ]);
         setActiveKey(newSqlKey);
       } else if (action === 'close-tab') {
@@ -169,7 +175,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     return () => {
       window.removeEventListener('tab-action', handleTabAction as EventListener);
     };
-  }, [activeKey, selectedConnectionId]);
+  }, [activeKey, selectedConnectionId, selectedDatabase]);
 
   // 双击表时调用（来自树或表列表），打开新的数据浏览 Tab
   const openTableTab = useCallback(
@@ -451,7 +457,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 connectionId={selectedConnectionId}
                 database={selectedDatabase}
                 objectType={selectedObjectType}
-                onTableSelect={(tableName, db) => {
+                onTableSelect={() => {
                   // Single click in TableList → show structure in objects tab
                 }}
                 onTableOpen={openTableTab}
@@ -522,20 +528,63 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       ];
     }),
     // 动态 SQL 查询 Tab
-    ...openedSqlTabs.map((sqlTab) => ({
+    ...openedSqlTabs.map((sqlTab, index) => ({
       key: sqlTab.key,
       label: (
         <span
           onContextMenu={(e) => handleTabContextMenu(e, sqlTab.key)}
-          style={{ cursor: 'pointer' }}
+          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          onDoubleClick={() => {
+            Modal.confirm({
+              title: '重命名标签页',
+              content: (
+                <input
+                  autoFocus
+                  defaultValue={sqlTab.title}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 4,
+                    background: 'var(--background)',
+                    color: 'var(--text)',
+                  }}
+                  onChange={(e) => {
+                    const newTitle = e.target.value;
+                    setOpenedSqlTabs((prev) =>
+                      prev.map((t) => (t.key === sqlTab.key ? { ...t, title: newTitle } : t))
+                    );
+                  }}
+                />
+              ),
+              okText: '确定',
+              cancelText: '取消',
+              onOk: () => {},
+            });
+          }}
         >
           <DatabaseOutlined style={{ marginRight: 4 }} />
-          {sqlTab.title}
+          {sqlTab.title || `SQL ${index + 1}`}
         </span>
       ),
       children: (
         <div style={{ height: '100%' }}>
-          <SQLEditor connectionId={selectedConnectionId} />
+          <SQLEditor 
+            connectionId={selectedConnectionId} 
+            database={sqlTab.database || selectedDatabase}
+            availableDatabases={
+              selectedConnectionId && connectionDatabases?.[selectedConnectionId]
+                ? connectionDatabases[selectedConnectionId].map((db) => db.database)
+                : []
+            }
+            onDatabaseChange={(database) => {
+              setOpenedSqlTabs((prev) =>
+                prev.map((t) =>
+                  t.key === sqlTab.key ? { ...t, database } : t
+                )
+              );
+            }}
+          />
         </div>
       ),
       closable: true,

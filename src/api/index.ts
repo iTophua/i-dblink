@@ -57,6 +57,10 @@ export const api = {
     return await invoke('save_connection', { input });
   },
 
+  async updateConnectionPassword(connectionId: string, password: string): Promise<void> {
+    return await invoke('update_connection_password', { connectionId, password });
+  },
+
   async deleteConnection(id: string): Promise<void> {
     return await invoke('delete_connection', { id });
   },

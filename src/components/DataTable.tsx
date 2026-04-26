@@ -125,6 +125,12 @@ export const DataTable = memo(function DataTable({
   ]);
   const [whereClause, setWhereClause] = useState('');
   const [orderByClause, setOrderByClause] = useState('');
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    rowData: RowData | null;
+  }>({ visible: false, x: 0, y: 0, rowData: null });
   const loadDataRef = useRef<() => void>(() => {});
   const overrideWhereRef = useRef<string | undefined>();
   const overrideOrderByRef = useRef<string | undefined>();
@@ -399,7 +405,7 @@ export const DataTable = memo(function DataTable({
       const dataMaxLength = colWidths[col.column_name] || 0;
       const contentWidth = Math.max(headerLength, dataMaxLength);
       const autoWidth = Math.max(60, Math.min(300, contentWidth * 8 + 30));
-      const nullableInfo = col.is_nullable ? ' | NULL' : ' | NOT NULL';
+      const nullableInfo = col.is_nullable === 'YES' ? ' | NULL' : ' | NOT NULL';
       const commentInfo = col.comment ? ` | ${col.comment}` : '';
 
       return {
@@ -504,6 +510,97 @@ export const DataTable = memo(function DataTable({
     });
   }, []);
 
+  const handleContextMenu = useCallback((event: React.MouseEvent, rowData: RowData) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      visible: true,
+      x: event.clientX,
+      y: event.clientY,
+      rowData,
+    });
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const handleContextMenuAction = useCallback(
+    async (action: string) => {
+      closeContextMenu();
+      const row = contextMenu.rowData;
+      if (!row) return;
+
+      const primaryKey = columns.find((col) => col.column_key === 'PRI');
+
+      switch (action) {
+        case 'copy-row':
+          navigator.clipboard.writeText(JSON.stringify(row, null, 2));
+          message.success('已复制行数据到剪贴板');
+          break;
+        case 'delete-row':
+          if (!primaryKey) {
+            message.warning('该表没有主键，无法删除单行');
+            return;
+          }
+          Modal.confirm({
+            title: '确认删除',
+            content: `确定要删除选中的行吗？此操作不可撤销。`,
+            okText: '删除',
+            okType: 'danger',
+            cancelText: '取消',
+            onOk: () => {
+              setPendingChanges((prev) => ({
+                ...prev,
+                deletes: [...prev.deletes, row],
+              }));
+              setHasUnsavedChanges(true);
+            },
+          });
+          break;
+        case 'edit-row':
+          setEditingRow(row);
+          setEditModalOpen(true);
+          break;
+        case 'copy-select':
+          const selectedRows = gridApiRef.current?.getSelectedRows() || [];
+          if (selectedRows.length === 0) {
+            message.warning('没有选中的行');
+            return;
+          }
+          navigator.clipboard.writeText(JSON.stringify(selectedRows, null, 2));
+          message.success(`已复制 ${selectedRows.length} 行到剪贴板`);
+          break;
+        case 'delete-select':
+          if (!primaryKey) {
+            message.warning('该表没有主键，无法批量删除');
+            return;
+          }
+          const selectedToDelete = gridApiRef.current?.getSelectedRows() || [];
+          if (selectedToDelete.length === 0) {
+            message.warning('没有选中的行');
+            return;
+          }
+          Modal.confirm({
+            title: '确认删除',
+            content: `确定要删除选中的 ${selectedToDelete.length} 行吗？此操作不可撤销。`,
+            okText: '删除',
+            okType: 'danger',
+            cancelText: '取消',
+            onOk: () => {
+              setPendingChanges((prev) => ({
+                ...prev,
+                deletes: [...prev.deletes, ...selectedToDelete],
+              }));
+              setHasUnsavedChanges(true);
+            },
+          });
+          break;
+      }
+    },
+    [contextMenu.rowData, columns, closeContextMenu]
+  );
+
   const handleCommit = useCallback(async () => {
     if (!hasUnsavedChanges) {
       message.info('没有未保存的更改');
@@ -594,7 +691,7 @@ export const DataTable = memo(function DataTable({
           if (updates.length === 0) continue; // 没有实际更改
 
           const primaryKeyValue = row[primaryKey.column_name];
-          const updateSQL = `UPDATE \`${tableName}\` SET ${updates.join(', ')} WHERE \`${primaryKey.column_name}\` = '${primaryKeyValue}'`;
+          const updateSQL = `UPDATE \`${tableName}\` SET ${updates.join(', ')} WHERE \`${primaryKey.column_name}\` = ${escapeSqlValue(primaryKeyValue)}`;
           const result = await executeQuery(connectionId, updateSQL);
 
           if (result.error) {
@@ -1561,6 +1658,11 @@ export const DataTable = memo(function DataTable({
                   setCurrentPage(1);
                 }
               }}
+              onCellContextMenu={(event) => {
+                if (event.data && event.event) {
+                  handleContextMenu(event.event as unknown as React.MouseEvent, event.data);
+                }
+              }}
               rowSelection="multiple"
               suppressRowClickSelection={true}
               suppressPaginationPanel={true}
@@ -1798,14 +1900,14 @@ export const DataTable = memo(function DataTable({
               label={
                 <span>
                   {col.column_name}
-                  {!col.is_nullable && <span style={{ color: 'var(--color-error)' }}> *</span>}
+                  {col.is_nullable !== 'YES' && <span style={{ color: 'var(--color-error)' }}> *</span>}
                   <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
                     {col.data_type}
                   </span>
                 </span>
               }
               name={col.column_name}
-              rules={[{ required: !col.is_nullable, message: `请输入 ${col.column_name}` }]}
+              rules={[{ required: col.is_nullable !== 'YES', message: `请输入 ${col.column_name}` }]}
             >
               <GlobalInput placeholder={col.comment || col.data_type} />
             </Form.Item>
@@ -1852,6 +1954,63 @@ export const DataTable = memo(function DataTable({
           ))}
         </Form>
       </Modal>
+
+      <Dropdown
+        open={contextMenu.visible}
+        onOpenChange={(visible) => {
+          if (!visible) closeContextMenu();
+        }}
+        menu={{
+          items: [
+            {
+              key: 'copy-row',
+              label: '复制行',
+              icon: <CopyOutlined />,
+              onClick: () => handleContextMenuAction('copy-row'),
+            },
+            {
+              key: 'edit-row',
+              label: '编辑行',
+              icon: <EditOutlined />,
+              onClick: () => handleContextMenuAction('edit-row'),
+            },
+            { type: 'divider' },
+            {
+              key: 'delete-row',
+              label: '删除行',
+              icon: <DeleteOutlined />,
+              danger: true,
+              onClick: () => handleContextMenuAction('delete-row'),
+            },
+            { type: 'divider' },
+            {
+              key: 'copy-select',
+              label: '复制选中行',
+              icon: <CopyOutlined />,
+              onClick: () => handleContextMenuAction('copy-select'),
+            },
+            {
+              key: 'delete-select',
+              label: '删除选中行',
+              icon: <DeleteOutlined />,
+              danger: true,
+              onClick: () => handleContextMenuAction('delete-select'),
+            },
+          ],
+        }}
+      >
+        <div
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: 'none',
+          }}
+        />
+      </Dropdown>
     </div>
   );
 });

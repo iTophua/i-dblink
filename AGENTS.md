@@ -20,16 +20,22 @@ i-dblink/
 │   ├── types/                    # TypeScript 类型定义 (被 6 文件引用)
 │   ├── styles/                   # Ant Design 主题配置
 │   └── constants/                # 快捷键配置 (1 文件)
-├── src-tauri/                    # Rust 后端
+├── src-tauri/                    # Rust 后端（桌面壳 + 本地存储）
 │   ├── src/
-│   │   ├── db/                   # 数据库模块 (6 文件)
-│   │   ├── drivers/              # 数据库驱动抽象 (3 文件)
-│   │   ├── commands.rs           # Tauri 命令 (657 行，已重构)
-│   │   ├── main.rs               # Rust 入口
+│   │   ├── db/                   # 本地 SQLite 存储模块 (连接/分组配置)
+│   │   ├── commands.rs           # Tauri 命令（HTTP 转发到 Go Sidecar）
+│   │   ├── main.rs               # Rust 入口（启动 Go Sidecar）
 │   │   ├── security.rs           # 密钥链安全
+│   │   ├── sidecar.rs            # Go Sidecar 进程管理
 │   │   └── storage.rs            # 本地存储
 │   └── icons/                    # 应用图标 (15 文件)
-├── doc/                          # 项目文档 (6 个 markdown)
+├── go-backend/                   # Go 后端（数据库引擎）
+│   ├── api/                      # HTTP API 路由与处理器
+│   ├── db/                       # 数据库连接池管理器
+│   ├── models/                   # 共享结构体（JSON 契约）
+│   ├── main.go                   # HTTP 服务入口
+│   └── server.go                 # 服务启动
+├── doc/                          # 项目文档 (6+ 个 markdown)
 └── public/                       # 静态资源
 ```
 
@@ -43,9 +49,9 @@ i-dblink/
 | 前端 Hooks | `src/hooks/` | useApi (业务逻辑 + TTL 缓存)，useMenuShortcuts |
 | 前端 API | `src/api/index.ts` | 封装 12 个 Tauri invoke 调用 |
 | Rust 入口 | `src-tauri/src/main.rs` | 应用启动、菜单初始化 |
-| Rust 数据库 | `src-tauri/src/db/` | 连接池、模型、迁移、查询、仓储 |
-| Rust 命令 | `src-tauri/src/commands.rs` | 数据库操作命令 (657 行，已重构) |
-| Rust 驱动 | `src-tauri/src/drivers/` | MySQL/PostgreSQL/SQLite 驱动抽象 |
+| Rust 命令转发 | `src-tauri/src/commands.rs` | Tauri invoke → HTTP → Go |
+| Go 数据库引擎 | `go-backend/` | MySQL/PostgreSQL/SQLite/达梦 驱动 |
+| Rust Sidecar 管理 | `src-tauri/src/sidecar.rs` | Go 进程启动与生命周期 |
 | 安全存储 | `src-tauri/src/security.rs` | 系统密钥链密码管理 |
 
 ## CODE MAP
@@ -73,10 +79,11 @@ i-dblink/
 - **类型定义**: 集中在 `src/types/api.ts`
 
 ### 后端
-- **模块命名**: snake_case (`db_pool.rs`)
-- **数据库驱动**: sqlx (MySQL, PostgreSQL, SQLite)
+- **模块命名**: snake_case (`sidecar.rs`)
+- **数据库驱动**: Go `database/sql` + 各数据库官方驱动（通过 Go Sidecar）
+- **Rust ↔ Go 通信**: HTTP/JSON (localhost)
 - **密码存储**: 系统密钥链 (keyring crate)
-- **配置存储**: 本地 JSON 文件
+- **配置存储**: 本地 SQLite 文件（sqlx，仅用于连接/分组配置）
 
 ### 配置缺失
 - **无 ESLint/Prettier**: 无代码格式化规范
@@ -86,8 +93,8 @@ i-dblink/
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
-1. ~~**重复代码**: `commands.rs` 中 MySQL/PostgreSQL/SQLite 连接逻辑~~ ✅ **已修复**: 通过 `DbPool::validate()` 消除
-2. **大文件**: 少数文件 >500 行 (MainLayout.tsx 716行, SQLEditor.tsx 631行)
+1. ~~**重复代码**: `commands.rs` 中 MySQL/PostgreSQL/SQLite 连接逻辑~~ ✅ **已修复**: 迁移到 Go Sidecar
+2. ~~**Rust 驱动限制**: sqlx 不支持达梦/Oracle 等数据库~~ ✅ **已修复**: 通过 Go Sidecar 支持达梦官方驱动
 3. ~~**空目录**: `commands/`, `models/`, `utils/`~~ ✅ **已清理**: 删除了空目录
 4. ~~**重复嵌套**: `src-tauri/src-tauri/.dev-data`~~ ✅ **已清理**: 删除了重复目录
 5. **无测试**: 零测试覆盖，需要添加
@@ -105,10 +112,11 @@ i-dblink/
 ## COMMANDS
 
 ```bash
-# 开发模式 (启动 Vite + Tauri)
-pnpm tauri dev
+# 开发模式 (启动 Vite + Tauri，需先编译 Go 后端)
+cd go-backend && go build -o go-backend
+cd .. && pnpm tauri dev
 
-# 构建生产版本
+# 构建生产版本（Tauri 会自动打包 Go sidecar）
 pnpm tauri build
 
 # 安装前端依赖
@@ -116,12 +124,15 @@ pnpm install
 
 # TypeScript 类型检查
 pnpm exec tsc --noEmit
+
+# Go 后端开发
+cd go-backend && go run .
 ```
 
 ## NOTES
 
 1. **项目阶段**: 早期开发 (v0.1.0)，功能不完整
-2. **数据库支持**: MySQL/PostgreSQL/SQLite 已实现，SQL Server/Oracle/达梦 计划中
+2. **数据库支持**: MySQL/PostgreSQL/SQLite/达梦 已支持（Go Sidecar），SQL Server/Oracle 计划中
 3. **构建产物**: `src-tauri/target/` 为 Rust 编译缓存，勿手动修改
 4. **密钥存储**: 密码通过系统密钥链管理，不存明文
 5. **开发端口**: Vite 固定 1420，Tauri 开发窗口自动连接

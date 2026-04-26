@@ -43,6 +43,9 @@ export interface ThemeColors {
   dbOracle: string;
   dbMariadb: string;
   dbDameng: string;
+  dbKingbase: string;
+  dbHighgo: string;
+  dbVastbase: string;
   // 日志级别色
   logError: string;
   logWarn: string;
@@ -98,6 +101,9 @@ export function useThemeColors(): ThemeColors {
     dbOracle: config.dbTypeColors.oracle,
     dbMariadb: config.dbTypeColors.mariadb,
     dbDameng: config.dbTypeColors.dameng,
+    dbKingbase: config.dbTypeColors.kingbase,
+    dbHighgo: config.dbTypeColors.highgo,
+    dbVastbase: config.dbTypeColors.vastbase,
     logError: c.error,
     logWarn: c.warning,
     logOk: c.success,

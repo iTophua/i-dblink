@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
-import { Button, Space, message, Tabs, Tag, Tooltip, Dropdown, Empty, Spin, Table, Drawer } from 'antd';
+import { Button, Space, App, Tabs, Tag, Tooltip, Dropdown, Empty, Spin, Table, Drawer, Select } from 'antd';
 import {
   PlayCircleOutlined,
   SaveOutlined,
@@ -15,17 +15,17 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   WarningOutlined,
-  InfoCircleOutlined,
   SettingOutlined,
   FullscreenOutlined,
-  AppstoreOutlined,
   BugOutlined,
   DownloadOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
+import { getShortcutDisplayText } from '../hooks/useMenuShortcuts';
+import { useAppStore } from '../stores/appStore';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
-import type { QueryResult } from '../types/api';
+import type { QueryResult, DatabaseType } from '../types/api';
 
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;
@@ -33,11 +33,300 @@ interface QueryResultWithTiming extends QueryResult {
 
 interface SQLEditorProps {
   connectionId?: string | null;
+  database?: string;
   defaultQuery?: string;
+  availableDatabases?: string[];
+  onDatabaseChange?: (database: string) => void;
 }
 
-export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
-  const [sql, setSql] = useState(defaultQuery || '-- 输入 SQL 语句\nSELECT * FROM users LIMIT 100;');
+// 智能分割 SQL 语句，忽略字符串和注释中的分号
+function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inString = false;
+  let stringChar = '';
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const nextChar = sql[i + 1];
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false;
+      }
+      current += char;
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && nextChar === '/') {
+        inBlockComment = false;
+        current += char;
+        current += nextChar;
+        i++;
+        continue;
+      }
+      current += char;
+      continue;
+    }
+
+    if (inString) {
+      if (char === '\\' && nextChar) {
+        current += char;
+        current += nextChar;
+        i++;
+        continue;
+      }
+      if (char === stringChar) {
+        inString = false;
+      }
+      current += char;
+      continue;
+    }
+
+    if (char === '-' && nextChar === '-') {
+      inLineComment = true;
+      current += char;
+      continue;
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true;
+      current += char;
+      current += nextChar;
+      i++;
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      inString = true;
+      stringChar = char;
+      current += char;
+      continue;
+    }
+
+    if (char === ';') {
+      const trimmed = current.trim();
+      if (trimmed) {
+        statements.push(trimmed);
+      }
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  const trimmed = current.trim();
+  if (trimmed) {
+    statements.push(trimmed);
+  }
+
+  return statements;
+}
+
+// === 数据库类型分组（用于简化提示配置） ===
+type DbGroup = 'mysql-like' | 'pg-like' | 'mssql-like' | 'oracle-like' | 'sqlite-like';
+
+const DB_GROUP_MAP: Record<DatabaseType, DbGroup> = {
+  mysql: 'mysql-like',
+  mariadb: 'mysql-like',
+  postgresql: 'pg-like',
+  sqlite: 'sqlite-like',
+  sqlserver: 'mssql-like',
+  oracle: 'oracle-like',
+  dameng: 'oracle-like',
+  kingbase: 'pg-like',
+  highgo: 'pg-like',
+  vastbase: 'pg-like',
+};
+
+interface SqlKeyword {
+  label: string;
+  insertText: string;
+  detail?: string;
+  /** 支持的数据库分组，不指定则全部支持 */
+  groups?: DbGroup[];
+}
+
+interface SqlFunction {
+  label: string;
+  insertText: string;
+  detail: string;
+  /** 支持的数据库分组，不指定则全部支持 */
+  groups?: DbGroup[];
+}
+
+// === SQL 关键字（按数据库分组） ===
+const SQL_KEYWORDS: SqlKeyword[] = [
+  // 通用（所有数据库）
+  { label: 'SELECT', insertText: 'SELECT ${1:*} FROM ${2:table}' },
+  { label: 'INSERT INTO', insertText: 'INSERT INTO ${1:table} (${2:columns}) VALUES (${3:values})' },
+  { label: 'UPDATE', insertText: 'UPDATE ${1:table} SET ${2:column} = ${3:value} WHERE ${4:condition}' },
+  { label: 'DELETE FROM', insertText: 'DELETE FROM ${1:table} WHERE ${2:condition}' },
+  { label: 'WHERE', insertText: 'WHERE ${1:condition}' },
+  { label: 'ORDER BY', insertText: 'ORDER BY ${1:column} ${2:ASC}' },
+  { label: 'GROUP BY', insertText: 'GROUP BY ${1:column}' },
+  { label: 'HAVING', insertText: 'HAVING ${1:condition}' },
+  { label: 'JOIN', insertText: 'JOIN ${1:table} ON ${2:condition}' },
+  { label: 'LEFT JOIN', insertText: 'LEFT JOIN ${1:table} ON ${2:condition}' },
+  { label: 'RIGHT JOIN', insertText: 'RIGHT JOIN ${1:table} ON ${2:condition}' },
+  { label: 'INNER JOIN', insertText: 'INNER JOIN ${1:table} ON ${2:condition}' },
+  { label: 'FULL OUTER JOIN', insertText: 'FULL OUTER JOIN ${1:table} ON ${2:condition}' },
+  { label: 'CROSS JOIN', insertText: 'CROSS JOIN ${1:table}' },
+  { label: 'UNION', insertText: 'UNION' },
+  { label: 'UNION ALL', insertText: 'UNION ALL' },
+  { label: 'DISTINCT', insertText: 'DISTINCT' },
+  { label: 'EXISTS', insertText: 'EXISTS (${1:subquery})' },
+  { label: 'BETWEEN', insertText: 'BETWEEN ${1:start} AND ${2:end}' },
+  { label: 'LIKE', insertText: "LIKE '${1:%pattern%}'" },
+  { label: 'IN', insertText: 'IN (${1:item1}, ${2:item2})' },
+  { label: 'NOT IN', insertText: 'NOT IN (${1:item1}, ${2:item2})' },
+  { label: 'IS NULL', insertText: 'IS NULL' },
+  { label: 'IS NOT NULL', insertText: 'IS NOT NULL' },
+  { label: 'CASE', insertText: 'CASE\n  WHEN ${1:condition} THEN ${2:result}\n  ELSE ${3:default}\nEND' },
+  { label: 'WITH', insertText: 'WITH ${1:cte_name} AS (\n  ${2:query}\n)\nSELECT * FROM ${1:cte_name}' },
+  
+  // MySQL / MariaDB / SQLite / PostgreSQL
+  { label: 'LIMIT', insertText: 'LIMIT ${1:100}', groups: ['mysql-like', 'pg-like', 'sqlite-like'] },
+  { label: 'OFFSET', insertText: 'OFFSET ${1:0}', groups: ['mysql-like', 'pg-like', 'sqlite-like'] },
+  
+  // SQL Server
+  { label: 'TOP', insertText: 'TOP ${1:100}', groups: ['mssql-like'] },
+  
+  // Oracle / 达梦
+  { label: 'ROWNUM', insertText: 'ROWNUM <= ${1:100}', groups: ['oracle-like'] },
+  { label: 'FETCH FIRST', insertText: 'FETCH FIRST ${1:100} ROWS ONLY', groups: ['oracle-like'] },
+  
+  // PostgreSQL 特有
+  { label: 'RETURNING', insertText: 'RETURNING ${1:*}', groups: ['pg-like'] },
+  { label: 'ILIKE', insertText: "ILIKE '${1:%pattern%}'", groups: ['pg-like'] },
+  
+  // MySQL 特有
+  { label: 'SHOW TABLES', insertText: 'SHOW TABLES', groups: ['mysql-like'] },
+  { label: 'SHOW DATABASES', insertText: 'SHOW DATABASES', groups: ['mysql-like'] },
+  { label: 'DESCRIBE', insertText: 'DESCRIBE ${1:table}', groups: ['mysql-like'] },
+  { label: 'EXPLAIN', insertText: 'EXPLAIN ${1:query}', groups: ['mysql-like'] },
+  
+  // SQLite 特有
+  { label: 'PRAGMA', insertText: 'PRAGMA ${1:table_info}(${2:table})', groups: ['sqlite-like'] },
+];
+
+// === SQL 函数（按数据库分组） ===
+const SQL_FUNCTIONS: SqlFunction[] = [
+  // 通用聚合函数
+  { label: 'COUNT(*)', insertText: 'COUNT(*)', detail: '聚合函数' },
+  { label: 'COUNT()', insertText: 'COUNT(${1:column})', detail: '聚合函数' },
+  { label: 'SUM()', insertText: 'SUM(${1:column})', detail: '聚合函数' },
+  { label: 'AVG()', insertText: 'AVG(${1:column})', detail: '聚合函数' },
+  { label: 'MAX()', insertText: 'MAX(${1:column})', detail: '聚合函数' },
+  { label: 'MIN()', insertText: 'MIN(${1:column})', detail: '聚合函数' },
+  
+  // 通用空值处理
+  { label: 'COALESCE()', insertText: 'COALESCE(${1:column}, ${2:default})', detail: '空值处理' },
+  { label: 'NULLIF()', insertText: 'NULLIF(${1:expr1}, ${2:expr2})', detail: '空值处理' },
+  
+  // 通用字符串函数
+  { label: 'LENGTH()', insertText: 'LENGTH(${1:str})', detail: '字符串函数' },
+  { label: 'TRIM()', insertText: 'TRIM(${1:str})', detail: '字符串函数' },
+  { label: 'UPPER()', insertText: 'UPPER(${1:str})', detail: '字符串函数' },
+  { label: 'LOWER()', insertText: 'LOWER(${1:str})', detail: '字符串函数' },
+  { label: 'REPLACE()', insertText: 'REPLACE(${1:str}, ${2:old}, ${3:new})', detail: '字符串函数' },
+  { label: 'SUBSTRING()', insertText: 'SUBSTRING(${1:str}, ${2:start}, ${3:length})', detail: '字符串函数' },
+  
+  // 通用数值函数
+  { label: 'ROUND()', insertText: 'ROUND(${1:num}, ${2:decimals})', detail: '数值函数' },
+  { label: 'FLOOR()', insertText: 'FLOOR(${1:num})', detail: '数值函数' },
+  { label: 'CEIL()', insertText: 'CEIL(${1:num})', detail: '数值函数' },
+  { label: 'ABS()', insertText: 'ABS(${1:num})', detail: '数值函数' },
+  
+  // 通用类型转换
+  { label: 'CAST()', insertText: 'CAST(${1:expr} AS ${2:type})', detail: '类型转换' },
+  
+  // 通用日期时间
+  { label: 'CURRENT_DATE', insertText: 'CURRENT_DATE', detail: '日期时间函数' },
+  { label: 'CURRENT_TIMESTAMP', insertText: 'CURRENT_TIMESTAMP', detail: '日期时间函数' },
+  
+  // MySQL / MariaDB 特有
+  { label: 'IFNULL()', insertText: 'IFNULL(${1:expr}, ${2:default})', detail: '空值处理 (MySQL)', groups: ['mysql-like'] },
+  { label: 'CONCAT()', insertText: 'CONCAT(${1:str1}, ${2:str2})', detail: '字符串函数 (MySQL)', groups: ['mysql-like'] },
+  { label: 'GROUP_CONCAT()', insertText: 'GROUP_CONCAT(${1:column})', detail: '聚合函数 (MySQL)', groups: ['mysql-like'] },
+  { label: 'NOW()', insertText: 'NOW()', detail: '日期时间函数 (MySQL)', groups: ['mysql-like'] },
+  { label: 'DATE_FORMAT()', insertText: "DATE_FORMAT(${1:date}, '${2:%Y-%m-%d}')", detail: '日期时间函数 (MySQL)', groups: ['mysql-like'] },
+  { label: 'STR_TO_DATE()', insertText: "STR_TO_DATE(${1:str}, '${2:%Y-%m-%d}')", detail: '日期时间函数 (MySQL)', groups: ['mysql-like'] },
+  { label: 'FIND_IN_SET()', insertText: 'FIND_IN_SET(${1:str}, ${2:strlist})', detail: '字符串函数 (MySQL)', groups: ['mysql-like'] },
+  { label: 'FIELD()', insertText: 'FIELD(${1:val}, ${2:val1}, ${3:val2})', detail: '字符串函数 (MySQL)', groups: ['mysql-like'] },
+  
+  // PostgreSQL 特有
+  { label: 'STRING_AGG()', insertText: 'STRING_AGG(${1:column}, \'${2:,}\')', detail: '聚合函数 (PostgreSQL)', groups: ['pg-like'] },
+  { label: 'TO_CHAR()', insertText: "TO_CHAR(${1:date}, '${2:YYYY-MM-DD}')", detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
+  { label: 'TO_DATE()', insertText: "TO_DATE(${1:str}, '${2:YYYY-MM-DD}')", detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
+  { label: 'TO_TIMESTAMP()', insertText: "TO_TIMESTAMP(${1:str}, '${2:YYYY-MM-DD HH24:MI:SS}')", detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
+  { label: 'AGE()', insertText: 'AGE(${1:timestamp})', detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
+  { label: 'EXTRACT()', insertText: 'EXTRACT(${1:YEAR} FROM ${2:date})', detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
+  { label: 'ARRAY_AGG()', insertText: 'ARRAY_AGG(${1:column})', detail: '聚合函数 (PostgreSQL)', groups: ['pg-like'] },
+  { label: 'JSON_BUILD_OBJECT()', insertText: 'JSON_BUILD_OBJECT(${1:key}, ${2:value})', detail: 'JSON 函数 (PostgreSQL)', groups: ['pg-like'] },
+  { label: 'JSONB_BUILD_OBJECT()', insertText: 'JSONB_BUILD_OBJECT(${1:key}, ${2:value})', detail: 'JSON 函数 (PostgreSQL)', groups: ['pg-like'] },
+  
+  // SQLite 特有
+  { label: 'strftime()', insertText: "strftime('${1:%Y-%m-%d}', ${2:date})", detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
+  { label: 'datetime()', insertText: 'datetime(${1:now})', detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
+  { label: 'date()', insertText: 'date(${1:now})', detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
+  { label: 'time()', insertText: 'time(${1:now})', detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
+  { label: 'julianday()', insertText: 'julianday(${1:date})', detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
+  { label: 'TOTAL()', insertText: 'TOTAL(${1:column})', detail: '聚合函数 (SQLite)', groups: ['sqlite-like'] },
+  
+  // SQL Server 特有
+  { label: 'ISNULL()', insertText: 'ISNULL(${1:expr}, ${2:default})', detail: '空值处理 (SQL Server)', groups: ['mssql-like'] },
+  { label: 'CONVERT()', insertText: 'CONVERT(${1:VARCHAR}, ${2:expr}, ${3:120})', detail: '类型转换 (SQL Server)', groups: ['mssql-like'] },
+  { label: 'GETDATE()', insertText: 'GETDATE()', detail: '日期时间函数 (SQL Server)', groups: ['mssql-like'] },
+  { label: 'DATEPART()', insertText: 'DATEPART(${1:year}, ${2:date})', detail: '日期时间函数 (SQL Server)', groups: ['mssql-like'] },
+  { label: 'DATEDIFF()', insertText: 'DATEDIFF(${1:day}, ${2:start}, ${3:end})', detail: '日期时间函数 (SQL Server)', groups: ['mssql-like'] },
+  { label: 'CHARINDEX()', insertText: 'CHARINDEX(${1:substring}, ${2:string})', detail: '字符串函数 (SQL Server)', groups: ['mssql-like'] },
+  { label: 'LEN()', insertText: 'LEN(${1:str})', detail: '字符串函数 (SQL Server)', groups: ['mssql-like'] },
+  { label: 'STRING_AGG()', insertText: "STRING_AGG(${1:column}, '${2:,}')", detail: '聚合函数 (SQL Server)', groups: ['mssql-like'] },
+  
+  // Oracle / 达梦 特有
+  { label: 'NVL()', insertText: 'NVL(${1:expr}, ${2:default})', detail: '空值处理 (Oracle)', groups: ['oracle-like'] },
+  { label: 'DECODE()', insertText: 'DECODE(${1:expr}, ${2:val1}, ${3:result1}, ${4:default})', detail: '条件函数 (Oracle)', groups: ['oracle-like'] },
+  { label: 'SYSDATE', insertText: 'SYSDATE', detail: '日期时间函数 (Oracle)', groups: ['oracle-like'] },
+  { label: 'TO_CHAR()', insertText: "TO_CHAR(${1:date}, '${2:YYYY-MM-DD}')", detail: '日期时间函数 (Oracle)', groups: ['oracle-like'] },
+  { label: 'TO_DATE()', insertText: "TO_DATE('${1:2024-01-01}', '${2:YYYY-MM-DD}')", detail: '日期时间函数 (Oracle)', groups: ['oracle-like'] },
+  { label: 'TO_NUMBER()', insertText: 'TO_NUMBER(${1:str})', detail: '类型转换 (Oracle)', groups: ['oracle-like'] },
+  { label: 'INSTR()', insertText: 'INSTR(${1:str}, ${2:substr})', detail: '字符串函数 (Oracle)', groups: ['oracle-like'] },
+  { label: 'SUBSTR()', insertText: 'SUBSTR(${1:str}, ${2:start}, ${3:length})', detail: '字符串函数 (Oracle)', groups: ['oracle-like'] },
+  { label: 'LISTAGG()', insertText: "LISTAGG(${1:column}, '${2:,}') WITHIN GROUP (ORDER BY ${3:column})", detail: '聚合函数 (Oracle)', groups: ['oracle-like'] },
+];
+
+/** 根据数据库类型过滤提示 */
+function filterByDbType<T extends { groups?: DbGroup[] }>(
+  items: T[],
+  dbType: DatabaseType | undefined
+): T[] {
+  if (!dbType) return items;
+  const group = DB_GROUP_MAP[dbType];
+  return items.filter(item => !item.groups || item.groups.includes(group));
+}
+
+// 预编译的正则表达式（避免每次触发重新编译）
+const REGEX_PATTERNS = {
+  fromOrJoin: /\b(FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s*$/i,
+  select: /\bSELECT\s+.*$/i,
+  where: /\bWHERE\s+.*$/i,
+  afterTableRef: /\b(FROM|JOIN)\s+(?:\w+\s*,\s*)*\w+\s*$/i,
+  hasTableAlias: /\b(FROM|JOIN)\s+\w+\s+(?:AS\s+)?(\w+)\s*$/i,
+};
+
+export function SQLEditor({ connectionId, database, defaultQuery, availableDatabases, onDatabaseChange }: SQLEditorProps) {
+  const { message } = App.useApp();
+  const connections = useAppStore((state) => state.connections);
+  const dbType = useMemo(() => {
+    const conn = connections.find((c) => c.id === connectionId);
+    return conn?.db_type;
+  }, [connections, connectionId]);
+  const [sql, setSql] = useState(defaultQuery || '');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [results, setResults] = useState<QueryResultWithTiming[]>([]);
@@ -48,15 +337,105 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
   const editorRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const schemaRef = useRef<{ tables: Map<string, string[]>; views: Map<string, string[]> } | null>(null);
+  const monacoRef = useRef<any>(null);
   
-  const tc = useThemeColors();
-  
-  const { executeQuery: executeQueryApi } = useDatabase();
+  // 缓存预生成的补全建议，避免每次按键都重建对象
+  const completionCacheRef = useRef<{
+    keywordSuggestions: any[];
+    functionSuggestions: any[];
+    tableSuggestions: any[];
+    viewSuggestions: any[];
+    columnSuggestions: any[];
+    tableNameToColumns: Map<string, string[]>;
+    lastSchemaKey: string;
+  } | null>(null);
 
-  const handleEditorMount: OnMount = (editor, monaco) => {
+  // 用于在 handleEditorMount 中引用最新的 handleExecuteQuery，避免闭包陷阱
+  const handleExecuteQueryRef = useRef<() => void>(() => {});
+
+  const tc = useThemeColors();
+
+  const { executeQuery: executeQueryApi, getTables, getColumns } = useDatabase();
+
+  // 获取 schema 数据用于补全，并预生成缓存的 suggestions
+  const fetchSchema = useCallback(async () => {
+    if (!connectionId || !database) {
+      schemaRef.current = null;
+      completionCacheRef.current = null;
+      return;
+    }
+
+    try {
+      const tables = await getTables(connectionId, database, false);
+      const tablesMap = new Map<string, string[]>();
+      const viewsMap = new Map<string, string[]>();
+
+      for (const table of tables) {
+        const tableType = (table.table_type || '').toUpperCase().trim();
+        const isView = tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
+        const targetMap = isView ? viewsMap : tablesMap;
+
+        try {
+          const columns = await getColumns(connectionId, table.table_name, database);
+          targetMap.set(table.table_name, columns.map(c => c.column_name));
+        } catch {
+          targetMap.set(table.table_name, []);
+        }
+      }
+
+      schemaRef.current = { tables: tablesMap, views: viewsMap };
+      
+      // 预生成所有 schema 相关的 suggestions，避免每次按键都重建
+      completionCacheRef.current = {
+        keywordSuggestions: [],
+        functionSuggestions: [],
+        tableSuggestions: [],
+        viewSuggestions: [],
+        columnSuggestions: [],
+        tableNameToColumns: new Map(tablesMap),
+        lastSchemaKey: `${connectionId}.${database}`,
+      };
+    } catch (error) {
+      console.error('Failed to fetch schema for completion:', error);
+      schemaRef.current = null;
+      completionCacheRef.current = null;
+    }
+  }, [connectionId, database, getTables, getColumns]);
+
+  // 当连接或数据库变化时，重新获取 schema
+  useEffect(() => {
+    fetchSchema();
+  }, [fetchSchema]);
+
+  // 使用 useCallback 避免闭包陷阱，并预生成基础 suggestions
+  const handleEditorMount = useCallback<OnMount>((editor, monaco) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
+
+    // 预生成基础 suggestions（SQL 关键字和函数），这些不依赖 schema
+    // 根据数据库类型过滤，只显示当前数据库支持的关键字和函数
+    const filteredKeywords = filterByDbType(SQL_KEYWORDS, dbType);
+    const filteredFunctions = filterByDbType(SQL_FUNCTIONS, dbType);
+
+    const baseKeywordSuggestions = filteredKeywords.map((kw) => ({
+      label: kw.label,
+      kind: monaco.languages.CompletionItemKind.Keyword,
+      insertText: kw.insertText,
+      insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+      detail: kw.detail || '关键字',
+    }));
+
+    const baseFunctionSuggestions = filteredFunctions.map((fn) => ({
+      label: fn.label,
+      kind: monaco.languages.CompletionItemKind.Function,
+      insertText: fn.insertText,
+      insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+      detail: fn.detail,
+    }));
 
     monaco.languages.registerCompletionItemProvider('sql', {
+      // 去掉 async，减少 Promise 开销
       provideCompletionItems: (model, position) => {
         const word = model.getWordUntilPosition(position);
         const range = {
@@ -66,38 +445,206 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
           endColumn: word.endColumn,
         };
 
-        return {
-          suggestions: [
-            { label: 'SELECT', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'SELECT ${1:*} FROM ${2:table}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'INSERT INTO', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'INSERT INTO ${1:table} (${2:columns}) VALUES (${3:values})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'UPDATE', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'UPDATE ${1:table} SET ${2:column} = ${3:value} WHERE ${4:condition}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'DELETE FROM', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'DELETE FROM ${1:table} WHERE ${2:condition}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'WHERE', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'WHERE', range },
-            { label: 'ORDER BY', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'ORDER BY ${1:column}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'GROUP BY', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'GROUP BY ${1:column}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'LIMIT', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'LIMIT ${1:100}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'JOIN', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'JOIN ${1:table} ON ${2:condition}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'LEFT JOIN', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'LEFT JOIN ${1:table} ON ${2:condition}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'COUNT(*)', kind: monaco.languages.CompletionItemKind.Function, insertText: 'COUNT(*)', range },
-            { label: 'SUM()', kind: monaco.languages.CompletionItemKind.Function, insertText: 'SUM(${1:column})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'AVG()', kind: monaco.languages.CompletionItemKind.Function, insertText: 'AVG(${1:column})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'MAX()', kind: monaco.languages.CompletionItemKind.Function, insertText: 'MAX(${1:column})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-            { label: 'MIN()', kind: monaco.languages.CompletionItemKind.Function, insertText: 'MIN(${1:column})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, range },
-          ]
-        };
-      }
+        // 获取光标前当前行的文本（用于上下文分析）
+        const textBeforeCursor = model.getValueInRange({
+          startLineNumber: position.lineNumber,
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        });
+
+        // 获取当前语句类型的上下文
+        const textBeforeCurrentLine = model.getValueInRange({
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        });
+
+        const suggestions: any[] = [...baseKeywordSuggestions, ...baseFunctionSuggestions];
+
+        // 上下文分析
+        const isAfterFromOrJoin = REGEX_PATTERNS.fromOrJoin.test(textBeforeCursor);
+        const isAfterSelect = REGEX_PATTERNS.select.test(textBeforeCursor);
+        const isAfterWhere = REGEX_PATTERNS.where.test(textBeforeCursor);
+        const isAfterTableRef = REGEX_PATTERNS.afterTableRef.test(textBeforeCursor);
+        const hasTableAliasMatch = textBeforeCursor.match(REGEX_PATTERNS.hasTableAlias);
+
+        // 判断语句类型（更智能的上下文）
+        const upperText = textBeforeCurrentLine.toUpperCase();
+        const isInSelectContext = upperText.includes('SELECT') && !upperText.includes('FROM');
+        const isInFromContext = upperText.includes('FROM') && !upperText.includes('WHERE') && !upperText.includes('ORDER') && !upperText.includes('GROUP');
+        const isInWhereContext = upperText.includes('WHERE') && !upperText.includes('ORDER') && !upperText.includes('GROUP') && !upperText.includes('LIMIT');
+        const isInOrderByContext = upperText.includes('ORDER BY');
+        const isInGroupByContext = upperText.includes('GROUP BY');
+        const isInSetContext = upperText.includes('SET') && upperText.includes('UPDATE');
+        const isInInsertContext = upperText.includes('INSERT INTO');
+
+        const cache = completionCacheRef.current;
+        const schema = schemaRef.current;
+
+        if (schema && cache) {
+          // 智能排序：根据上下文调整 suggestion 优先级
+          
+          // 1. 在 FROM / JOIN / INTO / UPDATE 之后 -> 优先表名和视图名
+          if (isAfterFromOrJoin || isInFromContext) {
+            for (const [tableName, columns] of schema.tables) {
+              suggestions.unshift({
+                label: tableName,
+                kind: monaco.languages.CompletionItemKind.Class,
+                insertText: tableName,
+                range,
+                detail: `表 (${columns.length} 列)`,
+                sortText: '0', // 优先排序
+              });
+            }
+            for (const [viewName, columns] of schema.views) {
+              suggestions.unshift({
+                label: viewName,
+                kind: monaco.languages.CompletionItemKind.Class,
+                insertText: viewName,
+                range,
+                detail: `视图 (${columns.length} 列)`,
+                sortText: '0',
+              });
+            }
+          }
+
+          // 2. 在 SELECT 后或 WHERE 后 -> 优先列名和函数
+          if (isAfterSelect || isInSelectContext || isAfterWhere || isInWhereContext || isInOrderByContext || isInGroupByContext) {
+            // 添加所有列名（不带表前缀，方便使用）
+            const addedColumns = new Set<string>();
+            for (const [tableName, columns] of schema.tables) {
+              for (const column of columns) {
+                if (!addedColumns.has(column)) {
+                  suggestions.unshift({
+                    label: column,
+                    kind: monaco.languages.CompletionItemKind.Field,
+                    insertText: column,
+                    range,
+                    detail: `${tableName} 表的列`,
+                    sortText: '0',
+                  });
+                  addedColumns.add(column);
+                }
+              }
+            }
+
+            // 添加表名.列名的格式（当有多个表时帮助区分）
+            for (const [tableName, columns] of schema.tables) {
+              for (const column of columns) {
+                suggestions.push({
+                  label: `${tableName}.${column}`,
+                  kind: monaco.languages.CompletionItemKind.Field,
+                  insertText: `${tableName}.${column}`,
+                  range,
+                  detail: `${tableName} 表的列`,
+                  sortText: '1',
+                });
+              }
+            }
+          }
+
+          // 3. 在 SET 后（UPDATE 语句）-> 只提供列名
+          if (isInSetContext) {
+            const addedColumns = new Set<string>();
+            for (const [tableName, columns] of schema.tables) {
+              for (const column of columns) {
+                if (!addedColumns.has(column)) {
+                  suggestions.unshift({
+                    label: column,
+                    kind: monaco.languages.CompletionItemKind.Field,
+                    insertText: `${column} = `,
+                    range,
+                    detail: `${tableName} 表的列`,
+                    sortText: '0',
+                  });
+                  addedColumns.add(column);
+                }
+              }
+            }
+          }
+
+          // 4. 在 INSERT INTO 后 -> 提供表名
+          if (isInInsertContext && !upperText.includes('VALUES')) {
+            for (const [tableName, columns] of schema.tables) {
+              suggestions.unshift({
+                label: tableName,
+                kind: monaco.languages.CompletionItemKind.Class,
+                insertText: tableName,
+                range,
+                detail: `表 (${columns.length} 列)`,
+                sortText: '0',
+              });
+            }
+          }
+
+          // 5. 如果用户输入了表别名，提供别名列名补全
+          if (hasTableAliasMatch) {
+            const alias = hasTableAliasMatch[2];
+            // 找到别名对应的表（简单匹配：别名为表名时）
+            for (const [tableName, columns] of schema.tables) {
+              if (tableName.toLowerCase().startsWith(alias.toLowerCase()) || alias.toLowerCase().startsWith(tableName.toLowerCase())) {
+                for (const column of columns) {
+                  suggestions.unshift({
+                    label: `${alias}.${column}`,
+                    kind: monaco.languages.CompletionItemKind.Field,
+                    insertText: `${alias}.${column}`,
+                    range,
+                    detail: `${tableName} 表 (别名: ${alias})`,
+                    sortText: '0',
+                  });
+                }
+              }
+            }
+          }
+
+          // 默认情况：始终提供表名和视图名（但排序靠后）
+          if (!isAfterFromOrJoin && !isInFromContext && !isInInsertContext) {
+            for (const [tableName, columns] of schema.tables) {
+              suggestions.push({
+                label: tableName,
+                kind: monaco.languages.CompletionItemKind.Class,
+                insertText: tableName,
+                range,
+                detail: `表 (${columns.length} 列)`,
+                sortText: '2',
+              });
+            }
+            for (const [viewName, columns] of schema.views) {
+              suggestions.push({
+                label: viewName,
+                kind: monaco.languages.CompletionItemKind.Class,
+                insertText: viewName,
+                range,
+                detail: `视图 (${columns.length} 列)`,
+                sortText: '2',
+              });
+            }
+          }
+        }
+
+        return { suggestions };
+      },
     });
 
     editor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
       () => {
-        handleExecuteQuery();
+        handleExecuteQueryRef.current();
       }
     );
-  };
+  }, []);
 
   const handleExecuteQuery = useCallback(async () => {
-    if (!sql.trim()) {
+    // 获取选中的 SQL，如果没有选中则使用整个 SQL
+    const selectedSql = editorRef.current?.getModel()?.getValueInRange(
+      editorRef.current.getSelection()
+    )?.trim();
+
+    const sqlToExecute = selectedSql || sql;
+
+    if (!sqlToExecute.trim()) {
       message.warning('请输入 SQL 语句');
       return;
     }
@@ -114,62 +661,62 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       setResults([]);
       abortControllerRef.current = new AbortController();
 
-      // 检测是否多语句（按分号分割）
-      const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+      // 检测是否多语句（按分号分割，忽略字符串内的分号）
+      const statements = splitSqlStatements(sqlToExecute);
       const isMultiStatement = statements.length > 1;
-      
+
       if (isMultiStatement) {
         const multiResults: QueryResultWithTiming[] = [];
         const msgs: string[] = [];
         let totalErrors = 0;
         let totalSuccess = 0;
 
-      for (let i = 0; i < statements.length; i++) {
-        try {
-          const stmt = statements[i];
-          if (abortControllerRef.current?.signal.aborted) break;
+        for (let i = 0; i < statements.length; i++) {
+          try {
+            const stmt = statements[i];
+            if (abortControllerRef.current?.signal.aborted) break;
 
-          const startTime = Date.now();
-          const queryResult = await executeQueryApi(connectionId, stmt);
-          const executionTime = Date.now() - startTime;
+            const startTime = Date.now();
+            const queryResult = await executeQueryApi(connectionId, stmt, database);
+            const executionTime = Date.now() - startTime;
 
-          multiResults.push({ ...queryResult, executionTime });
+            multiResults.push({ ...queryResult, executionTime });
 
-          if (queryResult.error) {
-            msgs.push(`语句 ${i + 1} ✗：${queryResult.error}`);
-            totalErrors++;
-          } else {
-            const rowCount = queryResult.rows.length;
-            const affectedRows = queryResult.rows_affected || 0;
-            if (rowCount > 0) {
-              msgs.push(`语句 ${i + 1} ✓：返回 ${rowCount} 条记录，耗时 ${executionTime}ms`);
-            } else if (affectedRows > 0) {
-              msgs.push(`语句 ${i + 1} ✓：影响 ${affectedRows} 行，耗时 ${executionTime}ms`);
+            if (queryResult.error) {
+              msgs.push(`语句 ${i + 1} ✗：${queryResult.error}`);
+              totalErrors++;
             } else {
-              msgs.push(`语句 ${i + 1} ✓：执行成功，耗时 ${executionTime}ms`);
+              const rowCount = queryResult.rows.length;
+              const affectedRows = queryResult.rows_affected || 0;
+              if (rowCount > 0) {
+                msgs.push(`语句 ${i + 1} ✓：返回 ${rowCount} 条记录，耗时 ${executionTime}ms`);
+              } else if (affectedRows > 0) {
+                msgs.push(`语句 ${i + 1} ✓：影响 ${affectedRows} 行，耗时 ${executionTime}ms`);
+              } else {
+                msgs.push(`语句 ${i + 1} ✓：执行成功，耗时 ${executionTime}ms`);
+              }
+              totalSuccess++;
             }
-            totalSuccess++;
+          } catch (error: any) {
+            msgs.push(`语句 ${i + 1} ✗：${error.message || error}`);
+            totalErrors++;
           }
-        } catch (error: any) {
-          msgs.push(`语句 ${i + 1} ✗：${error.message || error}`);
-          totalErrors++;
         }
-      }
 
-      setResults(multiResults);
-      setMessages(msgs);
+        setResults(multiResults);
+        setMessages(msgs);
 
-      if (totalErrors === 0) {
-        message.success(`全部执行成功：${totalSuccess} 条语句`);
-        setActiveTab('results');
-      } else {
-        message.error(`部分执行失败：${totalSuccess} 成功，${totalErrors} 失败`);
-        setActiveTab('messages');
-      }
+        if (totalErrors === 0) {
+          message.success(`全部执行成功：${totalSuccess} 条语句`);
+          setActiveTab('results');
+        } else {
+          message.error(`部分执行失败：${totalSuccess} 成功，${totalErrors} 失败`);
+          setActiveTab('messages');
+        }
       } else {
         // 单语句执行（原有逻辑）
         const startTime = Date.now();
-        const queryResult = await executeQueryApi(connectionId, sql);
+        const queryResult = await executeQueryApi(connectionId, sqlToExecute, database);
         const executionTime = Date.now() - startTime;
 
         if (queryResult.error) {
@@ -192,9 +739,9 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
           setActiveTab('result');
         }
       }
-      
+
       // 保存历史记录
-      setQueryHistory(prev => [sql, ...prev.slice(0, 49)]);  // 增加到 50 条
+      setQueryHistory(prev => [sqlToExecute, ...prev.slice(0, 49)]);
     } catch (error: any) {
       console.error('SQL execution error:', error);
       setMessages([`✗ 错误：${error.message || error}`]);
@@ -204,7 +751,12 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       setLoading(false);
       abortControllerRef.current = null;
     }
-  }, [sql, connectionId, executeQueryApi]);
+  }, [sql, connectionId, database, executeQueryApi]);
+
+  // 同步 handleExecuteQuery 到 ref，供 Monaco 快捷键使用
+  useEffect(() => {
+    handleExecuteQueryRef.current = handleExecuteQuery;
+  }, [handleExecuteQuery]);
 
   const stopQuery = useCallback(() => {
     if (abortControllerRef.current) {
@@ -232,7 +784,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       setLoading(true);
       
       const explainSQL = `EXPLAIN ${sql}`;
-      const result = await executeQueryApi(connectionId, explainSQL);
+      const result = await executeQueryApi(connectionId, explainSQL, database);
       
       if (result.error) {
         message.error(`生成执行计划失败：${result.error}`);
@@ -247,7 +799,7 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
     } finally {
       setLoading(false);
     }
-  }, [sql, connectionId, executeQueryApi]);
+  }, [sql, connectionId, database, executeQueryApi]);
 
   const formatSQL = useCallback(() => {
     if (!editorRef.current) return;
@@ -416,20 +968,22 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
         background: 'var(--background-toolbar)',
       }}>
         <Space size="small">
-          <Button 
-            type="primary" 
-            icon={<PlayCircleOutlined />} 
-            onClick={handleExecuteQuery}
-            loading={loading}
-            disabled={!connectionId}
-            style={{ 
-              borderRadius: 4,
-              fontWeight: 500
-            }}
-            size="small"
-          >
-            执行
-          </Button>
+          <Tooltip title={`执行 (${getShortcutDisplayText('execute-query')})`}>
+            <Button 
+              type="primary" 
+              icon={<PlayCircleOutlined />} 
+              onClick={handleExecuteQuery}
+              loading={loading}
+              disabled={!connectionId}
+              style={{ 
+                borderRadius: 4,
+                fontWeight: 500
+              }}
+              size="small"
+            >
+              执行
+            </Button>
+          </Tooltip>
           <Button 
             icon={<StopOutlined />} 
             onClick={stopQuery}
@@ -492,6 +1046,34 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
         </Space>
         
         <Space>
+          {/* 数据库选择 */}
+          {connectionId ? (
+            availableDatabases && availableDatabases.length > 0 ? (
+              <Select
+                value={database || undefined}
+                onChange={(value) => onDatabaseChange?.(value)}
+                placeholder="选择数据库"
+                showSearch
+                optionFilterProp="label"
+                filterOption={(input, option) =>
+                  (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                }
+                style={{ minWidth: 140 }}
+                size="small"
+                options={availableDatabases.map((db) => ({ label: db, value: db }))}
+              />
+            ) : (
+              <span style={{ color: 'var(--color-error)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <WarningOutlined />
+                未加载数据库
+              </span>
+            )
+          ) : (
+            <span style={{ color: 'var(--color-error)', fontSize: 12 }}>
+              未选择连接
+            </span>
+          )}
+
           {result && !result.error && (
             <Space size="middle">
               <Tag color="success" icon={<CheckCircleOutlined />}>
@@ -502,8 +1084,8 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
               </Tag>
             </Space>
           )}
-          <Button 
-            icon={<FullscreenOutlined />} 
+          <Button
+            icon={<FullscreenOutlined />}
             type="text"
             onClick={() => {
               if (editorRef.current) {
@@ -554,117 +1136,20 @@ export function SQLEditor({ connectionId, defaultQuery }: SQLEditorProps) {
       </div>
 
       <div style={{ flex: '1 1 0', minHeight: 150, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'result' | 'results' | 'messages' | 'explain')}
-          size="small"
-          style={{
-            background: 'var(--background-card)',
-            padding: '0 8px'
-          }}
-          items={(() => {
-            const items: any[] = [
-              {
-                key: 'result',
-                label: (
-                  <span>
-                    <CheckCircleOutlined style={{ marginRight: 4 }} />
-                    结果 {result && result.rows.length > 0 && `(${result.rows.length})`}
-                  </span>
-                ),
-                children: renderSingleResult,
-              },
-            ];
-
-            if (results.length > 1) {
-              items.push({
-                key: 'results',
-                label: (
-                  <span>
-                    <AppstoreOutlined style={{ marginRight: 4 }} />
-                    多结果 ({results.length})
-                  </span>
-                ),
-                children: (
-                  <Tabs
-                    type="card"
-                    size="small"
-                    items={results.map((r, i) => ({
-                      key: `result-${i}`,
-                      label: `结果 ${i + 1} (${r.rows.length} 行) ${r.executionTime ? `${r.executionTime}ms` : ''}`,
-                      children: renderResultTable(r),
-                    }))}
-                  />
-                ),
-              });
-            }
-
-            items.push({
-              key: 'messages',
-              label: (
-                <span>
-                  <InfoCircleOutlined style={{ marginRight: 4 }} />
-                  消息 {messages.length > 0 && `(${messages.length})`}
-                </span>
-              ),
-              children: (
-                <div style={{ height: '100%', overflow: 'auto', padding: '8px 16px', fontSize: 13, fontFamily: 'monospace' }}>
-                  {messages.length === 0 ? (
-                    <Empty description="暂无消息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                  ) : (
-                    messages.map((msg, i) => (
-                      <div key={i} style={{ padding: '4px 0', color: msg.startsWith('✗') ? 'var(--color-error)' : msg.startsWith('⚠') ? 'var(--color-warning)' : 'var(--color-success)' }}>
-                        {msg}
-                      </div>
-                    ))
-                  )}
-                </div>
-              ),
-            });
-
-            items.push({
-              key: 'explain',
-              label: (
-                <span>
-                  <LineChartOutlined style={{ marginRight: 4 }} />
-                  执行计划
-                </span>
-              ),
-              children: (
-                <div style={{ height: '100%', overflow: 'auto', padding: '0 16px' }}>
-                  {explainPlan.length === 0 ? (
-                    <Empty description="暂无执行计划" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                  ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                      <thead>
-                        <tr style={{ background: 'var(--header-bg)', position: 'sticky', top: 0 }}>
-                          {Object.keys(explainPlan[0] || {}).map((key, i) => (
-                            <th key={i} style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '2px solid var(--border)', fontWeight: 600 }}>
-                              {key}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {explainPlan.map((row, i) => (
-                          <tr key={i} style={{ background: i % 2 === 0 ? 'var(--background-card)' : 'var(--row-stripe-bg)' }}>
-                            {Object.values(row).map((cell: any, j) => (
-                              <td key={j} style={{ padding: '3px 8px', borderBottom: '1px solid var(--border)' }}>
-                                {String(cell || 'NULL')}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              ),
-            });
-
-            return items;
-          })()}
-        />
+        {results.length > 1 ? (
+          <Tabs
+            type="card"
+            size="small"
+            style={{ background: 'var(--background-card)', padding: '0 8px' }}
+            items={results.map((r, i) => ({
+              key: `result-${i}`,
+              label: `结果 ${i + 1} (${r.rows.length} 行) ${r.executionTime ? `${r.executionTime}ms` : ''}`,
+              children: renderResultTable(r),
+            }))}
+          />
+        ) : (
+          renderSingleResult
+        )}
       </div>
       
       {/* 查询历史抽屉 */}

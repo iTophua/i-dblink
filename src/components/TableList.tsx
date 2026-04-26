@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { Tag, Spin, Empty, Button, Space, Tooltip, Modal, message } from 'antd';
+import { Tag, Spin, Empty, Button, Space, Tooltip, Modal, App } from 'antd';
 import { GlobalInput } from './GlobalInput';
 import {
   TableOutlined,
@@ -267,6 +267,9 @@ function TableListComponent({
   }, [viewMode]);
 
   useEffect(() => {
+    // 未选择数据库时不自动加载
+    if (!database) return;
+
     const currentCacheKey = `${connectionId}::${database || ''}`;
     // 只在 connectionId/database 真正变化时（或组件重新挂载时）自动加载，
     // 避免 clearTableData 清除缓存后触发重复请求和重复 toast

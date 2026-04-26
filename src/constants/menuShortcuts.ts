@@ -5,6 +5,7 @@
 export interface ShortcutMapping {
   id: string;
   keys: string;
+  macKeys?: string; // macOS 专用快捷键
   description: string;
   category: 'file' | 'edit' | 'view' | 'connection' | 'tools' | 'window' | 'help';
 }
@@ -39,7 +40,8 @@ export const MENU_SHORTCUTS: ShortcutMapping[] = [
   { id: 'connect-selected', keys: 'mod+shift+c', description: '连接所选', category: 'connection' },
   { id: 'disconnect', keys: 'mod+shift+d', description: '断开连接', category: 'connection' },
   { id: 'new-query', keys: 'mod+q', description: '新建查询', category: 'connection' },
-  { id: 'execute-query', keys: 'mod+enter', description: '执行查询', category: 'connection' },
+  // macOS 默认 Cmd+R，其他平台 Ctrl+Enter
+  { id: 'execute-query', keys: 'mod+enter', macKeys: 'mod+r', description: '执行查询', category: 'connection' },
   
   // 工具操作
   { id: 'settings', keys: 'mod+,', description: '设置', category: 'tools' },

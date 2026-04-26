@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Layout, theme, Modal } from 'antd';
+import { Layout, theme, Modal, Form, Input } from 'antd';
 import { GlobalSearch } from './GlobalInput';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
+import { useMenuShortcuts } from '../hooks/useMenuShortcuts';
 import { Toolbar } from './Toolbar';
 import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
 import { TabPanel, type TabPanelRef } from './TabPanel';
@@ -14,6 +15,7 @@ import type { ConnectionFormData } from './ConnectionDialog';
 import type { Connection } from '../stores/appStore';
 import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { api } from '../api';
 
 const { Sider, Content } = Layout;
 
@@ -105,6 +107,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<ConnectionFormData | undefined>();
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordDialogConn, setPasswordDialogConn] = useState<{ id: string; name: string } | null>(null);
+  const [passwordForm] = Form.useForm();
   const tabPanelRef = useRef<TabPanelRef>(null);
 
   const { token } = theme.useToken();
@@ -126,6 +131,70 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const { getTables, refreshTables, getDatabases, getColumns, getIndexes } = useDatabase();
 
   useInitApp();
+
+  const menuActions = useMemo(() => ({
+    onNewConnection: () => setConnectionDialogOpen(true),
+    onOpenConnection: () => setConnectionDialogOpen(true),
+    onSaveConnection: () => {},
+    onSaveAs: () => {},
+    onImport: () => {},
+    onExport: () => {},
+    onQuit: () => {},
+    onUndo: () => {},
+    onRedo: () => {},
+    onCut: () => {},
+    onCopy: () => {},
+    onPaste: () => {},
+    onDelete: () => {},
+    onSelectAll: () => {},
+    onFindReplace: () => {},
+    onRefresh: () => {
+      if (selectedConnectionId && selectedDatabase) {
+        loadDatabaseTables(selectedConnectionId, selectedDatabase, true);
+      }
+    },
+    onZoomIn: () => {},
+    onZoomOut: () => {},
+    onZoomReset: () => {},
+    onToggleFullscreen: () => {
+      const elem = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+      elem.catch(() => {});
+    },
+    onConnectSelected: () => {
+      if (selectedConnectionId) {
+        handleConnect(selectedConnectionId);
+      }
+    },
+    onDisconnect: () => {
+      if (selectedConnectionId) {
+        handleDisconnect(selectedConnectionId);
+      }
+    },
+    onNewQuery: () => {
+      if (selectedConnectionId) {
+        handleNewQuery(selectedConnectionId);
+      }
+    },
+    onExecuteQuery: () => {
+      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'execute-query' } }));
+    },
+    onSettings: () => setSettingsDialogOpen(true),
+    onNewTab: () => {
+      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } }));
+    },
+    onCloseTab: () => {
+      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'close-tab' } }));
+    },
+    onNextTab: () => {
+      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'next-tab' } }));
+    },
+    onPreviousTab: () => {
+      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'previous-tab' } }));
+    },
+    onHelp: () => {},
+  }), [selectedConnectionId, selectedDatabase]);
+
+  useMenuShortcuts(menuActions);
 
   // Debounced search (500ms)
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -224,6 +293,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         setConnectionDialogOpen(false);
       } catch (error) {
         console.error('Failed to save connection:', error);
+        throw error;
       }
     },
     [saveConnection]
@@ -326,7 +396,14 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           [connectionId]: dbList,
         }));
         setExpandedKeys((prev) => [...prev, connectionId]);
-      } catch (err) {
+      } catch (err: any) {
+        // 检查是否是密码错误，需要弹框输入密码
+        if (err?.code === 'PASSWORD_REQUIRED') {
+          const conn = connections.find((c) => c.id === connectionId);
+          setPasswordDialogConn({ id: connectionId, name: conn?.name || '未知连接' });
+          setPasswordDialogOpen(true);
+          return;
+        }
         // 连接失败时，彻底清理所有相关状态
         setConnectionDatabases((prev) => {
           const next = { ...prev };
@@ -347,21 +424,83 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         throw err;
       }
     },
-    [connect, getDatabases]
+    [connect, getDatabases, connections]
   );
+
+  const handlePasswordSubmit = async () => {
+    try {
+      const values = await passwordForm.validateFields();
+      setPasswordDialogOpen(false);
+      passwordForm.resetFields();
+
+      if (!passwordDialogConn) return;
+
+      // 保存密码到存储
+      await api.updateConnectionPassword(passwordDialogConn.id, values.password);
+
+      // 重试连接
+      const { setLoading, clearTableData, setConnections, setError } = useAppStore.getState();
+      try {
+        await connect(passwordDialogConn.id);
+        const databases = await getDatabases(passwordDialogConn.id);
+        const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
+        setConnectionDatabases((prev) => {
+          const next = { ...prev };
+          // 清除之前连接失败的状态
+          if (next[passwordDialogConn.id]) {
+            next[passwordDialogConn.id] = next[passwordDialogConn.id].map((db) => ({
+              ...db,
+              loadFailed: false,
+            }));
+          }
+          return {
+            ...next,
+            [passwordDialogConn.id]: dbList,
+          };
+        });
+        setExpandedKeys((prev) => [...prev, passwordDialogConn.id]);
+      } catch (err) {
+        setConnectionDatabases((prev) => {
+          const next = { ...prev };
+          delete next[passwordDialogConn.id];
+          return next;
+        });
+        clearTableData(passwordDialogConn.id);
+        setConnections((prev) =>
+          prev.map((c) =>
+            c.id === passwordDialogConn.id ? { ...c, status: 'disconnected' as const } : c
+          )
+        );
+        setLoading(false);
+        setError(null);
+        throw err;
+      }
+    } catch (err) {
+      // 表单验证失败或其他错误
+      console.error('Password prompt error:', err);
+    }
+  };
 
   const handleDatabaseExpand = useCallback(
     async (connectionId: string, database: string) => {
       setSelectedConnectionId(connectionId);
       setSelectedDatabase(database);
+
+      // 检查连接状态
+      const conn = connections.find((c) => c.id === connectionId);
+      if (!conn || conn.status !== 'connected') {
+        return;
+      }
+
       // 检查是否已加载失败，避免不断重试导致错误提示
       const dbList = connectionDatabases[connectionId] || [];
       const db = dbList.find((d) => d.database === database);
       if (db?.loadFailed) return;
+
       // 始终强制刷新，因为展开数据库时需要最新数据
       await loadDatabaseTables(connectionId, database, true);
     },
-    [loadDatabaseTables, connectionDatabases]
+    [loadDatabaseTables, connectionDatabases, connections]
   );
 
   const handleDatabaseRefresh = useCallback(
@@ -371,8 +510,12 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     [loadDatabaseTables]
   );
 
+  const closingDbModalRef = useRef(false);
+
   const handleDatabaseClose = useCallback(
     (connectionId: string, database: string) => {
+      if (closingDbModalRef.current) return;
+
       const hasTabs = tabPanelRef.current?.hasDatabaseTabs(connectionId, database);
       const tabInfo = tabPanelRef.current?.getDatabaseTabInfo(connectionId, database);
 
@@ -411,16 +554,19 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       };
 
       if (hasTabs && tabInfo && tabInfo.dataTabCount > 0) {
+        closingDbModalRef.current = true;
         Modal.confirm({
           title: '关闭关联标签页',
           content: `该数据库下还有 ${tabInfo.dataTabCount} 个数据表标签页处于打开状态，关闭数据库时是否一并关闭？`,
           okText: '关闭并关闭数据库',
           cancelText: '仅关闭数据库',
           onOk: () => {
+            closingDbModalRef.current = false;
             tabPanelRef.current?.closeDatabaseTabs(connectionId, database);
             doClose();
           },
           onCancel: () => {
+            closingDbModalRef.current = false;
             doClose();
           },
         });
@@ -567,14 +713,27 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   );
 
   const handleNewQuery = useCallback(
-    (connectionId: string) => {
+    async (connectionId: string) => {
+      const conn = connections.find((c) => c.id === connectionId);
+      if (!conn) return;
+
+      // 如果未连接，先尝试连接
+      if (conn.status !== 'connected') {
+        try {
+          await handleConnect(connectionId);
+        } catch (err: any) {
+          // 连接失败时，handleConnect 会处理密码弹框，不需要再处理
+          return;
+        }
+      }
+
       setSelectedConnectionId(connectionId);
       setActiveConnection(connectionId);
       window.dispatchEvent(
-        new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } })
+        new CustomEvent('tab-action', { detail: { action: 'new-sql-tab', connectionId, database: selectedDatabase } })
       );
     },
-    [setActiveConnection]
+    [connections, handleConnect, setActiveConnection]
   );
 
   const handleEditTab = useCallback((targetKey: string, action: string) => {
@@ -814,6 +973,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
               tableToOpen={tableToOpen}
               onSqlTabCountChange={setSqlTabCount}
               pageSize={useSettingsStore.getState().settings.pageSize}
+              connectionDatabases={connectionDatabases}
             />
           </div>
 
@@ -852,6 +1012,28 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       />
 
       <SettingsDialog open={settingsDialogOpen} onCancel={() => setSettingsDialogOpen(false)} />
+
+      <Modal
+        title={`连接 "${passwordDialogConn?.name}" 需要密码`}
+        open={passwordDialogOpen}
+        onOk={handlePasswordSubmit}
+        onCancel={() => {
+          setPasswordDialogOpen(false);
+          passwordForm.resetFields();
+        }}
+        okText="连接"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Form form={passwordForm} layout="vertical">
+          <Form.Item
+            name="password"
+            rules={[{ required: true, message: '请输入密码' }]}
+          >
+            <Input.Password autoFocus placeholder="请输入数据库密码" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Layout>
   );
 }

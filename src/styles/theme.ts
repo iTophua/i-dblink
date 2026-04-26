@@ -53,6 +53,15 @@ export interface NeutralColors {
   surfaceElevated: string;
   scrollbarThumb: string;
   scrollbarTrack: string;
+  // 层级过渡色 - 用于细腻的层次区分
+  level1: string;  // 底层
+  level2: string;  // 卡片层
+  level3: string;  // 悬浮层
+  level4: string;  // 弹窗层
+  // 边框层次
+  borderSubtle: string;   // 极淡边框 - 分隔同类元素
+  borderEmphasis: string; // 强调边框 - 聚焦当前
+  borderActive: string;   // 激活边框 - 选中状态
 }
 
 export interface GlassEffect {
@@ -60,6 +69,8 @@ export interface GlassEffect {
   glassBorder: string;
   glassBlur: string;
   glassShadow: string;
+  glassInnerGlow: string;
+  glassHighlight: string;
 }
 
 export interface FocusStyle {
@@ -76,14 +87,18 @@ export interface ThemeConfig {
   colors: ThemeColorScheme;
   neutralColors: NeutralColors;
   glassEffect: GlassEffect;
+  glassLayers: typeof GLASS_LAYERS;
   focusStyle: FocusStyle;
+  lighting: typeof LIGHTING_EFFECTS;
   dbTypeColors: Record<string, string>;
   typography: typeof TYPOGRAPHY;
   spacing: typeof SPACING;
   sizes: typeof SIZES;
   borderRadius: typeof BORDER_RADIUS;
   shadows: typeof SHADOWS;
+  shadowLevels: typeof SHADOW_LEVELS;
   animation: typeof ANIMATION;
+  animationEnhanced: typeof ANIMATION_ENHANCED;
   breakpoints: typeof BREAKPOINTS;
   zIndex: typeof Z_INDEX;
 }
@@ -176,23 +191,60 @@ export const BORDER_RADIUS = {
   modalRadius: 8,
 };
 
-// ==================== 阴影规范 ====================
+// ==================== 阴影规范 - 增强层次感 ====================
 
 export const SHADOWS = {
-  shadowSm: '0 1px 2px rgba(0, 0, 0, 0.05)',
-  shadowMd: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)',
-  shadowLg: '0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06)',
-  shadowXl: '0 8px 32px rgba(0, 0, 0, 0.16), 0 4px 8px rgba(0, 0, 0, 0.08)',
-  shadow2xl: '0 16px 48px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.1)',
+  // 细腻阴影 - 轻微悬浮感，用于内嵌元素
+  shadowSm: '0 1px 2px rgba(0, 0, 0, 0.04)',
+  // 柔和阴影 - 标准卡片态
+  shadowMd: '0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)',
+  // 立体阴影 - 悬浮态，强调深度
+  shadowLg: '0 4px 16px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06)',
+  // 强调阴影 - 模态框、弹窗
+  shadowXl: '0 8px 32px rgba(0, 0, 0, 0.14), 0 4px 8px rgba(0, 0, 0, 0.08)',
+  // 夸张阴影 - 浮出感极强
+  shadow2xl: '0 16px 48px rgba(0, 0, 0, 0.20), 0 8px 16px rgba(0, 0, 0, 0.12)',
+  // 底部加厚阴影 - 模拟光源在上方
+  shadowBottom: '0 4px 12px rgba(0, 0, 0, 0.10), 0 8px 24px rgba(0, 0, 0, 0.06)',
+  // 顶部加厚阴影 - 模拟光源在下方
+  shadowTop: '0 -4px 12px rgba(0, 0, 0, 0.08), 0 -8px 24px rgba(0, 0, 0, 0.04)',
+  // 侧向阴影 - 左侧光源
+  shadowLeft: '4px 0 12px rgba(0, 0, 0, 0.08)',
+  // 侧向阴影 - 右侧光源
+  shadowRight: '-4px 0 12px rgba(0, 0, 0, 0.08)',
+
+  // 亮色主题阴影
   cardShadowLight: '0 2px 8px rgba(0, 0, 0, 0.06), 0 0 1px rgba(0, 0, 0, 0.04)',
   headerShadowLight: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)',
+  // 暗色主题阴影 - 更深更弥散
   cardShadowDark: '0 4px 12px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.03)',
   headerShadowDark: '0 4px 12px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3), inset 0 -1px 0 rgba(255, 255, 255, 0.02)',
+  // 浮窗阴影 - 强对比浮出
   floatingShadow: '0 12px 40px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.12)',
+  // 内凹阴影
   insetShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.04)',
+  // 主题色光晕
   glowPrimary: '0 0 20px rgba(99, 102, 241, 0.2)',
   glowSuccess: '0 0 20px rgba(16, 185, 129, 0.2)',
   glowError: '0 0 20px rgba(239, 68, 68, 0.2)',
+  // 高级感光晕 - 更柔和更弥散
+  glowPrimarySoft: '0 0 30px rgba(99, 102, 241, 0.15), 0 0 60px rgba(99, 102, 241, 0.08)',
+  glowPrimaryStrong: '0 0 40px rgba(99, 102, 241, 0.3), 0 0 80px rgba(99, 102, 241, 0.15)',
+};
+
+// ==================== 阴影层级系统 ====================
+
+export const SHADOW_LEVELS = {
+  // 微交互 - hover 状态变化
+  level0: '0 1px 2px rgba(0, 0, 0, 0.04)',
+  // 基础卡片
+  level1: '0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)',
+  // 悬浮卡片
+  level2: '0 4px 16px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06)',
+  // 下拉菜单
+  level3: '0 8px 24px rgba(0, 0, 0, 0.14), 0 4px 8px rgba(0, 0, 0, 0.08)',
+  // 弹窗
+  level4: '0 16px 48px rgba(0, 0, 0, 0.20), 0 8px 16px rgba(0, 0, 0, 0.12)',
 };
 
 // ==================== 动效规范 ====================
@@ -214,6 +266,98 @@ export const ANIMATION = {
   transitionTransform: 'transform 0.2s ease',
   transitionBoxShadow: 'box-shadow 0.2s ease',
   transitionSpring: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+};
+
+// ==================== 增强动效规范 - 细腻层次过渡 ====================
+
+export const ANIMATION_ENHANCED = {
+  // 快速交互 - 按钮点击、hover 即时反馈
+  micro: {
+    duration: '0.1s',
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  // 标准过渡 - 颜色、透明度变化
+  standard: {
+    duration: '0.2s',
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  // 流畅过渡 - 位移、缩放
+  smooth: {
+    duration: '0.3s',
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  // 慢速过渡 - 大面积元素、页面切换
+  deliberate: {
+    duration: '0.4s',
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  // 弹性动画 - 弹跳、强调效果
+  emphasis: {
+    duration: '0.5s',
+    easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+  },
+  // 渐入效果 - 新元素出现
+  fadeIn: {
+    duration: '0.3s',
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    mode: 'ease-out' as const,
+  },
+  // 渐出效果 - 元素消失
+  fadeOut: {
+    duration: '0.2s',
+    easing: 'cubic-bezier(0.4, 0, 1, 1)',
+    mode: 'ease-in' as const,
+  },
+  // 滑入效果 - 侧边栏、抽屉
+  slideIn: {
+    duration: '0.35s',
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  // 缩放效果 - 弹窗、下拉
+  scale: {
+    duration: '0.25s',
+    easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+  },
+};
+
+// ==================== 层级光照效果 ====================
+
+export interface LightingEffect {
+  highlightTop: string;      // 顶部高光
+  highlightBottom: string;   // 底部渐隐
+  innerShadow: string;       // 内阴影
+  outerGlow: string;         // 外发光
+}
+
+export const LIGHTING_EFFECTS = {
+  light: {
+    // 顶部光源 - 模拟上方光照
+    topHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 30%)',
+    // 底部渐隐 - 底部柔和过渡
+    bottomFade: 'linear-gradient(0deg, rgba(0,0,0,0.02) 0%, rgba(0,0,0,0) 50%)',
+    // 内凹效果 - 模拟凹陷
+    insetLight: 'inset 0 1px 2px rgba(0,0,0,0.06)',
+    // 外放效果 - 模拟凸起
+    raisedGlow: '0 2px 8px rgba(0,0,0,0.08)',
+    // 悬浮效果 - 卡片悬浮态
+    hoverLift: '0 8px 24px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06)',
+    // 按下效果 - 按钮按下态
+    pressedInset: 'inset 0 2px 4px rgba(0,0,0,0.1)',
+    // 高光边缘 - 顶部亮边
+    topEdge: 'inset 0 1px 0 rgba(255,255,255,0.9)',
+    // 暗边 - 底部暗边
+    bottomEdge: 'inset 0 -1px 0 rgba(0,0,0,0.05)',
+  },
+  dark: {
+    topHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 30%)',
+    bottomFade: 'linear-gradient(0deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 50%)',
+    insetLight: 'inset 0 1px 2px rgba(0,0,0,0.3)',
+    raisedGlow: '0 2px 8px rgba(0,0,0,0.4)',
+    hoverLift: '0 8px 24px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3)',
+    pressedInset: 'inset 0 2px 4px rgba(0,0,0,0.4)',
+    topEdge: 'inset 0 1px 0 rgba(255,255,255,0.07)',
+    bottomEdge: 'inset 0 -1px 0 rgba(0,0,0,0.2)',
+  },
 };
 
 // ==================== 响应式断点 ====================
@@ -303,6 +447,9 @@ export const DB_TYPE_COLORS = {
   oracle: '#fa8c16',
   mariadb: '#13c2c2',
   dameng: '#722ed1',
+  kingbase: '#eb2f96',
+  highgo: '#13c2c2',
+  vastbase: '#52c41a',
   default: '#1890ff',
 };
 
@@ -310,16 +457,96 @@ export const DB_TYPE_COLORS = {
 
 export const GLASS_EFFECTS = {
   light: {
-    glassBackground: 'rgba(255, 255, 255, 0.72)',
-    glassBorder: 'rgba(255, 255, 255, 0.35)',
+    glassBackground: 'rgba(255, 255, 255, 0.80)',
+    glassBorder: 'rgba(255, 255, 255, 0.40)',
     glassBlur: 'blur(16px)',
     glassShadow: '0 8px 32px rgba(31, 38, 135, 0.12)',
+    glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+    glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 30%)',
   },
   dark: {
-    glassBackground: 'rgba(22, 28, 45, 0.82)',
+    glassBackground: 'rgba(22, 28, 45, 0.88)',
     glassBorder: 'rgba(255, 255, 255, 0.08)',
     glassBlur: 'blur(20px)',
     glassShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+    glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+    glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 30%)',
+  },
+};
+
+// ==================== 玻璃拟态效果增强版 ====================
+export interface GlassEffectEnhanced {
+  glassBackground: string;
+  glassBorder: string;
+  glassBlur: string;
+  glassShadow: string;
+  glassInnerGlow: string;
+  glassHighlight: string;
+  glassOverlay: string;
+}
+
+// 多层玻璃效果 - 用于卡片层级
+export const GLASS_LAYERS = {
+  light: {
+    // 底层卡片 - 最不透明
+    glassBase: {
+      glassBackground: 'rgba(255, 255, 255, 0.85)',
+      glassBorder: 'rgba(0, 0, 0, 0.06)',
+      glassBlur: 'blur(8px)',
+      glassShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+      glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+      glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%)',
+      glassOverlay: 'transparent',
+    },
+    // 中层卡片
+    glassMid: {
+      glassBackground: 'rgba(255, 255, 255, 0.90)',
+      glassBorder: 'rgba(255, 255, 255, 0.5)',
+      glassBlur: 'blur(16px)',
+      glassShadow: '0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04)',
+      glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+      glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 50%)',
+      glassOverlay: 'transparent',
+    },
+    // 顶层卡片/模态框
+    glassTop: {
+      glassBackground: 'rgba(255, 255, 255, 0.95)',
+      glassBorder: 'rgba(255, 255, 255, 0.6)',
+      glassBlur: 'blur(24px)',
+      glassShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06)',
+      glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 1)',
+      glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 30%)',
+      glassOverlay: 'transparent',
+    },
+  },
+  dark: {
+    glassBase: {
+      glassBackground: 'rgba(30, 35, 55, 0.85)',
+      glassBorder: 'rgba(255, 255, 255, 0.05)',
+      glassBlur: 'blur(8px)',
+      glassShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+      glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.03)',
+      glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%)',
+      glassOverlay: 'transparent',
+    },
+    glassMid: {
+      glassBackground: 'rgba(35, 40, 65, 0.90)',
+      glassBorder: 'rgba(255, 255, 255, 0.07)',
+      glassBlur: 'blur(16px)',
+      glassShadow: '0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2)',
+      glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+      glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 50%)',
+      glassOverlay: 'transparent',
+    },
+    glassTop: {
+      glassBackground: 'rgba(40, 45, 75, 0.95)',
+      glassBorder: 'rgba(255, 255, 255, 0.09)',
+      glassBlur: 'blur(24px)',
+      glassShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)',
+      glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.07)',
+      glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 30%)',
+      glassOverlay: 'transparent',
+    },
   },
 };
 
@@ -380,14 +607,18 @@ function createThemeConfig(
     colors,
     neutralColors,
     glassEffect: GLASS_EFFECTS[mode],
+    glassLayers: GLASS_LAYERS,
     focusStyle: FOCUS_STYLES[mode],
+    lighting: LIGHTING_EFFECTS,
     dbTypeColors: DB_TYPE_COLORS,
     typography: TYPOGRAPHY,
     spacing: SPACING,
     sizes: SIZES,
     borderRadius: BORDER_RADIUS,
     shadows: SHADOWS,
+    shadowLevels: SHADOW_LEVELS,
     animation: ANIMATION,
+    animationEnhanced: ANIMATION_ENHANCED,
     breakpoints: BREAKPOINTS,
     zIndex: Z_INDEX,
   };
@@ -432,6 +663,13 @@ const NEON_CYBER_LIGHT_NEUTRAL: NeutralColors = {
   surfaceElevated: '#ffffff',
   scrollbarThumb: 'rgba(0, 0, 0, 0.15)',
   scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
+  level1: '#f8f8fc',
+  level2: '#ffffff',
+  level3: '#ffffff',
+  level4: '#ffffff',
+  borderSubtle: '#eaeaef',
+  borderEmphasis: '#d0d0dc',
+  borderActive: '#00e5ff',
 };
 
 const NEON_CYBER_DARK_NEUTRAL: NeutralColors = {
@@ -456,6 +694,13 @@ const NEON_CYBER_DARK_NEUTRAL: NeutralColors = {
   surfaceElevated: '#1c1c40',
   scrollbarThumb: 'rgba(255, 255, 255, 0.18)',
   scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
+  level1: '#0d0d18',
+  level2: '#13132a',
+  level3: '#1c1c38',
+  level4: '#252548',
+  borderSubtle: '#222240',
+  borderEmphasis: '#3a3a55',
+  borderActive: '#00f5ff',
 };
 
 // 2. MidnightDeep - 深夜深蓝风格
@@ -497,6 +742,13 @@ const MIDNIGHT_DEEP_LIGHT_NEUTRAL: NeutralColors = {
   surfaceElevated: '#ffffff',
   scrollbarThumb: 'rgba(0, 0, 0, 0.15)',
   scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
+  level1: '#f8fafc',
+  level2: '#ffffff',
+  level3: '#ffffff',
+  level4: '#ffffff',
+  borderSubtle: '#e2e8f0',
+  borderEmphasis: '#cbd5e1',
+  borderActive: '#6366f1',
 };
 
 const MIDNIGHT_DEEP_DARK_NEUTRAL: NeutralColors = {
@@ -521,6 +773,13 @@ const MIDNIGHT_DEEP_DARK_NEUTRAL: NeutralColors = {
   surfaceElevated: '#1a2438',
   scrollbarThumb: 'rgba(255, 255, 255, 0.15)',
   scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
+  level1: '#0a0f1f',
+  level2: '#111827',
+  level3: '#1a2235',
+  level4: '#252d45',
+  borderSubtle: '#1a2030',
+  borderEmphasis: '#323f5a',
+  borderActive: '#818cf8',
 };
 
 // 3. OceanBlue - 海洋蓝色风格
@@ -562,6 +821,13 @@ const OCEAN_BLUE_LIGHT_NEUTRAL: NeutralColors = {
   surfaceElevated: '#ffffff',
   scrollbarThumb: 'rgba(0, 0, 0, 0.15)',
   scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
+  level1: '#f0f9ff',
+  level2: '#ffffff',
+  level3: '#ffffff',
+  level4: '#ffffff',
+  borderSubtle: '#e0f2fe',
+  borderEmphasis: '#bae6fd',
+  borderActive: '#0ea5e9',
 };
 
 const OCEAN_BLUE_DARK_NEUTRAL: NeutralColors = {
@@ -586,6 +852,13 @@ const OCEAN_BLUE_DARK_NEUTRAL: NeutralColors = {
   surfaceElevated: '#162840',
   scrollbarThumb: 'rgba(255, 255, 255, 0.15)',
   scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
+  level1: '#071520',
+  level2: '#0d1e30',
+  level3: '#122535',
+  level4: '#1a3550',
+  borderSubtle: '#0a3050',
+  borderEmphasis: '#0a3a60',
+  borderActive: '#38bdf8',
 };
 
 // 4. NordicFrost - 北欧冷淡风格
@@ -627,6 +900,13 @@ const NORDIC_FROST_LIGHT_NEUTRAL: NeutralColors = {
   surfaceElevated: '#ffffff',
   scrollbarThumb: 'rgba(0, 0, 0, 0.15)',
   scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
+  level1: '#f8fafc',
+  level2: '#ffffff',
+  level3: '#ffffff',
+  level4: '#ffffff',
+  borderSubtle: '#f1f5f9',
+  borderEmphasis: '#e2e8f0',
+  borderActive: '#64748b',
 };
 
 const NORDIC_FROST_DARK_NEUTRAL: NeutralColors = {
@@ -651,6 +931,13 @@ const NORDIC_FROST_DARK_NEUTRAL: NeutralColors = {
   surfaceElevated: '#1a2230',
   scrollbarThumb: 'rgba(255, 255, 255, 0.12)',
   scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
+  level1: '#0c1018',
+  level2: '#111520',
+  level3: '#1a2030',
+  level4: '#252d40',
+  borderSubtle: '#1a2030',
+  borderEmphasis: '#3a4455',
+  borderActive: '#94a3b8',
 };
 
 // ==================== 导出所有主题配置 ====================

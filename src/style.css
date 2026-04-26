@@ -18,8 +18,13 @@
   --db-color-mysql: #1890ff;
   --db-color-postgresql: #336791;
   --db-color-sqlite: #003b57;
+  --db-color-sqlserver: #eb2f96;
+  --db-color-oracle: #fa8c16;
   --db-color-mariadb: #13c2c2;
   --db-color-dameng: #722ed1;
+  --db-color-kingbase: #eb2f96;
+  --db-color-highgo: #13c2c2;
+  --db-color-vastbase: #52c41a;
 
   --text-primary: #0f0f0f;
   --text-secondary: #595959;

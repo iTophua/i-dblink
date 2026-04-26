@@ -22,7 +22,7 @@ function App() {
           const oldSettings = parsed.state.settings;
           if (oldSettings.theme && !oldSettings.themePreset) {
             const preset = oldSettings.theme === 'dark' ? 'midnightDeep' :
-                          oldSettings.theme === 'light' ? 'midnightDeep' : 'midnightDeep';
+                          oldSettings.theme === 'light' ? 'nordicFrost' : 'midnightDeep';
             const mode = oldSettings.theme === 'system'
               ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
               : oldSettings.theme;
@@ -141,15 +141,6 @@ function App() {
       }
     });
   }, [themePreset, effectiveMode, isHydrated]);
-
-  function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
-    } : null;
-  }
 
   if (!isHydrated) {
     return null;

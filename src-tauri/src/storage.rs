@@ -1,13 +1,15 @@
 use crate::db::{ConnectionGroup, ConnectionRepository, DbConnection, DbPool, GroupRepository};
-use crate::security::PasswordManager;
+use crate::security::{decrypt_password, encrypt_password};
 use std::path::PathBuf;
 use tauri::AppHandle;
 
 /// 获取应用数据目录（区分开发和生产环境）
-fn get_data_dir(_app_handle: &AppHandle) -> PathBuf {
+fn get_data_dir(app_handle: &AppHandle) -> PathBuf {
     // 检查是否为开发模式（debug 构建）
     #[cfg(debug_assertions)]
     {
+        // 消除 unused warning（开发模式下不使用 app_handle）
+        let _ = app_handle;
         // 开发环境：使用项目根目录的 .dev-data 文件夹
         // 这样开发时的数据不会干扰生产数据
         // 注意：cargo 在 src-tauri 目录下运行，所以需要向上一级
@@ -100,7 +102,9 @@ impl Storage {
     ) -> Result<Option<(DbConnection, Option<String>)>, anyhow::Error> {
         let conn = self.connection_repo.get_by_id(id).await?;
         if let Some(connection) = conn {
-            let password = PasswordManager::get_password(id).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
+            let encrypted = self.connection_repo.get_password(id).await?;
+            let password = encrypted
+                .and_then(|pwd| decrypt_password(&pwd).ok());
             Ok(Some((connection, password)))
         } else {
             Ok(None)
@@ -110,14 +114,17 @@ impl Storage {
     /// 保存连接
     pub async fn save_connection(
         &self,
-        conn: DbConnection,
+        conn: &DbConnection,
         password: Option<&str>,
     ) -> Result<(), anyhow::Error> {
         // 保存连接配置
-        self.connection_repo.save(&conn).await?;
+        self.connection_repo.save(conn).await?;
 
+        // 加密并保存密码
         if let Some(pwd) = password {
-            PasswordManager::save_password(&conn.id, pwd).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
+            let encrypted = encrypt_password(pwd)
+                .map_err(|e| anyhow::anyhow!("Encryption error: {}", e))?;
+            self.connection_repo.save_password(&conn.id, &encrypted).await?;
         }
 
         Ok(())
@@ -127,25 +134,28 @@ impl Storage {
     pub async fn update_connection(
         &self,
         id: &str,
-        updated: DbConnection,
+        updated: &DbConnection,
         new_password: Option<&str>,
     ) -> Result<(), anyhow::Error> {
-        // 只有当新密码非空时才更新密码，否则保留旧密码
+        // 保存连接配置
+        self.connection_repo.save(updated).await?;
+
+        // 加密并保存新密码（如果提供）
         if let Some(pwd) = new_password {
             if !pwd.is_empty() {
-                PasswordManager::save_password(id, pwd).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
+                let encrypted = encrypt_password(pwd)
+                    .map_err(|e| anyhow::anyhow!("Encryption error: {}", e))?;
+                self.connection_repo.save_password(id, &encrypted).await?;
             }
         }
-
-        // 更新连接配置
-        self.connection_repo.save(&updated).await?;
 
         Ok(())
     }
 
     /// 删除连接
     pub async fn delete_connection(&self, id: &str) -> Result<(), anyhow::Error> {
-        PasswordManager::delete_password(id).map_err(|e| anyhow::anyhow!("Password error: {}", e))?;
+        // 删除密码
+        self.connection_repo.delete_password(id).await?;
 
         // 删除连接配置
         self.connection_repo.delete(id).await?;
@@ -168,17 +178,12 @@ impl Storage {
         Ok(self.group_repo.delete(id).await?)
     }
 
-    /// 记录连接历史
-    pub async fn _log_connection_history(
-        &self,
-        connection_id: &str,
-        action: &str,
-        success: bool,
-        error_message: Option<&str>,
-    ) -> Result<(), anyhow::Error> {
-        Ok(self
-            .connection_repo
-            ._log_history(connection_id, action, success, error_message)
-            .await?)
+    /// 更新连接密码
+    pub async fn update_password(&self, id: &str, password: &str) -> Result<(), anyhow::Error> {
+        let encrypted = encrypt_password(password)
+            .map_err(|e| anyhow::anyhow!("Encryption error: {}", e))?;
+        self.connection_repo.save_password(id, &encrypted).await?;
+        Ok(())
     }
+
 }

@@ -29,13 +29,14 @@ src/
 
 | 文件 | 行数 | 复杂度 | 备注 |
 |------|------|--------|------|
-| `MainLayout.tsx` | 783 | 高 | 500+ 行内联样式，需拆分 |
-| `UIDesignShowcase.tsx` | 641 | 中 | UI 展示 (Demo) |
-| `SQLEditor.tsx` | 631 | 中 | Monaco Editor SQL 编辑器 |
-| `DataTable.tsx` | 523 | 中 | AG Grid 数据表格 |
-| `ConnectionDialog.tsx` | 中 | 连接配置对话框 |
+| `MainLayout.tsx` | ~850 | 高 | 布局组件，已集成快捷键 |
+| `TabPanel/index.tsx` | ~650 | 中 | 标签页管理，支持多 SQL 查询 |
+| `SQLEditor.tsx` | ~650 | 中 | Monaco Editor SQL 编辑器 |
+| `DataTable.tsx` | ~600 | 中 | AG Grid 数据表格，已实现右键菜单 |
+| `ConnectionDialog.tsx` | 中 | 连接配置对话框，已实现文件选择 |
+| `EnhancedConnectionTree.tsx` | 高 | 连接树组件，已实现确认对话框 |
 | `TableList.tsx` | 中 | 表列表组件 |
-| `Welcome.tsx` | 低 | 欢迎页 |
+| `TableDesigner/index.tsx` | ~800 | 中 | 表设计器 |
 
 ## 约定
 
@@ -47,6 +48,14 @@ src/
 
 ## 前端特定问题
 
-1. **组件大文件**: 4 个组件 >500 行，`MainLayout.tsx` 达 783 行
-2. **内联样式**: `MainLayout.tsx` 含 500+ 行内联样式，建议提取为 CSS-in-JS 或样式文件
-3. **TODO**: 2 个待实现功能 (`TableList.tsx` 刷新按钮, `useApi.ts` 菜单操作)
+1. **组件大文件**: 部分组件 >500 行，可进一步拆分
+2. **内联样式**: `MainLayout.tsx` 含较多内联样式，建议提取为 CSS-in-JS 或样式文件
+
+## 已解决问题
+
+1. ✅ **SQL 注入漏洞** - DataTable.tsx UPDATE 语句已修复
+2. ✅ **文件选择对话框** - ConnectionDialog.tsx SSL/SSH 文件选择已实现
+3. ✅ **右键上下文菜单** - DataTable.tsx 行级操作菜单已实现
+4. ✅ **危险操作确认对话框** - EnhancedConnectionTree.tsx 已实现
+5. ✅ **快捷键系统** - MainLayout.tsx 已集成 useMenuShortcuts
+6. ✅ **多查询标签页** - TabPanel/index.tsx 已支持 Tab 重命名

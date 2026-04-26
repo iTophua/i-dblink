@@ -1,13 +1,8 @@
 use crate::db::{ConnectionGroup, DbConnection};
-use crate::drivers::db_pool::DbPool;
-use crate::drivers::{
-    connect_by_type, execute_query_by_type, get_columns_by_type, get_databases_by_type,
-    get_foreign_keys_by_type, get_indexes_by_type, get_tables_by_type,
-    get_tables_categorized_by_type, get_table_structure_by_type,
-};
+use crate::sidecar::{SidecarManager, SidecarState};
 use crate::storage::Storage;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::HashSet;
 use tauri::State;
 use tokio::sync::{Mutex, RwLock};
 
@@ -51,7 +46,7 @@ impl From<DbConnection> for ConnectionOutput {
             name: conn.name,
             db_type: conn.db_type,
             host: conn.host,
-            port: conn.port as u16,
+            port: conn.port.max(0) as u16,
             username: conn.username,
             database: conn.database,
             group_id: conn.group_id,
@@ -110,7 +105,7 @@ pub struct TableInfo {
 pub struct ColumnInfo {
     pub column_name: String,
     pub data_type: String,
-    pub is_nullable: bool,
+    pub is_nullable: String,
     pub column_key: Option<String>,
     pub column_default: Option<String>,
     pub extra: Option<String>,
@@ -144,18 +139,82 @@ pub struct TablesResult {
 /// 表结构结果（包含列、索引、外键）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableStructure {
+    #[serde(default)]
     pub columns: Vec<ColumnInfo>,
+    #[serde(default)]
     pub indexes: Vec<IndexInfo>,
+    #[serde(default)]
     pub foreign_keys: Vec<ForeignKeyInfo>,
+    pub error: Option<String>,
 }
 
-async fn get_connection_pool(
+/// 存储过程/函数信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutineInfo {
+    pub routine_name: String,
+    pub routine_type: String,
+    pub definition: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// 路由列表结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutinesResult {
+    pub procedures: Vec<RoutineInfo>,
+    pub functions: Vec<RoutineInfo>,
+}
+
+/// SQL 查询结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryResult {
+    #[serde(default)]
+    pub columns: Vec<String>,
+    #[serde(default)]
+    pub rows: Vec<Vec<serde_json::Value>>,
+    pub rows_affected: Option<u64>,
+    pub error: Option<String>,
+}
+
+/// 活跃连接集合（仅记录已连接的 connection_id）
+pub struct ActiveConnections {
+    conns: RwLock<HashSet<String>>,
+}
+
+impl ActiveConnections {
+    pub fn new() -> Self {
+        Self {
+            conns: RwLock::new(HashSet::new()),
+        }
+    }
+
+    pub async fn contains(&self, connection_id: &str) -> bool {
+        self.conns.read().await.contains(connection_id)
+    }
+
+    pub async fn add(&self, connection_id: String) {
+        self.conns.write().await.insert(connection_id);
+    }
+
+    pub async fn remove(&self, connection_id: &str) -> bool {
+        self.conns.write().await.remove(connection_id)
+    }
+}
+
+/// 确保指定连接已建立（如未连接则自动创建）
+async fn ensure_connected(
     connection_id: &str,
     state: &State<'_, Mutex<Option<Storage>>>,
     connections: &State<'_, RwLock<ActiveConnections>>,
-) -> Result<(crate::drivers::db_pool::DbPool, String), String> {
+    sm: &SidecarManager,
+) -> Result<(), String> {
+    if connections.read().await.contains(connection_id).await {
+        return Ok(());
+    }
+
     let guard = state.lock().await;
-    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
+    let storage = guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
 
     let (conn_config, password_opt) = storage
         .get_connection_with_password(connection_id)
@@ -165,131 +224,29 @@ async fn get_connection_pool(
 
     let password = password_opt.unwrap_or_default();
 
-    let pools = connections.read().await;
-    let pool = match pools.get(connection_id).await {
-        Some(pool) => pool,
-        None => connect_by_type(&conn_config.db_type, &conn_config, &password).await?,
-    };
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "db_type": conn_config.db_type,
+        "host": conn_config.host,
+        "port": conn_config.port,
+        "username": conn_config.username,
+        "password": password,
+        "database": conn_config.database,
+    });
 
-    Ok((pool, conn_config.db_type))
-}
+    let resp: serde_json::Value = sm.post("/connect", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            // 检测密码错误，返回特定错误码供前端识别
+            if err.contains("password") || err.contains("Password") || err.contains("认证") || err.contains("authentication") {
+                return Err("PASSWORD_REQUIRED".to_string());
+            }
+            return Err(err.to_string());
+        }
+    }
 
-/// 表信息
-#[tauri::command]
-pub async fn get_tables(
-    connection_id: String,
-    database: Option<String>,
-    state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, RwLock<ActiveConnections>>,
-) -> Result<Vec<TableInfo>, String> {
-    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
-    let tables = get_tables_by_type(&db_type, &pool, database.as_deref()).await?;
-    Ok(tables)
-}
-
-/// 获取分类的表和视图（支持搜索过滤）
-#[tauri::command]
-pub async fn get_tables_categorized(
-    connection_id: String,
-    database: Option<String>,
-    search: Option<String>,
-    state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, RwLock<ActiveConnections>>,
-) -> Result<TablesResult, String> {
-    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
-    let result = get_tables_categorized_by_type(&db_type, &pool, database.as_deref(), search.as_deref()).await?;
-    Ok(result)
-}
-
-/// 获取完整的表结构（列、索引、外键）
-#[tauri::command]
-pub async fn get_table_structure(
-    connection_id: String,
-    table_name: String,
-    database: Option<String>,
-    state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, RwLock<ActiveConnections>>,
-) -> Result<TableStructure, String> {
-    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
-    let result = get_table_structure_by_type(&db_type, &pool, &table_name, database.as_deref()).await?;
-    Ok(result)
-}
-
-/// 获取数据库列表
-#[tauri::command]
-pub async fn get_databases(
-    connection_id: String,
-    state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, RwLock<ActiveConnections>>,
-) -> Result<Vec<String>, String> {
-    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
-    let databases = get_databases_by_type(&db_type, &pool).await?;
-    Ok(databases)
-}
-
-/// 获取列信息
-#[tauri::command]
-pub async fn get_columns(
-    connection_id: String,
-    table_name: String,
-    database: Option<String>,
-    state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, RwLock<ActiveConnections>>,
-) -> Result<Vec<ColumnInfo>, String> {
-    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
-    let cols = get_columns_by_type(&db_type, &pool, &table_name, database.as_deref()).await?;
-    Ok(cols)
-}
-
-/// 获取索引信息
-#[tauri::command]
-pub async fn get_indexes(
-    connection_id: String,
-    table_name: String,
-    database: Option<String>,
-    state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, RwLock<ActiveConnections>>,
-) -> Result<Vec<IndexInfo>, String> {
-    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
-    let indexes = get_indexes_by_type(&db_type, &pool, &table_name, database.as_deref()).await?;
-    Ok(indexes)
-}
-
-/// 获取外键信息
-#[tauri::command]
-pub async fn get_foreign_keys(
-    connection_id: String,
-    table_name: String,
-    database: Option<String>,
-    state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, RwLock<ActiveConnections>>,
-) -> Result<Vec<ForeignKeyInfo>, String> {
-    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
-    let fks = get_foreign_keys_by_type(&db_type, &pool, &table_name, database.as_deref()).await?;
-    Ok(fks)
-}
-
-/// 执行 SQL 查询
-#[tauri::command]
-pub async fn execute_query(
-    connection_id: String,
-    sql: String,
-    _database: Option<String>,
-    state: State<'_, Mutex<Option<Storage>>>,
-    connections: State<'_, RwLock<ActiveConnections>>,
-) -> Result<QueryResult, String> {
-    let (pool, db_type) = get_connection_pool(&connection_id, &state, &connections).await?;
-    let result = execute_query_by_type(&db_type, &pool, &sql).await?;
-    Ok(result)
-}
-
-/// SQL 查询结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryResult {
-    pub columns: Vec<String>,
-    pub rows: Vec<Vec<serde_json::Value>>,
-    pub rows_affected: Option<u64>,
-    pub error: Option<String>,
+    connections.write().await.add(connection_id.to_string()).await;
+    Ok(())
 }
 
 /// 测试数据库连接
@@ -301,136 +258,65 @@ pub async fn test_connection(
     username: &str,
     password: &str,
     database: Option<&str>,
+    sidecar: State<'_, SidecarState>,
 ) -> Result<bool, String> {
-    tracing::info!(
-        "Testing connection to {}:{}:{} as {}",
-        db_type, host, port, username
-    );
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
 
-    // 构造临时配置用于测试连接
-    let config = DbConnection::new(
-        "test".to_string(),
-        db_type.to_string(),
-        host.to_string(),
-        port as i32,
-        username.to_string(),
-        database.map(|s| s.to_string()),
-        None,
-    );
+    let req = serde_json::json!({
+        "connection_id": "",
+        "db_type": db_type,
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "database": database,
+    });
 
-    // 尝试创建连接池（验证连接是否可用）
-    let pool = connect_by_type(db_type, &config, password).await?;
-
-    // 验证连接池是否真正可用（执行简单查询）
-    pool.validate().await?;
-
-    tracing::info!("Connection test successful");
+    let resp: serde_json::Value = sm.post("/test", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
     Ok(true)
 }
 
-/// 活跃连接池（内存中管理）
-/// 性能优化：使用 RwLock 替代 Mutex，提升读多写少场景的性能
-pub struct ActiveConnections {
-    pools: RwLock<HashMap<String, DbPool>>,
-}
-
-impl ActiveConnections {
-    pub fn new() -> Self {
-        Self {
-            pools: RwLock::new(HashMap::new()),
-        }
-    }
-
-    /// 读取连接池 - 使用读锁，并发读取性能更好
-    pub async fn get(&self, connection_id: &str) -> Option<DbPool> {
-        let pools = self.pools.read().await;
-        pools.get(connection_id).cloned()
-    }
-
-    /// 添加连接池 - 使用写锁
-    pub async fn add(&self, connection_id: String, pool: DbPool) {
-        let mut pools = self.pools.write().await;
-        pools.insert(connection_id, pool);
-    }
-
-    /// 移除连接池 - 使用写锁
-    pub async fn remove(&self, connection_id: &str) -> Option<DbPool> {
-        let mut pools = self.pools.write().await;
-        pools.remove(connection_id)
-    }
-
-    /// 检查连接是否存在 - 使用读锁
-    pub async fn contains(&self, connection_id: &str) -> bool {
-        let pools = self.pools.read().await;
-        pools.contains_key(connection_id)
-    }
-
-    /// 获取所有连接 ID - 使用读锁
-    pub async fn _get_all_ids(&self) -> Vec<String> {
-        let pools = self.pools.read().await;
-        pools.keys().cloned().collect()
-    }
-}
-
-/// 连接到数据库（建立并保持连接池）
+/// 连接到数据库（建立并保持连接）
 #[tauri::command]
 pub async fn connect_database(
     connection_id: String,
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
 ) -> Result<bool, String> {
-    let guard = state.lock().await;
-    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
 
-    // 检查是否已经连接 - 性能优化：使用读锁
-    {
-        let conns = connections.read().await;
-        if conns.contains(&connection_id).await {
-            return Ok(true);
-        }
-    }
-
-    // 获取连接配置（含密码）
-    let (conn_config, password_opt) = storage
-        .get_connection_with_password(&connection_id)
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?
-        .ok_or_else(|| "Connection not found".to_string())?;
-
-    tracing::info!(
-        "Connecting to {}:{}:{} as {}",
-        conn_config.db_type, conn_config.host, conn_config.port, conn_config.username
-    );
-
-    let password = password_opt.unwrap_or_default();
-
-    // 创建连接池并保持
-    let pool = connect_by_type(&conn_config.db_type, &conn_config, &password).await?;
-
-    // 验证连接可用性
-    pool.validate().await?;
-
-    // 性能优化：使用 RwLock 的写锁（write().await）
-    connections.write().await.add(connection_id, pool).await;
-
-    tracing::info!("Connected successfully");
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
     Ok(true)
 }
 
-/// 断开数据库连接（释放连接池）
+/// 断开数据库连接
 #[tauri::command]
 pub async fn disconnect_database(
     connection_id: String,
     connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
 ) -> Result<bool, String> {
-    // 性能优化：使用 RwLock 的写锁（write().await）
-    if connections
-        .write()
-        .await
-        .remove(&connection_id)
-        .await
-        .is_some()
-    {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({ "connection_id": connection_id });
+    let _: serde_json::Value = sm.post("/disconnect", &req).await?;
+
+    if connections.write().await.remove(&connection_id).await {
         tracing::info!("Disconnected from {}", connection_id);
         Ok(true)
     } else {
@@ -447,13 +333,12 @@ pub async fn get_connections(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<Vec<ConnectionOutput>, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
+    let storage = guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
 
     match storage.get_connections().await {
-        Ok(connections) => Ok(connections
-            .into_iter()
-            .map(ConnectionOutput::from)
-            .collect()),
+        Ok(connections) => Ok(connections.into_iter().map(ConnectionOutput::from).collect()),
         Err(e) => Err(format!("Failed to get connections: {}", e)),
     }
 }
@@ -465,11 +350,12 @@ pub async fn save_connection(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<ConnectionOutput, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
+    let storage = guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
 
     match input.id {
         Some(id) => {
-            // 更新现有连接
             let existing = storage
                 .get_connection_with_password(&id)
                 .await
@@ -486,24 +372,13 @@ pub async fn save_connection(
             updated.group_id = input.group_id.clone();
 
             storage
-                .update_connection(&id, updated.clone(), input.password.as_deref())
+                .update_connection(&id, &updated, input.password.as_deref())
                 .await
                 .map_err(|e| format!("Failed to update connection: {}", e))?;
 
-            Ok(ConnectionOutput {
-                id,
-                name: updated.name,
-                db_type: updated.db_type,
-                host: updated.host,
-                port: updated.port as u16,
-                username: updated.username,
-                database: updated.database,
-                group_id: updated.group_id,
-                status: "disconnected".to_string(),
-            })
+            Ok(ConnectionOutput::from(updated))
         }
         None => {
-            // 创建新连接
             let new_conn = DbConnection::new(
                 input.name,
                 input.db_type,
@@ -514,31 +389,12 @@ pub async fn save_connection(
                 input.group_id,
             );
 
-            let output_id = new_conn.id.clone();
-            let output_name = new_conn.name.clone();
-            let output_db_type = new_conn.db_type.clone();
-            let output_host = new_conn.host.clone();
-            let output_port = new_conn.port;
-            let output_username = new_conn.username.clone();
-            let output_database = new_conn.database.clone();
-            let output_group_id = new_conn.group_id.clone();
-
             storage
-                .save_connection(new_conn, input.password.as_deref())
+                .save_connection(&new_conn, input.password.as_deref())
                 .await
                 .map_err(|e| format!("Failed to save connection: {}", e))?;
 
-            Ok(ConnectionOutput {
-                id: output_id,
-                name: output_name,
-                db_type: output_db_type,
-                host: output_host,
-                port: output_port as u16,
-                username: output_username,
-                database: output_database,
-                group_id: output_group_id,
-                status: "disconnected".to_string(),
-            })
+            Ok(new_conn.into())
         }
     }
 }
@@ -550,7 +406,9 @@ pub async fn delete_connection(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<(), String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
+    let storage = guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
 
     storage
         .delete_connection(&id)
@@ -564,7 +422,9 @@ pub async fn get_groups(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<Vec<GroupOutput>, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
+    let storage = guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
 
     match storage.get_groups().await {
         Ok(groups) => Ok(groups.into_iter().map(|g| g.into()).collect()),
@@ -579,11 +439,12 @@ pub async fn save_group(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<GroupOutput, String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
+    let storage = guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
 
     match input.id {
         Some(id) => {
-            // 更新现有分组
             let mut group = storage
                 .get_groups()
                 .await
@@ -611,7 +472,6 @@ pub async fn save_group(
             })
         }
         None => {
-            // 创建新分组
             let new_group = ConnectionGroup::new(
                 input.name.clone(),
                 input.icon.clone(),
@@ -644,7 +504,9 @@ pub async fn delete_group(
     state: State<'_, Mutex<Option<Storage>>>,
 ) -> Result<(), String> {
     let guard = state.lock().await;
-    let storage = guard.as_ref().ok_or_else(|| "Storage not initialized".to_string())?;
+    let storage = guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
 
     if id == "default" {
         return Err("Cannot delete default group".to_string());
@@ -654,4 +516,273 @@ pub async fn delete_group(
         .delete_group(&id)
         .await
         .map_err(|e| format!("Failed to delete group: {}", e))
+}
+
+// ==================== 数据库元数据命令（通过 Go Sidecar） ====================
+
+/// 获取数据库列表
+#[tauri::command]
+pub async fn get_databases(
+    connection_id: String,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<String>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({ "connection_id": connection_id });
+    let resp: Vec<String> = sm.post("/databases", &req).await?;
+    Ok(resp)
+}
+
+/// 获取表列表
+#[tauri::command]
+pub async fn get_tables(
+    connection_id: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<TableInfo>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({ "connection_id": connection_id, "database": database });
+    let resp: Vec<TableInfo> = sm.post("/tables", &req).await?;
+    Ok(resp)
+}
+
+/// 获取分类的表和视图（支持搜索过滤）
+#[tauri::command]
+pub async fn get_tables_categorized(
+    connection_id: String,
+    database: Option<String>,
+    search: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<TablesResult, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+        "search": search,
+    });
+    let resp: TablesResult = sm.post("/tables-categorized", &req).await?;
+    Ok(resp)
+}
+
+/// 获取完整的表结构（列、索引、外键）
+#[tauri::command]
+pub async fn get_table_structure(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<TableStructure, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+        "table_name": table_name,
+    });
+    let resp: TableStructure = sm.post("/table-structure", &req).await?;
+    if let Some(err) = resp.error.as_ref() {
+        if !err.is_empty() {
+            return Err(err.clone());
+        }
+    }
+    Ok(resp)
+}
+
+/// 获取列信息
+#[tauri::command]
+pub async fn get_columns(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<ColumnInfo>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+        "table_name": table_name,
+    });
+    let resp_val: serde_json::Value = sm.post("/columns", &req).await?;
+    if let Some(err) = resp_val.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            // 返回空数组，让前端继续加载数据
+            return Ok(vec![]);
+        }
+    }
+    let resp: Vec<ColumnInfo> = serde_json::from_value(resp_val)
+        .map_err(|e| format!("Invalid columns response: {}", e))?;
+    Ok(resp)
+}
+
+/// 获取索引信息
+#[tauri::command]
+pub async fn get_indexes(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<IndexInfo>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+        "table_name": table_name,
+    });
+    let resp_val: serde_json::Value = sm.post("/indexes", &req).await?;
+    if let Some(err) = resp_val.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            // 返回空数组，让前端继续加载数据
+            return Ok(vec![]);
+        }
+    }
+    let resp: Vec<IndexInfo> = serde_json::from_value(resp_val)
+        .map_err(|e| format!("Invalid indexes response: {}", e))?;
+    Ok(resp)
+}
+
+/// 获取外键信息
+#[tauri::command]
+pub async fn get_foreign_keys(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<ForeignKeyInfo>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+        "table_name": table_name,
+    });
+    let resp_val: serde_json::Value = sm.post("/foreign-keys", &req).await?;
+    if let Some(err) = resp_val.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            // 返回空数组，让前端继续加载数据
+            return Ok(vec![]);
+        }
+    }
+    let resp: Vec<ForeignKeyInfo> = serde_json::from_value(resp_val)
+        .map_err(|e| format!("Invalid foreign keys response: {}", e))?;
+    Ok(resp)
+}
+
+/// 执行 SQL 查询
+#[tauri::command]
+pub async fn execute_query(
+    connection_id: String,
+    sql: String,
+    _database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<QueryResult, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "sql": sql,
+    });
+    let resp: QueryResult = sm.post("/query", &req).await?;
+    Ok(resp)
+}
+
+/// 获取存储过程和函数列表
+#[tauri::command]
+pub async fn get_routines(
+    connection_id: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<RoutinesResult, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+    });
+    let resp: RoutinesResult = sm.post("/routines", &req).await?;
+    Ok(resp)
+}
+
+/// 更新连接密码
+#[tauri::command]
+pub async fn update_connection_password(
+    connection_id: String,
+    password: String,
+    state: State<'_, Mutex<Option<Storage>>>,
+) -> Result<(), String> {
+    let guard = state.lock().await;
+    let storage = guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
+
+    storage
+        .update_password(&connection_id, &password)
+        .await
+        .map_err(|e| format!("Failed to update password: {}", e))
 }

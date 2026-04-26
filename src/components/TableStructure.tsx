@@ -87,7 +87,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       dataIndex: 'is_nullable',
       key: 'is_nullable',
       width: 60,
-      render: (val: boolean) => val ? '是' : '否',
+      render: (val: string) => val === 'YES' ? '是' : '否',
     },
     {
       title: '默认值',

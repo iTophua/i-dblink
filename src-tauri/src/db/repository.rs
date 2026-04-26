@@ -1,8 +1,6 @@
 use super::models::*;
 use super::pool::DbPool;
 
-use sqlx::Row;
-
 /// 连接配置仓库
 #[derive(Clone)]
 pub struct ConnectionRepository {
@@ -33,18 +31,6 @@ impl ConnectionRepository {
                 .await?;
 
         Ok(connection)
-    }
-
-    /// 根据分组 ID 获取连接
-    pub async fn _get_by_group(&self, group_id: &str) -> Result<Vec<DbConnection>, sqlx::Error> {
-        let connections = sqlx::query_as::<_, DbConnection>(
-            "SELECT * FROM connections WHERE group_id = ? ORDER BY name",
-        )
-        .bind(group_id)
-        .fetch_all(self.pool.inner())
-        .await?;
-
-        Ok(connections)
     }
 
     /// 保存连接（新增或更新）
@@ -111,27 +97,41 @@ impl ConnectionRepository {
         Ok(())
     }
 
-    /// 记录连接历史
-    pub async fn _log_history(
-        &self,
-        connection_id: &str,
-        action: &str,
-        success: bool,
-        error_message: Option<&str>,
-    ) -> Result<(), sqlx::Error> {
+    /// 获取连接密码
+    pub async fn get_password(&self, connection_id: &str) -> Result<Option<String>, sqlx::Error> {
+        let row = sqlx::query_as::<_, (String,)>(
+            "SELECT password FROM connection_passwords WHERE connection_id = ?",
+        )
+        .bind(connection_id)
+        .fetch_optional(self.pool.inner())
+        .await?;
+
+        Ok(row.map(|(pwd,)| pwd))
+    }
+
+    /// 保存连接密码
+    pub async fn save_password(&self, connection_id: &str, password: &str) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            INSERT INTO connection_history (id, connection_id, action, success, error_message, created_at)
-            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            INSERT INTO connection_passwords (connection_id, password)
+            VALUES (?, ?)
+            ON CONFLICT(connection_id) DO UPDATE SET password = excluded.password
             "#,
         )
-        .bind(uuid::Uuid::new_v4().to_string())
         .bind(connection_id)
-        .bind(action)
-        .bind(success)
-        .bind(error_message)
+        .bind(password)
         .execute(self.pool.inner())
         .await?;
+
+        Ok(())
+    }
+
+    /// 删除连接密码
+    pub async fn delete_password(&self, connection_id: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM connection_passwords WHERE connection_id = ?")
+            .bind(connection_id)
+            .execute(self.pool.inner())
+            .await?;
 
         Ok(())
     }
@@ -157,17 +157,6 @@ impl GroupRepository {
         .await?;
 
         Ok(groups)
-    }
-
-    /// 根据 ID 获取分组
-    pub async fn __get_by_id(&self, id: &str) -> Result<Option<ConnectionGroup>, sqlx::Error> {
-        let group =
-            sqlx::query_as::<_, ConnectionGroup>("SELECT * FROM connection_groups WHERE id = ?")
-                .bind(id)
-                .fetch_optional(self.pool.inner())
-                .await?;
-
-        Ok(group)
     }
 
     /// 保存分组
@@ -235,43 +224,6 @@ impl GroupRepository {
             .bind(id)
             .execute(self.pool.inner())
             .await?;
-
-        Ok(())
-    }
-}
-
-/// 应用配置仓库
-#[derive(Clone)]
-pub struct _ConfigRepository {
-    pool: DbPool,
-}
-
-impl _ConfigRepository {
-    pub fn _new(pool: DbPool) -> Self {
-        Self { pool }
-    }
-
-    pub async fn _get(&self, key: &str) -> Result<Option<String>, sqlx::Error> {
-        let row = sqlx::query("SELECT value FROM app_config WHERE key = ?")
-            .bind(key)
-            .fetch_optional(self.pool.inner())
-            .await?;
-
-        Ok(row.map(|r| r.get::<String, _>(0)))
-    }
-
-    /// 设置配置值
-    pub async fn _set(&self, key: &str, value: &str) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            INSERT OR REPLACE INTO app_config (key, value, updated_at)
-            VALUES (?, ?, datetime('now'))
-            "#,
-        )
-        .bind(key)
-        .bind(value)
-        .execute(self.pool.inner())
-        .await?;
 
         Ok(())
     }

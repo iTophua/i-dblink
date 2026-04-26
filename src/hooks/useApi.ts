@@ -1,5 +1,5 @@
-import { useEffect, useCallback, useRef } from 'react';
-import { message } from 'antd';
+import { useEffect, useCallback } from 'react';
+import { App } from 'antd';
 import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
@@ -75,7 +75,97 @@ class TTLCache<T> {
 
 const structureCache = new TTLCache<Promise<import('../api').TableStructure>>(100, 10 * 60 * 1000);
 
+// Schema 补全缓存：用于智能代码补全
+interface SchemaCompletionEntry {
+  tables: Map<string, string[]>;  // tableName -> columnNames
+  views: Map<string, string[]>;
+  timestamp: number;
+}
+
+class SchemaCompletionCache {
+  private cache = new Map<string, SchemaCompletionEntry>();
+  private ttl = 10 * 60 * 1000; // 10 分钟
+  private pendingPromises = new Map<string, Promise<SchemaCompletionEntry>>();
+
+  private makeKey(connectionId: string, database: string): string {
+    return `${connectionId}::${database}`;
+  }
+
+  async get(
+    connectionId: string,
+    database: string,
+    getTables: () => Promise<import('../types/api').TableInfo[]>,
+    getColumns: (tableName: string) => Promise<import('../types/api').ColumnInfo[]>
+  ): Promise<SchemaCompletionEntry> {
+    const key = this.makeKey(connectionId, database);
+    const entry = this.cache.get(key);
+
+    if (entry && Date.now() - entry.timestamp < this.ttl) {
+      return entry;
+    }
+
+    // 如果有正在进行的请求，等待它
+    const pending = this.pendingPromises.get(key);
+    if (pending) {
+      return pending;
+    }
+
+    // 开始获取 schema 数据
+    const promise = (async () => {
+      const tablesResult = await getTables();
+      const tablesMap = new Map<string, string[]>();
+      const viewsMap = new Map<string, string[]>();
+
+      for (const table of tablesResult) {
+        const tableType = (table.table_type || '').toUpperCase().trim();
+        const isView = tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
+        const targetMap = isView ? viewsMap : tablesMap;
+
+        try {
+          const columns = await getColumns(table.table_name);
+          targetMap.set(table.table_name, columns.map(c => c.column_name));
+        } catch {
+          targetMap.set(table.table_name, []);
+        }
+      }
+
+      const entry: SchemaCompletionEntry = {
+        tables: tablesMap,
+        views: viewsMap,
+        timestamp: Date.now(),
+      };
+
+      this.cache.set(key, entry);
+      this.pendingPromises.delete(key);
+      return entry;
+    })();
+
+    this.pendingPromises.set(key, promise);
+    return promise;
+  }
+
+  invalidate(connectionId: string, database?: string): void {
+    if (database) {
+      this.cache.delete(this.makeKey(connectionId, database));
+    } else {
+      // 删除该连接的所有缓存
+      for (const key of this.cache.keys()) {
+        if (key.startsWith(`${connectionId}::`)) {
+          this.cache.delete(key);
+        }
+      }
+    }
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+const schemaCompletionCache = new SchemaCompletionCache();
+
 export const useConnections = () => {
+  const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
   const groups = useAppStore((state) => state.groups);
   const activeConnectionId = useAppStore((state) => state.activeConnectionId);
@@ -185,7 +275,14 @@ export const useConnections = () => {
         );
         message.success('连接成功');
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '连接失败';
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        // 检查是否是密码错误（后端返回 PASSWORD_REQUIRED）
+        if (errorMsg === 'PASSWORD_REQUIRED' || (typeof err === 'object' && err !== null && 'code' in err && (err as Record<string, unknown>).code === 'PASSWORD_REQUIRED')) {
+          setLoading(false);
+          const error = new Error('密码错误，请重新输入') as Error & { code: string };
+          error.code = 'PASSWORD_REQUIRED';
+          throw error;
+        }
         setError(errorMsg);
         message.error(errorMsg);
         throw err;
@@ -236,6 +333,7 @@ export const useConnections = () => {
 };
 
 export const useGroups = () => {
+  const { message } = App.useApp();
   const groups = useAppStore((state) => state.groups);
   const isLoading = useAppStore((state) => state.isLoading);
   const setGroups = useAppStore((state) => state.setGroups);
@@ -295,6 +393,7 @@ export const useGroups = () => {
 const tableLoadingPromises = new Map<string, Promise<import('../types/api').TableInfo[]>>();
 
 export const useDatabase = () => {
+  const { message } = App.useApp();
   const { setLoading, setError, setTableData, setTableDataLoading, setTableDataFailed, getTableData, clearTableData } =
     useAppStore();
 
@@ -332,11 +431,15 @@ export const useDatabase = () => {
         try {
           setTableDataLoading(cacheKey, true);
           const result = await api.getTablesCategorized(connectionId, database, search);
-          const allTables = [...result.tables, ...result.views];
+          const allTables = [
+            ...(result.tables || []),
+            ...(result.views || []),
+          ];
           setTableData(cacheKey, allTables);
           return allTables;
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : '获取表列表失败';
+          console.error('获取表列表失败:', connectionId, database, err);
           setError(errorMsg);
           message.error(errorMsg);
           setTableDataFailed(cacheKey, true);
@@ -523,7 +626,28 @@ export const useDatabase = () => {
     getTableInfo,
     getCreateTableSQL,
     executeQuery,
+    schemaCompletionCache,
   };
+};
+
+// Schema 补全 Hook
+export const useSchemaCompletion = (connectionId: string | null, database?: string) => {
+  const { getTables, getColumns } = useDatabase();
+
+  const getSchema = useCallback(async () => {
+    if (!connectionId || !database) {
+      return { tables: new Map<string, string[]>(), views: new Map<string, string[]>() };
+    }
+
+    return schemaCompletionCache.get(
+      connectionId,
+      database,
+      () => getTables(connectionId, database, false),
+      (tableName) => getColumns(connectionId, tableName, database)
+    );
+  }, [connectionId, database, getTables, getColumns]);
+
+  return { getSchema, schemaCompletionCache };
 };
 
 export const useInitApp = () => {

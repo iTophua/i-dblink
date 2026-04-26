@@ -31,25 +31,6 @@ pub struct ConnectionGroup {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 连接历史记录
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct _ConnectionHistory {
-    pub id: String,
-    pub connection_id: String,
-    pub action: String,
-    pub success: bool,
-    pub error_message: Option<String>,
-    pub created_at: DateTime<Utc>,
-}
-
-/// 应用配置
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct _AppConfig {
-    pub key: String,
-    pub value: String,
-    pub updated_at: DateTime<Utc>,
-}
-
 impl DbConnection {
     pub fn new(
         name: String,

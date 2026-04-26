@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useMemo, useEffect, ChangeEvent, MouseEvent } from 'react';
-import { Tree, Spin, Dropdown, Badge, Modal, message, Tooltip } from 'antd';
+import { Tree, Spin, Dropdown, Badge, Modal, App, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   DatabaseOutlined,
@@ -15,7 +15,6 @@ import {
   FolderOutlined,
   PlusOutlined,
   ThunderboltOutlined,
-  CloudServerOutlined,
   FunctionOutlined,
   MinusOutlined,
   SwapOutlined,
@@ -25,17 +24,7 @@ import type { TableInfo } from '../../types/api';
 import { GroupDialog } from './GroupDialog';
 import { EnhancedEmptyState } from '../LoadingStates';
 import { GlobalInput } from '../GlobalInput';
-import { useThemeColors } from '../../hooks/useThemeColors';
-
-const DB_TYPE_COLORS: Record<string, string> = {
-  mysql: 'var(--db-color-mysql)',
-  postgresql: 'var(--db-color-postgresql)',
-  sqlite: 'var(--db-color-sqlite)',
-  sqlserver: 'var(--db-color-sqlserver)',
-  oracle: 'var(--db-color-oracle)',
-  mariadb: 'var(--db-color-mariadb)',
-  dameng: 'var(--db-color-dameng)',
-};
+import { DatabaseIcon } from '../DatabaseIcon';
 
 const isBaseTable = (tableType: string): boolean => {
   const normalizedType = (tableType || '').toUpperCase().trim();
@@ -304,13 +293,11 @@ type ConnectionTreeProps = {
 };
 
 function getDbIcon(dbType: string) {
-  const color = DB_TYPE_COLORS[dbType] || '#8c8c8c';
-  return <DatabaseOutlined style={{ color }} />;
+  return <DatabaseIcon type={dbType} size={16} />;
 }
 
 function getConnIcon(dbType: string) {
-  const color = DB_TYPE_COLORS[dbType] || '#8c8c8c';
-  return <CloudServerOutlined style={{ color }} />;
+  return <DatabaseIcon type={dbType} size={16} />;
 }
 
 export function EnhancedConnectionTree({
@@ -344,7 +331,7 @@ export function EnhancedConnectionTree({
   onDeleteGroup,
   onCreateConnection,
 }: ConnectionTreeProps) {
-  const tc = useThemeColors();
+  const { message } = App.useApp();
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
@@ -354,6 +341,7 @@ export function EnhancedConnectionTree({
   const [renameValue, setRenameValue] = useState('');
   const prevTableCountsRef = useRef<Map<string, number>>(new Map());
   const connectionDatabasesRef = useRef(connectionDatabases);
+  const closingDbModalRef = useRef(false);
   const expandedKeysRef = useRef(expandedKeys);
 
   useEffect(() => {
@@ -476,7 +464,14 @@ export function EnhancedConnectionTree({
         if (key === 'connect') {
           await onConnect(conn.id);
         } else if (key === 'disconnect') {
-          onDisconnect(conn.id);
+          Modal.confirm({
+            title: '确认断开连接',
+            content: `确定要断开连接 "${conn.name}" 吗？`,
+            okText: '断开',
+            okType: 'danger',
+            cancelText: '取消',
+            onOk: () => onDisconnect(conn.id),
+          });
         } else if (key === 'refresh') {
           onExpandKeys(expandedKeys.filter((k) => !k.startsWith(`db::${conn.id}::`)));
           onExpand(conn.id, true);
@@ -598,7 +593,22 @@ export function EnhancedConnectionTree({
         } else if (key === 'refresh-db') {
           onDatabaseRefresh?.(connId, dbName);
         } else if (key === 'close-db') {
-          onDatabaseClose?.(connId, dbName);
+          if (closingDbModalRef.current) return;
+          closingDbModalRef.current = true;
+          Modal.confirm({
+            title: '确认关闭数据库',
+            content: `确定要关闭数据库 "${dbName}" 吗？这将关闭所有相关的标签页。`,
+            okText: '关闭',
+            okType: 'danger',
+            cancelText: '取消',
+            onOk: () => {
+              closingDbModalRef.current = false;
+              onDatabaseClose?.(connId, dbName);
+            },
+            onCancel: () => {
+              closingDbModalRef.current = false;
+            },
+          });
         } else {
           message.info('功能开发中...');
         }
@@ -1060,12 +1070,7 @@ export function EnhancedConnectionTree({
                   userSelect: 'none',
                 }}
               >
-                <DatabaseOutlined
-                  style={{
-                    color: db.loaded ? 'var(--color-success)' : 'var(--color-primary)',
-                    fontSize: 12,
-                  }}
-                />
+                <DatabaseOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
                 <span
                   style={{
                     color: db.loaded ? 'var(--color-success)' : undefined,
@@ -1608,6 +1613,18 @@ export function EnhancedConnectionTree({
             }}
             onSelect={handleSelect}
             treeData={treeData}
+            draggable={(node) => !node.key.toString().startsWith('group-') && !node.key.toString().startsWith('db::') && !node.key.toString().startsWith('table::') && !node.key.toString().startsWith('view::') && !node.key.toString().startsWith('tables::') && !node.key.toString().startsWith('views::') && !node.key.toString().startsWith('procedures::') && !node.key.toString().startsWith('functions::')}
+            onDrop={(info) => {
+              const draggedKey = info.dragNode.key as string;
+              const dropKey = info.node.key as string;
+
+              // 只有当放置目标是分组时，才移动连接
+              if (dropKey.startsWith('group-')) {
+                const connId = draggedKey;
+                const groupId = dropKey.replace('group-', '');
+                handleMoveConnection(connId, groupId);
+              }
+            }}
             style={{
               background: 'transparent',
               padding: '0 4px 8px',

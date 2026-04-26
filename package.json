@@ -12,12 +12,18 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css,md}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css,md}\""
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css,md}\"",
+    "build:sidecar": "cd go-backend && go build -o go-backend",
+    "build:sidecar:release": "node scripts/build-sidecar-release.js"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@monaco-editor/react": "^4.6.0",
     "@tauri-apps/api": "^2.0.0",
+    "@xyflow/react": "^12.10.2",
     "ag-grid-community": "^35.2.1",
     "ag-grid-react": "^35.2.1",
     "antd": "^6.3.5",
