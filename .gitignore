@@ -7,21 +7,58 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
 *.local
 
+# Vite
+.vite/
+*.tsbuildinfo
+
+# Tauri (Rust backend build cache - HUGE, must be ignored)
+src-tauri/target/
+
+# Go backend build output
+go-backend/go-backend
+go-backend/*.exe
+
 # Development data directory (for iDBLink)
 .dev-data
+
+# Certificates (Tauri dev generates these)
+*.pem
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
+.qwen
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Test coverage
+coverage/
+
+# Env files (contain secrets)
+.env
+.env.local
+.env.*.local
