@@ -369,3 +369,32 @@ func damengGetRoutines(ctx context.Context, dbConn *sql.DB, database *string) (m
 	}
 	return result, rows.Err()
 }
+
+func damengGetRoutineBody(ctx context.Context, dbConn *sql.DB, database, routineName, routineType string) (string, error) {
+	schema := "SYSDBA"
+	if database != "" {
+		schema = database
+	}
+	query := `SELECT TEXT FROM SYS.DBA_SOURCE WHERE OWNER = ? AND NAME = ? AND TYPE = ? ORDER BY LINE`
+	routineTypeUpper := strings.ToUpper(routineType)
+	rows, err := dbConn.QueryContext(ctx, query, schema, routineName, routineTypeUpper)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var sb strings.Builder
+	for rows.Next() {
+		var text sql.NullString
+		if err := rows.Scan(&text); err != nil {
+			return "", err
+		}
+		if text.Valid {
+			sb.WriteString(text.String)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return sb.String(), nil
+}

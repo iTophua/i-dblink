@@ -339,6 +339,19 @@ func mysqlGetRoutines(ctx context.Context, dbConn *sql.DB, database *string) (mo
 	return result, nil
 }
 
+func mysqlGetRoutineBody(ctx context.Context, dbConn *sql.DB, database, routineName, routineType string) (string, error) {
+	var def sql.NullString
+	query := `SELECT ROUTINE_DEFINITION FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ? AND ROUTINE_NAME = ? AND ROUTINE_TYPE = ?`
+	err := dbConn.QueryRowContext(ctx, query, database, routineName, routineType).Scan(&def)
+	if err != nil {
+		return "", err
+	}
+	if !def.Valid {
+		return "", nil
+	}
+	return def.String, nil
+}
+
 func formatNullTime(t sql.NullTime) *string {
 	if t.Valid {
 		s := t.Time.Format("2006-01-02 15:04:05")

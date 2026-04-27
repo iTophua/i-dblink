@@ -1,4 +1,11 @@
-import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import { Tabs, Empty, Breadcrumb, Menu, App, Modal, Tooltip } from 'antd';
 import type { TabsProps } from 'antd';
 import {
@@ -12,6 +19,7 @@ import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
 import { TableList } from '../TableList';
 import { TableStructure } from '../TableStructure';
+import { TableDesigner } from '../TableDesigner';
 import type { TableInfo } from '../../types/api';
 
 interface TabPanelProps {
@@ -27,7 +35,10 @@ interface TabPanelProps {
   /** 分页大小 */
   pageSize?: number;
   /** 当前连接的数据库列表 */
-  connectionDatabases?: Record<string, { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean }[]>;
+  connectionDatabases?: Record<
+    string,
+    { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean }[]
+  >;
 }
 
 interface OpenedTable {
@@ -45,7 +56,17 @@ interface OpenedSqlTab {
   database?: string;
 }
 
+interface OpenedDesignerTab {
+  key: string;
+  title: string;
+  connectionId: string;
+  database?: string;
+  tableName?: string;
+  isNewTable?: boolean;
+}
+
 export interface TabPanelRef {
+  openDesignerTab: (tableName?: string) => void;
   hasConnectionTabs: (connectionId: string) => boolean;
   hasDatabaseTabs: (connectionId: string, database: string) => boolean;
   closeConnectionTabs: (connectionId: string) => void;
@@ -54,34 +75,40 @@ export interface TabPanelRef {
   getDatabaseTabInfo: (connectionId: string, database: string) => { dataTabCount: number };
 }
 
-export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanelInner({
-  selectedConnectionId,
-  selectedConnectionName,
-  selectedTable,
-  selectedDatabase,
-  selectedObjectType = 'all',
-  tableToOpen,
-  onSqlTabCountChange,
-  pageSize,
-  connectionDatabases,
-}, ref) {
+export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanelInner(
+  {
+    selectedConnectionId,
+    selectedConnectionName,
+    selectedTable,
+    selectedDatabase,
+    selectedObjectType = 'all',
+    tableToOpen,
+    onSqlTabCountChange,
+    pageSize,
+    connectionDatabases,
+  },
+  ref
+) {
   const { message } = App.useApp();
   // 已打开的数据浏览 Tab 列表
   const [openedTables, setOpenedTables] = useState<OpenedTable[]>([]);
   // SQL 查询 Tab 列表（动态添加/删除）
   const [openedSqlTabs, setOpenedSqlTabs] = useState<OpenedSqlTab[]>([]);
+  // 表设计器 Tab 列表
+  const [openedDesignerTabs, setOpenedDesignerTabs] = useState<OpenedDesignerTab[]>([]);
   const [activeKey, setActiveKey] = useState('objects');
 
   useImperativeHandle(ref, () => ({
+    openDesignerTab: (tableName?: string) => {
+      openDesignerTab(tableName);
+    },
     hasConnectionTabs: (connectionId: string) => {
       const hasDataTabs = openedTables.some((t) => t.connectionId === connectionId);
       const hasSqlTabs = openedSqlTabs.some((t) => t.connectionId === connectionId);
       return hasDataTabs || hasSqlTabs;
     },
     hasDatabaseTabs: (connectionId: string, database: string) => {
-      return openedTables.some(
-        (t) => t.connectionId === connectionId && t.database === database
-      );
+      return openedTables.some((t) => t.connectionId === connectionId && t.database === database);
     },
     closeConnectionTabs: (connectionId: string) => {
       const tablesToClose = openedTables.filter((t) => t.connectionId === connectionId);
@@ -150,7 +177,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
   // 监听 tab-action 事件（来自菜单或工具栏）
   useEffect(() => {
-    const handleTabAction = (event: CustomEvent<{ action: string; connectionId?: string; database?: string }>) => {
+    const handleTabAction = (
+      event: CustomEvent<{ action: string; connectionId?: string; database?: string }>
+    ) => {
       const { action, connectionId: eventConnId, database: eventDb } = event.detail;
       if (action === 'new-sql-tab') {
         const newSqlKey = `sql-${Date.now()}`;
@@ -159,7 +188,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         const dbName = eventDb || selectedDatabase;
         setOpenedSqlTabs((prev) => [
           ...prev,
-          { key: newSqlKey, title: 'SQL 查询', connectionId: connId || undefined, database: dbName },
+          {
+            key: newSqlKey,
+            title: 'SQL 查询',
+            connectionId: connId || undefined,
+            database: dbName,
+          },
         ]);
         setActiveKey(newSqlKey);
       } else if (action === 'close-tab') {
@@ -204,6 +238,36 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       setActiveKey(dataTabKey);
     },
     [selectedConnectionId, selectedConnectionName, openedTables]
+  );
+
+  // 打开表设计器 Tab
+  const openDesignerTab = useCallback(
+    (tableName?: string) => {
+      if (!selectedConnectionId) return;
+
+      const isNewTable = !tableName || tableName === '';
+      const tabKey = isNewTable ? `designer-new-${Date.now()}` : `designer-${tableName}`;
+
+      const exists = openedDesignerTabs.find((t) => {
+        if (isNewTable) return t.key === tabKey;
+        return t.tableName === tableName && t.connectionId === selectedConnectionId;
+      });
+      if (!exists) {
+        setOpenedDesignerTabs((prev) => [
+          ...prev,
+          {
+            key: tabKey,
+            title: isNewTable ? '新建表' : `设计表: ${tableName}`,
+            connectionId: selectedConnectionId,
+            database: selectedDatabase,
+            tableName: isNewTable ? undefined : tableName,
+            isNewTable,
+          },
+        ]);
+      }
+      setActiveKey(tabKey);
+    },
+    [selectedConnectionId, selectedDatabase, openedDesignerTabs]
   );
 
   // 监听 tableToOpen 变化，当双击树中的表时打开新 Tab
@@ -271,6 +335,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       } else if (key.startsWith('sql-')) {
         // 关闭 SQL 查询 Tab
         setOpenedSqlTabs((prev) => prev.filter((tab) => tab.key !== key));
+        if (activeKey === key) {
+          setActiveKey('objects');
+        }
+      } else if (key.startsWith('designer-')) {
+        // 关闭表设计器 Tab
+        setOpenedDesignerTabs((prev) => prev.filter((tab) => tab.key !== key));
         if (activeKey === key) {
           setActiveKey('objects');
         }
@@ -508,7 +578,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 >
                   {table.name}
                 </span>
-                {table.isDirty && <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>}
+                {table.isDirty && (
+                  <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>
+                )}
               </span>
             </Tooltip>
           ),
@@ -569,8 +641,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       ),
       children: (
         <div style={{ height: '100%' }}>
-          <SQLEditor 
-            connectionId={selectedConnectionId} 
+          <SQLEditor
+            connectionId={selectedConnectionId}
             database={sqlTab.database || selectedDatabase}
             availableDatabases={
               selectedConnectionId && connectionDatabases?.[selectedConnectionId]
@@ -579,10 +651,41 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             }
             onDatabaseChange={(database) => {
               setOpenedSqlTabs((prev) =>
-                prev.map((t) =>
-                  t.key === sqlTab.key ? { ...t, database } : t
-                )
+                prev.map((t) => (t.key === sqlTab.key ? { ...t, database } : t))
               );
+            }}
+          />
+        </div>
+      ),
+      closable: true,
+    })),
+    // 表设计器 Tab
+    ...openedDesignerTabs.map((designerTab) => ({
+      key: designerTab.key,
+      label: (
+        <span
+          onContextMenu={(e) => handleTabContextMenu(e, designerTab.key)}
+          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        >
+          <TableOutlined style={{ marginRight: 4 }} />
+          {designerTab.title}
+        </span>
+      ),
+      children: (
+        <div style={{ height: '100%' }}>
+          <TableDesigner
+            connectionId={designerTab.connectionId}
+            tableName={designerTab.tableName}
+            database={designerTab.database}
+            onSave={(sql) => {
+              console.log('TableDesigner save:', sql);
+              // 关闭 Tab
+              setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
+              setActiveKey('objects');
+            }}
+            onCancel={() => {
+              setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
+              setActiveKey('objects');
             }}
           />
         </div>

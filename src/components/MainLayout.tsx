@@ -86,7 +86,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [searchText, setSearchText] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [connectionDatabases, setConnectionDatabases] = useState<
-    Record<string, { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean }[]>
+    Record<string, { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean; procedures?: string[]; functions?: string[]; routinesLoaded?: boolean }[]>
   >({});
   const [tableStructures, setTableStructures] = useState<
     Record<string, { columns: ColumnInfo[]; indexes: IndexInfo[]; loaded: boolean }>
@@ -358,6 +358,40 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     [getTables]
   );
 
+  const loadDatabaseRoutines = useCallback(
+    async (connectionId: string, database: string) => {
+      try {
+        const [procedures, functions] = await Promise.all([
+          api.getProcedures(connectionId, database),
+          api.getFunctions(connectionId, database),
+        ]);
+
+        setConnectionDatabases((prev) => {
+          const dbList = prev[connectionId] || [];
+          const dbIndex = dbList.findIndex((db) => db.database === database);
+
+          if (dbIndex >= 0) {
+            const newDbList = [...dbList];
+            newDbList[dbIndex] = {
+              ...newDbList[dbIndex],
+              procedures,
+              functions,
+              routinesLoaded: true,
+            };
+            return {
+              ...prev,
+              [connectionId]: newDbList,
+            };
+          }
+          return prev;
+        });
+      } catch (err) {
+        console.error('Failed to load routines:', err);
+      }
+    },
+    []
+  );
+
   const handleTableSelect = useCallback((table: string | null, database?: string) => {
     setSelectedTable(table);
     setSelectedDatabase(database);
@@ -486,8 +520,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
       // 始终强制刷新，因为展开数据库时需要最新数据
       await loadDatabaseTables(connectionId, database, true);
+      await loadDatabaseRoutines(connectionId, database);
     },
-    [loadDatabaseTables, connectionDatabases, connections]
+    [loadDatabaseTables, loadDatabaseRoutines, connectionDatabases, connections]
   );
 
   const handleDatabaseRefresh = useCallback(
@@ -903,6 +938,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                   setTimeout(() => {
                     setTableToOpen({ name: tableName, database });
                   }, 0);
+                }}
+                onOpenDesigner={(tableName, database) => {
+                  tabPanelRef.current?.openDesignerTab(tableName);
                 }}
                 onExpand={handleConnectionExpand}
                 collapsed={collapsed}

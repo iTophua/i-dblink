@@ -389,6 +389,10 @@ fn main() {
             commands::get_indexes,
             commands::get_foreign_keys,
             commands::execute_query,
+            commands::get_procedures,
+            commands::get_functions,
+            commands::get_procedure_body,
+            commands::get_function_body,
             commands::get_routines,
             commands::update_connection_password
         ])

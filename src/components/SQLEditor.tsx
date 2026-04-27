@@ -2,7 +2,21 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import { AgGridReact } from 'ag-grid-react';
 
-import { Button, Space, App, Tabs, TabsProps, Tag, Tooltip, Dropdown, Empty, Spin, Drawer, Select } from 'antd';
+import {
+  Button,
+  Space,
+  App,
+  Tabs,
+  TabsProps,
+  Tag,
+  Tooltip,
+  Dropdown,
+  Empty,
+  Spin,
+  Drawer,
+  Select,
+  Modal,
+} from 'antd';
 import {
   PlayCircleOutlined,
   SaveOutlined,
@@ -168,8 +182,14 @@ interface SqlFunction {
 const SQL_KEYWORDS: SqlKeyword[] = [
   // 通用（所有数据库）
   { label: 'SELECT', insertText: 'SELECT ${1:*} FROM ${2:table}' },
-  { label: 'INSERT INTO', insertText: 'INSERT INTO ${1:table} (${2:columns}) VALUES (${3:values})' },
-  { label: 'UPDATE', insertText: 'UPDATE ${1:table} SET ${2:column} = ${3:value} WHERE ${4:condition}' },
+  {
+    label: 'INSERT INTO',
+    insertText: 'INSERT INTO ${1:table} (${2:columns}) VALUES (${3:values})',
+  },
+  {
+    label: 'UPDATE',
+    insertText: 'UPDATE ${1:table} SET ${2:column} = ${3:value} WHERE ${4:condition}',
+  },
   { label: 'DELETE FROM', insertText: 'DELETE FROM ${1:table} WHERE ${2:condition}' },
   { label: 'WHERE', insertText: 'WHERE ${1:condition}' },
   { label: 'ORDER BY', insertText: 'ORDER BY ${1:column} ${2:ASC}' },
@@ -191,30 +211,44 @@ const SQL_KEYWORDS: SqlKeyword[] = [
   { label: 'NOT IN', insertText: 'NOT IN (${1:item1}, ${2:item2})' },
   { label: 'IS NULL', insertText: 'IS NULL' },
   { label: 'IS NOT NULL', insertText: 'IS NOT NULL' },
-  { label: 'CASE', insertText: 'CASE\n  WHEN ${1:condition} THEN ${2:result}\n  ELSE ${3:default}\nEND' },
-  { label: 'WITH', insertText: 'WITH ${1:cte_name} AS (\n  ${2:query}\n)\nSELECT * FROM ${1:cte_name}' },
-  
+  {
+    label: 'CASE',
+    insertText: 'CASE\n  WHEN ${1:condition} THEN ${2:result}\n  ELSE ${3:default}\nEND',
+  },
+  {
+    label: 'WITH',
+    insertText: 'WITH ${1:cte_name} AS (\n  ${2:query}\n)\nSELECT * FROM ${1:cte_name}',
+  },
+
   // MySQL / MariaDB / SQLite / PostgreSQL
-  { label: 'LIMIT', insertText: 'LIMIT ${1:100}', groups: ['mysql-like', 'pg-like', 'sqlite-like'] },
-  { label: 'OFFSET', insertText: 'OFFSET ${1:0}', groups: ['mysql-like', 'pg-like', 'sqlite-like'] },
-  
+  {
+    label: 'LIMIT',
+    insertText: 'LIMIT ${1:100}',
+    groups: ['mysql-like', 'pg-like', 'sqlite-like'],
+  },
+  {
+    label: 'OFFSET',
+    insertText: 'OFFSET ${1:0}',
+    groups: ['mysql-like', 'pg-like', 'sqlite-like'],
+  },
+
   // SQL Server
   { label: 'TOP', insertText: 'TOP ${1:100}', groups: ['mssql-like'] },
-  
+
   // Oracle / 达梦
   { label: 'ROWNUM', insertText: 'ROWNUM <= ${1:100}', groups: ['oracle-like'] },
   { label: 'FETCH FIRST', insertText: 'FETCH FIRST ${1:100} ROWS ONLY', groups: ['oracle-like'] },
-  
+
   // PostgreSQL 特有
   { label: 'RETURNING', insertText: 'RETURNING ${1:*}', groups: ['pg-like'] },
   { label: 'ILIKE', insertText: "ILIKE '${1:%pattern%}'", groups: ['pg-like'] },
-  
+
   // MySQL 特有
   { label: 'SHOW TABLES', insertText: 'SHOW TABLES', groups: ['mysql-like'] },
   { label: 'SHOW DATABASES', insertText: 'SHOW DATABASES', groups: ['mysql-like'] },
   { label: 'DESCRIBE', insertText: 'DESCRIBE ${1:table}', groups: ['mysql-like'] },
   { label: 'EXPLAIN', insertText: 'EXPLAIN ${1:query}', groups: ['mysql-like'] },
-  
+
   // SQLite 特有
   { label: 'PRAGMA', insertText: 'PRAGMA ${1:table_info}(${2:table})', groups: ['sqlite-like'] },
 ];
@@ -228,81 +262,280 @@ const SQL_FUNCTIONS: SqlFunction[] = [
   { label: 'AVG()', insertText: 'AVG(${1:column})', detail: '聚合函数' },
   { label: 'MAX()', insertText: 'MAX(${1:column})', detail: '聚合函数' },
   { label: 'MIN()', insertText: 'MIN(${1:column})', detail: '聚合函数' },
-  
+
   // 通用空值处理
   { label: 'COALESCE()', insertText: 'COALESCE(${1:column}, ${2:default})', detail: '空值处理' },
   { label: 'NULLIF()', insertText: 'NULLIF(${1:expr1}, ${2:expr2})', detail: '空值处理' },
-  
+
   // 通用字符串函数
   { label: 'LENGTH()', insertText: 'LENGTH(${1:str})', detail: '字符串函数' },
   { label: 'TRIM()', insertText: 'TRIM(${1:str})', detail: '字符串函数' },
   { label: 'UPPER()', insertText: 'UPPER(${1:str})', detail: '字符串函数' },
   { label: 'LOWER()', insertText: 'LOWER(${1:str})', detail: '字符串函数' },
   { label: 'REPLACE()', insertText: 'REPLACE(${1:str}, ${2:old}, ${3:new})', detail: '字符串函数' },
-  { label: 'SUBSTRING()', insertText: 'SUBSTRING(${1:str}, ${2:start}, ${3:length})', detail: '字符串函数' },
-  
+  {
+    label: 'SUBSTRING()',
+    insertText: 'SUBSTRING(${1:str}, ${2:start}, ${3:length})',
+    detail: '字符串函数',
+  },
+
   // 通用数值函数
   { label: 'ROUND()', insertText: 'ROUND(${1:num}, ${2:decimals})', detail: '数值函数' },
   { label: 'FLOOR()', insertText: 'FLOOR(${1:num})', detail: '数值函数' },
   { label: 'CEIL()', insertText: 'CEIL(${1:num})', detail: '数值函数' },
   { label: 'ABS()', insertText: 'ABS(${1:num})', detail: '数值函数' },
-  
+
   // 通用类型转换
   { label: 'CAST()', insertText: 'CAST(${1:expr} AS ${2:type})', detail: '类型转换' },
-  
+
   // 通用日期时间
   { label: 'CURRENT_DATE', insertText: 'CURRENT_DATE', detail: '日期时间函数' },
   { label: 'CURRENT_TIMESTAMP', insertText: 'CURRENT_TIMESTAMP', detail: '日期时间函数' },
-  
+
   // MySQL / MariaDB 特有
-  { label: 'IFNULL()', insertText: 'IFNULL(${1:expr}, ${2:default})', detail: '空值处理 (MySQL)', groups: ['mysql-like'] },
-  { label: 'CONCAT()', insertText: 'CONCAT(${1:str1}, ${2:str2})', detail: '字符串函数 (MySQL)', groups: ['mysql-like'] },
-  { label: 'GROUP_CONCAT()', insertText: 'GROUP_CONCAT(${1:column})', detail: '聚合函数 (MySQL)', groups: ['mysql-like'] },
+  {
+    label: 'IFNULL()',
+    insertText: 'IFNULL(${1:expr}, ${2:default})',
+    detail: '空值处理 (MySQL)',
+    groups: ['mysql-like'],
+  },
+  {
+    label: 'CONCAT()',
+    insertText: 'CONCAT(${1:str1}, ${2:str2})',
+    detail: '字符串函数 (MySQL)',
+    groups: ['mysql-like'],
+  },
+  {
+    label: 'GROUP_CONCAT()',
+    insertText: 'GROUP_CONCAT(${1:column})',
+    detail: '聚合函数 (MySQL)',
+    groups: ['mysql-like'],
+  },
   { label: 'NOW()', insertText: 'NOW()', detail: '日期时间函数 (MySQL)', groups: ['mysql-like'] },
-  { label: 'DATE_FORMAT()', insertText: "DATE_FORMAT(${1:date}, '${2:%Y-%m-%d}')", detail: '日期时间函数 (MySQL)', groups: ['mysql-like'] },
-  { label: 'STR_TO_DATE()', insertText: "STR_TO_DATE(${1:str}, '${2:%Y-%m-%d}')", detail: '日期时间函数 (MySQL)', groups: ['mysql-like'] },
-  { label: 'FIND_IN_SET()', insertText: 'FIND_IN_SET(${1:str}, ${2:strlist})', detail: '字符串函数 (MySQL)', groups: ['mysql-like'] },
-  { label: 'FIELD()', insertText: 'FIELD(${1:val}, ${2:val1}, ${3:val2})', detail: '字符串函数 (MySQL)', groups: ['mysql-like'] },
-  
+  {
+    label: 'DATE_FORMAT()',
+    insertText: "DATE_FORMAT(${1:date}, '${2:%Y-%m-%d}')",
+    detail: '日期时间函数 (MySQL)',
+    groups: ['mysql-like'],
+  },
+  {
+    label: 'STR_TO_DATE()',
+    insertText: "STR_TO_DATE(${1:str}, '${2:%Y-%m-%d}')",
+    detail: '日期时间函数 (MySQL)',
+    groups: ['mysql-like'],
+  },
+  {
+    label: 'FIND_IN_SET()',
+    insertText: 'FIND_IN_SET(${1:str}, ${2:strlist})',
+    detail: '字符串函数 (MySQL)',
+    groups: ['mysql-like'],
+  },
+  {
+    label: 'FIELD()',
+    insertText: 'FIELD(${1:val}, ${2:val1}, ${3:val2})',
+    detail: '字符串函数 (MySQL)',
+    groups: ['mysql-like'],
+  },
+
   // PostgreSQL 特有
-  { label: 'STRING_AGG()', insertText: 'STRING_AGG(${1:column}, \'${2:,}\')', detail: '聚合函数 (PostgreSQL)', groups: ['pg-like'] },
-  { label: 'TO_CHAR()', insertText: "TO_CHAR(${1:date}, '${2:YYYY-MM-DD}')", detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
-  { label: 'TO_DATE()', insertText: "TO_DATE(${1:str}, '${2:YYYY-MM-DD}')", detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
-  { label: 'TO_TIMESTAMP()', insertText: "TO_TIMESTAMP(${1:str}, '${2:YYYY-MM-DD HH24:MI:SS}')", detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
-  { label: 'AGE()', insertText: 'AGE(${1:timestamp})', detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
-  { label: 'EXTRACT()', insertText: 'EXTRACT(${1:YEAR} FROM ${2:date})', detail: '日期时间函数 (PostgreSQL)', groups: ['pg-like'] },
-  { label: 'ARRAY_AGG()', insertText: 'ARRAY_AGG(${1:column})', detail: '聚合函数 (PostgreSQL)', groups: ['pg-like'] },
-  { label: 'JSON_BUILD_OBJECT()', insertText: 'JSON_BUILD_OBJECT(${1:key}, ${2:value})', detail: 'JSON 函数 (PostgreSQL)', groups: ['pg-like'] },
-  { label: 'JSONB_BUILD_OBJECT()', insertText: 'JSONB_BUILD_OBJECT(${1:key}, ${2:value})', detail: 'JSON 函数 (PostgreSQL)', groups: ['pg-like'] },
-  
+  {
+    label: 'STRING_AGG()',
+    insertText: "STRING_AGG(${1:column}, '${2:,}')",
+    detail: '聚合函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+  {
+    label: 'TO_CHAR()',
+    insertText: "TO_CHAR(${1:date}, '${2:YYYY-MM-DD}')",
+    detail: '日期时间函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+  {
+    label: 'TO_DATE()',
+    insertText: "TO_DATE(${1:str}, '${2:YYYY-MM-DD}')",
+    detail: '日期时间函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+  {
+    label: 'TO_TIMESTAMP()',
+    insertText: "TO_TIMESTAMP(${1:str}, '${2:YYYY-MM-DD HH24:MI:SS}')",
+    detail: '日期时间函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+  {
+    label: 'AGE()',
+    insertText: 'AGE(${1:timestamp})',
+    detail: '日期时间函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+  {
+    label: 'EXTRACT()',
+    insertText: 'EXTRACT(${1:YEAR} FROM ${2:date})',
+    detail: '日期时间函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+  {
+    label: 'ARRAY_AGG()',
+    insertText: 'ARRAY_AGG(${1:column})',
+    detail: '聚合函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+  {
+    label: 'JSON_BUILD_OBJECT()',
+    insertText: 'JSON_BUILD_OBJECT(${1:key}, ${2:value})',
+    detail: 'JSON 函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+  {
+    label: 'JSONB_BUILD_OBJECT()',
+    insertText: 'JSONB_BUILD_OBJECT(${1:key}, ${2:value})',
+    detail: 'JSON 函数 (PostgreSQL)',
+    groups: ['pg-like'],
+  },
+
   // SQLite 特有
-  { label: 'strftime()', insertText: "strftime('${1:%Y-%m-%d}', ${2:date})", detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
-  { label: 'datetime()', insertText: 'datetime(${1:now})', detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
-  { label: 'date()', insertText: 'date(${1:now})', detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
-  { label: 'time()', insertText: 'time(${1:now})', detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
-  { label: 'julianday()', insertText: 'julianday(${1:date})', detail: '日期时间函数 (SQLite)', groups: ['sqlite-like'] },
-  { label: 'TOTAL()', insertText: 'TOTAL(${1:column})', detail: '聚合函数 (SQLite)', groups: ['sqlite-like'] },
-  
+  {
+    label: 'strftime()',
+    insertText: "strftime('${1:%Y-%m-%d}', ${2:date})",
+    detail: '日期时间函数 (SQLite)',
+    groups: ['sqlite-like'],
+  },
+  {
+    label: 'datetime()',
+    insertText: 'datetime(${1:now})',
+    detail: '日期时间函数 (SQLite)',
+    groups: ['sqlite-like'],
+  },
+  {
+    label: 'date()',
+    insertText: 'date(${1:now})',
+    detail: '日期时间函数 (SQLite)',
+    groups: ['sqlite-like'],
+  },
+  {
+    label: 'time()',
+    insertText: 'time(${1:now})',
+    detail: '日期时间函数 (SQLite)',
+    groups: ['sqlite-like'],
+  },
+  {
+    label: 'julianday()',
+    insertText: 'julianday(${1:date})',
+    detail: '日期时间函数 (SQLite)',
+    groups: ['sqlite-like'],
+  },
+  {
+    label: 'TOTAL()',
+    insertText: 'TOTAL(${1:column})',
+    detail: '聚合函数 (SQLite)',
+    groups: ['sqlite-like'],
+  },
+
   // SQL Server 特有
-  { label: 'ISNULL()', insertText: 'ISNULL(${1:expr}, ${2:default})', detail: '空值处理 (SQL Server)', groups: ['mssql-like'] },
-  { label: 'CONVERT()', insertText: 'CONVERT(${1:VARCHAR}, ${2:expr}, ${3:120})', detail: '类型转换 (SQL Server)', groups: ['mssql-like'] },
-  { label: 'GETDATE()', insertText: 'GETDATE()', detail: '日期时间函数 (SQL Server)', groups: ['mssql-like'] },
-  { label: 'DATEPART()', insertText: 'DATEPART(${1:year}, ${2:date})', detail: '日期时间函数 (SQL Server)', groups: ['mssql-like'] },
-  { label: 'DATEDIFF()', insertText: 'DATEDIFF(${1:day}, ${2:start}, ${3:end})', detail: '日期时间函数 (SQL Server)', groups: ['mssql-like'] },
-  { label: 'CHARINDEX()', insertText: 'CHARINDEX(${1:substring}, ${2:string})', detail: '字符串函数 (SQL Server)', groups: ['mssql-like'] },
-  { label: 'LEN()', insertText: 'LEN(${1:str})', detail: '字符串函数 (SQL Server)', groups: ['mssql-like'] },
-  { label: 'STRING_AGG()', insertText: "STRING_AGG(${1:column}, '${2:,}')", detail: '聚合函数 (SQL Server)', groups: ['mssql-like'] },
-  
+  {
+    label: 'ISNULL()',
+    insertText: 'ISNULL(${1:expr}, ${2:default})',
+    detail: '空值处理 (SQL Server)',
+    groups: ['mssql-like'],
+  },
+  {
+    label: 'CONVERT()',
+    insertText: 'CONVERT(${1:VARCHAR}, ${2:expr}, ${3:120})',
+    detail: '类型转换 (SQL Server)',
+    groups: ['mssql-like'],
+  },
+  {
+    label: 'GETDATE()',
+    insertText: 'GETDATE()',
+    detail: '日期时间函数 (SQL Server)',
+    groups: ['mssql-like'],
+  },
+  {
+    label: 'DATEPART()',
+    insertText: 'DATEPART(${1:year}, ${2:date})',
+    detail: '日期时间函数 (SQL Server)',
+    groups: ['mssql-like'],
+  },
+  {
+    label: 'DATEDIFF()',
+    insertText: 'DATEDIFF(${1:day}, ${2:start}, ${3:end})',
+    detail: '日期时间函数 (SQL Server)',
+    groups: ['mssql-like'],
+  },
+  {
+    label: 'CHARINDEX()',
+    insertText: 'CHARINDEX(${1:substring}, ${2:string})',
+    detail: '字符串函数 (SQL Server)',
+    groups: ['mssql-like'],
+  },
+  {
+    label: 'LEN()',
+    insertText: 'LEN(${1:str})',
+    detail: '字符串函数 (SQL Server)',
+    groups: ['mssql-like'],
+  },
+  {
+    label: 'STRING_AGG()',
+    insertText: "STRING_AGG(${1:column}, '${2:,}')",
+    detail: '聚合函数 (SQL Server)',
+    groups: ['mssql-like'],
+  },
+
   // Oracle / 达梦 特有
-  { label: 'NVL()', insertText: 'NVL(${1:expr}, ${2:default})', detail: '空值处理 (Oracle)', groups: ['oracle-like'] },
-  { label: 'DECODE()', insertText: 'DECODE(${1:expr}, ${2:val1}, ${3:result1}, ${4:default})', detail: '条件函数 (Oracle)', groups: ['oracle-like'] },
-  { label: 'SYSDATE', insertText: 'SYSDATE', detail: '日期时间函数 (Oracle)', groups: ['oracle-like'] },
-  { label: 'TO_CHAR()', insertText: "TO_CHAR(${1:date}, '${2:YYYY-MM-DD}')", detail: '日期时间函数 (Oracle)', groups: ['oracle-like'] },
-  { label: 'TO_DATE()', insertText: "TO_DATE('${1:2024-01-01}', '${2:YYYY-MM-DD}')", detail: '日期时间函数 (Oracle)', groups: ['oracle-like'] },
-  { label: 'TO_NUMBER()', insertText: 'TO_NUMBER(${1:str})', detail: '类型转换 (Oracle)', groups: ['oracle-like'] },
-  { label: 'INSTR()', insertText: 'INSTR(${1:str}, ${2:substr})', detail: '字符串函数 (Oracle)', groups: ['oracle-like'] },
-  { label: 'SUBSTR()', insertText: 'SUBSTR(${1:str}, ${2:start}, ${3:length})', detail: '字符串函数 (Oracle)', groups: ['oracle-like'] },
-  { label: 'LISTAGG()', insertText: "LISTAGG(${1:column}, '${2:,}') WITHIN GROUP (ORDER BY ${3:column})", detail: '聚合函数 (Oracle)', groups: ['oracle-like'] },
+  {
+    label: 'NVL()',
+    insertText: 'NVL(${1:expr}, ${2:default})',
+    detail: '空值处理 (Oracle)',
+    groups: ['oracle-like'],
+  },
+  {
+    label: 'DECODE()',
+    insertText: 'DECODE(${1:expr}, ${2:val1}, ${3:result1}, ${4:default})',
+    detail: '条件函数 (Oracle)',
+    groups: ['oracle-like'],
+  },
+  {
+    label: 'SYSDATE',
+    insertText: 'SYSDATE',
+    detail: '日期时间函数 (Oracle)',
+    groups: ['oracle-like'],
+  },
+  {
+    label: 'TO_CHAR()',
+    insertText: "TO_CHAR(${1:date}, '${2:YYYY-MM-DD}')",
+    detail: '日期时间函数 (Oracle)',
+    groups: ['oracle-like'],
+  },
+  {
+    label: 'TO_DATE()',
+    insertText: "TO_DATE('${1:2024-01-01}', '${2:YYYY-MM-DD}')",
+    detail: '日期时间函数 (Oracle)',
+    groups: ['oracle-like'],
+  },
+  {
+    label: 'TO_NUMBER()',
+    insertText: 'TO_NUMBER(${1:str})',
+    detail: '类型转换 (Oracle)',
+    groups: ['oracle-like'],
+  },
+  {
+    label: 'INSTR()',
+    insertText: 'INSTR(${1:str}, ${2:substr})',
+    detail: '字符串函数 (Oracle)',
+    groups: ['oracle-like'],
+  },
+  {
+    label: 'SUBSTR()',
+    insertText: 'SUBSTR(${1:str}, ${2:start}, ${3:length})',
+    detail: '字符串函数 (Oracle)',
+    groups: ['oracle-like'],
+  },
+  {
+    label: 'LISTAGG()',
+    insertText: "LISTAGG(${1:column}, '${2:,}') WITHIN GROUP (ORDER BY ${3:column})",
+    detail: '聚合函数 (Oracle)',
+    groups: ['oracle-like'],
+  },
 ];
 
 /** 根据数据库类型过滤提示 */
@@ -312,7 +545,7 @@ function filterByDbType<T extends { groups?: DbGroup[] }>(
 ): T[] {
   if (!dbType) return items;
   const group = DB_GROUP_MAP[dbType];
-  return items.filter(item => !item.groups || item.groups.includes(group));
+  return items.filter((item) => !item.groups || item.groups.includes(group));
 }
 
 // 预编译的正则表达式（避免每次触发重新编译）
@@ -324,7 +557,13 @@ const REGEX_PATTERNS = {
   hasTableAlias: /\b(FROM|JOIN)\s+\w+\s+(?:AS\s+)?(\w+)\s*$/i,
 };
 
-export function SQLEditor({ connectionId, database, defaultQuery, availableDatabases, onDatabaseChange }: SQLEditorProps) {
+export function SQLEditor({
+  connectionId,
+  database,
+  defaultQuery,
+  availableDatabases,
+  onDatabaseChange,
+}: SQLEditorProps) {
   const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
   const dbType = useMemo(() => {
@@ -342,7 +581,9 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
   const editorRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const schemaRef = useRef<{ tables: Map<string, string[]>; views: Map<string, string[]> } | null>(null);
+  const schemaRef = useRef<{ tables: Map<string, string[]>; views: Map<string, string[]> } | null>(
+    null
+  );
   const monacoRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -371,7 +612,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
     document.addEventListener('mousemove', handleResizeMove);
     document.addEventListener('mouseup', handleResizeEnd);
   }, [handleResizeMove, handleResizeEnd]);
-  
+
   // 缓存预生成的补全建议，避免每次按键都重建对象
   const completionCacheRef = useRef<{
     keywordSuggestions: any[];
@@ -416,19 +657,23 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
 
       for (const table of tables) {
         const tableType = (table.table_type || '').toUpperCase().trim();
-        const isView = tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
+        const isView =
+          tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
         const targetMap = isView ? viewsMap : tablesMap;
 
         try {
           const columns = await getColumns(connectionId, table.table_name, database);
-          targetMap.set(table.table_name, columns.map(c => c.column_name));
+          targetMap.set(
+            table.table_name,
+            columns.map((c) => c.column_name)
+          );
         } catch {
           targetMap.set(table.table_name, []);
         }
       }
 
       schemaRef.current = { tables: tablesMap, views: viewsMap };
-      
+
       // 预生成所有 schema 相关的 suggestions，避免每次按键都重建
       completionCacheRef.current = {
         keywordSuggestions: [],
@@ -516,8 +761,16 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
         // 判断语句类型（更智能的上下文）
         const upperText = textBeforeCurrentLine.toUpperCase();
         const isInSelectContext = upperText.includes('SELECT') && !upperText.includes('FROM');
-        const isInFromContext = upperText.includes('FROM') && !upperText.includes('WHERE') && !upperText.includes('ORDER') && !upperText.includes('GROUP');
-        const isInWhereContext = upperText.includes('WHERE') && !upperText.includes('ORDER') && !upperText.includes('GROUP') && !upperText.includes('LIMIT');
+        const isInFromContext =
+          upperText.includes('FROM') &&
+          !upperText.includes('WHERE') &&
+          !upperText.includes('ORDER') &&
+          !upperText.includes('GROUP');
+        const isInWhereContext =
+          upperText.includes('WHERE') &&
+          !upperText.includes('ORDER') &&
+          !upperText.includes('GROUP') &&
+          !upperText.includes('LIMIT');
         const isInOrderByContext = upperText.includes('ORDER BY');
         const isInGroupByContext = upperText.includes('GROUP BY');
         const isInSetContext = upperText.includes('SET') && upperText.includes('UPDATE');
@@ -528,7 +781,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
 
         if (schema && cache) {
           // 智能排序：根据上下文调整 suggestion 优先级
-          
+
           // 1. 在 FROM / JOIN / INTO / UPDATE 之后 -> 优先表名和视图名
           if (isAfterFromOrJoin || isInFromContext) {
             for (const [tableName, columns] of schema.tables) {
@@ -554,7 +807,14 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
           }
 
           // 2. 在 SELECT 后或 WHERE 后 -> 优先列名和函数
-          if (isAfterSelect || isInSelectContext || isAfterWhere || isInWhereContext || isInOrderByContext || isInGroupByContext) {
+          if (
+            isAfterSelect ||
+            isInSelectContext ||
+            isAfterWhere ||
+            isInWhereContext ||
+            isInOrderByContext ||
+            isInGroupByContext
+          ) {
             // 添加所有列名（不带表前缀，方便使用）
             const addedColumns = new Set<string>();
             for (const [tableName, columns] of schema.tables) {
@@ -627,7 +887,10 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
             const alias = hasTableAliasMatch[2];
             // 找到别名对应的表（简单匹配：别名为表名时）
             for (const [tableName, columns] of schema.tables) {
-              if (tableName.toLowerCase().startsWith(alias.toLowerCase()) || alias.toLowerCase().startsWith(tableName.toLowerCase())) {
+              if (
+                tableName.toLowerCase().startsWith(alias.toLowerCase()) ||
+                alias.toLowerCase().startsWith(tableName.toLowerCase())
+              ) {
                 for (const column of columns) {
                   suggestions.unshift({
                     label: `${alias}.${column}`,
@@ -671,19 +934,17 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
       },
     });
 
-    editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-      () => {
-        handleExecuteQueryRef.current();
-      }
-    );
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      handleExecuteQueryRef.current();
+    });
   }, []);
 
   const handleExecuteQuery = useCallback(async () => {
     // 获取选中的 SQL，如果没有选中则使用整个 SQL
-    const selectedSql = editorRef.current?.getModel()?.getValueInRange(
-      editorRef.current.getSelection()
-    )?.trim();
+    const selectedSql = editorRef.current
+      ?.getModel()
+      ?.getValueInRange(editorRef.current.getSelection())
+      ?.trim();
 
     const sqlToExecute = selectedSql || sql;
 
@@ -700,6 +961,34 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
     if (!database) {
       message.warning('请先选择一个数据库');
       return;
+    }
+
+    // 大数据保护：检测无 LIMIT 的 SELECT 查询
+    const sqlUpper = sqlToExecute.trim().toUpperCase();
+    const hasLimit = /\bLIMIT\b/.test(sqlUpper);
+    const hasTop = /\bTOP\s/.test(sqlUpper);
+    const hasRownum = /\bROWNUM\b/.test(sqlUpper);
+    if (
+      (sqlUpper.startsWith('SELECT') || sqlUpper.startsWith('/*')) &&
+      !hasLimit &&
+      !hasTop &&
+      !hasRownum
+    ) {
+      const needConfirm = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: '大查询警告',
+          content:
+            '您执行的查询似乎没有 LIMIT 限制，这可能会返回大量数据并导致内存溢出或性能问题。\n\n是否继续执行？',
+          okText: '继续执行',
+          cancelText: '取消',
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!needConfirm) {
+        setLoading(false);
+        return;
+      }
     }
 
     try {
@@ -791,7 +1080,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
       }
 
       // 保存历史记录
-      setQueryHistory(prev => [sqlToExecute, ...prev.slice(0, 49)]);
+      setQueryHistory((prev) => [sqlToExecute, ...prev.slice(0, 49)]);
     } catch (error: any) {
       console.error('SQL execution error:', error);
       setMessages([`✗ 错误：${error.message || error}`]);
@@ -812,7 +1101,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       setLoading(false);
-      setMessages(prev => [...prev, '⚠ 查询已停止']);
+      setMessages((prev) => [...prev, '⚠ 查询已停止']);
       message.warning('查询已停止');
     } else {
       message.info('没有正在执行的查询');
@@ -832,10 +1121,10 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
 
     try {
       setLoading(true);
-      
+
       const explainSQL = `EXPLAIN ${sql}`;
       const result = await executeQueryApi(connectionId, explainSQL, database);
-      
+
       if (result.error) {
         message.error(`生成执行计划失败：${result.error}`);
       } else {
@@ -853,16 +1142,19 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
 
   const formatSQL = useCallback(() => {
     if (!editorRef.current) return;
-    
+
     const formatted = sql
-      .replace(/\b(SELECT|FROM|WHERE|AND|OR|ORDER|BY|GROUP|LIMIT|INSERT|INTO|VALUES|UPDATE|SET|DELETE|JOIN|ON|AS|IN|NOT|NULL|IS|LIKE|BETWEEN|EXISTS)\b/gi, match => match.toUpperCase())
+      .replace(
+        /\b(SELECT|FROM|WHERE|AND|OR|ORDER|BY|GROUP|LIMIT|INSERT|INTO|VALUES|UPDATE|SET|DELETE|JOIN|ON|AS|IN|NOT|NULL|IS|LIKE|BETWEEN|EXISTS)\b/gi,
+        (match) => match.toUpperCase()
+      )
       .replace(/,/g, ',\n  ')
       .replace(/\bFROM\b/i, '\nFROM')
       .replace(/\bWHERE\b/i, '\nWHERE')
       .replace(/\bORDER BY\b/i, '\nORDER BY')
       .replace(/\bGROUP BY\b/i, '\nGROUP BY')
       .replace(/\bLIMIT\b/i, '\nLIMIT');
-    
+
     setSql(formatted);
     message.success('SQL 已格式化');
   }, [sql]);
@@ -910,7 +1202,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
 
     const csv = [
       targetResult.columns.map(escapeCsv).join(','),
-      ...targetResult.rows.map(row => row.map(escapeCsv).join(','))
+      ...targetResult.rows.map((row) => row.map(escapeCsv).join(',')),
     ].join('\n');
 
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -924,64 +1216,94 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
   }, [result, results]);
 
   // 渲染单个结果集的表格（AG Grid）
-  const renderResultTable = useCallback((queryResult: QueryResultWithTiming) => {
-    return (
-      <ResultGrid
-        queryResult={queryResult}
-        isDark={tc.isDark}
-        executionTime={queryResult.executionTime}
-        connectionId={connectionId || undefined}
-        database={database}
-        originalSql={sql}
-        dbType={dbType}
-      />
-    );
-  }, [tc.isDark, connectionId, database, sql, dbType]);
-
-  // 渲染单结果（用于 result 标签）
-  const renderSingleResult = useMemo(() => (
-    <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-          <Spin size="large" tip="执行中..." />
-        </div>
-      ) : !connectionId ? (
-        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Empty description="请先选择一个数据库连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        </div>
-      ) : !result ? (
-        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Empty description="暂无查询结果" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        </div>
-      ) : (
+  const renderResultTable = useCallback(
+    (queryResult: QueryResultWithTiming) => {
+      return (
         <ResultGrid
-          queryResult={result}
+          queryResult={queryResult}
           isDark={tc.isDark}
-          executionTime={result.executionTime}
+          executionTime={queryResult.executionTime}
           connectionId={connectionId || undefined}
           database={database}
           originalSql={sql}
           dbType={dbType}
         />
-      )}
-    </div>
-  ), [loading, connectionId, database, sql, dbType, result, tc.isDark]);
+      );
+    },
+    [tc.isDark, connectionId, database, sql, dbType]
+  );
+
+  // 渲染单结果（用于 result 标签）
+  const renderSingleResult = useMemo(
+    () => (
+      <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {loading ? (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '100%',
+            }}
+          >
+            <Spin size="large" tip="执行中..." />
+          </div>
+        ) : !connectionId ? (
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Empty description="请先选择一个数据库连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
+        ) : !result ? (
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Empty description="暂无查询结果" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
+        ) : (
+          <ResultGrid
+            queryResult={result}
+            isDark={tc.isDark}
+            executionTime={result.executionTime}
+            connectionId={connectionId || undefined}
+            database={database}
+            originalSql={sql}
+            dbType={dbType}
+          />
+        )}
+      </div>
+    ),
+    [loading, connectionId, database, sql, dbType, result, tc.isDark]
+  );
 
   // 结果面板 Tab items
   const resultTabItems = useMemo<NonNullable<TabsProps['items']>>(() => {
     const items: NonNullable<TabsProps['items']> = [];
 
-    const resultLabel = results.length > 1
-      ? `结果 (${results.length})`
-      : result
-        ? `结果 (${result.rows.length} 行)`
-        : '结果';
+    const resultLabel =
+      results.length > 1
+        ? `结果 (${results.length})`
+        : result
+          ? `结果 (${result.rows.length} 行)`
+          : '结果';
 
     items.push({
       key: 'result',
       label: resultLabel,
       children: (
-        <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div
+          style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+        >
           {results.length > 1 ? (
             <Tabs
               type="card"
@@ -1004,7 +1326,14 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
       key: 'messages',
       label: `消息 (${messages.length})`,
       children: (
-        <div style={{ padding: 12, overflow: 'auto', height: '100%', background: 'var(--background-card)' }}>
+        <div
+          style={{
+            padding: 12,
+            overflow: 'auto',
+            height: '100%',
+            background: 'var(--background-card)',
+          }}
+        >
           {messages.length === 0 ? (
             <Empty description="暂无消息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
           ) : (
@@ -1067,33 +1396,35 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
         background: 'var(--background-card)',
       }}
     >
-      <div style={{ 
-        padding: '4px 8px', 
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: 'var(--background-toolbar)',
-      }}>
+      <div
+        style={{
+          padding: '4px 8px',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'var(--background-toolbar)',
+        }}
+      >
         <Space size="small">
           <Tooltip title={`执行 (${getShortcutDisplayText('execute-query')})`}>
-            <Button 
-              type="primary" 
-              icon={<PlayCircleOutlined />} 
+            <Button
+              type="primary"
+              icon={<PlayCircleOutlined />}
               onClick={handleExecuteQuery}
               loading={loading}
               disabled={!connectionId}
-              style={{ 
+              style={{
                 borderRadius: 4,
-                fontWeight: 500
+                fontWeight: 500,
               }}
               size="small"
             >
               执行
             </Button>
           </Tooltip>
-          <Button 
-            icon={<StopOutlined />} 
+          <Button
+            icon={<StopOutlined />}
             onClick={stopQuery}
             disabled={!loading}
             danger
@@ -1102,24 +1433,26 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
           >
             停止
           </Button>
-          
-          <div style={{ 
-            width: 1, 
-            height: 16, 
-            background: 'var(--border)',
-            margin: '0 4px'
-          }} />
-          
-          <Button 
-            icon={<FormatPainterOutlined />} 
+
+          <div
+            style={{
+              width: 1,
+              height: 16,
+              background: 'var(--border)',
+              margin: '0 4px',
+            }}
+          />
+
+          <Button
+            icon={<FormatPainterOutlined />}
             onClick={formatSQL}
             style={{ borderRadius: 4 }}
             size="small"
           >
             格式化
           </Button>
-          <Button 
-            icon={<LineChartOutlined />} 
+          <Button
+            icon={<LineChartOutlined />}
             onClick={showExplainPlan}
             disabled={!connectionId}
             style={{ borderRadius: 4 }}
@@ -1127,7 +1460,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
           >
             执行计划
           </Button>
-          
+
           <Dropdown
             menu={{
               items: [
@@ -1144,7 +1477,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
                 else if (key === 'clear') clearEditor();
                 else if (key === 'export') exportResult();
                 else if (key === 'history') setHistoryPanelVisible(true);
-              }
+              },
             }}
           >
             <Button icon={<FileTextOutlined />} style={{ borderRadius: 4 }} size="small">
@@ -1152,7 +1485,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
             </Button>
           </Dropdown>
         </Space>
-        
+
         <Space>
           {/* 数据库选择 */}
           {connectionId ? (
@@ -1171,15 +1504,21 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
                 options={availableDatabases.map((db) => ({ label: db, value: db }))}
               />
             ) : (
-              <span style={{ color: 'var(--color-error)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span
+                style={{
+                  color: 'var(--color-error)',
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
                 <WarningOutlined />
                 未加载数据库
               </span>
             )
           ) : (
-            <span style={{ color: 'var(--color-error)', fontSize: 12 }}>
-              未选择连接
-            </span>
+            <span style={{ color: 'var(--color-error)', fontSize: 12 }}>未选择连接</span>
           )}
 
           {result && !result.error && (
@@ -1280,7 +1619,15 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
 
       {/* 结果面板区域 — 仅在有结果时显示 */}
       {hasResult && (
-        <div style={{ flex: 1, minHeight: 120, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 120,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <Tabs
             type="card"
             size="small"

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Tabs,
   Table,
@@ -12,6 +12,7 @@ import {
   Card,
   Typography,
   Tooltip,
+  Spin,
 } from 'antd';
 import { GlobalInput } from '../GlobalInput';
 import {
@@ -25,6 +26,8 @@ import {
 } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import type { ColumnsType } from 'antd/es/table';
+import { api } from '../../api';
+import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../../types/api';
 
 const { Text } = Typography;
 
@@ -165,9 +168,9 @@ function generateCreateTableSQL(
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function TableDesigner({
-  connectionId: _connectionId,
+  connectionId,
   tableName: propTableName,
-  database: _database,
+  database,
   onSave,
   onCancel,
 }: TableDesignerProps) {
@@ -178,11 +181,87 @@ export function TableDesigner({
   ]);
   const [indexes, setIndexes] = useState<DesignerIndex[]>([]);
   const [foreignKeys, setForeignKeys] = useState<DesignerForeignKey[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const lastLoadedRef = useRef('');
 
   // Sync tableName when prop changes
   useEffect(() => {
     if (propTableName) setTableName(propTableName);
   }, [propTableName]);
+
+  // Load existing table structure
+  useEffect(() => {
+    if (!connectionId || !propTableName) return;
+    const cacheKey = `${connectionId}::${database || ''}::${propTableName}`;
+    if (lastLoadedRef.current === cacheKey) return;
+
+    const loadStructure = async () => {
+      setLoading(true);
+      try {
+        const structure = await api.getTableStructure(connectionId, propTableName, database);
+
+        // Convert columns
+        const loadedColumns: DesignerColumn[] = structure.columns.map((col: ColumnInfo) => {
+          const rawType = col.data_type;
+          const baseMatch = rawType.match(/^([A-Z]+)/i);
+          const baseType = (baseMatch ? baseMatch[1] : rawType).toUpperCase();
+          const sizeMatch = rawType.match(/\(([^)]+)\)/);
+          let length = 255;
+          if (sizeMatch) {
+            const parts = sizeMatch[1].split(',').map((s: string) => s.trim());
+            const firstNum = parseInt(parts[0], 10);
+            if (!isNaN(firstNum)) length = firstNum;
+          }
+          return {
+            key: genKey(),
+            name: col.column_name,
+            type: baseType,
+            length,
+            nullable: col.is_nullable === 'YES',
+            defaultValue: col.column_default || undefined,
+            comment: col.comment || undefined,
+            isPrimary: col.column_key === 'PRI',
+          };
+        });
+        setColumns(loadedColumns);
+
+        // Convert indexes (skip primary key index as it's handled by column's isPrimary)
+        const loadedIndexes: DesignerIndex[] = structure.indexes
+          .filter((idx: IndexInfo) => !idx.is_primary)
+          .map((idx: IndexInfo) => ({
+            key: genKey(),
+            name: idx.index_name,
+            type: idx.is_unique ? ('UNIQUE' as const) : ('INDEX' as const),
+            columns: [idx.column_name],
+          }));
+        setIndexes(loadedIndexes);
+
+        // Convert foreign keys
+        const loadedForeignKeys: DesignerForeignKey[] = structure.foreign_keys.map(
+          (fk: ForeignKeyInfo) => ({
+            key: genKey(),
+            name: fk.constraint_name,
+            column: fk.column_name,
+            referencedTable: fk.referenced_table,
+            referencedColumn: fk.referenced_column,
+            onUpdate: 'CASCADE' as const,
+            onDelete: 'CASCADE' as const,
+          })
+        );
+        setForeignKeys(loadedForeignKeys);
+
+        lastLoadedRef.current = cacheKey;
+      } catch (err) {
+        console.error('Failed to load table structure:', err);
+        message.error('加载表结构失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStructure();
+  }, [connectionId, propTableName, database]);
 
   // ── SQL Preview ────────────────────────────────────────────────────────
   const sqlPreview = useMemo(
@@ -192,10 +271,17 @@ export function TableDesigner({
 
   // ── Column CRUD ────────────────────────────────────────────────────────
   const addColumn = () => {
-    setColumns((prev) => [...prev, { key: genKey(), name: '', type: 'VARCHAR', length: 255, nullable: true }]);
+    setColumns((prev) => [
+      ...prev,
+      { key: genKey(), name: '', type: 'VARCHAR', length: 255, nullable: true },
+    ]);
   };
 
-  const updateColumn = (key: string, field: keyof DesignerColumn, value: DesignerColumn[keyof DesignerColumn]) => {
+  const updateColumn = (
+    key: string,
+    field: keyof DesignerColumn,
+    value: DesignerColumn[keyof DesignerColumn]
+  ) => {
     setColumns((prev) => prev.map((c) => (c.key === key ? { ...c, [field]: value } : c)));
   };
 
@@ -230,7 +316,11 @@ export function TableDesigner({
     ]);
   };
 
-  const updateIndex = (key: string, field: keyof DesignerIndex, value: DesignerIndex[keyof DesignerIndex]) => {
+  const updateIndex = (
+    key: string,
+    field: keyof DesignerIndex,
+    value: DesignerIndex[keyof DesignerIndex]
+  ) => {
     setIndexes((prev) => prev.map((i) => (i.key === key ? { ...i, [field]: value } : i)));
   };
 
@@ -378,7 +468,11 @@ export function TableDesigner({
       dataIndex: 'nullable',
       width: 80,
       render: (val: boolean, record: DesignerColumn) => (
-        <Switch size="small" checked={val} onChange={(v) => updateColumn(record.key, 'nullable', v)} />
+        <Switch
+          size="small"
+          checked={val}
+          onChange={(v) => updateColumn(record.key, 'nullable', v)}
+        />
       ),
     },
     {
@@ -705,7 +799,25 @@ export function TableDesigner({
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      {loading && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(255,255,255,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+          }}
+        >
+          <Spin tip="加载表结构..." />
+        </div>
+      )}
       {/* Header */}
       <div
         style={{
@@ -744,7 +856,12 @@ export function TableDesigner({
 
       {/* Tabs */}
       <div style={{ flex: 1, overflow: 'hidden', padding: '12px 16px' }}>
-        <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} style={{ height: '100%' }} />
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={tabItems}
+          style={{ height: '100%' }}
+        />
       </div>
     </div>
   );

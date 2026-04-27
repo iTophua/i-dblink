@@ -277,3 +277,16 @@ func postgresGetRoutines(ctx context.Context, dbConn *sql.DB, _database *string)
 	}
 	return result, rows.Err()
 }
+
+func postgresGetRoutineBody(ctx context.Context, dbConn *sql.DB, database, routineName, routineType string) (string, error) {
+	var def sql.NullString
+	query := `SELECT routine_definition FROM information_schema.routines WHERE routine_schema = $1 AND routine_name = $2 AND routine_type = $3`
+	err := dbConn.QueryRowContext(ctx, query, database, routineName, routineType).Scan(&def)
+	if err != nil {
+		return "", err
+	}
+	if !def.Valid {
+		return "", nil
+	}
+	return def.String, nil
+}

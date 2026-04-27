@@ -396,7 +396,36 @@ export const DataTable = memo(function DataTable({
 
   // 性能优化：计算列定义的 useMemo
   const columnDefs = useMemo(() => {
-    return columns.map((col) => {
+    const statusColumn: ColDef = {
+      field: '__status__',
+      headerName: '',
+      width: 40,
+      minWidth: 40,
+      maxWidth: 40,
+      sortable: false,
+      filter: false,
+      resizable: false,
+      suppressSizeToFit: true,
+      cellRenderer: (params: any) => {
+        const status = params.data?.__status__;
+        if (status === 'new')
+          return <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>+</span>;
+        if (status === 'modified') return <span style={{ color: 'var(--color-primary)' }}>✎</span>;
+        if (status === 'deleted')
+          return (
+            <span style={{ color: 'var(--color-error)', textDecoration: 'line-through' }}>✗</span>
+          );
+        return null;
+      },
+      cellStyle: {
+        padding: '0 4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+    };
+
+    const dataColumns = columns.map((col) => {
       if (hiddenColumns.has(col.column_name)) {
         return { field: col.column_name, hide: true } as ColDef;
       }
@@ -408,6 +437,22 @@ export const DataTable = memo(function DataTable({
       const nullableInfo = col.is_nullable === 'YES' ? ' | NULL' : ' | NOT NULL';
       const commentInfo = col.comment ? ` | ${col.comment}` : '';
 
+      const dataType = (col.data_type || '').toUpperCase();
+      const isBoolean = dataType === 'BOOLEAN' || dataType === 'BOOL' || dataType === 'TINYINT(1)';
+      const isDate = dataType.includes('DATE') || dataType.includes('TIME');
+      const isEnum = dataType.startsWith('ENUM') || dataType.startsWith('SET');
+
+      let cellEditor: any = undefined;
+      if (isBoolean) {
+        cellEditor = 'agCheckboxCellEditor';
+      } else if (isDate) {
+        cellEditor = 'agDateStringCellEditor';
+      } else if (isEnum) {
+        const enumMatch = col.data_type.match(/'([^']+)'/g);
+        const enumValues = enumMatch ? enumMatch.map((v: string) => v.slice(1, -1)) : [];
+        cellEditor = { component: 'agSelectCellEditor', params: { values: enumValues } };
+      }
+
       return {
         field: col.column_name,
         headerName: col.column_name,
@@ -418,21 +463,46 @@ export const DataTable = memo(function DataTable({
         maxWidth: 300,
         width: autoWidth,
         editable: true,
+        cellEditor,
         headerTooltip: col.data_type + nullableInfo + commentInfo,
-        cellClass: (params: any) => (params.value === null ? 'null-cell' : undefined),
-        cellRenderer: (params: any) => params.value,
+        cellClass: (params: any) => {
+          if (params.value === null) return 'null-cell';
+          if (
+            params.data?.__status__ === 'modified' &&
+            params.data?.__original_data__?.[col.column_name] !== params.value
+          ) {
+            return 'modified-cell';
+          }
+          return undefined;
+        },
+        cellRenderer: (params: any) => {
+          if (params.value === null) {
+            return <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>NULL</span>;
+          }
+          if (isBoolean) {
+            return params.value ? '✓' : '✗';
+          }
+          return params.value;
+        },
         checkboxSelection: col.column_key === 'PRI',
       } as ColDef;
     });
+
+    return [statusColumn, ...dataColumns];
   }, [columns, colWidths, hiddenColumns]);
 
   useEffect(() => {
     if (gridApiRef.current && columns.length > 0) {
       const api = gridApiRef.current;
       if (api && typeof (api as unknown as Record<string, unknown>).setColumnDefs === 'function') {
-        (api as unknown as { setColumnDefs: (defs: typeof columnDefs) => void }).setColumnDefs(columnDefs);
+        (api as unknown as { setColumnDefs: (defs: typeof columnDefs) => void }).setColumnDefs(
+          columnDefs
+        );
       } else if (api) {
-        (api as unknown as { setGridOption: (key: string, value: unknown) => void }).setGridOption('columnDefs', columnDefs);
+        (api as unknown as { setGridOption: (key: string, value: unknown) => void }).setGridOption(
+          'columnDefs',
+          columnDefs
+        );
       }
     }
   }, [columnDefs, columns]);
@@ -860,7 +930,8 @@ export const DataTable = memo(function DataTable({
       const updates = Object.entries(values)
         .filter(([key, value]) => key !== '__row_id__' && value !== editingRow?.[key])
         .map(
-          ([key, value]) => `\`${key}\` = ${value === null || value === '' ? 'NULL' : escapeSqlValue(value)}`
+          ([key, value]) =>
+            `\`${key}\` = ${value === null || value === '' ? 'NULL' : escapeSqlValue(value)}`
         )
         .join(', ');
 
@@ -964,7 +1035,9 @@ export const DataTable = memo(function DataTable({
   const handleQuickFilter = useCallback((value: string) => {
     setQuickFilter(value);
     if (gridApiRef.current) {
-      (gridApiRef.current as unknown as { setGridOption: (key: string, value: string) => void }).setGridOption('quickFilterText', value);
+      (
+        gridApiRef.current as unknown as { setGridOption: (key: string, value: string) => void }
+      ).setGridOption('quickFilterText', value);
     }
   }, []);
 
@@ -1418,7 +1491,12 @@ export const DataTable = memo(function DataTable({
                 >
                   {cond.isGroupStart && (
                     <span
-                      style={{ fontSize: 14, fontWeight: 'bold', color: 'var(--color-info)', marginRight: 4 }}
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 'bold',
+                        color: 'var(--color-info)',
+                        marginRight: 4,
+                      }}
                     >
                       (
                     </span>
@@ -1489,9 +1567,7 @@ export const DataTable = memo(function DataTable({
                         />
                       )}
                       {['isNull', 'isNotNull'].includes(cond.operator) && (
-                        <span
-                          style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)' }}
-                        >
+                        <span style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)' }}>
                           —
                         </span>
                       )}
@@ -1499,7 +1575,12 @@ export const DataTable = memo(function DataTable({
                   )}
                   {cond.isGroupEnd && (
                     <span
-                      style={{ fontSize: 14, fontWeight: 'bold', color: 'var(--color-info)', marginLeft: 4 }}
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 'bold',
+                        color: 'var(--color-info)',
+                        marginLeft: 4,
+                      }}
                     >
                       )
                     </span>
@@ -1522,7 +1603,12 @@ export const DataTable = memo(function DataTable({
                           });
                           setFilterConditions(newConditions);
                         }}
-                        style={{ fontSize: 10, padding: '0 2px', height: 16, color: 'var(--color-primary)' }}
+                        style={{
+                          fontSize: 10,
+                          padding: '0 2px',
+                          height: 16,
+                          color: 'var(--color-primary)',
+                        }}
                       >
                         +同级
                       </Button>
@@ -1573,7 +1659,12 @@ export const DataTable = memo(function DataTable({
                           );
                           setFilterConditions(newConditions);
                         }}
-                        style={{ fontSize: 10, padding: '0 2px', height: 16, color: 'var(--color-info)' }}
+                        style={{
+                          fontSize: 10,
+                          padding: '0 2px',
+                          height: 16,
+                          color: 'var(--color-info)',
+                        }}
                       >
                         +括号
                       </Button>
@@ -1900,14 +1991,18 @@ export const DataTable = memo(function DataTable({
               label={
                 <span>
                   {col.column_name}
-                  {col.is_nullable !== 'YES' && <span style={{ color: 'var(--color-error)' }}> *</span>}
+                  {col.is_nullable !== 'YES' && (
+                    <span style={{ color: 'var(--color-error)' }}> *</span>
+                  )}
                   <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
                     {col.data_type}
                   </span>
                 </span>
               }
               name={col.column_name}
-              rules={[{ required: col.is_nullable !== 'YES', message: `请输入 ${col.column_name}` }]}
+              rules={[
+                { required: col.is_nullable !== 'YES', message: `请输入 ${col.column_name}` },
+              ]}
             >
               <GlobalInput placeholder={col.comment || col.data_type} />
             </Form.Item>

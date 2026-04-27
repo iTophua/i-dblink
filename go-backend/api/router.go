@@ -55,6 +55,10 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 	mux.HandleFunc("POST /foreign-keys", recoverMiddleware(h.GetForeignKeys))
 	mux.HandleFunc("POST /table-structure", recoverMiddleware(h.GetTableStructure))
 	mux.HandleFunc("POST /routines", recoverMiddleware(h.GetRoutines))
+	mux.HandleFunc("POST /procedures", recoverMiddleware(h.GetProcedures))
+	mux.HandleFunc("POST /functions", recoverMiddleware(h.GetFunctions))
+	mux.HandleFunc("POST /procedure-body", recoverMiddleware(h.GetProcedureBody))
+	mux.HandleFunc("POST /function-body", recoverMiddleware(h.GetFunctionBody))
 }
 
 // Handler HTTP 处理器

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef } from 'ag-grid-community';
-import { Button, Space, Empty, Tooltip, Tag, Modal, App } from 'antd';
+import { Button, Space, Empty, Tooltip, Tag, Modal, App, Form, Input } from 'antd';
 import {
   DeleteOutlined,
   SaveOutlined,
@@ -9,6 +9,7 @@ import {
   CodeOutlined,
   ExclamationCircleOutlined,
   CopyOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../../hooks/useApi';
 import type { QueryResult, DatabaseType, ColumnInfo } from '../../types/api';
@@ -39,7 +40,12 @@ function escapeSqlValue(val: unknown): string {
 }
 
 function escapeSqlIdentifier(name: string, dbType?: DatabaseType): string {
-  if (dbType === 'postgresql' || dbType === 'kingbase' || dbType === 'highgo' || dbType === 'vastbase') {
+  if (
+    dbType === 'postgresql' ||
+    dbType === 'kingbase' ||
+    dbType === 'highgo' ||
+    dbType === 'vastbase'
+  ) {
     return `"${name.replace(/"/g, '""')}"`;
   }
   return `\`${name.replace(/\`/g, '``')}\``;
@@ -72,9 +78,7 @@ function generateInsertSql(
 ): string {
   const tableRef = escapeSqlIdentifier(tableName, dbType);
   const colStr = columns.map((c) => escapeSqlIdentifier(c, dbType)).join(', ');
-  const values = rows
-    .map((row) => `(${row.map(escapeSqlValue).join(', ')})`)
-    .join(',\n');
+  const values = rows.map((row) => `(${row.map(escapeSqlValue).join(', ')})`).join(',\n');
   return `INSERT INTO ${tableRef} (${colStr})\nVALUES\n${values};`;
 }
 
@@ -155,6 +159,9 @@ export function ResultGrid({
   const [deletedRowIndices, setDeletedRowIndices] = useState<Set<number>>(new Set());
   const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
   const [operationSql, setOperationSql] = useState<string>('');
+  const [newRows, setNewRows] = useState<unknown[][]>([]);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addForm] = Form.useForm();
 
   // 右键菜单
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -163,20 +170,30 @@ export function ResultGrid({
     y: 0,
   });
 
-  // 行数据（带修改和删除标记）
+  // 行数据（带修改和删除标记，以及新增行）
   const rowData = useMemo(() => {
-    return queryResult.rows
+    const existingRows = queryResult.rows
       .map((row, i) => {
         if (deletedRowIndices.has(i)) return null;
         const displayRow = modifiedRows.has(i) ? modifiedRows.get(i)! : row;
-        const obj: Record<string, unknown> = { __id: i };
+        const obj: Record<string, unknown> = { __id: i, __isNew: false };
         displayRow.forEach((cell, j) => {
           obj[String(j)] = cell;
         });
         return obj;
       })
       .filter(Boolean) as Record<string, unknown>[];
-  }, [queryResult.rows, modifiedRows, deletedRowIndices]);
+
+    const newRowsData = newRows.map((row, i) => {
+      const obj: Record<string, unknown> = { __id: `new-${i}`, __isNew: true };
+      row.forEach((cell, j) => {
+        obj[String(j)] = cell;
+      });
+      return obj;
+    });
+
+    return [...existingRows, ...newRowsData];
+  }, [queryResult.rows, modifiedRows, deletedRowIndices, newRows]);
 
   const colDefs = useMemo<ColDef[]>(() => {
     const cols: ColDef[] = [
@@ -233,16 +250,32 @@ export function ResultGrid({
   const onCellValueChanged = useCallback(
     (event: any) => {
       if (!isEditable) return;
-      const rowId = event.data.__id as number;
+      const rowId = event.data.__id;
       const colId = parseInt(event.colDef.field, 10);
       const newValue = event.newValue;
 
+      if (typeof rowId === 'string' && rowId.startsWith('new-')) {
+        const newRowIndex = parseInt(rowId.split('-')[1], 10);
+        setNewRows((prev) => {
+          const updated = [...prev];
+          const existingRow = updated[newRowIndex]
+            ? [...updated[newRowIndex]]
+            : [...queryResult.columns.map(() => null)];
+          existingRow[colId] = newValue;
+          updated[newRowIndex] = existingRow;
+          return updated;
+        });
+        return;
+      }
+
       setModifiedRows((prev) => {
         const newMap = new Map(prev);
-        const originalRow = queryResult.rows[rowId];
-        const currentRow = newMap.has(rowId) ? newMap.get(rowId)! : [...originalRow];
+        const originalRow = queryResult.rows[rowId as number];
+        const currentRow = newMap.has(rowId as number)
+          ? newMap.get(rowId as number)!
+          : [...originalRow];
         currentRow[colId] = newValue;
-        newMap.set(rowId, currentRow);
+        newMap.set(rowId as number, currentRow);
         return newMap;
       });
     },
@@ -275,7 +308,10 @@ export function ResultGrid({
       }
       if (changedCols.length === 0) continue;
       const setters = changedCols
-        .map((col, idx) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[idx])}`)
+        .map(
+          (col, idx) =>
+            `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[idx])}`
+        )
         .join(', ');
       lines.push(
         `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx])};`
@@ -306,7 +342,33 @@ export function ResultGrid({
       let successCount = 0;
       let errorMsg = '';
 
+      // 执行 INSERT（新增行）
+      if (newRows.length > 0) {
+        for (const row of newRows) {
+          const cols: string[] = [];
+          const vals: unknown[] = [];
+          row.forEach((v, i) => {
+            if (v !== null) {
+              cols.push(queryResult.columns[i]);
+              vals.push(v);
+            }
+          });
+          if (cols.length === 0) continue;
+          const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')}) VALUES (${vals.map(escapeSqlValue).join(', ')})`;
+          const res = await executeQuery(connectionId, sql, database);
+          if (res.error) {
+            errorMsg = res.error;
+            break;
+          }
+          successCount++;
+        }
+      }
+
       // 执行 UPDATE
+      if (errorMsg) {
+        message.error(`提交失败：${errorMsg}`);
+        return;
+      }
       for (const [rowId, row] of modifiedRows) {
         if (deletedRowIndices.has(rowId)) continue;
         const originalRow = queryResult.rows[rowId];
@@ -321,7 +383,9 @@ export function ResultGrid({
         if (changedCols.length === 0) continue;
 
         const setters = changedCols
-          .map((col, i) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[i])}`)
+          .map(
+            (col, i) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[i])}`
+          )
           .join(', ');
         const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx])}`;
 
@@ -353,11 +417,24 @@ export function ResultGrid({
         message.success(`成功提交 ${successCount} 个更改`);
         setModifiedRows(new Map());
         setDeletedRowIndices(new Set());
+        setNewRows([]);
       }
     } catch (err: any) {
       message.error(`提交失败：${err.message || err}`);
     }
-  }, [connectionId, tableName, primaryKeyCol, queryResult, modifiedRows, deletedRowIndices, dbType, database, executeQuery, message]);
+  }, [
+    connectionId,
+    tableName,
+    primaryKeyCol,
+    queryResult,
+    newRows,
+    modifiedRows,
+    deletedRowIndices,
+    dbType,
+    database,
+    executeQuery,
+    message,
+  ]);
 
   // 撤销更改
   const handleUndo = useCallback(() => {
@@ -367,6 +444,7 @@ export function ResultGrid({
       onOk: () => {
         setModifiedRows(new Map());
         setDeletedRowIndices(new Set());
+        setNewRows([]);
         message.info('已撤销所有修改');
       },
     });
@@ -516,7 +594,9 @@ export function ResultGrid({
   // 错误/空结果处理
   if (queryResult.error) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
         <Empty
           description={
             <div style={{ color: 'var(--color-error)' }}>
@@ -534,7 +614,9 @@ export function ResultGrid({
 
   if (queryResult.rows.length === 0) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
         <Empty
           description={
             <div>
@@ -637,6 +719,16 @@ export function ResultGrid({
               SQL
             </Button>
           </Space>
+        )}
+        {isEditable && (
+          <Button
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={() => setAddModalOpen(true)}
+            style={{ fontSize: 11, height: 22 }}
+          >
+            新增行
+          </Button>
         )}
         {isEditable && (
           <Button
@@ -818,6 +910,59 @@ export function ResultGrid({
           )}
         </div>
       )}
+
+      {/* 新增行 Modal */}
+      <Modal
+        title="新增行"
+        open={addModalOpen}
+        onCancel={() => {
+          setAddModalOpen(false);
+          addForm.resetFields();
+        }}
+        onOk={async () => {
+          try {
+            const values = await addForm.validateFields();
+            const newRow = queryResult.columns.map((_, i) => {
+              const colName = queryResult.columns[i];
+              return values[colName] ?? null;
+            });
+            setNewRows((prev) => [...prev, newRow]);
+            setAddModalOpen(false);
+            addForm.resetFields();
+            message.success('已添加新行，请点击"提交"保存到数据库');
+          } catch (err) {
+            // 表单验证失败，不做处理
+          }
+        }}
+        okText="添加"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
+          {tableColumns.map((col) => (
+            <Form.Item
+              key={col.column_name}
+              label={
+                <span>
+                  {col.column_name}
+                  {col.is_nullable !== 'YES' && (
+                    <span style={{ color: 'var(--color-error)' }}> *</span>
+                  )}
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
+                    {col.data_type}
+                  </span>
+                </span>
+              }
+              name={col.column_name}
+              rules={[
+                { required: col.is_nullable !== 'YES', message: `请输入 ${col.column_name}` },
+              ]}
+            >
+              <Input placeholder={col.comment || col.data_type} />
+            </Form.Item>
+          ))}
+        </Form>
+      </Modal>
     </div>
   );
 }
@@ -832,7 +977,9 @@ interface ExplainPlanGridProps {
 export function ExplainPlanGrid({ data, isDark }: ExplainPlanGridProps) {
   if (!data || data.length === 0) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
         <Empty description="暂无执行计划数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </div>
     );

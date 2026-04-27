@@ -365,6 +365,174 @@ func (h *Handler) GetRoutines(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+// GetProcedures 获取存储过程列表（仅名称）
+func (h *Handler) GetProcedures(w http.ResponseWriter, r *http.Request) {
+	var req MetadataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result models.RoutinesResult
+	switch dbType {
+	case "mysql":
+		result, err = mysqlGetRoutines(ctx, dbConn, req.Database)
+	case "postgresql":
+		result, err = postgresGetRoutines(ctx, dbConn, req.Database)
+	case "sqlite":
+		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
+	case "dameng":
+		result, err = damengGetRoutines(ctx, dbConn, req.Database)
+	default:
+		err = fmt.Errorf("unsupported db type: %s", dbType)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	names := make([]string, len(result.Procedures))
+	for i, p := range result.Procedures {
+		names[i] = p.RoutineName
+	}
+	json.NewEncoder(w).Encode(names)
+}
+
+// GetFunctions 获取函数列表（仅名称）
+func (h *Handler) GetFunctions(w http.ResponseWriter, r *http.Request) {
+	var req MetadataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result models.RoutinesResult
+	switch dbType {
+	case "mysql":
+		result, err = mysqlGetRoutines(ctx, dbConn, req.Database)
+	case "postgresql":
+		result, err = postgresGetRoutines(ctx, dbConn, req.Database)
+	case "sqlite":
+		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
+	case "dameng":
+		result, err = damengGetRoutines(ctx, dbConn, req.Database)
+	default:
+		err = fmt.Errorf("unsupported db type: %s", dbType)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	names := make([]string, len(result.Functions))
+	for i, f := range result.Functions {
+		names[i] = f.RoutineName
+	}
+	json.NewEncoder(w).Encode(names)
+}
+
+// GetProcedureBody 获取存储过程定义
+func (h *Handler) GetProcedureBody(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ConnectionID  string `json:"connection_id"`
+		ProcedureName string `json:"procedure_name"`
+		Database      string `json:"database"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var body string
+	switch dbType {
+	case "mysql":
+		body, err = mysqlGetRoutineBody(ctx, dbConn, req.Database, req.ProcedureName, "PROCEDURE")
+	case "postgresql":
+		body, err = postgresGetRoutineBody(ctx, dbConn, req.Database, req.ProcedureName, "PROCEDURE")
+	case "dameng":
+		body, err = damengGetRoutineBody(ctx, dbConn, req.Database, req.ProcedureName, "PROCEDURE")
+	default:
+		err = fmt.Errorf("unsupported db type: %s", dbType)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"body": body})
+}
+
+// GetFunctionBody 获取函数定义
+func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ConnectionID  string `json:"connection_id"`
+		FunctionName  string `json:"function_name"`
+		Database      string `json:"database"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var body string
+	switch dbType {
+	case "mysql":
+		body, err = mysqlGetRoutineBody(ctx, dbConn, req.Database, req.FunctionName, "FUNCTION")
+	case "postgresql":
+		body, err = postgresGetRoutineBody(ctx, dbConn, req.Database, req.FunctionName, "FUNCTION")
+	case "dameng":
+		body, err = damengGetRoutineBody(ctx, dbConn, req.Database, req.FunctionName, "FUNCTION")
+	default:
+		err = fmt.Errorf("unsupported db type: %s", dbType)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"body": body})
+}
+
 // getConnAndType 获取连接和数据库类型
 func (h *Handler) getConnAndType(connectionID string) (*sql.DB, string, error) {
 	dbConn, err := h.mgr.Get(connectionID)

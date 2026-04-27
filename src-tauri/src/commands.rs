@@ -748,6 +748,116 @@ pub async fn execute_query(
     Ok(resp)
 }
 
+/// 获取存储过程列表
+#[tauri::command]
+pub async fn get_procedures(
+    connection_id: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<String>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+    });
+    let resp: Vec<String> = sm.post("/procedures", &req).await?;
+    Ok(resp)
+}
+
+/// 获取函数列表
+#[tauri::command]
+pub async fn get_functions(
+    connection_id: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<String>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+    });
+    let resp: Vec<String> = sm.post("/functions", &req).await?;
+    Ok(resp)
+}
+
+/// 获取存储过程定义
+#[tauri::command]
+pub async fn get_procedure_body(
+    connection_id: String,
+    procedure_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<String, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "procedure_name": procedure_name,
+        "database": database,
+    });
+    let resp: serde_json::Value = sm.post("/procedure-body", &req).await?;
+    let body = resp
+        .get("body")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Ok(body)
+}
+
+/// 获取函数定义
+#[tauri::command]
+pub async fn get_function_body(
+    connection_id: String,
+    function_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<String, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "function_name": function_name,
+        "database": database,
+    });
+    let resp: serde_json::Value = sm.post("/function-body", &req).await?;
+    let body = resp
+        .get("body")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Ok(body)
+}
+
 /// 获取存储过程和函数列表
 #[tauri::command]
 pub async fn get_routines(

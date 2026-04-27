@@ -105,6 +105,22 @@ export const api = {
     return await invoke('get_foreign_keys', { connectionId, tableName, database });
   },
 
+  async getProcedures(connectionId: string, database?: string): Promise<string[]> {
+    return await invoke('get_procedures', { connectionId, database });
+  },
+
+  async getFunctions(connectionId: string, database?: string): Promise<string[]> {
+    return await invoke('get_functions', { connectionId, database });
+  },
+
+  async getProcedureBody(connectionId: string, procedureName: string, database?: string): Promise<string> {
+    return await invoke('get_procedure_body', { connectionId, procedureName, database });
+  },
+
+  async getFunctionBody(connectionId: string, functionName: string, database?: string): Promise<string> {
+    return await invoke('get_function_body', { connectionId, functionName, database });
+  },
+
   async executeQuery(connectionId: string, sql: string, database?: string): Promise<QueryResult> {
     return await invoke('execute_query', { connectionId, sql, database });
   },

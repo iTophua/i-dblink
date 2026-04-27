@@ -1,4 +1,12 @@
-import React, { useRef, useCallback, useState, useMemo, useEffect, ChangeEvent, MouseEvent } from 'react';
+import React, {
+  useRef,
+  useCallback,
+  useState,
+  useMemo,
+  useEffect,
+  ChangeEvent,
+  MouseEvent,
+} from 'react';
 import { Tree, Spin, Dropdown, Badge, Modal, App, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -122,71 +130,73 @@ interface TableNodeProps {
   onNewQuery: (connId: string) => void;
 }
 
-const TableNode = React.memo<TableNodeProps>(({
-  connId,
-  database,
-  table,
-  selectedTableId,
-  onTableClick,
-  onTableOpen,
-  onContextMenu,
-  onNewQuery,
-}) => {
-  const [hovered, setHovered] = useState(false);
-  const isSelected = selectedTableId === table.table_name;
-  const backgroundColor = isSelected
-    ? 'var(--row-selected-bg)'
-    : hovered
-    ? 'var(--row-hover-bg)'
-    : 'transparent';
+const TableNode = React.memo<TableNodeProps>(
+  ({
+    connId,
+    database,
+    table,
+    selectedTableId,
+    onTableClick,
+    onTableOpen,
+    onContextMenu,
+    onNewQuery,
+  }) => {
+    const [hovered, setHovered] = useState(false);
+    const isSelected = selectedTableId === table.table_name;
+    const backgroundColor = isSelected
+      ? 'var(--row-selected-bg)'
+      : hovered
+        ? 'var(--row-hover-bg)'
+        : 'transparent';
 
-  return (
-    <Dropdown menu={onContextMenu(connId, table.table_name, database)} trigger={['contextMenu']}>
-      <span
-        style={{
-          ...TABLE_NODE_STYLE,
-          background: backgroundColor,
-          border: isSelected ? '1px solid var(--row-selected-bg)' : '1px solid transparent',
-        }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        onClick={(e) => {
-          e.stopPropagation();
-          onTableClick(table.table_name, database);
-        }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          onTableOpen(table.table_name, database);
-        }}
-      >
-        <TableOutlined style={{ color: 'var(--color-success)', fontSize: 11 }} />
-        <span style={{ fontSize: 12 }}>{table.table_name}</span>
-        {hovered && (
-          <>
-            <QuickActionButton
-              icon={<PlayCircleOutlined />}
-              tooltip="新建查询"
-              visible={hovered}
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewQuery(connId);
-              }}
-            />
-            <QuickActionButton
-              icon={<SwapOutlined style={{ fontSize: 10 }} />}
-              tooltip="查看数据"
-              visible={hovered}
-              onClick={(e) => {
-                e.stopPropagation();
-                onTableOpen(table.table_name, database);
-              }}
-            />
-          </>
-        )}
-      </span>
-    </Dropdown>
-  );
-});
+    return (
+      <Dropdown menu={onContextMenu(connId, table.table_name, database)} trigger={['contextMenu']}>
+        <span
+          style={{
+            ...TABLE_NODE_STYLE,
+            background: backgroundColor,
+            border: isSelected ? '1px solid var(--row-selected-bg)' : '1px solid transparent',
+          }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTableClick(table.table_name, database);
+          }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onTableOpen(table.table_name, database);
+          }}
+        >
+          <TableOutlined style={{ color: 'var(--color-success)', fontSize: 11 }} />
+          <span style={{ fontSize: 12 }}>{table.table_name}</span>
+          {hovered && (
+            <>
+              <QuickActionButton
+                icon={<PlayCircleOutlined />}
+                tooltip="新建查询"
+                visible={hovered}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewQuery(connId);
+                }}
+              />
+              <QuickActionButton
+                icon={<SwapOutlined style={{ fontSize: 10 }} />}
+                tooltip="查看数据"
+                visible={hovered}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTableOpen(table.table_name, database);
+                }}
+              />
+            </>
+          )}
+        </span>
+      </Dropdown>
+    );
+  }
+);
 
 interface ViewNodeProps {
   connId: string;
@@ -199,60 +209,62 @@ interface ViewNodeProps {
   onNewQuery: (connId: string) => void;
 }
 
-const ViewNode = React.memo<ViewNodeProps>(({
-  connId,
-  database,
-  view,
-  selectedTableId,
-  onTableClick,
-  onTableOpen,
-  onContextMenu,
-  onNewQuery,
-}) => {
-  const [hovered, setHovered] = useState(false);
-  const isSelected = selectedTableId === view.table_name;
-  const backgroundColor = isSelected
-    ? 'var(--row-selected-bg)'
-    : hovered
-    ? 'var(--row-hover-bg)'
-    : 'transparent';
+const ViewNode = React.memo<ViewNodeProps>(
+  ({
+    connId,
+    database,
+    view,
+    selectedTableId,
+    onTableClick,
+    onTableOpen,
+    onContextMenu,
+    onNewQuery,
+  }) => {
+    const [hovered, setHovered] = useState(false);
+    const isSelected = selectedTableId === view.table_name;
+    const backgroundColor = isSelected
+      ? 'var(--row-selected-bg)'
+      : hovered
+        ? 'var(--row-hover-bg)'
+        : 'transparent';
 
-  return (
-    <Dropdown menu={onContextMenu(connId, view.table_name, database)} trigger={['contextMenu']}>
-      <span
-        style={{
-          ...TABLE_NODE_STYLE,
-          background: backgroundColor,
-          border: isSelected ? '1px solid var(--row-selected-bg)' : '1px solid transparent',
-        }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        onClick={(e) => {
-          e.stopPropagation();
-          onTableClick(view.table_name, database);
-        }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          onTableOpen(view.table_name, database);
-        }}
-      >
-        <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 11 }} />
-        <span style={{ fontSize: 12 }}>{view.table_name}</span>
-        {hovered && (
-          <QuickActionButton
-            icon={<PlayCircleOutlined />}
-            tooltip="新建查询"
-            visible={hovered}
-            onClick={(e) => {
-              e.stopPropagation();
-              onNewQuery(connId);
-            }}
-          />
-        )}
-      </span>
-    </Dropdown>
-  );
-});
+    return (
+      <Dropdown menu={onContextMenu(connId, view.table_name, database)} trigger={['contextMenu']}>
+        <span
+          style={{
+            ...TABLE_NODE_STYLE,
+            background: backgroundColor,
+            border: isSelected ? '1px solid var(--row-selected-bg)' : '1px solid transparent',
+          }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTableClick(view.table_name, database);
+          }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onTableOpen(view.table_name, database);
+          }}
+        >
+          <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 11 }} />
+          <span style={{ fontSize: 12 }}>{view.table_name}</span>
+          {hovered && (
+            <QuickActionButton
+              icon={<PlayCircleOutlined />}
+              tooltip="新建查询"
+              visible={hovered}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewQuery(connId);
+              }}
+            />
+          )}
+        </span>
+      </Dropdown>
+    );
+  }
+);
 
 type ConnectionTreeProps = {
   connections: Connection[];
@@ -263,12 +275,22 @@ type ConnectionTreeProps = {
   onTableSelect: (table: string | null, database?: string) => void;
   onObjectTypeSelect?: (objectType: 'table' | 'view' | 'all', database?: string) => void;
   onTableOpen: (tableName: string, database?: string) => void;
+  onOpenDesigner?: (tableName: string, database?: string) => void;
   onExpand: (connectionId: string, expanded: boolean) => void;
   collapsed: boolean;
   searchText: string;
   expandedKeys: string[];
   onExpandKeys: (keys: string[]) => void;
-  connectionDatabases: Record<string, { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean }[]>;
+  connectionDatabases: Record<
+    string,
+    {
+      database: string;
+      tables: TableInfo[];
+      loaded: boolean;
+      loadFailed?: boolean;
+      routinesLoaded?: boolean;
+    }[]
+  >;
   isLoading: boolean;
   onConnect: (connectionId: string) => Promise<void> | void;
   onDisconnect: (connectionId: string) => void;
@@ -309,6 +331,7 @@ export function EnhancedConnectionTree({
   onTableSelect,
   onObjectTypeSelect,
   onTableOpen,
+  onOpenDesigner,
   onExpand,
   collapsed,
   searchText,
@@ -380,9 +403,7 @@ export function EnhancedConnectionTree({
     const q = searchText.trim().toLowerCase();
     if (!q) return connections;
     return connections.filter(
-      (conn) =>
-        conn.name.toLowerCase().includes(q) ||
-        conn.host.toLowerCase().includes(q)
+      (conn) => conn.name.toLowerCase().includes(q) || conn.host.toLowerCase().includes(q)
     );
   }, [connections, searchText]);
 
@@ -634,8 +655,10 @@ export function EnhancedConnectionTree({
         { key: 'export-csv', label: '导出 CSV' },
       ],
       onClick: ({ key }) => {
-        if (key === 'open-table' || key === 'design-table') {
+        if (key === 'open-table') {
           onTableOpen(tableName, database);
+        } else if (key === 'design-table') {
+          onOpenDesigner?.(tableName, database);
         } else if (key === 'truncate-table') {
           Modal.confirm({
             title: '确认清空表',
@@ -659,7 +682,7 @@ export function EnhancedConnectionTree({
         }
       },
     }),
-    [onTableOpen]
+    [onTableOpen, onOpenDesigner]
   );
 
   const getViewMenu = useCallback(
@@ -875,7 +898,15 @@ export function EnhancedConnectionTree({
 
     const buildTableNodes = (
       connId: string,
-      db: { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean },
+      db: {
+        database: string;
+        tables: TableInfo[];
+        loaded: boolean;
+        loadFailed?: boolean;
+        procedures?: string[];
+        functions?: string[];
+        routinesLoaded?: boolean;
+      },
       allTableItems: TableInfo[] | undefined,
       allViewItems: TableInfo[] | undefined,
       isDbExpanded: boolean
@@ -892,16 +923,22 @@ export function EnhancedConnectionTree({
       const isViewsFolderExpanded = expandedKeys.includes(viewsFolderKey);
 
       const filteredTables = searchText.trim()
-        ? tableItems.filter((t) => t.table_name.toLowerCase().includes(searchText.trim().toLowerCase()))
+        ? tableItems.filter((t) =>
+            t.table_name.toLowerCase().includes(searchText.trim().toLowerCase())
+          )
         : tableItems;
       const filteredViews = searchText.trim()
-        ? viewItems.filter((v) => v.table_name.toLowerCase().includes(searchText.trim().toLowerCase()))
+        ? viewItems.filter((v) =>
+            v.table_name.toLowerCase().includes(searchText.trim().toLowerCase())
+          )
         : viewItems;
 
       const tablesNode = {
         key: tablesFolderKey,
         title: isLoading ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}>
+          <span
+            style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}
+          >
             <Spin size="small" />
             <span>表 (加载中...)</span>
           </span>
@@ -916,7 +953,11 @@ export function EnhancedConnectionTree({
           ? [
               {
                 key: `init-tables::${connId}::${db.database}`,
-                title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>点击展开加载表...</span>,
+                title: (
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                    点击展开加载表...
+                  </span>
+                ),
                 isLeaf: true,
                 selectable: false,
               },
@@ -943,7 +984,9 @@ export function EnhancedConnectionTree({
               : [
                   {
                     key: `no-tables::${connId}::${db.database}`,
-                    title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无表</span>,
+                    title: (
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无表</span>
+                    ),
                     isLeaf: true,
                     selectable: false,
                   },
@@ -953,7 +996,15 @@ export function EnhancedConnectionTree({
       const viewsNode = {
         key: viewsFolderKey,
         title: isLoading ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)', userSelect: 'none' }}>
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              color: 'var(--text-tertiary)',
+              userSelect: 'none',
+            }}
+          >
             <Spin size="small" />
             <span>视图 (加载中...)</span>
           </span>
@@ -968,7 +1019,11 @@ export function EnhancedConnectionTree({
           ? [
               {
                 key: `init-views::${connId}::${db.database}`,
-                title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>点击展开加载视图...</span>,
+                title: (
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                    点击展开加载视图...
+                  </span>
+                ),
                 isLeaf: true,
                 selectable: false,
               },
@@ -995,51 +1050,140 @@ export function EnhancedConnectionTree({
               : [
                   {
                     key: `no-views::${connId}::${db.database}`,
-                    title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无视图</span>,
+                    title: (
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无视图</span>
+                    ),
                     isLeaf: true,
                     selectable: false,
                   },
                 ],
       };
 
+      const proceduresFolderKey = `procedures::${connId}::${db.database}`;
+      const functionsFolderKey = `functions::${connId}::${db.database}`;
+      const isProceduresFolderExpanded = expandedKeys.includes(proceduresFolderKey);
+      const isFunctionsFolderExpanded = expandedKeys.includes(functionsFolderKey);
+
       const proceduresNode = {
-        key: `procedures::${connId}::${db.database}`,
-        title: (
+        key: proceduresFolderKey,
+        title: db.routinesLoaded ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <ThunderboltOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-            存储过程
+            <span>存储过程 ({db.procedures?.length || 0})</span>
+          </span>
+        ) : isDbExpanded ? (
+          <span
+            style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}
+          >
+            <Spin size="small" />
+            <span>存储过程 (加载中...)</span>
+          </span>
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
+            <ThunderboltOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
+            <span>存储过程</span>
           </span>
         ),
-        isLeaf: true,
-        selectable: false,
-        children: [
-          {
-            key: `no-procedures::${connId}::${db.database}`,
-            title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无存储过程</span>,
-            isLeaf: true,
-            selectable: false,
-          },
-        ],
+        isLeaf: false,
+        children: !db.routinesLoaded
+          ? [
+              {
+                key: `init-procedures::${connId}::${db.database}`,
+                title: (
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                    点击展开加载...
+                  </span>
+                ),
+                isLeaf: true,
+                selectable: false,
+              },
+            ]
+          : db.procedures && db.procedures.length > 0
+            ? isProceduresFolderExpanded
+              ? db.procedures.map((proc) => ({
+                  key: `proc::${connId}::${db.database}::${proc}`,
+                  isLeaf: true,
+                  title: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <ThunderboltOutlined
+                        style={{ color: 'var(--color-warning)', fontSize: 11 }}
+                      />
+                      <span style={{ fontSize: 12 }}>{proc}</span>
+                    </span>
+                  ),
+                }))
+              : undefined
+            : [
+                {
+                  key: `no-procedures::${connId}::${db.database}`,
+                  title: (
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                      暂无存储过程
+                    </span>
+                  ),
+                  isLeaf: true,
+                  selectable: false,
+                },
+              ],
       };
 
       const functionsNode = {
-        key: `functions::${connId}::${db.database}`,
-        title: (
+        key: functionsFolderKey,
+        title: db.routinesLoaded ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
-            函数
+            <span>函数 ({db.functions?.length || 0})</span>
+          </span>
+        ) : isDbExpanded ? (
+          <span
+            style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}
+          >
+            <Spin size="small" />
+            <span>函数 (加载中...)</span>
+          </span>
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
+            <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
+            <span>函数</span>
           </span>
         ),
-        isLeaf: true,
-        selectable: false,
-        children: [
-          {
-            key: `no-functions::${connId}::${db.database}`,
-            title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无函数</span>,
-            isLeaf: true,
-            selectable: false,
-          },
-        ],
+        isLeaf: false,
+        children: !db.routinesLoaded
+          ? [
+              {
+                key: `init-functions::${connId}::${db.database}`,
+                title: (
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                    点击展开加载...
+                  </span>
+                ),
+                isLeaf: true,
+                selectable: false,
+              },
+            ]
+          : db.functions && db.functions.length > 0
+            ? isFunctionsFolderExpanded
+              ? db.functions.map((func) => ({
+                  key: `func::${connId}::${db.database}::${func}`,
+                  isLeaf: true,
+                  title: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 11 }} />
+                      <span style={{ fontSize: 12 }}>{func}</span>
+                    </span>
+                  ),
+                }))
+              : undefined
+            : [
+                {
+                  key: `no-functions::${connId}::${db.database}`,
+                  title: (
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无函数</span>
+                  ),
+                  isLeaf: true,
+                  selectable: false,
+                },
+              ],
       };
 
       const dbChildren = q
@@ -1104,17 +1248,16 @@ export function EnhancedConnectionTree({
         const tableItems = db.loaded
           ? db.tables.filter((t) => isBaseTable(t.table_type))
           : isDbExpanded
-          ? undefined
-          : [];
+            ? undefined
+            : [];
         const viewItems = db.loaded
           ? db.tables.filter((t) => isView(t.table_type))
           : isDbExpanded
-          ? undefined
-          : [];
+            ? undefined
+            : [];
 
         const tablesMatch = matchTables(tableItems || []);
         const viewsMatch = matchViews(db.tables || []);
-
 
         if (q && !dbMatch && !tablesMatch && !viewsMatch && !isDbExpanded) continue;
 
@@ -1133,9 +1276,7 @@ export function EnhancedConnectionTree({
           }}
         >
           <Dropdown menu={getConnectionMenu(conn)} trigger={['contextMenu']}>
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}
-            >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
               {getConnIcon(conn.db_type)}
               <span
                 style={{
@@ -1173,7 +1314,9 @@ export function EnhancedConnectionTree({
                 </Tooltip>
               )}
               {conn.database && (
-                <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>({conn.database})</span>
+                <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                  ({conn.database})
+                </span>
               )}
             </div>
           </Dropdown>
@@ -1191,7 +1334,11 @@ export function EnhancedConnectionTree({
               : [
                   {
                     key: `loading::${conn.id}`,
-                    title: <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无数据库</span>,
+                    title: (
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                        暂无数据库
+                      </span>
+                    ),
                     isLeaf: true,
                     selectable: false,
                   },
@@ -1392,6 +1539,34 @@ export function EnhancedConnectionTree({
         }
       }
 
+      if (key.startsWith('procedures::') && info.expanded) {
+        const parts = key.split('::');
+        if (parts.length >= 3) {
+          const connectionId = parts[1];
+          const database = parts[2];
+          const dbList = connectionDatabasesRef.current[connectionId] || [];
+          const db = dbList.find((d) => d.database === database);
+          if (db?.loadFailed) return;
+          if (!db || !db.loaded || !db.routinesLoaded) {
+            onDatabaseExpand(connectionId, database);
+          }
+        }
+      }
+
+      if (key.startsWith('functions::') && info.expanded) {
+        const parts = key.split('::');
+        if (parts.length >= 3) {
+          const connectionId = parts[1];
+          const database = parts[2];
+          const dbList = connectionDatabasesRef.current[connectionId] || [];
+          const db = dbList.find((d) => d.database === database);
+          if (db?.loadFailed) return;
+          if (!db || !db.loaded || !db.routinesLoaded) {
+            onDatabaseExpand(connectionId, database);
+          }
+        }
+      }
+
       if (key.startsWith('tables::') && info.expanded) {
         const parts = key.split('::');
         if (parts.length >= 3) {
@@ -1527,10 +1702,7 @@ export function EnhancedConnectionTree({
                   marginBottom: 4,
                   borderRadius: 6,
                   cursor: 'pointer',
-                  background:
-                    selectedId === conn.id
-                      ? 'var(--row-selected-bg)'
-                      : 'transparent',
+                  background: selectedId === conn.id ? 'var(--row-selected-bg)' : 'transparent',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1613,7 +1785,16 @@ export function EnhancedConnectionTree({
             }}
             onSelect={handleSelect}
             treeData={treeData}
-            draggable={(node) => !node.key.toString().startsWith('group-') && !node.key.toString().startsWith('db::') && !node.key.toString().startsWith('table::') && !node.key.toString().startsWith('view::') && !node.key.toString().startsWith('tables::') && !node.key.toString().startsWith('views::') && !node.key.toString().startsWith('procedures::') && !node.key.toString().startsWith('functions::')}
+            draggable={(node) =>
+              !node.key.toString().startsWith('group-') &&
+              !node.key.toString().startsWith('db::') &&
+              !node.key.toString().startsWith('table::') &&
+              !node.key.toString().startsWith('view::') &&
+              !node.key.toString().startsWith('tables::') &&
+              !node.key.toString().startsWith('views::') &&
+              !node.key.toString().startsWith('procedures::') &&
+              !node.key.toString().startsWith('functions::')
+            }
             onDrop={(info) => {
               const draggedKey = info.dragNode.key as string;
               const dropKey = info.node.key as string;
