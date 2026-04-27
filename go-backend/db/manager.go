@@ -8,10 +8,11 @@ import (
 	"time"
 )
 
-// connInfo 保存连接池及其类型
+// connInfo 保存连接池及其类型和参数
 type connInfo struct {
 	db     *sql.DB
 	dbType string
+	args   ConnectArgs // 保存连接参数以便创建带数据库的连接
 }
 
 // Manager 管理所有数据库连接池
@@ -68,7 +69,7 @@ func (m *Manager) Connect(connectionID string, req ConnectArgs) error {
 	}
 
 	m.mu.Lock()
-	m.pools[connectionID] = &connInfo{db: db, dbType: req.DbType}
+	m.pools[connectionID] = &connInfo{db: db, dbType: req.DbType, args: req}
 	m.mu.Unlock()
 
 	return nil
@@ -114,6 +115,94 @@ func (m *Manager) GetDBType(connectionID string) (string, error) {
 	}
 
 	return info.dbType, nil
+}
+
+// GetConnectArgs 获取连接的参数
+func (m *Manager) GetConnectArgs(connectionID string) (ConnectArgs, error) {
+	m.mu.RLock()
+	info, ok := m.pools[connectionID]
+	m.mu.RUnlock()
+
+	if !ok {
+		return ConnectArgs{}, fmt.Errorf("connection %s not found", connectionID)
+	}
+
+	return info.args, nil
+}
+
+// ConnectWithDatabase 建立指定数据库的连接
+func (m *Manager) ConnectWithDatabase(connectionID string, database string) error {
+	m.mu.RLock()
+	info, ok := m.pools[connectionID]
+	m.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("connection %s not found", connectionID)
+	}
+
+	key := connectionID + ":" + database
+
+	fmt.Printf("[DEBUG] ConnectWithDatabase: connectionID=%s, database=%s, key=%s\n", connectionID, database, key)
+	fmt.Printf("[DEBUG] original args.Database=%s\n", info.args.Database)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.pools[key]; exists {
+		fmt.Printf("[DEBUG] Connection already exists for key=%s\n", key)
+		return nil
+	}
+
+	dbArgs := info.args
+	dbArgs.Database = database
+	fmt.Printf("[DEBUG] Creating new connection with Database=%s\n", dbArgs.Database)
+	db, err := openDB(dbArgs)
+	if err != nil {
+		return err
+	}
+
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(time.Hour)
+	db.SetConnMaxIdleTime(time.Minute * 10)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return fmt.Errorf("ping failed: %w", err)
+	}
+
+	m.pools[key] = &connInfo{db: db, dbType: dbArgs.DbType, args: dbArgs}
+	return nil
+}
+
+// GetWithDatabase 获取指定数据库的连接，如果不存在则创建
+func (m *Manager) GetWithDatabase(connectionID string, database string) (*sql.DB, error) {
+	key := connectionID + ":" + database
+
+	m.mu.RLock()
+	info, ok := m.pools[key]
+	m.mu.RUnlock()
+
+	if ok {
+		return info.db, nil
+	}
+
+	// 连接不存在，尝试创建
+	if err := m.ConnectWithDatabase(connectionID, database); err != nil {
+		return nil, err
+	}
+
+	m.mu.RLock()
+	info, ok = m.pools[key]
+	m.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("failed to create connection for database %s", database)
+	}
+
+	return info.db, nil
 }
 
 func openDB(args ConnectArgs) (*sql.DB, error) {

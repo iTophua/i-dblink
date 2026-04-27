@@ -62,7 +62,10 @@ function buildSidecarPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), buildSidecarPlugin()],
+  plugins: [
+    react(),
+    buildSidecarPlugin(),
+  ],
   server: {
     port: 5100,
     strictPort: true,

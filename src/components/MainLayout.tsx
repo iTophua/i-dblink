@@ -8,7 +8,6 @@ import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree'
 import { TabPanel, type TabPanelRef } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
-import { LogPanel } from './LogPanel';
 import { SettingsDialog } from './SettingsDialog';
 import type { TableInfo, ColumnInfo, IndexInfo } from '../types/api';
 import type { ConnectionFormData } from './ConnectionDialog';
@@ -63,23 +62,12 @@ const getStyles = () => ({
     flexDirection: 'column' as const,
     minHeight: 0,
   },
-  tabPanelContainer: {
+tabPanelContainer: {
     flex: 1,
-    overflow: 'hidden' as const,
-    display: 'flex' as const,
-    flexDirection: 'column' as const,
     minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
   },
-  logPanelCollapsed: {
-    height: 28,
-    borderTop: '1px solid var(--border-color)',
-    background: 'var(--background-toolbar)',
-    padding: '0 16px',
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'flex-end' as const,
-  },
-  logLink: { fontSize: 12, color: 'var(--color-primary)' },
 });
 
 interface MainLayoutProps {
@@ -94,7 +82,6 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [selectedObjectType, setSelectedObjectType] = useState<'table' | 'view' | 'all'>('all');
   // 双击表时触发，用于在 TabPanel 中打开新 Tab
   const [tableToOpen, setTableToOpen] = useState<{ name: string; database?: string } | null>(null);
-  const [logPanelCollapsed, setLogPanelCollapsed] = useState(false);
   const [sqlTabCount, setSqlTabCount] = useState(0);
   const [searchText, setSearchText] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
@@ -976,19 +963,6 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
               connectionDatabases={connectionDatabases}
             />
           </div>
-
-          {/* 日志面板：仅在有 SQL 查询 Tab 时显示 */}
-          {sqlTabCount > 0 && !logPanelCollapsed && (
-            <LogPanel onCollapse={() => setLogPanelCollapsed(true)} />
-          )}
-
-          {sqlTabCount > 0 && logPanelCollapsed && (
-            <div style={styles.logPanelCollapsed}>
-              <a onClick={() => setLogPanelCollapsed(false)} style={styles.logLink}>
-                显示日志
-              </a>
-            </div>
-          )}
         </Content>
       </Layout>
 

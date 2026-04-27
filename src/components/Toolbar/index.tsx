@@ -173,15 +173,6 @@ export function Toolbar(): JSX.Element {
       >
         新建查询
       </Button>
-      <Button
-        type="text"
-        size="small"
-        icon={<PlayCircleOutlined />}
-        onClick={() => handleMenuAction('execute-query')}
-        style={buttonStyle}
-      >
-        执行
-      </Button>
     </>
   );
 

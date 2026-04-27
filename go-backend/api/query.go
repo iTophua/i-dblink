@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 	"unicode/utf8"
 
@@ -20,15 +21,31 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, err := h.mgr.Get(req.ConnectionID)
-	if err != nil {
-		writeJSONError(w, err.Error())
-		return
-	}
+	fmt.Printf("[DEBUG] Query: connectionID=%s, database=%s, sql=%s\n", req.ConnectionID, req.Database, req.SQL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	var dbConn *sql.DB
+	var err error
+
+	// 如果指定了数据库，获取或创建该数据库的连接
+	if req.Database != "" {
+		fmt.Printf("[DEBUG] GetWithDatabase: %s, %s\n", req.ConnectionID, req.Database)
+		dbConn, err = h.mgr.GetWithDatabase(req.ConnectionID, req.Database)
+		if err != nil {
+			writeJSONError(w, err.Error())
+			return
+		}
+	} else {
+		dbConn, err = h.mgr.Get(req.ConnectionID)
+		if err != nil {
+			writeJSONError(w, err.Error())
+			return
+		}
+	}
+
+	fmt.Printf("[DEBUG] dbConn=%p, Database=%s\n", dbConn, req.Database)
 	result, err := executeSQL(ctx, dbConn, req.SQL)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -42,22 +59,29 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 }
 
 func executeSQL(ctx context.Context, dbConn *sql.DB, sqlStr string) (*models.QueryResult, error) {
+	fmt.Fprintf(os.Stderr, "[DEBUG] executeSQL start: sql=%s\n", sqlStr)
+
 	rows, err := dbConn.QueryContext(ctx, sqlStr)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[DEBUG] QueryContext error: %v\n", err)
 		return nil, err
 	}
 	defer rows.Close()
+	fmt.Fprintf(os.Stderr, "[DEBUG] QueryContext success\n")
 
 	columns, err := rows.Columns()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[DEBUG] rows.Columns error: %v\n", err)
 		return nil, err
 	}
+	fmt.Fprintf(os.Stderr, "[DEBUG] columns=%v\n", columns)
 
 	result := &models.QueryResult{
 		Columns: columns,
 		Rows:    make([][]interface{}, 0),
 	}
 
+	rowCount := 0
 	for rows.Next() {
 		row := make([]interface{}, len(columns))
 		rowPtrs := make([]interface{}, len(columns))
@@ -66,6 +90,7 @@ func executeSQL(ctx context.Context, dbConn *sql.DB, sqlStr string) (*models.Que
 		}
 
 		if err := rows.Scan(rowPtrs...); err != nil {
+			fmt.Fprintf(os.Stderr, "[DEBUG] rows.Scan error at row %d: %v\n", rowCount, err)
 			return nil, err
 		}
 
@@ -75,9 +100,12 @@ func executeSQL(ctx context.Context, dbConn *sql.DB, sqlStr string) (*models.Que
 			jsonRow[i] = convertValue(v)
 		}
 		result.Rows = append(result.Rows, jsonRow)
+		rowCount++
 	}
+	fmt.Fprintf(os.Stderr, "[DEBUG] rows scanned: %d\n", rowCount)
 
 	if err := rows.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "[DEBUG] rows.Err: %v\n", err)
 		return nil, err
 	}
 
@@ -89,6 +117,7 @@ func executeSQL(ctx context.Context, dbConn *sql.DB, sqlStr string) (*models.Que
 		result.RowsAffected = nil
 	}
 
+	fmt.Fprintf(os.Stderr, "[DEBUG] executeSQL end\n")
 	return result, nil
 }
 

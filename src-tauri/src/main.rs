@@ -301,9 +301,29 @@ fn main() {
 
                 match result {
                     Ok(Ok(sidecar)) => {
-                        tracing::info!("Go sidecar started successfully");
-                        let mut guard = sidecar_state_clone.lock().await;
-                        *guard = Some(sidecar);
+                        // readiness probe：确认 HTTP 服务真正就绪
+                        let mut healthy = false;
+                        for i in 0..30 {
+                            match sidecar.health_check().await {
+                                Ok(()) => {
+                                    tracing::info!("Go sidecar health check passed on attempt {}", i + 1);
+                                    healthy = true;
+                                    break;
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Go sidecar health check attempt {} failed: {}", i + 1, e);
+                                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                }
+                            }
+                        }
+
+                        if healthy {
+                            tracing::info!("Go sidecar started successfully and is ready");
+                            let mut guard = sidecar_state_clone.lock().await;
+                            *guard = Some(sidecar);
+                        } else {
+                            tracing::error!("Go sidecar started but failed health checks. Sidecar features will be unavailable.");
+                        }
                     }
                     Ok(Err(e)) => {
                         tracing::error!("Failed to start Go sidecar: {}. Sidecar features will be unavailable.", e);

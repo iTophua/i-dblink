@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, Form, InputNumber, Select, Button, Space, Tag, Tooltip, Switch, Menu } from 'antd';
+import { Modal, Form, InputNumber, Select, Button, Space, Tag, Tooltip, Switch, Menu, Input, message, type InputRef } from 'antd';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
 import { ThemePreset, THEME_PRESETS_LIST } from '../styles/theme';
+import { MENU_SHORTCUTS, isMacOS } from '../constants/menuShortcuts';
 
 interface SettingsDialogProps {
   open: boolean;
   onCancel: () => void;
 }
 
-type SettingsTab = 'general' | 'appearance' | 'language';
+type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts';
 
 const THEME_PREVIEW_COLORS: Record<ThemePreset, { light: string; dark: string }> = {
   neonCyber: { light: '#00f5ff', dark: '#00f5ff' },
@@ -21,6 +22,7 @@ const MENU_ITEMS = [
   { key: 'general', label: '通用设置' },
   { key: 'appearance', label: '外观与主题' },
   { key: 'language', label: '语言设置' },
+  { key: 'shortcuts', label: '快捷键设置' },
 ];
 
 export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
@@ -92,10 +94,11 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       title="设置"
       open={open}
       onCancel={onCancel}
-      width={720}
+      width={900}
       forceRender
       transitionName=""
       maskTransitionName=""
+      styles={{ body: { maxHeight: 'calc(100vh - 200px)', overflow: 'hidden', padding: 0 } }}
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <Button onClick={handleReset}>恢复默认</Button>
@@ -110,14 +113,15 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
         </div>
       }
     >
-      <div style={{ display: 'flex', marginTop: 16 }}>
+      <div style={{ display: 'flex', height: '100%' }}>
         <div
           style={{
             width: 140,
             flexShrink: 0,
-            background: 'var(--background-card)',
+            background: 'var(--background-toolbar)',
             borderRight: '1px solid var(--border-color)',
             padding: '8px 0',
+            overflowY: 'auto',
           }}
         >
           <Menu
@@ -136,7 +140,9 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
             flex: 1,
             background: 'var(--background-card)',
             padding: '16px 24px',
-            minHeight: 300,
+            minHeight: 400,
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto',
           }}
         >
           <Form
@@ -244,9 +250,167 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                 </Form.Item>
               </div>
             )}
+
+            {activeTab === 'shortcuts' && (
+              <ShortcutsSettings />
+            )}
           </Form>
         </div>
       </div>
     </Modal>
+  );
+}
+
+function ShortcutsSettings() {
+  const settings = useSettingsStore((s) => s.settings);
+  const updateSettings = useSettingsStore((s) => s.updateSettings);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [inputValue, setInputValue] = useState('');
+  const [messageApi, contextHolder] = message.useMessage();
+  const isMac = isMacOS();
+
+  const shortcuts = settings.shortcuts || {};
+
+  const handleShortcutClick = (shortcutId: string) => {
+    setEditingKey(shortcutId);
+    const current = shortcuts[shortcutId] || MENU_SHORTCUTS.find(s => s.id === shortcutId)?.keys || '';
+    setInputValue(current);
+  };
+
+  const handleShortcutSave = () => {
+    if (editingKey) {
+      const newShortcuts = { ...shortcuts };
+      if (inputValue) {
+        newShortcuts[editingKey] = inputValue;
+      } else {
+        delete newShortcuts[editingKey];
+      }
+      updateSettings({ shortcuts: newShortcuts });
+      messageApi.success('快捷键已保存');
+    }
+    setEditingKey(null);
+    setInputValue('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const keys: string[] = [];
+    if (e.metaKey || e.ctrlKey) keys.push('mod');
+    if (e.altKey) keys.push('alt');
+    if (e.shiftKey) keys.push('shift');
+    if (!['Control', 'Meta', 'Alt', 'Shift'].includes(e.key)) {
+      keys.push(e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase());
+    }
+    if (keys.length > 0) {
+      setInputValue(keys.join('+'));
+    }
+  };
+
+  const handleCancel = () => {
+    setEditingKey(null);
+    setInputValue('');
+  };
+
+  const getDisplayKeys = (shortcutId: string) => {
+    const custom = shortcuts[shortcutId];
+    if (custom) {
+      return custom.replace('mod+', isMac ? '⌘' : 'Ctrl+')
+        .replace('shift+', '⇧')
+        .replace('alt+', isMac ? '⌥' : 'Alt+')
+        .replace('enter', '↵')
+        .toUpperCase();
+    }
+    const defaultShortcut = MENU_SHORTCUTS.find(s => s.id === shortcutId);
+    if (!defaultShortcut) return '';
+    const keys = isMac && defaultShortcut.macKeys ? defaultShortcut.macKeys : defaultShortcut.keys;
+    return keys.replace('mod+', isMac ? '⌘' : 'Ctrl+')
+      .replace('shift+', '⇧')
+      .replace('alt+', isMac ? '⌥' : 'Alt+')
+      .replace('enter', '↵')
+      .toUpperCase();
+  };
+
+  const categories = useMemo(() => {
+    const cats: Record<string, typeof MENU_SHORTCUTS> = {};
+    MENU_SHORTCUTS.forEach(s => {
+      if (!cats[s.category]) cats[s.category] = [];
+      cats[s.category].push(s);
+    });
+    return cats;
+  }, []);
+
+  const categoryNames: Record<string, string> = {
+    file: '文件操作',
+    edit: '编辑操作',
+    view: '查看操作',
+    connection: '连接操作',
+    tools: '工具操作',
+    window: '窗口操作',
+    help: '帮助操作',
+  };
+
+  return (
+    <div>
+      {contextHolder}
+      <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12 }}>
+        点击快捷键进行修改。修改后自动生效，无需保存。
+      </div>
+      {Object.entries(categories).map(([category, shortcuts]) => (
+        <div key={category} style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>
+            {categoryNames[category] || category}
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {shortcuts.map(shortcut => (
+              <div
+                key={shortcut.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '8px 12px',
+                  background: 'var(--background-toolbar)',
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span style={{ fontSize: 13 }}>{shortcut.description}</span>
+                {editingKey === shortcut.id ? (
+                  <Space size="small">
+                    <Input
+                      size="small"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      style={{ width: 140, fontFamily: 'monospace', fontSize: 12 }}
+                      autoFocus
+                      placeholder="按下组合键"
+                    />
+                    <Button size="small" type="primary" onClick={handleShortcutSave}>
+                      确定
+                    </Button>
+                    <Button size="small" onClick={handleCancel}>
+                      取消
+                    </Button>
+                  </Space>
+                ) : (
+                  <Tag
+                    style={{
+                      cursor: 'pointer',
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      padding: '2px 8px',
+                    }}
+                    onClick={() => handleShortcutClick(shortcut.id)}
+                  >
+                    {getDisplayKeys(shortcut.id)}
+                  </Tag>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

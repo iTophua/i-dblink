@@ -725,7 +725,7 @@ pub async fn get_foreign_keys(
 pub async fn execute_query(
     connection_id: String,
     sql: String,
-    _database: Option<String>,
+    database: Option<String>,
     state: State<'_, Mutex<Option<Storage>>>,
     connections: State<'_, RwLock<ActiveConnections>>,
     sidecar: State<'_, SidecarState>,
@@ -737,10 +737,13 @@ pub async fn execute_query(
 
     ensure_connected(&connection_id, &state, &connections, sm).await?;
 
-    let req = serde_json::json!({
-        "connection_id": connection_id,
-        "sql": sql,
-    });
+    let mut req_map = serde_json::Map::new();
+    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert("sql".to_string(), serde_json::json!(sql));
+    if let Some(db) = database {
+        req_map.insert("database".to_string(), serde_json::json!(db));
+    }
+    let req = serde_json::Value::Object(req_map);
     let resp: QueryResult = sm.post("/query", &req).await?;
     Ok(resp)
 }

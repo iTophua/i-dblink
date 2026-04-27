@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
-import { Button, Space, App, Tabs, Tag, Tooltip, Dropdown, Empty, Spin, Table, Drawer, Select } from 'antd';
+import { AgGridReact } from 'ag-grid-react';
+
+import { Button, Space, App, Tabs, TabsProps, Tag, Tooltip, Dropdown, Empty, Spin, Drawer, Select } from 'antd';
 import {
   PlayCircleOutlined,
   SaveOutlined,
@@ -25,7 +27,10 @@ import { useThemeColors } from '../hooks/useThemeColors';
 import { getShortcutDisplayText } from '../hooks/useMenuShortcuts';
 import { useAppStore } from '../stores/appStore';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
+import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
 import type { QueryResult, DatabaseType } from '../types/api';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;
@@ -328,9 +333,9 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
   }, [connections, connectionId]);
   const [sql, setSql] = useState(defaultQuery || '');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<QueryResult | null>(null);
+  const [result, setResult] = useState<QueryResultWithTiming | null>(null);
   const [results, setResults] = useState<QueryResultWithTiming[]>([]);
-  const [activeTab, setActiveTab] = useState<'result' | 'results' | 'messages' | 'explain'>('result');
+  const [activeTab, setActiveTab] = useState<'result' | 'messages' | 'explain'>('result');
   const [messages, setMessages] = useState<string[]>([]);
   const [explainPlan, setExplainPlan] = useState<any[]>([]);
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
@@ -339,6 +344,33 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
   const abortControllerRef = useRef<AbortController | null>(null);
   const schemaRef = useRef<{ tables: Map<string, string[]>; views: Map<string, string[]> } | null>(null);
   const monacoRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 可拖拽调整编辑器/结果面板高度
+  const [editorRatio, setEditorRatio] = useState(0.6); // 默认编辑器占 60%
+  const isResizingRef = useRef(false);
+
+  // 是否有查询结果需要展示（决定结果面板是否显示）
+  const hasResult = result !== null || results.length > 0 || loading || explainPlan.length > 0;
+
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!isResizingRef.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const newRatio = (e.clientY - rect.top) / rect.height;
+    setEditorRatio(Math.max(0.15, Math.min(0.85, newRatio)));
+  }, []);
+
+  const handleResizeEnd = useCallback(() => {
+    isResizingRef.current = false;
+    document.removeEventListener('mousemove', handleResizeMove);
+    document.removeEventListener('mouseup', handleResizeEnd);
+  }, [handleResizeMove]);
+
+  const handleResizeStart = useCallback(() => {
+    isResizingRef.current = true;
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+  }, [handleResizeMove, handleResizeEnd]);
   
   // 缓存预生成的补全建议，避免每次按键都重建对象
   const completionCacheRef = useRef<{
@@ -357,6 +389,17 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
   const tc = useThemeColors();
 
   const { executeQuery: executeQueryApi, getTables, getColumns } = useDatabase();
+
+  // 监听 tab-action 事件（来自菜单或工具栏的快捷键）
+  useEffect(() => {
+    const handleTabAction = () => {
+      handleExecuteQueryRef.current();
+    };
+    window.addEventListener('tab-action', handleTabAction as EventListener);
+    return () => {
+      window.removeEventListener('tab-action', handleTabAction as EventListener);
+    };
+  }, []);
 
   // 获取 schema 数据用于补全，并预生成缓存的 suggestions
   const fetchSchema = useCallback(async () => {
@@ -654,11 +697,17 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
       return;
     }
 
+    if (!database) {
+      message.warning('请先选择一个数据库');
+      return;
+    }
+
     try {
       setLoading(true);
       setMessages([]);
       setResult(null);
       setResults([]);
+      setExplainPlan([]);
       abortControllerRef.current = new AbortController();
 
       // 检测是否多语句（按分号分割，忽略字符串内的分号）
@@ -708,7 +757,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
 
         if (totalErrors === 0) {
           message.success(`全部执行成功：${totalSuccess} 条语句`);
-          setActiveTab('results');
+          setActiveTab('result');
         } else {
           message.error(`部分执行失败：${totalSuccess} 成功，${totalErrors} 失败`);
           setActiveTab('messages');
@@ -723,8 +772,9 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
           setMessages([`✗ 错误：${queryResult.error}`]);
           setActiveTab('messages');
           message.error(`SQL 执行失败：${queryResult.error}`);
+          setResult({ ...queryResult, executionTime });
         } else {
-          setResult(queryResult);
+          setResult({ ...queryResult, executionTime });
           const rowCount = queryResult.rows.length;
           const affectedRows = queryResult.rows_affected || 0;
 
@@ -822,6 +872,7 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
     setResult(null);
     setMessages([]);
     setExplainPlan([]);
+    setActiveTab('result');
     message.success('编辑器已清空');
   }, []);
 
@@ -842,17 +893,27 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
   }, [sql]);
 
   const exportResult = useCallback(() => {
-    if (!result || result.rows.length === 0) {
+    const targetResult = result || (results.length > 0 ? results[0] : null);
+    if (!targetResult || targetResult.rows.length === 0) {
       message.warning('没有可导出的数据');
       return;
     }
 
+    const escapeCsv = (value: unknown): string => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
     const csv = [
-      result.columns.join(','),
-      ...result.rows.map(row => row.join(','))
+      targetResult.columns.map(escapeCsv).join(','),
+      ...targetResult.rows.map(row => row.map(escapeCsv).join(','))
     ].join('\n');
 
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -860,105 +921,152 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
     a.click();
     URL.revokeObjectURL(url);
     message.success('结果已导出为 CSV');
-  }, [result]);
+  }, [result, results]);
 
-  // 渲染单个结果集的表格
-  const renderResultTable = useCallback((queryResult: QueryResult) => {
-    if (queryResult.error) {
-      return (
-        <Empty description={`错误：${queryResult.error}`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      );
-    }
-    
-    if (queryResult.rows.length === 0) {
-      return (
-        <Empty description="查询成功，但没有返回数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      );
-    }
-    
-    const columns = queryResult.columns.map((col, i) => ({
-      title: col,
-      dataIndex: i,
-      key: col,
-      width: 120,
-      ellipsis: true,
-      render: (val: any) => val === null || val === undefined ? <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>NULL</span> : String(val),
-    }));
-    
-    const dataSource = queryResult.rows.map((row, i) => {
-      const obj: any = { key: i };
-      row.forEach((cell, j) => {
-        obj[j] = cell;
-      });
-      return obj;
-    });
-    
+  // 渲染单个结果集的表格（AG Grid）
+  const renderResultTable = useCallback((queryResult: QueryResultWithTiming) => {
     return (
-      <Table
-        columns={columns}
-        dataSource={dataSource}
-        size="small"
-        pagination={{ pageSize: 100, showSizeChanger: true, showTotal: (total) => `共 ${total} 行` }}
-        scroll={{ x: 'max-content', y: 300 }}
-        style={{ fontSize: 12 }}
+      <ResultGrid
+        queryResult={queryResult}
+        isDark={tc.isDark}
+        executionTime={queryResult.executionTime}
+        connectionId={connectionId || undefined}
+        database={database}
+        originalSql={sql}
+        dbType={dbType}
       />
     );
-  }, []);
+  }, [tc.isDark, connectionId, database, sql, dbType]);
 
   // 渲染单结果（用于 result 标签）
   const renderSingleResult = useMemo(() => (
-    <div style={{ height: '100%', overflow: 'auto', padding: '0 16px' }}>
+    <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
           <Spin size="large" tip="执行中..." />
         </div>
       ) : !connectionId ? (
-        <Empty description="请先选择一个数据库连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Empty description="请先选择一个数据库连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        </div>
       ) : !result ? (
-        <Empty description="暂无查询结果" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      ) : result.error ? (
-        <Empty description={`错误：${result.error}`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      ) : result.rows.length === 0 ? (
-        <Empty description="查询成功，但没有返回数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Empty description="暂无查询结果" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead>
-            <tr style={{ background: 'var(--header-bg)', position: 'sticky', top: 0, zIndex: 1 }}>
-              {result.columns.map((col, i) => (
-                <th key={i} style={{ padding: '4px 8px', textAlign: 'left', borderBottom: '2px solid var(--border)', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {result.rows.map((row, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? 'var(--background-card)' : 'var(--row-stripe-bg)' }}>
-                {row.map((cell, j) => (
-                  <td key={j} style={{ padding: '3px 8px', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                    {cell === null || cell === undefined ? (
-                      <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>NULL</span>
-                    ) : (
-                      String(cell)
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ResultGrid
+          queryResult={result}
+          isDark={tc.isDark}
+          executionTime={result.executionTime}
+          connectionId={connectionId || undefined}
+          database={database}
+          originalSql={sql}
+          dbType={dbType}
+        />
       )}
     </div>
-  ), [loading, connectionId, result, tc.isDark]);
+  ), [loading, connectionId, database, sql, dbType, result, tc.isDark]);
+
+  // 结果面板 Tab items
+  const resultTabItems = useMemo<NonNullable<TabsProps['items']>>(() => {
+    const items: NonNullable<TabsProps['items']> = [];
+
+    const resultLabel = results.length > 1
+      ? `结果 (${results.length})`
+      : result
+        ? `结果 (${result.rows.length} 行)`
+        : '结果';
+
+    items.push({
+      key: 'result',
+      label: resultLabel,
+      children: (
+        <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {results.length > 1 ? (
+            <Tabs
+              type="card"
+              size="small"
+              style={{ padding: '0 8px' }}
+              items={results.map((r, i) => ({
+                key: `result-${i}`,
+                label: `结果 ${i + 1} (${r.rows.length} 行)${r.executionTime ? ` · ${r.executionTime}ms` : ''}`,
+                children: renderResultTable(r),
+              }))}
+            />
+          ) : (
+            renderSingleResult
+          )}
+        </div>
+      ),
+    });
+
+    items.push({
+      key: 'messages',
+      label: `消息 (${messages.length})`,
+      children: (
+        <div style={{ padding: 12, overflow: 'auto', height: '100%', background: 'var(--background-card)' }}>
+          {messages.length === 0 ? (
+            <Empty description="暂无消息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            messages.map((msg, i) => (
+              <div
+                key={i}
+                style={{
+                  fontSize: 13,
+                  marginBottom: 6,
+                  fontFamily: 'monospace',
+                  lineHeight: 1.6,
+                  wordBreak: 'break-all',
+                }}
+              >
+                {msg.startsWith('✗') ? (
+                  <span style={{ color: 'var(--color-error)' }}>{msg}</span>
+                ) : msg.startsWith('⚠') ? (
+                  <span style={{ color: 'var(--color-warning)' }}>{msg}</span>
+                ) : (
+                  <span style={{ color: 'var(--color-success)' }}>{msg}</span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      ),
+    });
+
+    if (explainPlan.length > 0) {
+      items.push({
+        key: 'explain',
+        label: '执行计划',
+        children: (
+          <div style={{ height: '100%', overflow: 'hidden' }}>
+            <ExplainPlanGrid data={explainPlan} isDark={tc.isDark} />
+          </div>
+        ),
+      });
+    }
+
+    return items;
+  }, [results, result, messages, explainPlan, tc.isDark, renderResultTable, renderSingleResult]);
+
+  // 当 Tab items 变化导致当前 activeTab 失效时，自动切换到第一个可用 Tab
+  useEffect(() => {
+    const validKeys = resultTabItems.map((item) => item!.key);
+    if (!validKeys.includes(activeTab)) {
+      setActiveTab('result');
+    }
+  }, [resultTabItems, activeTab]);
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      height: '100%',
-      minHeight: 0,
-      background: 'var(--background-card)'
-    }}>
+    <div
+      ref={containerRef}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        background: 'var(--background-card)',
+      }}
+    >
       <div style={{ 
         padding: '4px 8px', 
         borderBottom: '1px solid var(--border)',
@@ -1096,14 +1204,16 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
         </Space>
       </div>
 
-      <div style={{ 
-        flex: '2 1 0',
-        minHeight: 150,
-        borderBottom: '1px solid var(--border)',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
+      {/* 编辑器区域 — 无结果时占满，有结果时按 editorRatio 分配 */}
+      <div
+        style={{
+          flex: hasResult ? `0 0 calc(${editorRatio * 100}% - 2px)` : 1,
+          minHeight: hasResult ? 120 : 0,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         <Editor
           height="100%"
           language="sql"
@@ -1135,23 +1245,53 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
         />
       </div>
 
-      <div style={{ flex: '1 1 0', minHeight: 150, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {results.length > 1 ? (
+      {/* 拖拽调整条 — 仅在有结果时显示 */}
+      {hasResult && (
+        <div
+          onMouseDown={handleResizeStart}
+          style={{
+            flex: '0 0 4px',
+            background: 'var(--border)',
+            cursor: 'row-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.2s',
+            userSelect: 'none',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLDivElement).style.background = 'var(--color-primary)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLDivElement).style.background = 'var(--border)';
+          }}
+        >
+          <div
+            style={{
+              width: 24,
+              height: 2,
+              borderRadius: 1,
+              background: 'var(--text-tertiary)',
+              opacity: 0.5,
+            }}
+          />
+        </div>
+      )}
+
+      {/* 结果面板区域 — 仅在有结果时显示 */}
+      {hasResult && (
+        <div style={{ flex: 1, minHeight: 120, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Tabs
             type="card"
             size="small"
+            activeKey={activeTab}
+            onChange={(key) => setActiveTab(key as typeof activeTab)}
             style={{ background: 'var(--background-card)', padding: '0 8px' }}
-            items={results.map((r, i) => ({
-              key: `result-${i}`,
-              label: `结果 ${i + 1} (${r.rows.length} 行) ${r.executionTime ? `${r.executionTime}ms` : ''}`,
-              children: renderResultTable(r),
-            }))}
+            items={resultTabItems}
           />
-        ) : (
-          renderSingleResult
-        )}
-      </div>
-      
+        </div>
+      )}
+
       {/* 查询历史抽屉 */}
       <Drawer
         title="查询历史"
@@ -1172,3 +1312,5 @@ export function SQLEditor({ connectionId, database, defaultQuery, availableDatab
     </div>
   );
 }
+
+// 组件已抽取到 ./SQLEditor/ResultGrid.tsx

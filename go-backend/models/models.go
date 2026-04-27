@@ -108,6 +108,7 @@ type GenericResponse struct {
 // QueryRequest 查询请求
 type QueryRequest struct {
 	ConnectionID string `json:"connection_id"`
+	Database     string `json:"database,omitempty"`
 	SQL          string `json:"sql"`
 }
 

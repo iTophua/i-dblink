@@ -247,6 +247,7 @@ function TableListComponent({
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(getInitialViewMode);
   const [localLoading, setLocalLoading] = useState(false);
   const tc = useThemeColors();
+  const { message } = App.useApp();
 
   const tableDataCache = useAppStore((state) => state.tableDataCache);
   const { getTables } = useDatabase();
