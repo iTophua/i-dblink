@@ -31,12 +31,13 @@ go-backend/*.exe
 
 # Certificates (Tauri dev generates these)
 *.pem
+.cargo
 
 # Editor directories and files
 .vscode/*
-!.vscode/extensions.json
 .idea
 .qwen
+.lingma
 .DS_Store
 *.suo
 *.ntvs*
