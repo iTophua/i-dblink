@@ -21,6 +21,8 @@ import { TableList } from '../TableList';
 import { TableStructure } from '../TableStructure';
 import { TableDesigner } from '../TableDesigner';
 import type { TableInfo } from '../../types/api';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { api } from '../../api';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
@@ -32,6 +34,8 @@ interface TabPanelProps {
   tableToOpen?: { name: string; database?: string } | null;
   /** 当有 SQL 查询 Tab 打开时回调，用于控制日志面板显示 */
   onSqlTabCountChange?: (count: number) => void;
+  /** 活跃 Tab 变化时回调 */
+  onActiveTabChange?: (info: ActiveTabInfo) => void;
   /** 分页大小 */
   pageSize?: number;
   /** 当前连接的数据库列表 */
@@ -54,6 +58,7 @@ interface OpenedSqlTab {
   title: string;
   connectionId?: string;
   database?: string;
+  defaultQuery?: string;
 }
 
 interface OpenedDesignerTab {
@@ -65,14 +70,24 @@ interface OpenedDesignerTab {
   isNewTable?: boolean;
 }
 
+export interface ActiveTabInfo {
+  type: 'objects' | 'data' | 'sql' | 'designer';
+  title: string;
+  connectionId?: string;
+  database?: string;
+  tableName?: string;
+}
+
 export interface TabPanelRef {
   openDesignerTab: (tableName?: string) => void;
+  openSqlTab: (options: { connectionId?: string; database?: string; title?: string; defaultQuery?: string }) => void;
   hasConnectionTabs: (connectionId: string) => boolean;
   hasDatabaseTabs: (connectionId: string, database: string) => boolean;
   closeConnectionTabs: (connectionId: string) => void;
   closeDatabaseTabs: (connectionId: string, database: string) => void;
   getConnectionTabInfo: (connectionId: string) => { dataTabCount: number; sqlTabCount: number };
   getDatabaseTabInfo: (connectionId: string, database: string) => { dataTabCount: number };
+  getActiveTabInfo: () => ActiveTabInfo;
 }
 
 export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanelInner(
@@ -84,6 +99,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     selectedObjectType = 'all',
     tableToOpen,
     onSqlTabCountChange,
+    onActiveTabChange,
     pageSize,
     connectionDatabases,
   },
@@ -97,10 +113,71 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   // 表设计器 Tab 列表
   const [openedDesignerTabs, setOpenedDesignerTabs] = useState<OpenedDesignerTab[]>([]);
   const [activeKey, setActiveKey] = useState('objects');
+  const isRestoredRef = useRef(false);
+
+  // 从 workspaceStore 恢复工作区
+  useEffect(() => {
+    if (isRestoredRef.current) return;
+    const ws = useWorkspaceStore.getState();
+    if (
+      ws.openedTables.length > 0 ||
+      ws.openedSqlTabs.length > 0 ||
+      ws.openedDesignerTabs.length > 0
+    ) {
+      // 重新生成 SQL Tab 的 key 避免时间戳冲突
+      const restoredSqlTabs = ws.openedSqlTabs.map((t) => ({
+        ...t,
+        key: `sql-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      }));
+      setOpenedTables(ws.openedTables.map((t) => ({ ...t, isDirty: false })));
+      setOpenedSqlTabs(restoredSqlTabs);
+      setOpenedDesignerTabs(ws.openedDesignerTabs);
+      // 只有当 activeKey 对应的 tab 存在时才激活，否则默认 objects
+      const validKeys = new Set([
+        'objects',
+        ...ws.openedTables.map((t) => {
+          const base = t.database ? `${t.name}@${t.database}` : t.name;
+          return `${base}-data`;
+        }),
+        ...restoredSqlTabs.map((t) => t.key),
+        ...ws.openedDesignerTabs.map((t) => t.key),
+      ]);
+      setActiveKey(validKeys.has(ws.activeKey) ? ws.activeKey : 'objects');
+    }
+    isRestoredRef.current = true;
+  }, []);
+
+  // 保存工作区到 store（debounced）
+  useEffect(() => {
+    if (!isRestoredRef.current) return;
+    const timer = setTimeout(() => {
+      useWorkspaceStore.getState().updateWorkspace({
+        openedTables: openedTables.map(({ isDirty, ...rest }) => rest),
+        openedSqlTabs,
+        openedDesignerTabs,
+        activeKey,
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [openedTables, openedSqlTabs, openedDesignerTabs, activeKey]);
 
   useImperativeHandle(ref, () => ({
     openDesignerTab: (tableName?: string) => {
       openDesignerTab(tableName);
+    },
+    openSqlTab: (options: { connectionId?: string; database?: string; title?: string; defaultQuery?: string }) => {
+      const newSqlKey = `sql-${Date.now()}`;
+      setOpenedSqlTabs((prev) => [
+        ...prev,
+        {
+          key: newSqlKey,
+          title: options.title || 'SQL 查询',
+          connectionId: options.connectionId,
+          database: options.database,
+          defaultQuery: options.defaultQuery,
+        },
+      ]);
+      setActiveKey(newSqlKey);
     },
     hasConnectionTabs: (connectionId: string) => {
       const hasDataTabs = openedTables.some((t) => t.connectionId === connectionId);
@@ -158,12 +235,102 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         (t) => t.connectionId === connectionId && t.database === database
       ).length,
     }),
+    getActiveTabInfo: () => {
+      if (activeKey === 'objects') {
+        return { type: 'objects' as const, title: '对象列表' };
+      }
+      if (activeKey.endsWith('-data')) {
+        const table = openedTables.find((t) => {
+          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
+          return `${baseKey}-data` === activeKey;
+        });
+        if (table) {
+          return {
+            type: 'data' as const,
+            title: table.name,
+            connectionId: table.connectionId,
+            database: table.database,
+            tableName: table.name,
+          };
+        }
+      }
+      if (activeKey.endsWith('-designer')) {
+        const designer = openedDesignerTabs.find((t) => t.key === activeKey);
+        if (designer) {
+          return {
+            type: 'designer' as const,
+            title: designer.tableName ? `设计: ${designer.tableName}` : '新建表',
+            connectionId: designer.connectionId,
+            database: designer.database,
+            tableName: designer.tableName,
+          };
+        }
+      }
+      const sqlTab = openedSqlTabs.find((t) => t.key === activeKey);
+      if (sqlTab) {
+        return {
+          type: 'sql' as const,
+          title: sqlTab.title,
+          connectionId: sqlTab.connectionId,
+          database: sqlTab.database,
+        };
+      }
+      return { type: 'objects' as const, title: '对象列表' };
+    },
   }));
 
   // 通知父组件 SQL Tab 数量变化
   useEffect(() => {
     onSqlTabCountChange?.(openedSqlTabs.length);
   }, [openedSqlTabs.length, onSqlTabCountChange]);
+
+  // 活跃 Tab 变化时通知父组件
+  useEffect(() => {
+    if (!onActiveTabChange) return;
+    const info = (() => {
+      if (activeKey === 'objects') {
+        return { type: 'objects' as const, title: '对象列表' };
+      }
+      if (activeKey.endsWith('-data')) {
+        const table = openedTables.find((t) => {
+          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
+          return `${baseKey}-data` === activeKey;
+        });
+        if (table) {
+          return {
+            type: 'data' as const,
+            title: table.name,
+            connectionId: table.connectionId,
+            database: table.database,
+            tableName: table.name,
+          };
+        }
+      }
+      if (activeKey.endsWith('-designer')) {
+        const designer = openedDesignerTabs.find((t) => t.key === activeKey);
+        if (designer) {
+          return {
+            type: 'designer' as const,
+            title: designer.tableName ? `设计: ${designer.tableName}` : '新建表',
+            connectionId: designer.connectionId,
+            database: designer.database,
+            tableName: designer.tableName,
+          };
+        }
+      }
+      const sqlTab = openedSqlTabs.find((t) => t.key === activeKey);
+      if (sqlTab) {
+        return {
+          type: 'sql' as const,
+          title: sqlTab.title,
+          connectionId: sqlTab.connectionId,
+          database: sqlTab.database,
+        };
+      }
+      return { type: 'objects' as const, title: '对象列表' };
+    })();
+    onActiveTabChange(info);
+  }, [activeKey, openedTables, openedSqlTabs, openedDesignerTabs, onActiveTabChange]);
 
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{
@@ -174,6 +341,104 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   }>({ visible: false, x: 0, y: 0, tabKey: '' });
 
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // 标签页拖拽排序
+  const dragKeyRef = useRef<string | null>(null);
+
+  const getTabCategory = (key: string): 'data' | 'sql' | 'designer' | 'fixed' => {
+    if (key === 'objects') return 'fixed';
+    if (key.endsWith('-data')) return 'data';
+    if (key.startsWith('sql-')) return 'sql';
+    if (key.startsWith('designer-')) return 'designer';
+    return 'fixed';
+  };
+
+  const handleDragStart = (key: string) => {
+    dragKeyRef.current = key;
+  };
+
+  const handleDragOver = (e: React.DragEvent, key: string) => {
+    e.preventDefault();
+    const sourceCat = getTabCategory(dragKeyRef.current || '');
+    const targetCat = getTabCategory(key);
+    if (sourceCat !== 'fixed' && sourceCat === targetCat) {
+      e.dataTransfer.dropEffect = 'move';
+    } else {
+      e.dataTransfer.dropEffect = 'none';
+    }
+  };
+
+  const handleDrop = (targetKey: string) => {
+    const sourceKey = dragKeyRef.current;
+    dragKeyRef.current = null;
+    if (!sourceKey || sourceKey === targetKey) return;
+    const sourceCat = getTabCategory(sourceKey);
+    const targetCat = getTabCategory(targetKey);
+    if (sourceCat === 'fixed' || sourceCat !== targetCat) return;
+
+    if (sourceCat === 'data') {
+      setOpenedTables((prev) => {
+        const sourceIndex = prev.findIndex((t) => {
+          const k = t.database ? `${t.name}@${t.database}` : t.name;
+          return `${k}-data` === sourceKey;
+        });
+        const targetIndex = prev.findIndex((t) => {
+          const k = t.database ? `${t.name}@${t.database}` : t.name;
+          return `${k}-data` === targetKey;
+        });
+        if (sourceIndex === -1 || targetIndex === -1) return prev;
+        const next = [...prev];
+        const [removed] = next.splice(sourceIndex, 1);
+        next.splice(targetIndex, 0, removed);
+        return next;
+      });
+    } else if (sourceCat === 'sql') {
+      setOpenedSqlTabs((prev) => {
+        const sourceIndex = prev.findIndex((t) => t.key === sourceKey);
+        const targetIndex = prev.findIndex((t) => t.key === targetKey);
+        if (sourceIndex === -1 || targetIndex === -1) return prev;
+        const next = [...prev];
+        const [removed] = next.splice(sourceIndex, 1);
+        next.splice(targetIndex, 0, removed);
+        return next;
+      });
+    } else if (sourceCat === 'designer') {
+      setOpenedDesignerTabs((prev) => {
+        const sourceIndex = prev.findIndex((t) => t.key === sourceKey);
+        const targetIndex = prev.findIndex((t) => t.key === targetKey);
+        if (sourceIndex === -1 || targetIndex === -1) return prev;
+        const next = [...prev];
+        const [removed] = next.splice(sourceIndex, 1);
+        next.splice(targetIndex, 0, removed);
+        return next;
+      });
+    }
+  };
+
+  const renderDraggableTabBar: TabsProps['renderTabBar'] = (tabBarProps, DefaultTabBar) => (
+    <DefaultTabBar {...tabBarProps}>
+      {(node) => {
+        const key = (node as any).key as string;
+        const cat = getTabCategory(key);
+        const draggable = cat !== 'fixed';
+        return (
+          <div
+            draggable={draggable}
+            onDragStart={() => handleDragStart(key)}
+            onDragOver={(e) => handleDragOver(e, key)}
+            onDrop={() => handleDrop(key)}
+            style={{
+              display: 'inline-block',
+              cursor: draggable ? 'grab' : 'default',
+              opacity: dragKeyRef.current && dragKeyRef.current !== key ? 0.6 : 1,
+            }}
+          >
+            {node}
+          </div>
+        );
+      }}
+    </DefaultTabBar>
+  );
 
   // 监听 tab-action 事件（来自菜单或工具栏）
   useEffect(() => {
@@ -531,6 +796,32 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   // Single click in TableList → show structure in objects tab
                 }}
                 onTableOpen={openTableTab}
+                onTableDesign={(tableName) => openDesignerTab(tableName)}
+                onTableNew={() => openDesignerTab()}
+                onTableDelete={async (tableName, db) => {
+                  try {
+                    await api.dropTable(selectedConnectionId, tableName, db);
+                    message.success(`表 ${tableName} 已删除`);
+                    window.dispatchEvent(new CustomEvent('refresh-connection-tree', { detail: { connectionId: selectedConnectionId } }));
+                  } catch (e: any) {
+                    message.error(`删除失败：${e.message || e}`);
+                  }
+                }}
+                onTableTruncate={async (tableName, db) => {
+                  try {
+                    await api.truncateTable(selectedConnectionId, tableName, db);
+                    message.success(`表 ${tableName} 已清空`);
+                    window.dispatchEvent(new CustomEvent('refresh-connection-tree', { detail: { connectionId: selectedConnectionId } }));
+                  } catch (e: any) {
+                    message.error(`清空失败：${e.message || e}`);
+                  }
+                }}
+                onTableCopy={(tableName) => {
+                  message.info('复制表功能开发中...');
+                }}
+                onTableDump={(tableName) => {
+                  message.info('转储SQL功能开发中...');
+                }}
               />
             )
           ) : (
@@ -644,6 +935,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           <SQLEditor
             connectionId={selectedConnectionId}
             database={sqlTab.database || selectedDatabase}
+            defaultQuery={sqlTab.defaultQuery}
             availableDatabases={
               selectedConnectionId && connectionDatabases?.[selectedConnectionId]
                 ? connectionDatabases[selectedConnectionId].map((db) => db.database)
@@ -722,6 +1014,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         tabBarGutter={2}
         items={tabItems}
         onEdit={handleTabEdit}
+        renderTabBar={renderDraggableTabBar}
       />
 
       {/* 右键菜单 */}

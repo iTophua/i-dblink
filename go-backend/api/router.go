@@ -59,6 +59,19 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 	mux.HandleFunc("POST /functions", recoverMiddleware(h.GetFunctions))
 	mux.HandleFunc("POST /procedure-body", recoverMiddleware(h.GetProcedureBody))
 	mux.HandleFunc("POST /function-body", recoverMiddleware(h.GetFunctionBody))
+
+	// DDL 操作
+	mux.HandleFunc("POST /execute-ddl", recoverMiddleware(h.ExecuteDDL))
+	mux.HandleFunc("POST /truncate-table", recoverMiddleware(h.TruncateTable))
+	mux.HandleFunc("POST /drop-table", recoverMiddleware(h.DropTable))
+	mux.HandleFunc("POST /drop-view", recoverMiddleware(h.DropView))
+	mux.HandleFunc("POST /rename-table", recoverMiddleware(h.RenameTable))
+
+	// 事务控制
+	mux.HandleFunc("POST /begin-transaction", recoverMiddleware(h.BeginTransaction))
+	mux.HandleFunc("POST /commit-transaction", recoverMiddleware(h.CommitTransaction))
+	mux.HandleFunc("POST /rollback-transaction", recoverMiddleware(h.RollbackTransaction))
+	mux.HandleFunc("POST /transaction-status", recoverMiddleware(h.GetTransactionStatus))
 }
 
 // Handler HTTP 处理器

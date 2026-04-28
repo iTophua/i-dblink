@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"idblink-backend/db"
 	"idblink-backend/models"
 )
 
-func mysqlGetDatabases(ctx context.Context, dbConn *sql.DB) ([]string, error) {
+func mysqlGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, error) {
 	rows, err := dbConn.QueryContext(ctx, "SHOW DATABASES")
 	if err != nil {
 		return nil, err
@@ -29,7 +30,7 @@ func mysqlGetDatabases(ctx context.Context, dbConn *sql.DB) ([]string, error) {
 	return result, rows.Err()
 }
 
-func mysqlGetTables(ctx context.Context, dbConn *sql.DB, database *string) ([]models.TableInfo, error) {
+func mysqlGetTables(ctx context.Context, dbConn db.Executor, database *string) ([]models.TableInfo, error) {
 	dbFilter := "DATABASE()"
 	if database != nil {
 		dbFilter = fmt.Sprintf("'%s'", *database)
@@ -76,7 +77,7 @@ func mysqlGetTables(ctx context.Context, dbConn *sql.DB, database *string) ([]mo
 	return result, rows.Err()
 }
 
-func mysqlGetTablesCategorized(ctx context.Context, dbConn *sql.DB, database *string, search *string) (models.TablesResult, error) {
+func mysqlGetTablesCategorized(ctx context.Context, dbConn db.Executor, database *string, search *string) (models.TablesResult, error) {
 	result := models.TablesResult{
 		Tables: []models.TableInfo{},
 		Views:  []models.TableInfo{},
@@ -154,7 +155,7 @@ func mysqlGetTablesCategorized(ctx context.Context, dbConn *sql.DB, database *st
 	return result, rows.Err()
 }
 
-func mysqlGetColumns(ctx context.Context, dbConn *sql.DB, tableName string, database *string) ([]models.ColumnInfo, error) {
+func mysqlGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
 	dbFilter := "DATABASE()"
 	if database != nil {
 		dbFilter = fmt.Sprintf("'%s'", *database)
@@ -191,7 +192,7 @@ func mysqlGetColumns(ctx context.Context, dbConn *sql.DB, tableName string, data
 	return result, rows.Err()
 }
 
-func mysqlGetIndexes(ctx context.Context, dbConn *sql.DB, tableName string, database *string) ([]models.IndexInfo, error) {
+func mysqlGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.IndexInfo, error) {
 	safeTable := strings.ReplaceAll(tableName, "`", "``")
 	var query string
 	if database != nil {
@@ -230,7 +231,7 @@ func mysqlGetIndexes(ctx context.Context, dbConn *sql.DB, tableName string, data
 	return result, rows.Err()
 }
 
-func mysqlGetForeignKeys(ctx context.Context, dbConn *sql.DB, tableName string, database *string) ([]models.ForeignKeyInfo, error) {
+func mysqlGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ForeignKeyInfo, error) {
 	dbFilter := "DATABASE()"
 	if database != nil {
 		dbFilter = fmt.Sprintf("'%s'", *database)
@@ -260,7 +261,7 @@ func mysqlGetForeignKeys(ctx context.Context, dbConn *sql.DB, tableName string, 
 	return result, rows.Err()
 }
 
-func mysqlGetTableStructure(ctx context.Context, dbConn *sql.DB, tableName string, database *string) (models.TableStructure, error) {
+func mysqlGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, database *string) (models.TableStructure, error) {
 	var result models.TableStructure
 	var err error
 	result.Columns, err = mysqlGetColumns(ctx, dbConn, tableName, database)
@@ -278,7 +279,7 @@ func mysqlGetTableStructure(ctx context.Context, dbConn *sql.DB, tableName strin
 	return result, nil
 }
 
-func mysqlGetRoutines(ctx context.Context, dbConn *sql.DB, database *string) (models.RoutinesResult, error) {
+func mysqlGetRoutines(ctx context.Context, dbConn db.Executor, database *string) (models.RoutinesResult, error) {
 	var result models.RoutinesResult
 
 	dbFilter := "DATABASE()"
@@ -339,7 +340,7 @@ func mysqlGetRoutines(ctx context.Context, dbConn *sql.DB, database *string) (mo
 	return result, nil
 }
 
-func mysqlGetRoutineBody(ctx context.Context, dbConn *sql.DB, database, routineName, routineType string) (string, error) {
+func mysqlGetRoutineBody(ctx context.Context, dbConn db.Executor, database, routineName, routineType string) (string, error) {
 	var def sql.NullString
 	query := `SELECT ROUTINE_DEFINITION FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ? AND ROUTINE_NAME = ? AND ROUTINE_TYPE = ?`
 	err := dbConn.QueryRowContext(ctx, query, database, routineName, routineType).Scan(&def)

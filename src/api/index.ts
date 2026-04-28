@@ -124,4 +124,40 @@ export const api = {
   async executeQuery(connectionId: string, sql: string, database?: string): Promise<QueryResult> {
     return await invoke('execute_query', { connectionId, sql, database });
   },
+
+  async executeDDL(connectionId: string, sql: string, database?: string): Promise<void> {
+    return await invoke('execute_ddl', { connectionId, sql, database });
+  },
+
+  async truncateTable(connectionId: string, tableName: string, database?: string): Promise<void> {
+    return await invoke('truncate_table', { connectionId, tableName, database });
+  },
+
+  async dropTable(connectionId: string, tableName: string, database?: string): Promise<void> {
+    return await invoke('drop_table', { connectionId, tableName, database });
+  },
+
+  async dropView(connectionId: string, viewName: string, database?: string): Promise<void> {
+    return await invoke('drop_view', { connectionId, viewName, database });
+  },
+
+  async renameTable(connectionId: string, oldName: string, newName: string, database?: string): Promise<void> {
+    return await invoke('rename_table', { connectionId, oldName, newName, database });
+  },
+
+  async beginTransaction(connectionId: string): Promise<void> {
+    return await invoke('begin_transaction', { connectionId });
+  },
+
+  async commitTransaction(connectionId: string): Promise<void> {
+    return await invoke('commit_transaction', { connectionId });
+  },
+
+  async rollbackTransaction(connectionId: string): Promise<void> {
+    return await invoke('rollback_transaction', { connectionId });
+  },
+
+  async getTransactionStatus(connectionId: string): Promise<boolean> {
+    return await invoke('get_transaction_status', { connectionId });
+  },
 };

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"strings"
 
+	"idblink-backend/db"
 	"idblink-backend/models"
 )
 
@@ -12,7 +13,7 @@ import (
 // 注：以下 SQL 基于达梦 DM8 的 SYS.* / DBA_* 视图，
 // 实际使用时可能需要根据数据库版本和权限（DBA/普通用户）调整。
 
-func damengGetDatabases(ctx context.Context, dbConn *sql.DB) ([]string, error) {
+func damengGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, error) {
 	// 达梦没有 MySQL 式的"数据库"概念，更接近 Schema。
 	// 返回当前用户可访问的 SCHEMA 列表
 	query := `SELECT DISTINCT OWNER FROM SYS.DBA_TABLES ORDER BY OWNER`
@@ -38,7 +39,7 @@ func damengGetDatabases(ctx context.Context, dbConn *sql.DB) ([]string, error) {
 	return result, rows.Err()
 }
 
-func damengGetTables(ctx context.Context, dbConn *sql.DB, database *string) ([]models.TableInfo, error) {
+func damengGetTables(ctx context.Context, dbConn db.Executor, database *string) ([]models.TableInfo, error) {
 	schema := "SYSDBA"
 	if database != nil && *database != "" {
 		schema = *database
@@ -80,7 +81,7 @@ func damengGetTables(ctx context.Context, dbConn *sql.DB, database *string) ([]m
 	return result, rows.Err()
 }
 
-func damengGetTablesCategorized(ctx context.Context, dbConn *sql.DB, database *string, search *string) (models.TablesResult, error) {
+func damengGetTablesCategorized(ctx context.Context, dbConn db.Executor, database *string, search *string) (models.TablesResult, error) {
 	result := models.TablesResult{
 		Tables: []models.TableInfo{},
 		Views:  []models.TableInfo{},
@@ -136,7 +137,7 @@ func damengGetTablesCategorized(ctx context.Context, dbConn *sql.DB, database *s
 	return result, nil
 }
 
-func damengGetColumns(ctx context.Context, dbConn *sql.DB, tableName string, database *string) ([]models.ColumnInfo, error) {
+func damengGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
 	schema := "SYSDBA"
 	if database != nil && *database != "" {
 		schema = *database
@@ -184,7 +185,7 @@ func damengGetColumns(ctx context.Context, dbConn *sql.DB, tableName string, dat
 	return result, rows.Err()
 }
 
-func damengGetIndexes(ctx context.Context, dbConn *sql.DB, tableName string, database *string) ([]models.IndexInfo, error) {
+func damengGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.IndexInfo, error) {
 	schema := "SYSDBA"
 	if database != nil && *database != "" {
 		schema = *database
@@ -233,7 +234,7 @@ func damengGetIndexes(ctx context.Context, dbConn *sql.DB, tableName string, dat
 	return result, rows.Err()
 }
 
-func damengGetForeignKeys(ctx context.Context, dbConn *sql.DB, tableName string, database *string) ([]models.ForeignKeyInfo, error) {
+func damengGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ForeignKeyInfo, error) {
 	schema := "SYSDBA"
 	if database != nil && *database != "" {
 		schema = *database
@@ -307,7 +308,7 @@ func damengGetForeignKeys(ctx context.Context, dbConn *sql.DB, tableName string,
 	return result, rows.Err()
 }
 
-func damengGetTableStructure(ctx context.Context, dbConn *sql.DB, tableName string, database *string) (models.TableStructure, error) {
+func damengGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, database *string) (models.TableStructure, error) {
 	var result models.TableStructure
 	var err error
 	result.Columns, err = damengGetColumns(ctx, dbConn, tableName, database)
@@ -325,7 +326,7 @@ func damengGetTableStructure(ctx context.Context, dbConn *sql.DB, tableName stri
 	return result, nil
 }
 
-func damengGetRoutines(ctx context.Context, dbConn *sql.DB, database *string) (models.RoutinesResult, error) {
+func damengGetRoutines(ctx context.Context, dbConn db.Executor, database *string) (models.RoutinesResult, error) {
 	var result models.RoutinesResult
 	schema := "SYSDBA"
 	if database != nil && *database != "" {
@@ -370,7 +371,7 @@ func damengGetRoutines(ctx context.Context, dbConn *sql.DB, database *string) (m
 	return result, rows.Err()
 }
 
-func damengGetRoutineBody(ctx context.Context, dbConn *sql.DB, database, routineName, routineType string) (string, error) {
+func damengGetRoutineBody(ctx context.Context, dbConn db.Executor, database, routineName, routineType string) (string, error) {
 	schema := "SYSDBA"
 	if database != "" {
 		schema = database

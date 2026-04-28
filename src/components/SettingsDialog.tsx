@@ -58,6 +58,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
     resetSettings();
     form.setFieldsValue({
       pageSize: 1000,
+      maxResultRows: 10000,
       themePreset: 'midnightDeep',
       themeMode: 'dark',
       themeSyncSystem: true,
@@ -162,6 +163,20 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                     min={10}
                     max={10000}
                     step={100}
+                    style={{ width: '100%' }}
+                    addonAfter="行"
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="查询结果上限"
+                  name="maxResultRows"
+                  rules={[{ required: true, message: '请输入查询结果上限' }]}
+                  tooltip="SQL 查询返回的最大行数，超过此限制将只返回前 N 行并提示"
+                >
+                  <InputNumber
+                    min={100}
+                    max={100000}
+                    step={1000}
                     style={{ width: '100%' }}
                     addonAfter="行"
                   />

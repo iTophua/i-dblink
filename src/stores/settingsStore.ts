@@ -13,6 +13,7 @@ export interface ShortcutConfig {
 
 export interface AppSettings {
   pageSize: number;
+  maxResultRows: number;
   themePreset: ThemePreset;
   themeMode: ThemeMode;
   themeSyncSystem: boolean;
@@ -29,6 +30,7 @@ interface SettingsState {
 
 const defaultSettings: AppSettings = {
   pageSize: 1000,
+  maxResultRows: 10000,
   themePreset: 'midnightDeep',
   themeMode: 'dark',
   themeSyncSystem: true,

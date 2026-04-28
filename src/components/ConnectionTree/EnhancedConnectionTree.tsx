@@ -33,6 +33,7 @@ import { GroupDialog } from './GroupDialog';
 import { EnhancedEmptyState } from '../LoadingStates';
 import { GlobalInput } from '../GlobalInput';
 import { DatabaseIcon } from '../DatabaseIcon';
+import { api } from '../../api';
 
 const isBaseTable = (tableType: string): boolean => {
   const normalizedType = (tableType || '').toUpperCase().trim();
@@ -297,6 +298,7 @@ type ConnectionTreeProps = {
   onEditConnection: (connection: Connection) => void;
   onDeleteConnection: (connectionId: string) => void;
   onNewQuery: (connectionId: string) => void;
+  onOpenRoutine?: (connectionId: string, database: string, name: string, type: 'procedure' | 'function') => void;
   onDatabaseExpand: (connectionId: string, database: string) => void;
   onDatabaseRefresh?: (connectionId: string, database: string) => void;
   onDatabaseClose?: (connectionId: string, database: string) => void;
@@ -344,6 +346,7 @@ export function EnhancedConnectionTree({
   onEditConnection,
   onDeleteConnection,
   onNewQuery,
+  onOpenRoutine,
   onDatabaseExpand,
   onDatabaseRefresh,
   onDatabaseClose,
@@ -639,7 +642,7 @@ export function EnhancedConnectionTree({
   );
 
   const getTableMenu = useCallback(
-    (_connId: string, tableName: string, database?: string): MenuProps => ({
+    (connId: string, tableName: string, database?: string): MenuProps => ({
       items: [
         { key: 'open-table', label: '打开表（浏览数据）' },
         { key: 'design-table', label: '设计表' },
@@ -654,7 +657,7 @@ export function EnhancedConnectionTree({
         { key: 'import-csv', label: '导入 CSV' },
         { key: 'export-csv', label: '导出 CSV' },
       ],
-      onClick: ({ key }) => {
+      onClick: async ({ key }) => {
         if (key === 'open-table') {
           onTableOpen(tableName, database);
         } else if (key === 'design-table') {
@@ -666,7 +669,15 @@ export function EnhancedConnectionTree({
             okText: '清空',
             okType: 'danger',
             cancelText: '取消',
-            onOk: () => message.info('清空表功能开发中...'),
+            onOk: async () => {
+              try {
+                await api.truncateTable(connId, tableName, database);
+                message.success(`表 "${tableName}" 已清空`);
+                onDatabaseRefresh?.(connId, database || '');
+              } catch (err: any) {
+                message.error(`清空表失败：${err.message || err}`);
+              }
+            },
           });
         } else if (key === 'drop-table') {
           Modal.confirm({
@@ -675,18 +686,26 @@ export function EnhancedConnectionTree({
             okText: '删除',
             okType: 'danger',
             cancelText: '取消',
-            onOk: () => message.info('删除表功能开发中...'),
+            onOk: async () => {
+              try {
+                await api.dropTable(connId, tableName, database);
+                message.success(`表 "${tableName}" 已删除`);
+                onDatabaseRefresh?.(connId, database || '');
+              } catch (err: any) {
+                message.error(`删除表失败：${err.message || err}`);
+              }
+            },
           });
         } else {
           message.info('功能开发中...');
         }
       },
     }),
-    [onTableOpen, onOpenDesigner]
+    [onTableOpen, onOpenDesigner, onDatabaseRefresh]
   );
 
   const getViewMenu = useCallback(
-    (_connId: string, viewName: string, _database?: string): MenuProps => ({
+    (connId: string, viewName: string, database?: string): MenuProps => ({
       items: [
         { key: 'open-view', label: '打开视图（浏览数据）' },
         { key: 'design-view', label: '设计视图' },
@@ -697,7 +716,7 @@ export function EnhancedConnectionTree({
         { key: 'view-dependencies', label: '查看依赖关系' },
         { key: 'view-properties', label: '属性' },
       ],
-      onClick: ({ key }) => {
+      onClick: async ({ key }) => {
         if (key === 'open-view' || key === 'design-view') {
           message.info('视图功能开发中...');
         } else if (key === 'drop-view') {
@@ -707,14 +726,22 @@ export function EnhancedConnectionTree({
             okText: '删除',
             okType: 'danger',
             cancelText: '取消',
-            onOk: () => message.info('删除视图功能开发中...'),
+            onOk: async () => {
+              try {
+                await api.dropView(connId, viewName, database);
+                message.success(`视图 "${viewName}" 已删除`);
+                onDatabaseRefresh?.(connId, database || '');
+              } catch (err: any) {
+                message.error(`删除视图失败：${err.message || err}`);
+              }
+            },
           });
         } else {
           message.info('功能开发中...');
         }
       },
     }),
-    []
+    [onDatabaseRefresh]
   );
 
   const handleCopyConnection = useCallback(
@@ -1104,7 +1131,10 @@ export function EnhancedConnectionTree({
                   key: `proc::${connId}::${db.database}::${proc}`,
                   isLeaf: true,
                   title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                      onClick={() => onOpenRoutine?.(connId, db.database, proc, 'procedure')}
+                    >
                       <ThunderboltOutlined
                         style={{ color: 'var(--color-warning)', fontSize: 11 }}
                       />
@@ -1167,7 +1197,10 @@ export function EnhancedConnectionTree({
                   key: `func::${connId}::${db.database}::${func}`,
                   isLeaf: true,
                   title: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                      onClick={() => onOpenRoutine?.(connId, db.database, func, 'function')}
+                    >
                       <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 11 }} />
                       <span style={{ fontSize: 12 }}>{func}</span>
                     </span>
@@ -1214,16 +1247,25 @@ export function EnhancedConnectionTree({
                   userSelect: 'none',
                 }}
               >
-                <DatabaseOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
-                <span
-                  style={{
-                    color: db.loaded ? 'var(--color-success)' : undefined,
-                    fontWeight: db.loaded ? 500 : undefined,
-                    userSelect: 'none',
-                  }}
-                >
-                  {db.database}
-                </span>
+                {(() => {
+                  const isSystemDb = ['mysql', 'information_schema', 'performance_schema', 'sys',
+                    'postgres', 'template0', 'template1',
+                    'master', 'tempdb', 'model', 'msdb'].includes(db.database.toLowerCase());
+                  return (
+                    <>
+                      <DatabaseOutlined style={{ color: isSystemDb ? 'var(--text-disabled)' : 'var(--color-primary)', fontSize: 12 }} />
+                      <span
+                        style={{
+                          color: isSystemDb ? 'var(--text-disabled)' : db.loaded ? 'var(--color-success)' : undefined,
+                          fontWeight: db.loaded ? 500 : undefined,
+                          userSelect: 'none',
+                        }}
+                      >
+                        {db.database}
+                      </span>
+                    </>
+                  );
+                })()}
               </div>
             </Dropdown>
           </div>
@@ -1287,7 +1329,7 @@ export function EnhancedConnectionTree({
               >
                 {conn.name}
               </span>
-              {conn.status === 'connected' && (
+              {conn.status === 'connected' ? (
                 <Tooltip title="已连接">
                   <span
                     style={{
@@ -1296,6 +1338,18 @@ export function EnhancedConnectionTree({
                       borderRadius: '50%',
                       background: 'var(--color-success)',
                       animation: 'pulse 2s infinite',
+                    }}
+                  />
+                </Tooltip>
+              ) : (
+                <Tooltip title="未连接">
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: 'var(--text-disabled)',
+                      opacity: 0.5,
                     }}
                   />
                 </Tooltip>
@@ -1440,6 +1494,7 @@ export function EnhancedConnectionTree({
     onTableOpen,
     getTableMenu,
     onNewQuery,
+    onOpenRoutine,
     handleDoubleClick,
     getConnectionMenu,
     getGroupMenu,

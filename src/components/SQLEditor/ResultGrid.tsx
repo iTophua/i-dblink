@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef } from 'ag-grid-community';
-import { Button, Space, Empty, Tooltip, Tag, Modal, App, Form, Input } from 'antd';
+import { Button, Space, Empty, Tooltip, Tag, Modal, App, Form, Input, Dropdown } from 'antd';
 import {
   DeleteOutlined,
   SaveOutlined,
@@ -10,9 +10,12 @@ import {
   ExclamationCircleOutlined,
   CopyOutlined,
   PlusOutlined,
+  DownloadOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../../hooks/useApi';
 import type { QueryResult, DatabaseType, ColumnInfo } from '../../types/api';
+import { exportToExcel } from '../../utils/exportUtils';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
@@ -113,6 +116,43 @@ interface ContextMenuState {
   visible: boolean;
   x: number;
   y: number;
+}
+
+function downloadBlob(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportToCsv(columns: string[], rows: unknown[][]): string {
+  const escape = (val: unknown) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+  const header = columns.map(escape).join(',');
+  const body = rows.map((row) => row.map(escape).join(',')).join('\n');
+  return `${header}\n${body}`;
+}
+
+function exportToJson(columns: string[], rows: unknown[][]): string {
+  const objs = rows.map((row) => {
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col, i) => {
+      obj[col] = row[i];
+    });
+    return obj;
+  });
+  return JSON.stringify(objs, null, 2);
 }
 
 // === ResultGrid 主组件 ===
@@ -691,6 +731,60 @@ export function ResultGrid({
           </Tooltip>
         )}
         <div style={{ flex: 1 }} />
+        <Dropdown
+          menu={{
+            items: [
+              {
+                key: 'excel',
+                label: '导出 Excel (.xlsx)',
+                icon: <FileTextOutlined />,
+                onClick: () => {
+                  try {
+                    const cols = queryResult.columns.map((c) => ({ field: c, headerName: c }));
+                    const data = queryResult.rows.map((row) => {
+                      const obj: Record<string, any> = {};
+                      queryResult.columns.forEach((col, i) => {
+                        obj[col] = row[i] === null ? '' : row[i];
+                      });
+                      return obj;
+                    });
+                    exportToExcel(data, cols, {
+                      filename: `result_${Date.now()}.xlsx`,
+                      sheetName: 'Query Result',
+                    });
+                    message.success('已导出 Excel');
+                  } catch (e: any) {
+                    message.error(`导出失败：${e.message}`);
+                  }
+                },
+              },
+              {
+                key: 'csv',
+                label: '导出 CSV',
+                icon: <FileTextOutlined />,
+                onClick: () => {
+                  const csv = exportToCsv(queryResult.columns, queryResult.rows);
+                  downloadBlob(csv, `result_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
+                  message.success('已导出 CSV');
+                },
+              },
+              {
+                key: 'json',
+                label: '导出 JSON',
+                icon: <FileTextOutlined />,
+                onClick: () => {
+                  const json = exportToJson(queryResult.columns, queryResult.rows);
+                  downloadBlob(json, `result_${Date.now()}.json`, 'application/json');
+                  message.success('已导出 JSON');
+                },
+              },
+            ],
+          }}
+        >
+          <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 11, height: 22 }}>
+            导出
+          </Button>
+        </Dropdown>
         {isEditable && hasChanges && (
           <Space size={4}>
             <Button

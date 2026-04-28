@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -27,7 +26,7 @@ func (h *Handler) GetDatabases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -39,13 +38,13 @@ func (h *Handler) GetDatabases(w http.ResponseWriter, r *http.Request) {
 	var databases []string
 	switch dbType {
 	case "mysql":
-		databases, err = mysqlGetDatabases(ctx, dbConn)
+		databases, err = mysqlGetDatabases(ctx, exec)
 	case "postgresql":
-		databases, err = postgresGetDatabases(ctx, dbConn)
+		databases, err = postgresGetDatabases(ctx, exec)
 	case "sqlite":
 		databases = []string{"main"}
 	case "dameng":
-		databases, err = damengGetDatabases(ctx, dbConn)
+		databases, err = damengGetDatabases(ctx, exec)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -66,7 +65,7 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -78,13 +77,13 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 	var tables []models.TableInfo
 	switch dbType {
 	case "mysql":
-		tables, err = mysqlGetTables(ctx, dbConn, req.Database)
+		tables, err = mysqlGetTables(ctx, exec, req.Database)
 	case "postgresql":
-		tables, err = postgresGetTables(ctx, dbConn, req.Database)
+		tables, err = postgresGetTables(ctx, exec, req.Database)
 	case "sqlite":
-		tables, err = sqliteGetTables(ctx, dbConn, req.Database)
+		tables, err = sqliteGetTables(ctx, exec, req.Database)
 	case "dameng":
-		tables, err = damengGetTables(ctx, dbConn, req.Database)
+		tables, err = damengGetTables(ctx, exec, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -105,7 +104,7 @@ func (h *Handler) GetTablesCategorized(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -120,13 +119,13 @@ func (h *Handler) GetTablesCategorized(w http.ResponseWriter, r *http.Request) {
 	}
 	switch dbType {
 	case "mysql":
-		result, err = mysqlGetTablesCategorized(ctx, dbConn, req.Database, req.Search)
+		result, err = mysqlGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	case "postgresql":
-		result, err = postgresGetTablesCategorized(ctx, dbConn, req.Database, req.Search)
+		result, err = postgresGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	case "sqlite":
-		result, err = sqliteGetTablesCategorized(ctx, dbConn, req.Database, req.Search)
+		result, err = sqliteGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	case "dameng":
-		result, err = damengGetTablesCategorized(ctx, dbConn, req.Database, req.Search)
+		result, err = damengGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -152,7 +151,7 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -164,13 +163,13 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 	var columns []models.ColumnInfo
 	switch dbType {
 	case "mysql":
-		columns, err = mysqlGetColumns(ctx, dbConn, *req.TableName, req.Database)
+		columns, err = mysqlGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "postgresql":
-		columns, err = postgresGetColumns(ctx, dbConn, *req.TableName, req.Database)
+		columns, err = postgresGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "sqlite":
-		columns, err = sqliteGetColumns(ctx, dbConn, *req.TableName, req.Database)
+		columns, err = sqliteGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
-		columns, err = damengGetColumns(ctx, dbConn, *req.TableName, req.Database)
+		columns, err = damengGetColumns(ctx, exec, *req.TableName, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -196,7 +195,7 @@ func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -208,13 +207,13 @@ func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 	var indexes []models.IndexInfo
 	switch dbType {
 	case "mysql":
-		indexes, err = mysqlGetIndexes(ctx, dbConn, *req.TableName, req.Database)
+		indexes, err = mysqlGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "postgresql":
-		indexes, err = postgresGetIndexes(ctx, dbConn, *req.TableName, req.Database)
+		indexes, err = postgresGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "sqlite":
-		indexes, err = sqliteGetIndexes(ctx, dbConn, *req.TableName, req.Database)
+		indexes, err = sqliteGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
-		indexes, err = damengGetIndexes(ctx, dbConn, *req.TableName, req.Database)
+		indexes, err = damengGetIndexes(ctx, exec, *req.TableName, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -240,7 +239,7 @@ func (h *Handler) GetForeignKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -252,13 +251,13 @@ func (h *Handler) GetForeignKeys(w http.ResponseWriter, r *http.Request) {
 	var fks []models.ForeignKeyInfo
 	switch dbType {
 	case "mysql":
-		fks, err = mysqlGetForeignKeys(ctx, dbConn, *req.TableName, req.Database)
+		fks, err = mysqlGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "postgresql":
-		fks, err = postgresGetForeignKeys(ctx, dbConn, *req.TableName, req.Database)
+		fks, err = postgresGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "sqlite":
-		fks, err = sqliteGetForeignKeys(ctx, dbConn, *req.TableName, req.Database)
+		fks, err = sqliteGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
-		fks, err = damengGetForeignKeys(ctx, dbConn, *req.TableName, req.Database)
+		fks, err = damengGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -284,7 +283,7 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -296,13 +295,13 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 	var structure models.TableStructure
 	switch dbType {
 	case "mysql":
-		structure, err = mysqlGetTableStructure(ctx, dbConn, *req.TableName, req.Database)
+		structure, err = mysqlGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "postgresql":
-		structure, err = postgresGetTableStructure(ctx, dbConn, *req.TableName, req.Database)
+		structure, err = postgresGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "sqlite":
-		structure, err = sqliteGetTableStructure(ctx, dbConn, *req.TableName, req.Database)
+		structure, err = sqliteGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
-		structure, err = damengGetTableStructure(ctx, dbConn, *req.TableName, req.Database)
+		structure, err = damengGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -334,7 +333,7 @@ func (h *Handler) GetRoutines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -346,13 +345,13 @@ func (h *Handler) GetRoutines(w http.ResponseWriter, r *http.Request) {
 	var result models.RoutinesResult
 	switch dbType {
 	case "mysql":
-		result, err = mysqlGetRoutines(ctx, dbConn, req.Database)
+		result, err = mysqlGetRoutines(ctx, exec, req.Database)
 	case "postgresql":
-		result, err = postgresGetRoutines(ctx, dbConn, req.Database)
+		result, err = postgresGetRoutines(ctx, exec, req.Database)
 	case "sqlite":
 		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
 	case "dameng":
-		result, err = damengGetRoutines(ctx, dbConn, req.Database)
+		result, err = damengGetRoutines(ctx, exec, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -373,7 +372,7 @@ func (h *Handler) GetProcedures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -385,13 +384,13 @@ func (h *Handler) GetProcedures(w http.ResponseWriter, r *http.Request) {
 	var result models.RoutinesResult
 	switch dbType {
 	case "mysql":
-		result, err = mysqlGetRoutines(ctx, dbConn, req.Database)
+		result, err = mysqlGetRoutines(ctx, exec, req.Database)
 	case "postgresql":
-		result, err = postgresGetRoutines(ctx, dbConn, req.Database)
+		result, err = postgresGetRoutines(ctx, exec, req.Database)
 	case "sqlite":
 		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
 	case "dameng":
-		result, err = damengGetRoutines(ctx, dbConn, req.Database)
+		result, err = damengGetRoutines(ctx, exec, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -416,7 +415,7 @@ func (h *Handler) GetFunctions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -428,13 +427,13 @@ func (h *Handler) GetFunctions(w http.ResponseWriter, r *http.Request) {
 	var result models.RoutinesResult
 	switch dbType {
 	case "mysql":
-		result, err = mysqlGetRoutines(ctx, dbConn, req.Database)
+		result, err = mysqlGetRoutines(ctx, exec, req.Database)
 	case "postgresql":
-		result, err = postgresGetRoutines(ctx, dbConn, req.Database)
+		result, err = postgresGetRoutines(ctx, exec, req.Database)
 	case "sqlite":
 		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
 	case "dameng":
-		result, err = damengGetRoutines(ctx, dbConn, req.Database)
+		result, err = damengGetRoutines(ctx, exec, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -463,7 +462,7 @@ func (h *Handler) GetProcedureBody(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -475,11 +474,11 @@ func (h *Handler) GetProcedureBody(w http.ResponseWriter, r *http.Request) {
 	var body string
 	switch dbType {
 	case "mysql":
-		body, err = mysqlGetRoutineBody(ctx, dbConn, req.Database, req.ProcedureName, "PROCEDURE")
+		body, err = mysqlGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
 	case "postgresql":
-		body, err = postgresGetRoutineBody(ctx, dbConn, req.Database, req.ProcedureName, "PROCEDURE")
+		body, err = postgresGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
 	case "dameng":
-		body, err = damengGetRoutineBody(ctx, dbConn, req.Database, req.ProcedureName, "PROCEDURE")
+		body, err = damengGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -504,7 +503,7 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbConn, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -516,11 +515,11 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 	var body string
 	switch dbType {
 	case "mysql":
-		body, err = mysqlGetRoutineBody(ctx, dbConn, req.Database, req.FunctionName, "FUNCTION")
+		body, err = mysqlGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
 	case "postgresql":
-		body, err = postgresGetRoutineBody(ctx, dbConn, req.Database, req.FunctionName, "FUNCTION")
+		body, err = postgresGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
 	case "dameng":
-		body, err = damengGetRoutineBody(ctx, dbConn, req.Database, req.FunctionName, "FUNCTION")
+		body, err = damengGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -533,15 +532,4 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"body": body})
 }
 
-// getConnAndType 获取连接和数据库类型
-func (h *Handler) getConnAndType(connectionID string) (*sql.DB, string, error) {
-	dbConn, err := h.mgr.Get(connectionID)
-	if err != nil {
-		return nil, "", err
-	}
-	dbType, err := h.mgr.GetDBType(connectionID)
-	if err != nil {
-		return nil, "", err
-	}
-	return dbConn, dbType, nil
-}
+

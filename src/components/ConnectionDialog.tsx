@@ -465,7 +465,15 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                       rules={[{ required: true, message: '请输入数据库文件路径' }]}
                       style={{ marginBottom: 16 }}
                     >
-                      <GlobalInput placeholder="例如：/path/to/database.db" />
+                      <Space.Compact style={{ width: '100%' }}>
+                        <GlobalInput placeholder="例如：/path/to/database.db" />
+                        <AntButton
+                          icon={<FolderOutlined />}
+                          onClick={() => createFileInput({ form, fieldName: 'host', accept: '.db,.sqlite,.sqlite3,.db3' })}
+                        >
+                          浏览
+                        </AntButton>
+                      </Space.Compact>
                     </Form.Item>
                   ) : (
                     <>

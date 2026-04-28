@@ -30,6 +30,7 @@ import {
   ThunderboltOutlined,
   ClockCircleOutlined,
   CheckCircleOutlined,
+  CloseCircleOutlined,
   WarningOutlined,
   SettingOutlined,
   FullscreenOutlined,
@@ -40,14 +41,25 @@ import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { getShortcutDisplayText } from '../hooks/useMenuShortcuts';
 import { useAppStore } from '../stores/appStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { format as formatSql } from 'sql-formatter';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
+import { api } from '../api';
 import type { QueryResult, DatabaseType } from '../types/api';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;
+}
+
+declare global {
+  interface Window {
+    __sqlHistoryApi?: {
+      addHistory: (item: { sql: string; success: boolean; duration?: number; rowCount?: number }) => void;
+    };
+  }
 }
 
 interface SQLEditorProps {
@@ -571,6 +583,14 @@ export function SQLEditor({
     return conn?.db_type;
   }, [connections, connectionId]);
   const [sql, setSql] = useState(defaultQuery || '');
+
+  // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
+  useEffect(() => {
+    if (defaultQuery) {
+      setSql(defaultQuery);
+    }
+  }, [defaultQuery]);
+
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResultWithTiming | null>(null);
   const [results, setResults] = useState<QueryResultWithTiming[]>([]);
@@ -579,6 +599,7 @@ export function SQLEditor({
   const [explainPlan, setExplainPlan] = useState<any[]>([]);
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
+  const [transactionActive, setTransactionActive] = useState(false);
   const editorRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const schemaRef = useRef<{ tables: Map<string, string[]>; views: Map<string, string[]> } | null>(
@@ -1008,6 +1029,8 @@ export function SQLEditor({
         const msgs: string[] = [];
         let totalErrors = 0;
         let totalSuccess = 0;
+        const maxRows = useSettingsStore.getState().settings.maxResultRows;
+        let hasTruncated = false;
 
         for (let i = 0; i < statements.length; i++) {
           try {
@@ -1018,27 +1041,54 @@ export function SQLEditor({
             const queryResult = await executeQueryApi(connectionId, stmt, database);
             const executionTime = Date.now() - startTime;
 
+            const truncated = queryResult.rows.length > maxRows;
+            if (truncated) {
+              hasTruncated = true;
+              queryResult.rows = queryResult.rows.slice(0, maxRows);
+            }
+
             multiResults.push({ ...queryResult, executionTime });
 
             if (queryResult.error) {
               msgs.push(`语句 ${i + 1} ✗：${queryResult.error}`);
               totalErrors++;
+              window.__sqlHistoryApi?.addHistory({
+                sql: stmt,
+                success: false,
+                duration: executionTime,
+              });
             } else {
               const rowCount = queryResult.rows.length;
               const affectedRows = queryResult.rows_affected || 0;
               if (rowCount > 0) {
-                msgs.push(`语句 ${i + 1} ✓：返回 ${rowCount} 条记录，耗时 ${executionTime}ms`);
+                let msg = `语句 ${i + 1} ✓：返回 ${rowCount} 条记录，耗时 ${executionTime}ms`;
+                if (truncated) msg += `（已截断至 ${maxRows} 行）`;
+                msgs.push(msg);
               } else if (affectedRows > 0) {
                 msgs.push(`语句 ${i + 1} ✓：影响 ${affectedRows} 行，耗时 ${executionTime}ms`);
               } else {
                 msgs.push(`语句 ${i + 1} ✓：执行成功，耗时 ${executionTime}ms`);
               }
               totalSuccess++;
+              window.__sqlHistoryApi?.addHistory({
+                sql: stmt,
+                success: true,
+                duration: executionTime,
+                rowCount: rowCount > 0 ? rowCount : affectedRows,
+              });
             }
           } catch (error: any) {
             msgs.push(`语句 ${i + 1} ✗：${error.message || error}`);
             totalErrors++;
+            window.__sqlHistoryApi?.addHistory({
+              sql: statements[i],
+              success: false,
+            });
           }
+        }
+
+        if (hasTruncated) {
+          message.warning(`部分查询结果超过 ${maxRows} 行，已截断显示。建议添加 LIMIT 限制。`);
         }
 
         setResults(multiResults);
@@ -1062,13 +1112,27 @@ export function SQLEditor({
           setActiveTab('messages');
           message.error(`SQL 执行失败：${queryResult.error}`);
           setResult({ ...queryResult, executionTime });
+          window.__sqlHistoryApi?.addHistory({
+            sql: sqlToExecute,
+            success: false,
+            duration: executionTime,
+          });
         } else {
-          setResult({ ...queryResult, executionTime });
-          const rowCount = queryResult.rows.length;
+          const maxRows = useSettingsStore.getState().settings.maxResultRows;
+          const truncated = queryResult.rows.length > maxRows;
+          const truncatedRows = truncated ? queryResult.rows.slice(0, maxRows) : queryResult.rows;
+          const rowCount = truncatedRows.length;
           const affectedRows = queryResult.rows_affected || 0;
 
+          setResult({ ...queryResult, rows: truncatedRows, executionTime });
+
           if (rowCount > 0) {
-            setMessages([`✓ 查询成功，返回 ${rowCount} 条记录，耗时 ${executionTime}ms`]);
+            let msg = `✓ 查询成功，返回 ${rowCount} 条记录，耗时 ${executionTime}ms`;
+            if (truncated) {
+              msg += `（结果集已截断，仅显示前 ${maxRows} 行）`;
+              message.warning(`查询结果超过 ${maxRows} 行，已截断显示。建议添加 LIMIT 限制。`);
+            }
+            setMessages([msg]);
           } else if (affectedRows > 0) {
             setMessages([`✓ 执行成功，影响 ${affectedRows} 行，耗时 ${executionTime}ms`]);
           } else {
@@ -1076,10 +1140,16 @@ export function SQLEditor({
           }
 
           setActiveTab('result');
+          window.__sqlHistoryApi?.addHistory({
+            sql: sqlToExecute,
+            success: true,
+            duration: executionTime,
+            rowCount: rowCount > 0 ? rowCount : affectedRows,
+          });
         }
       }
 
-      // 保存历史记录
+      // 保存历史记录（内存缓存，用于快速检索）
       setQueryHistory((prev) => [sqlToExecute, ...prev.slice(0, 49)]);
     } catch (error: any) {
       console.error('SQL execution error:', error);
@@ -1142,22 +1212,64 @@ export function SQLEditor({
 
   const formatSQL = useCallback(() => {
     if (!editorRef.current) return;
+    const dialectMap: Record<string, string> = {
+      mysql: 'mysql',
+      mariadb: 'mariadb',
+      postgresql: 'postgresql',
+      sqlite: 'sqlite',
+      sqlserver: 'transactsql',
+      oracle: 'plsql',
+      dameng: 'oracle',
+    };
+    try {
+      const formatted = formatSql(sql, {
+        language: (dialectMap[dbType || ''] || 'mysql') as any,
+        keywordCase: 'upper',
+        indentStyle: 'standard',
+        linesBetweenQueries: 2,
+      });
+      setSql(formatted);
+      message.success('SQL 已格式化');
+    } catch (e: any) {
+      message.error(`格式化失败：${e.message || e}`);
+    }
+  }, [sql, dbType]);
 
-    const formatted = sql
-      .replace(
-        /\b(SELECT|FROM|WHERE|AND|OR|ORDER|BY|GROUP|LIMIT|INSERT|INTO|VALUES|UPDATE|SET|DELETE|JOIN|ON|AS|IN|NOT|NULL|IS|LIKE|BETWEEN|EXISTS)\b/gi,
-        (match) => match.toUpperCase()
-      )
-      .replace(/,/g, ',\n  ')
-      .replace(/\bFROM\b/i, '\nFROM')
-      .replace(/\bWHERE\b/i, '\nWHERE')
-      .replace(/\bORDER BY\b/i, '\nORDER BY')
-      .replace(/\bGROUP BY\b/i, '\nGROUP BY')
-      .replace(/\bLIMIT\b/i, '\nLIMIT');
+  const handleBeginTransaction = useCallback(async () => {
+    if (!connectionId) {
+      message.warning('请先选择一个数据库连接');
+      return;
+    }
+    try {
+      await api.beginTransaction(connectionId);
+      setTransactionActive(true);
+      message.success('事务已开启');
+    } catch (err: any) {
+      message.error(`开启事务失败：${err.message || err}`);
+    }
+  }, [connectionId]);
 
-    setSql(formatted);
-    message.success('SQL 已格式化');
-  }, [sql]);
+  const handleCommitTransaction = useCallback(async () => {
+    if (!connectionId) return;
+    try {
+      await api.commitTransaction(connectionId);
+      setTransactionActive(false);
+      message.success('事务已提交');
+    } catch (err: any) {
+      message.error(`提交事务失败：${err.message || err}`);
+    }
+  }, [connectionId]);
+
+  const handleRollbackTransaction = useCallback(async () => {
+    if (!connectionId) return;
+    try {
+      await api.rollbackTransaction(connectionId);
+      setTransactionActive(false);
+      message.success('事务已回滚');
+    } catch (err: any) {
+      message.error(`回滚事务失败：${err.message || err}`);
+    }
+  }, [connectionId]);
 
   const clearEditor = useCallback(() => {
     setSql('');
@@ -1461,6 +1573,94 @@ export function SQLEditor({
             执行计划
           </Button>
 
+          <div
+            style={{
+              width: 1,
+              height: 16,
+              background: 'var(--border)',
+              margin: '0 4px',
+            }}
+          />
+
+          {!transactionActive ? (
+            <Button
+              icon={<ThunderboltOutlined />}
+              onClick={handleBeginTransaction}
+              disabled={!connectionId}
+              style={{ borderRadius: 4 }}
+              size="small"
+            >
+              开始事务
+            </Button>
+          ) : (
+            <>
+              <Button
+                icon={<CheckCircleOutlined />}
+                onClick={handleCommitTransaction}
+                type="primary"
+                style={{ borderRadius: 4 }}
+                size="small"
+              >
+                提交
+              </Button>
+              <Button
+                icon={<CloseCircleOutlined />}
+                onClick={handleRollbackTransaction}
+                danger
+                style={{ borderRadius: 4 }}
+                size="small"
+              >
+                回滚
+              </Button>
+            </>
+          )}
+
+          <div
+            style={{
+              width: 1,
+              height: 16,
+              background: 'var(--border)',
+              margin: '0 4px',
+            }}
+          />
+
+          <Tooltip title="注释/取消注释 (Ctrl+/)">
+            <Button
+              icon={<FileTextOutlined />}
+              onClick={() => editorRef.current?.getAction('editor.action.commentLine')?.run()}
+              style={{ borderRadius: 4 }}
+              size="small"
+            >
+              注释
+            </Button>
+          </Tooltip>
+
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'upper', label: '转大写' },
+                { key: 'lower', label: '转小写' },
+              ],
+              onClick: ({ key }) => {
+                const editor = editorRef.current;
+                if (!editor) return;
+                const model = editor.getModel();
+                const selection = editor.getSelection();
+                if (!model || !selection) return;
+                const selectedText = model.getValueInRange(selection);
+                if (!selectedText) return;
+                const replaced = key === 'upper' ? selectedText.toUpperCase() : selectedText.toLowerCase();
+                editor.executeEdits('case-transform', [
+                  { range: selection, text: replaced, forceMoveMarkers: true },
+                ]);
+              },
+            }}
+          >
+            <Button icon={<FormatPainterOutlined />} style={{ borderRadius: 4 }} size="small">
+              大小写
+            </Button>
+          </Dropdown>
+
           <Dropdown
             menu={{
               items: [
@@ -1654,6 +1854,7 @@ export function SQLEditor({
             setHistoryPanelVisible(false);
           }}
           maxHistory={50}
+          storageKey={`sql-history-${connectionId || 'global'}${database ? `-${database}` : ''}`}
         />
       </Drawer>
     </div>

@@ -14,6 +14,9 @@ import {
   DeleteOutlined,
   ImportOutlined,
   ExportOutlined,
+  ClearOutlined,
+  CopyOutlined,
+  CodeOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '../stores/appStore';
 import { useDatabase } from '../hooks/useApi';
@@ -57,6 +60,9 @@ export interface TableListProps {
   onTableDesign?: (tableName: string, database?: string) => void;
   onTableNew?: () => void;
   onTableDelete?: (tableName: string, database?: string) => void;
+  onTableTruncate?: (tableName: string, database?: string) => void;
+  onTableCopy?: (tableName: string, database?: string) => void;
+  onTableDump?: (tableName: string, database?: string) => void;
   onImport?: () => void;
   onExport?: () => void;
 }
@@ -200,8 +206,39 @@ const TableRow = React.memo(function TableRow({
   );
 });
 
+type SortKey = keyof TableData;
+interface SortState {
+  key: SortKey | null;
+  order: 'asc' | 'desc';
+}
+
+function formatSortValue(table: TableData, key: SortKey): string | number {
+  const val = table[key];
+  if (val === undefined || val === null) return '';
+  if (key === 'row_count') return typeof val === 'number' ? val : 0;
+  if (key === 'data_size' || key === 'index_size') {
+    const str = String(val);
+    const match = str.match(/^([\d.]+)\s*(KB|MB|GB|TB|B)?/i);
+    if (!match) return str;
+    const num = parseFloat(match[1]);
+    const unit = (match[2] || 'B').toUpperCase();
+    const mult = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+    return num * (mult[unit as keyof typeof mult] || 1);
+  }
+  return String(val);
+}
+
 // List header component
-function ListHeader() {
+function ListHeader({ sort, onSort }: { sort: SortState; onSort: (key: SortKey) => void }) {
+  const cols: { key: SortKey; label: string; align?: 'left' | 'right' | 'center' }[] = [
+    { key: 'table_name', label: '表名' },
+    { key: 'comment', label: '注释' },
+    { key: 'row_count', label: '行数', align: 'right' },
+    { key: 'data_size', label: '数据大小', align: 'right' },
+    { key: 'engine', label: '引擎', align: 'center' },
+    { key: 'create_time', label: '创建时间' },
+    { key: 'update_time', label: '更新时间' },
+  ];
   return (
     <div
       style={{
@@ -218,13 +255,31 @@ function ListHeader() {
         zIndex: 1,
       }}
     >
-      <span>表名</span>
-      <span>注释</span>
-      <span style={{ textAlign: 'right' }}>行数</span>
-      <span style={{ textAlign: 'right' }}>数据大小</span>
-      <span style={{ textAlign: 'center' }}>引擎</span>
-      <span>创建时间</span>
-      <span>更新时间</span>
+      {cols.map((col) => {
+        const isActive = sort.key === col.key;
+        return (
+          <span
+            key={col.key}
+            style={{
+              textAlign: col.align || 'left',
+              cursor: 'pointer',
+              userSelect: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: col.align === 'right' ? 'flex-end' : col.align === 'center' ? 'center' : 'flex-start',
+              gap: 2,
+            }}
+            onClick={() => onSort(col.key)}
+          >
+            {col.label}
+            {isActive && (
+              <span style={{ fontSize: 10, color: 'var(--color-primary)' }}>
+                {sort.order === 'asc' ? '▲' : '▼'}
+              </span>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -238,6 +293,9 @@ function TableListComponent({
   onTableDesign,
   onTableNew,
   onTableDelete,
+  onTableTruncate,
+  onTableCopy,
+  onTableDump,
   onImport,
   onExport,
 }: TableListProps) {
@@ -246,6 +304,7 @@ function TableListComponent({
   const [searchText, setSearchText] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(getInitialViewMode);
   const [localLoading, setLocalLoading] = useState(false);
+  const [sort, setSort] = useState<SortState>({ key: null, order: 'asc' });
   const tc = useThemeColors();
   const { message } = App.useApp();
 
@@ -317,6 +376,15 @@ function TableListComponent({
     }
   };
 
+  const handleSort = useCallback((key: SortKey) => {
+    setSort((prev) => {
+      if (prev.key === key) {
+        return { key, order: prev.order === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, order: 'asc' };
+    });
+  }, []);
+
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = (value: string) => {
@@ -348,8 +416,22 @@ function TableListComponent({
       }
       return objectType === 'all';
     });
+    if (sort.key) {
+      filtered.sort((a, b) => {
+        const av = formatSortValue(a, sort.key as SortKey);
+        const bv = formatSortValue(b, sort.key as SortKey);
+        if (av === '' && bv !== '') return sort.order === 'asc' ? 1 : -1;
+        if (bv === '' && av !== '') return sort.order === 'asc' ? -1 : 1;
+        if (typeof av === 'number' && typeof bv === 'number') {
+          return sort.order === 'asc' ? av - bv : bv - av;
+        }
+        return sort.order === 'asc'
+          ? String(av).localeCompare(String(bv))
+          : String(bv).localeCompare(String(av));
+      });
+    }
     return { filteredTables: filtered, tableCount, viewCount };
-  }, [tables, objectType]);
+  }, [tables, objectType, sort]);
 
   const tableRowItems = useMemo(
     () =>
@@ -405,7 +487,15 @@ function TableListComponent({
           <Tooltip title="打开表" open={!selectedRow ? false : undefined}><span><Button icon={<FolderOpenOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => selectedRow && onTableOpen?.(selectedRow, database)} /></span></Tooltip>
           <Tooltip title="设计表" open={!selectedRow ? false : undefined}><span><Button icon={<EditOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => selectedRow && onTableDesign?.(selectedRow, database)} /></span></Tooltip>
           <Tooltip title="新增表"><span><Button icon={<PlusOutlined />} size="small" onClick={onTableNew} /></span></Tooltip>
-          <Tooltip title="删除表" open={!selectedRow ? false : undefined}><span><Button icon={<DeleteOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => { if (selectedRow) { Modal.confirm({ title: '确认删除', content: `确定要删除表 "${selectedRow}" 吗？`, okText: '删除', okType: 'danger', onOk: () => onTableDelete?.(selectedRow, database) }); }}} /></span></Tooltip>
+          <Tooltip title="清空表" open={!selectedRow ? false : undefined}><span><Button icon={<ClearOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} danger onClick={() => { if (selectedRow) { Modal.confirm({ title: '确认清空表', content: `确定要清空表 "${selectedRow}" 吗？此操作不可撤销。`, okText: '清空', okType: 'danger', onOk: () => onTableTruncate?.(selectedRow, database) }); }}} /></span></Tooltip>
+          <Tooltip title="复制表" open={!selectedRow ? false : undefined}><span><Button icon={<CopyOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => { if (selectedRow) { const newName = `${selectedRow}_copy`; Modal.confirm({ title: '复制表', content: (
+                <div>
+                  <p>将复制表 "{selectedRow}" 到新表</p>
+                  <input id="copy-table-name" autoFocus defaultValue={newName} style={{ width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--background)', color: 'var(--text)' }} />
+                </div>
+              ), okText: '复制', onOk: () => { const input = document.getElementById('copy-table-name') as HTMLInputElement; onTableCopy?.(selectedRow, database); } }); }}} /></span></Tooltip>
+          <Tooltip title="转储SQL" open={!selectedRow ? false : undefined}><span><Button icon={<CodeOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => selectedRow && onTableDump?.(selectedRow, database)} /></span></Tooltip>
+          <Tooltip title="删除表" open={!selectedRow ? false : undefined}><span><Button icon={<DeleteOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} danger onClick={() => { if (selectedRow) { Modal.confirm({ title: '确认删除', content: `确定要删除表 "${selectedRow}" 吗？`, okText: '删除', okType: 'danger', onOk: () => onTableDelete?.(selectedRow, database) }); }}} /></span></Tooltip>
           <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
           <Tooltip title="导入向导"><span><Button icon={<ImportOutlined />} size="small" onClick={onImport} /></span></Tooltip>
           <Tooltip title="导出向导"><span><Button icon={<ExportOutlined />} size="small" onClick={onExport} /></span></Tooltip>
@@ -473,7 +563,7 @@ function TableListComponent({
           </div>
         ) : viewMode === 'list' ? (
           <div style={{ background: 'var(--background-card)' }}>
-            <ListHeader />
+            <ListHeader sort={sort} onSort={handleSort} />
             {tableRowItems}
           </div>
         ) : (

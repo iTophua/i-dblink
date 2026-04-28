@@ -394,7 +394,16 @@ fn main() {
             commands::get_procedure_body,
             commands::get_function_body,
             commands::get_routines,
-            commands::update_connection_password
+            commands::update_connection_password,
+            commands::execute_ddl,
+            commands::truncate_table,
+            commands::drop_table,
+            commands::drop_view,
+            commands::rename_table,
+            commands::begin_transaction,
+            commands::commit_transaction,
+            commands::rollback_transaction,
+            commands::get_transaction_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

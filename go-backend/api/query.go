@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"idblink-backend/db"
 	"idblink-backend/models"
 )
 
@@ -26,27 +26,13 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	var dbConn *sql.DB
-	var err error
-
-	// 如果指定了数据库，获取或创建该数据库的连接
-	if req.Database != "" {
-		fmt.Printf("[DEBUG] GetWithDatabase: %s, %s\n", req.ConnectionID, req.Database)
-		dbConn, err = h.mgr.GetWithDatabase(req.ConnectionID, req.Database)
-		if err != nil {
-			writeJSONError(w, err.Error())
-			return
-		}
-	} else {
-		dbConn, err = h.mgr.Get(req.ConnectionID)
-		if err != nil {
-			writeJSONError(w, err.Error())
-			return
-		}
+	exec, err := h.mgr.GetExecutor(req.ConnectionID, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
 	}
 
-	fmt.Printf("[DEBUG] dbConn=%p, Database=%s\n", dbConn, req.Database)
-	result, err := executeSQL(ctx, dbConn, req.SQL)
+	result, err := executeSQL(ctx, exec, req.SQL)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
@@ -58,10 +44,10 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-func executeSQL(ctx context.Context, dbConn *sql.DB, sqlStr string) (*models.QueryResult, error) {
+func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.QueryResult, error) {
 	fmt.Fprintf(os.Stderr, "[DEBUG] executeSQL start: sql=%s\n", sqlStr)
 
-	rows, err := dbConn.QueryContext(ctx, sqlStr)
+	rows, err := exec.QueryContext(ctx, sqlStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[DEBUG] QueryContext error: %v\n", err)
 		return nil, err

@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Layout, theme, Modal, Form, Input } from 'antd';
 import { GlobalSearch } from './GlobalInput';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
 import { useMenuShortcuts } from '../hooks/useMenuShortcuts';
 import { Toolbar } from './Toolbar';
 import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
-import { TabPanel, type TabPanelRef } from './TabPanel';
+import { TabPanel, type TabPanelRef, type ActiveTabInfo } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
 import { SettingsDialog } from './SettingsDialog';
@@ -14,6 +15,7 @@ import type { ConnectionFormData } from './ConnectionDialog';
 import type { Connection } from '../stores/appStore';
 import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useWorkspaceStore } from '../stores/workspaceStore';
 import { api } from '../api';
 
 const { Sider, Content } = Layout;
@@ -98,6 +100,26 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [passwordDialogConn, setPasswordDialogConn] = useState<{ id: string; name: string } | null>(null);
   const [passwordForm] = Form.useForm();
   const tabPanelRef = useRef<TabPanelRef>(null);
+  const workspaceRestoredRef = useRef(false);
+  const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo>({ type: 'objects', title: '对象列表' });
+
+  // 恢复侧边栏工作区状态
+  useEffect(() => {
+    if (workspaceRestoredRef.current) return;
+    const ws = useWorkspaceStore.getState();
+    setCollapsed(ws.sidebarCollapsed);
+    setExpandedKeys(ws.expandedKeys);
+    workspaceRestoredRef.current = true;
+  }, []);
+
+  // 保存侧边栏状态
+  useEffect(() => {
+    if (!workspaceRestoredRef.current) return;
+    useWorkspaceStore.getState().updateWorkspace({
+      sidebarCollapsed: collapsed,
+      expandedKeys,
+    });
+  }, [collapsed, expandedKeys]);
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
@@ -114,6 +136,25 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   } = useConnections();
 
   const { groups, saveGroup, deleteGroup } = useGroups();
+
+  // 动态更新窗口标题
+  useEffect(() => {
+    const connectionName = selectedConnectionId
+      ? connections.find((c) => c.id === selectedConnectionId)?.name
+      : undefined;
+    const parts: string[] = [];
+    if (connectionName) parts.push(connectionName);
+    if (activeTabInfo.database) parts.push(activeTabInfo.database);
+    if (activeTabInfo.title && activeTabInfo.type !== 'objects') parts.push(activeTabInfo.title);
+    const title = parts.length > 0 ? `${parts.join(' > ')} - iDBLink` : 'iDBLink';
+    document.title = title;
+    try {
+      const appWindow = getCurrentWindow();
+      appWindow.setTitle(title);
+    } catch (e) {
+      // 忽略 Tauri 未初始化时的错误
+    }
+  }, [selectedConnectionId, connections, activeTabInfo]);
 
   const { getTables, refreshTables, getDatabases, getColumns, getIndexes } = useDatabase();
 
@@ -954,6 +995,22 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                 onEditConnection={handleEditConnection}
                 onDeleteConnection={handleDeleteConnection}
                 onNewQuery={handleNewQuery}
+                onOpenRoutine={async (connId, db, name, type) => {
+                  try {
+                    const body =
+                      type === 'procedure'
+                        ? await api.getProcedureBody(connId, name, db)
+                        : await api.getFunctionBody(connId, name, db);
+                    tabPanelRef.current?.openSqlTab({
+                      connectionId: connId,
+                      database: db,
+                      title: `${type === 'procedure' ? '存储过程' : '函数'}: ${name}`,
+                      defaultQuery: body,
+                    });
+                  } catch (err: any) {
+                    console.error('Failed to load routine body:', err);
+                  }
+                }}
                 onDatabaseExpand={handleDatabaseExpand}
                 onDatabaseRefresh={handleDatabaseRefresh}
                 onDatabaseClose={handleDatabaseClose}
@@ -997,6 +1054,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
               selectedObjectType={selectedObjectType}
               tableToOpen={tableToOpen}
               onSqlTabCountChange={setSqlTabCount}
+              onActiveTabChange={setActiveTabInfo}
               pageSize={useSettingsStore.getState().settings.pageSize}
               connectionDatabases={connectionDatabases}
             />

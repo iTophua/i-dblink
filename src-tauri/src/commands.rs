@@ -899,3 +899,258 @@ pub async fn update_connection_password(
         .await
         .map_err(|e| format!("Failed to update password: {}", e))
 }
+
+// ==================== DDL 命令（通过 Go Sidecar） ====================
+
+/// 执行 DDL 语句
+#[tauri::command]
+pub async fn execute_ddl(
+    connection_id: String,
+    sql: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let mut req_map = serde_json::Map::new();
+    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert("sql".to_string(), serde_json::json!(sql));
+    if let Some(db) = database {
+        req_map.insert("database".to_string(), serde_json::json!(db));
+    }
+    let req = serde_json::Value::Object(req_map);
+    let resp: serde_json::Value = sm.post("/execute-ddl", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 清空表
+#[tauri::command]
+pub async fn truncate_table(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let mut req_map = serde_json::Map::new();
+    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert("table_name".to_string(), serde_json::json!(table_name));
+    if let Some(db) = database {
+        req_map.insert("database".to_string(), serde_json::json!(db));
+    }
+    let req = serde_json::Value::Object(req_map);
+    let resp: serde_json::Value = sm.post("/truncate-table", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 删除表
+#[tauri::command]
+pub async fn drop_table(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let mut req_map = serde_json::Map::new();
+    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert("table_name".to_string(), serde_json::json!(table_name));
+    if let Some(db) = database {
+        req_map.insert("database".to_string(), serde_json::json!(db));
+    }
+    let req = serde_json::Value::Object(req_map);
+    let resp: serde_json::Value = sm.post("/drop-table", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 删除视图
+#[tauri::command]
+pub async fn drop_view(
+    connection_id: String,
+    view_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let mut req_map = serde_json::Map::new();
+    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert("table_name".to_string(), serde_json::json!(view_name));
+    if let Some(db) = database {
+        req_map.insert("database".to_string(), serde_json::json!(db));
+    }
+    let req = serde_json::Value::Object(req_map);
+    let resp: serde_json::Value = sm.post("/drop-view", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 重命名表
+#[tauri::command]
+pub async fn rename_table(
+    connection_id: String,
+    old_name: String,
+    new_name: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let mut req_map = serde_json::Map::new();
+    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert("old_name".to_string(), serde_json::json!(old_name));
+    req_map.insert("new_name".to_string(), serde_json::json!(new_name));
+    if let Some(db) = database {
+        req_map.insert("database".to_string(), serde_json::json!(db));
+    }
+    let req = serde_json::Value::Object(req_map);
+    let resp: serde_json::Value = sm.post("/rename-table", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+// ==================== 事务控制命令（通过 Go Sidecar） ====================
+
+/// 开启事务
+#[tauri::command]
+pub async fn begin_transaction(
+    connection_id: String,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({ "connection_id": connection_id });
+    let resp: serde_json::Value = sm.post("/begin-transaction", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 提交事务
+#[tauri::command]
+pub async fn commit_transaction(
+    connection_id: String,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({ "connection_id": connection_id });
+    let resp: serde_json::Value = sm.post("/commit-transaction", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 回滚事务
+#[tauri::command]
+pub async fn rollback_transaction(
+    connection_id: String,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({ "connection_id": connection_id });
+    let resp: serde_json::Value = sm.post("/rollback-transaction", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 获取事务状态
+#[tauri::command]
+pub async fn get_transaction_status(
+    connection_id: String,
+    sidecar: State<'_, SidecarState>,
+) -> Result<bool, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({ "connection_id": connection_id });
+    let resp: serde_json::Value = sm.post("/transaction-status", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(resp.get("active").and_then(|v| v.as_bool()).unwrap_or(false))
+}

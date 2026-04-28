@@ -22,6 +22,7 @@ import {
 } from 'antd';
 import { GlobalInput } from './GlobalInput';
 import { SqlInput } from './SqlInput';
+import { ColumnFilterHeader } from './DataTable/ColumnFilterHeader';
 import {
   ReloadOutlined,
   DownloadOutlined,
@@ -36,10 +37,15 @@ import {
   FilterOutlined,
   DownOutlined,
   UpOutlined,
+  FileTextOutlined,
+  ImportOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
 import type { ColumnInfo } from '../types/api';
+import { api } from '../api';
+import { exportToExcel, exportToCSV as exportToCSVUtil, exportToJSON as exportToJSONUtil } from '../utils/exportUtils';
+import { ImportWizard } from './DataTable/ImportWizard';
 
 interface FilterCondition {
   id: string;
@@ -78,6 +84,43 @@ interface RowData {
   __original_data__?: Record<string, any>; // 保存原始数据用于对比
 }
 
+function downloadBlob(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function rowsToCsv(columns: string[], rows: RowData[]): string {
+  const escape = (val: unknown) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+  const header = columns.map(escape).join(',');
+  const body = rows.map((row) => columns.map((c) => escape(row[c])).join(',')).join('\n');
+  return `${header}\n${body}`;
+}
+
+function rowsToJson(columns: string[], rows: RowData[]): string {
+  const objs = rows.map((row) => {
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col) => {
+      obj[col] = row[col];
+    });
+    return obj;
+  });
+  return JSON.stringify(objs, null, 2);
+}
+
 interface DataTableProps {
   connectionId: string;
   tableName: string;
@@ -100,6 +143,7 @@ export const DataTable = memo(function DataTable({
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<RowData | null>(null);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
+  const primaryKey = useMemo(() => columns.find((col) => col.column_key === 'PRI'), [columns]);
   const [rowData, setRowData] = useState<RowData[]>([]);
   const [addForm] = Form.useForm();
   const [editForm] = Form.useForm();
@@ -125,6 +169,13 @@ export const DataTable = memo(function DataTable({
   ]);
   const [whereClause, setWhereClause] = useState('');
   const [orderByClause, setOrderByClause] = useState('');
+  const [textEditModal, setTextEditModal] = useState<{
+    open: boolean;
+    field: string;
+    value: string;
+    rowIndex: number;
+  } | null>(null);
+  const [importWizardOpen, setImportWizardOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
@@ -151,6 +202,32 @@ export const DataTable = memo(function DataTable({
   useEffect(() => {
     onDirtyChangeRef.current?.(hasUnsavedChanges);
   }, [hasUnsavedChanges]);
+
+  // Delete 键标记删除选中行
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete') return;
+      // 避免在输入框中触发
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      const api = gridApiRef.current;
+      if (!api) return;
+      const selectedToDelete = api.getSelectedRows();
+      if (selectedToDelete.length === 0) return;
+      if (!primaryKey && selectedToDelete.some((row) => row.__status__ !== 'new')) {
+        message.warning('该表没有主键，无法删除已有行');
+        return;
+      }
+      e.preventDefault();
+      setPendingChanges((prev) => ({
+        ...prev,
+        deletes: [...prev.deletes, ...selectedToDelete],
+      }));
+      setHasUnsavedChanges(true);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [primaryKey]);
 
   const tc = useThemeColors();
   const isDarkMode = tc.isDark;
@@ -465,6 +542,8 @@ export const DataTable = memo(function DataTable({
         editable: true,
         cellEditor,
         headerTooltip: col.data_type + nullableInfo + commentInfo,
+        headerComponent: 'columnFilterHeader',
+        headerComponentParams: { rowData },
         cellClass: (params: any) => {
           if (params.value === null) return 'null-cell';
           if (
@@ -560,6 +639,29 @@ export const DataTable = memo(function DataTable({
     }),
     []
   );
+
+  const onCellDoubleClicked = useCallback((event: any) => {
+    const field = event.colDef.field;
+    if (!field) return;
+    const colInfo = columns.find((c) => c.column_name === field);
+    if (!colInfo) return;
+    const dataType = (colInfo.data_type || '').toUpperCase();
+    const isTextBlob =
+      dataType === 'TEXT' ||
+      dataType === 'BLOB' ||
+      dataType === 'LONGTEXT' ||
+      dataType === 'MEDIUMTEXT' ||
+      dataType === 'LONG_BLOB' ||
+      dataType === 'MEDIUMBLOB' ||
+      dataType.includes('TEXT') ||
+      dataType.includes('BLOB') ||
+      dataType === 'BYTEA' ||
+      dataType === 'CLOB';
+    if (!isTextBlob) return;
+    const rowIndex = event.rowIndex;
+    const value = event.value === null || event.value === undefined ? '' : String(event.value);
+    setTextEditModal({ open: true, field, value, rowIndex });
+  }, [columns]);
 
   const onCellValueChanged = useCallback((event: any) => {
     if (event.newValue === event.oldValue) {
@@ -1212,7 +1314,10 @@ export const DataTable = memo(function DataTable({
 
   const statusBarStyle: React.CSSProperties = {
     borderTop: '1px solid var(--border-color)',
-    background: 'var(--background-toolbar)',
+    background: hasUnsavedChanges
+      ? 'var(--color-warning-bg, #fffbe6)'
+      : 'var(--background-toolbar)',
+    borderBottom: hasUnsavedChanges ? '2px solid var(--color-warning)' : undefined,
     padding: '1px 4px',
     display: 'flex',
     alignItems: 'center',
@@ -1220,6 +1325,7 @@ export const DataTable = memo(function DataTable({
     flexShrink: 0,
     gap: 4,
     minHeight: 22,
+    transition: 'background 0.3s ease',
   };
 
   const dividerStyle: React.CSSProperties = {
@@ -1732,8 +1838,10 @@ export const DataTable = memo(function DataTable({
               rowData={rowData}
               columnDefs={columnDefs}
               defaultColDef={defaultColDef}
+              components={{ columnFilterHeader: ColumnFilterHeader }}
               getRowId={(params) => params.data.__row_id__}
               onCellValueChanged={onCellValueChanged}
+              onCellDoubleClicked={onCellDoubleClicked}
               onSelectionChanged={onSelectionChanged}
               onSortChanged={(event) => {
                 const api = event.api;
@@ -1884,6 +1992,27 @@ export const DataTable = memo(function DataTable({
 
           <div style={dividerStyle} />
 
+          {hasUnsavedChanges && (
+            <>
+              {pendingChanges.inserts.length > 0 && (
+                <Tag color="success" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
+                  插入 {pendingChanges.inserts.length}
+                </Tag>
+              )}
+              {pendingChanges.updates.length > 0 && (
+                <Tag color="warning" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
+                  更新 {pendingChanges.updates.length}
+                </Tag>
+              )}
+              {pendingChanges.deletes.length > 0 && (
+                <Tag color="error" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
+                  删除 {pendingChanges.deletes.length}
+                </Tag>
+              )}
+              <div style={dividerStyle} />
+            </>
+          )}
+
           <Button
             icon={<ReloadOutlined />}
             onClick={() => loadData()}
@@ -1893,6 +2022,102 @@ export const DataTable = memo(function DataTable({
           >
             刷新
           </Button>
+          <Button
+            icon={<ImportOutlined />}
+            onClick={() => setImportWizardOpen(true)}
+            size="small"
+            style={{ height: 20, padding: '0 4px', fontSize: 11 }}
+          >
+            导入
+          </Button>
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'excel',
+                  label: '导出 Excel (.xlsx)',
+                  icon: <FileTextOutlined />,
+                  onClick: () => {
+                    try {
+                      const exportCols = columns.map((c) => ({
+                        field: c.column_name,
+                        headerName: c.column_name,
+                      }));
+                      const cleanData = rowData.map((row) => {
+                        const newRow: Record<string, any> = {};
+                        columns.forEach((c) => {
+                          const val = row[c.column_name];
+                          newRow[c.column_name] = val === null ? '' : val;
+                        });
+                        return newRow;
+                      });
+                      exportToExcel(cleanData, exportCols, {
+                        filename: `${tableName}_${Date.now()}.xlsx`,
+                        sheetName: tableName,
+                      });
+                      message.success('已导出 Excel');
+                    } catch (e: any) {
+                      message.error(`导出失败：${e.message}`);
+                    }
+                  },
+                },
+                {
+                  key: 'csv',
+                  label: '导出 CSV',
+                  icon: <FileTextOutlined />,
+                  onClick: () => {
+                    try {
+                      const exportCols = columns.map((c) => ({
+                        field: c.column_name,
+                        headerName: c.column_name,
+                      }));
+                      const cleanData = rowData.map((row) => {
+                        const newRow: Record<string, any> = {};
+                        columns.forEach((c) => {
+                          const val = row[c.column_name];
+                          newRow[c.column_name] = val === null ? '' : val;
+                        });
+                        return newRow;
+                      });
+                      exportToCSVUtil(cleanData, exportCols, {
+                        filename: `${tableName}_${Date.now()}.csv`,
+                      });
+                      message.success('已导出 CSV');
+                    } catch (e: any) {
+                      message.error(`导出失败：${e.message}`);
+                    }
+                  },
+                },
+                {
+                  key: 'json',
+                  label: '导出 JSON',
+                  icon: <FileTextOutlined />,
+                  onClick: () => {
+                    try {
+                      const cleanData = rowData.map((row) => {
+                        const newRow: Record<string, any> = {};
+                        columns.forEach((c) => {
+                          const val = row[c.column_name];
+                          newRow[c.column_name] = val === null ? '' : val;
+                        });
+                        return newRow;
+                      });
+                      exportToJSONUtil(cleanData, {
+                        filename: `${tableName}_${Date.now()}.json`,
+                      });
+                      message.success('已导出 JSON');
+                    } catch (e: any) {
+                      message.error(`导出失败：${e.message}`);
+                    }
+                  },
+                },
+              ],
+            }}
+          >
+            <Button icon={<DownloadOutlined />} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>
+              导出
+            </Button>
+          </Dropdown>
         </Space>
 
         {/* SQL 预览 */}
@@ -2049,6 +2274,90 @@ export const DataTable = memo(function DataTable({
           ))}
         </Form>
       </Modal>
+
+      <Modal
+        title={`编辑 ${textEditModal?.field || ''}`}
+        open={!!textEditModal?.open}
+        onCancel={() => setTextEditModal(null)}
+        onOk={() => {
+          if (!textEditModal || !gridApiRef.current) return;
+          const { field, rowIndex } = textEditModal;
+          const newValue = textEditModal.value;
+          const rowNode = gridApiRef.current.getDisplayedRowAtIndex(rowIndex);
+          if (rowNode) {
+            const updatedRow = { ...rowNode.data, [field]: newValue };
+            if (!updatedRow.__status__ || updatedRow.__status__ !== 'new') {
+              updatedRow.__status__ = 'modified';
+            }
+            gridApiRef.current.applyTransaction({ update: [updatedRow] });
+            setHasUnsavedChanges(true);
+            setPendingChanges((prev) => {
+              const filteredUpdates = prev.updates.filter(
+                (r) => r.__row_id__ !== updatedRow.__row_id__
+              );
+              return { ...prev, updates: [...filteredUpdates, updatedRow] };
+            });
+          }
+          setTextEditModal(null);
+        }}
+        width={600}
+      >
+        <Input.TextArea
+          rows={12}
+          value={textEditModal?.value || ''}
+          onChange={(e) =>
+            setTextEditModal((prev) => (prev ? { ...prev, value: e.target.value } : null))
+          }
+          placeholder="输入内容..."
+        />
+      </Modal>
+
+      <ImportWizard
+        open={importWizardOpen}
+        onClose={() => setImportWizardOpen(false)}
+        tableName={tableName || ''}
+        columns={columns}
+        onImport={async (data, mode, mapping) => {
+          // 根据映射转换数据
+          const mappedData = data.map((row) => {
+            const newRow: Record<string, any> = {};
+            Object.entries(mapping).forEach(([sourceField, targetField]) => {
+              if (targetField && row[sourceField] !== undefined) {
+                newRow[targetField] = row[sourceField];
+              }
+            });
+            return newRow;
+          });
+
+          // 这里应该调用后端API执行导入
+          // 暂时通过执行SQL语句来实现
+          const pkCol = columns.find((c) => c.column_key === 'PRI');
+          for (const row of mappedData) {
+            const colNames = Object.keys(row);
+            const values = Object.values(row);
+            if (mode === 'append') {
+              const sql = `INSERT INTO \`${tableName}\` (${colNames.map((c) => `\`${c}\``).join(', ')}) VALUES (${values.map((v) => (typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` : v)).join(', ')})`;
+              await api.executeQuery(connectionId, sql, database);
+            } else if (mode === 'replace') {
+              // TRUNCATE 已在导入前执行
+              const sql = `INSERT INTO \`${tableName}\` (${colNames.map((c) => `\`${c}\``).join(', ')}) VALUES (${values.map((v) => (typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` : v)).join(', ')})`;
+              await api.executeQuery(connectionId, sql, database);
+            } else if (mode === 'update' && pkCol) {
+              const pkValue = row[pkCol.column_name];
+              if (pkValue !== undefined) {
+                const setClause = colNames
+                  .filter((c) => c !== pkCol.column_name)
+                  .map((c) => `\`${c}\` = ${typeof row[c] === 'string' ? `'${row[c].replace(/'/g, "''")}'` : row[c]}`)
+                  .join(', ');
+                const sql = `UPDATE \`${tableName}\` SET ${setClause} WHERE \`${pkCol.column_name}\` = ${typeof pkValue === 'string' ? `'${pkValue.replace(/'/g, "''")}'` : pkValue}`;
+                await api.executeQuery(connectionId, sql, database);
+              }
+            }
+          }
+          // 刷新数据
+          loadData();
+        }}
+      />
 
       <Dropdown
         open={contextMenu.visible}

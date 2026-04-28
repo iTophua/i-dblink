@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"idblink-backend/db"
 	"idblink-backend/models"
 )
 
-func sqliteGetTables(ctx context.Context, dbConn *sql.DB, _database *string) ([]models.TableInfo, error) {
+func sqliteGetTables(ctx context.Context, dbConn db.Executor, _database *string) ([]models.TableInfo, error) {
 	query := `
 		SELECT name AS table_name, 'BASE TABLE' AS table_type,
 			NULL AS row_count, NULL AS comment, NULL AS engine,
@@ -37,7 +38,7 @@ func sqliteGetTables(ctx context.Context, dbConn *sql.DB, _database *string) ([]
 	return result, rows.Err()
 }
 
-func sqliteGetTablesCategorized(ctx context.Context, dbConn *sql.DB, _database *string, search *string) (models.TablesResult, error) {
+func sqliteGetTablesCategorized(ctx context.Context, dbConn db.Executor, _database *string, search *string) (models.TablesResult, error) {
 	result := models.TablesResult{
 		Tables: []models.TableInfo{},
 		Views:  []models.TableInfo{},
@@ -85,7 +86,7 @@ func sqliteGetTablesCategorized(ctx context.Context, dbConn *sql.DB, _database *
 	return result, rows.Err()
 }
 
-func sqliteGetColumns(ctx context.Context, dbConn *sql.DB, tableName string, _database *string) ([]models.ColumnInfo, error) {
+func sqliteGetColumns(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.ColumnInfo, error) {
 	safeTable := strings.ReplaceAll(tableName, `"`, `""`)
 	query := fmt.Sprintf(`PRAGMA table_info("%s")`, safeTable)
 	rows, err := dbConn.QueryContext(ctx, query)
@@ -118,7 +119,7 @@ func sqliteGetColumns(ctx context.Context, dbConn *sql.DB, tableName string, _da
 	return result, rows.Err()
 }
 
-func sqliteGetIndexes(ctx context.Context, dbConn *sql.DB, tableName string, _database *string) ([]models.IndexInfo, error) {
+func sqliteGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.IndexInfo, error) {
 	safeTable := strings.ReplaceAll(tableName, `"`, `""`)
 	listQuery := fmt.Sprintf(`PRAGMA index_list("%s")`, safeTable)
 	listRows, err := dbConn.QueryContext(ctx, listQuery)
@@ -169,7 +170,7 @@ func sqliteGetIndexes(ctx context.Context, dbConn *sql.DB, tableName string, _da
 	return result, nil
 }
 
-func sqliteGetForeignKeys(ctx context.Context, dbConn *sql.DB, tableName string, _database *string) ([]models.ForeignKeyInfo, error) {
+func sqliteGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.ForeignKeyInfo, error) {
 	safeTable := strings.ReplaceAll(tableName, `"`, `""`)
 	query := fmt.Sprintf(`PRAGMA foreign_key_list("%s")`, safeTable)
 	rows, err := dbConn.QueryContext(ctx, query)
@@ -196,7 +197,7 @@ func sqliteGetForeignKeys(ctx context.Context, dbConn *sql.DB, tableName string,
 	return result, rows.Err()
 }
 
-func sqliteGetTableStructure(ctx context.Context, dbConn *sql.DB, tableName string, _database *string) (models.TableStructure, error) {
+func sqliteGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, _database *string) (models.TableStructure, error) {
 	var result models.TableStructure
 	var err error
 	result.Columns, err = sqliteGetColumns(ctx, dbConn, tableName, _database)

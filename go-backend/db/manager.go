@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+// Executor 统一的数据库执行器接口（*sql.DB / *sql.Tx / *sql.Conn 均实现）
+type Executor interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
 // connInfo 保存连接池及其类型和参数
 type connInfo struct {
 	db     *sql.DB
@@ -15,16 +22,24 @@ type connInfo struct {
 	args   ConnectArgs // 保存连接参数以便创建带数据库的连接
 }
 
+// txInfo 保存活跃事务
+type txInfo struct {
+	conn *sql.Conn
+	tx   *sql.Tx
+}
+
 // Manager 管理所有数据库连接池
 type Manager struct {
 	mu    sync.RWMutex
 	pools map[string]*connInfo
+	txs   map[string]*txInfo
 }
 
 // NewManager 创建连接管理器
 func NewManager() *Manager {
 	return &Manager{
 		pools: make(map[string]*connInfo),
+		txs:   make(map[string]*txInfo),
 	}
 }
 
@@ -81,6 +96,12 @@ func (m *Manager) Disconnect(connectionID string) error {
 	info, ok := m.pools[connectionID]
 	if ok {
 		delete(m.pools, connectionID)
+	}
+	// 如果有活跃事务，先回滚
+	if txInfo, txOk := m.txs[connectionID]; txOk {
+		delete(m.txs, connectionID)
+		_ = txInfo.tx.Rollback()
+		_ = txInfo.conn.Close()
 	}
 	m.mu.Unlock()
 
@@ -203,6 +224,102 @@ func (m *Manager) GetWithDatabase(connectionID string, database string) (*sql.DB
 	}
 
 	return info.db, nil
+}
+
+// BeginTransaction 开启事务
+func (m *Manager) BeginTransaction(connectionID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.txs[connectionID]; exists {
+		return fmt.Errorf("transaction already active for connection %s", connectionID)
+	}
+
+	info, ok := m.pools[connectionID]
+	if !ok {
+		return fmt.Errorf("connection %s not found", connectionID)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := info.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to reserve connection: %w", err)
+	}
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel2()
+
+	tx, err := conn.BeginTx(ctx2, nil)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	m.txs[connectionID] = &txInfo{conn: conn, tx: tx}
+	return nil
+}
+
+// CommitTransaction 提交事务
+func (m *Manager) CommitTransaction(connectionID string) error {
+	m.mu.Lock()
+	txInfo, exists := m.txs[connectionID]
+	delete(m.txs, connectionID)
+	m.mu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("no active transaction for connection %s", connectionID)
+	}
+
+	err := txInfo.tx.Commit()
+	_ = txInfo.conn.Close()
+	if err != nil {
+		return fmt.Errorf("commit failed: %w", err)
+	}
+	return nil
+}
+
+// RollbackTransaction 回滚事务
+func (m *Manager) RollbackTransaction(connectionID string) error {
+	m.mu.Lock()
+	txInfo, exists := m.txs[connectionID]
+	delete(m.txs, connectionID)
+	m.mu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("no active transaction for connection %s", connectionID)
+	}
+
+	err := txInfo.tx.Rollback()
+	_ = txInfo.conn.Close()
+	if err != nil {
+		return fmt.Errorf("rollback failed: %w", err)
+	}
+	return nil
+}
+
+// HasTransaction 检查是否有活跃事务
+func (m *Manager) HasTransaction(connectionID string) bool {
+	m.mu.RLock()
+	_, exists := m.txs[connectionID]
+	m.mu.RUnlock()
+	return exists
+}
+
+// GetExecutor 获取执行器（优先返回活跃事务，其次返回连接池）
+func (m *Manager) GetExecutor(connectionID string, database string) (Executor, error) {
+	m.mu.RLock()
+	if txInfo, exists := m.txs[connectionID]; exists {
+		m.mu.RUnlock()
+		return txInfo.tx, nil
+	}
+	m.mu.RUnlock()
+
+	if database != "" {
+		return m.GetWithDatabase(connectionID, database)
+	}
+	return m.Get(connectionID)
 }
 
 func openDB(args ConnectArgs) (*sql.DB, error) {

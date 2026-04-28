@@ -106,6 +106,23 @@ function escapeIdentifier(name: string): string {
   return `\`${name.replace(/`/g, '``')}\``;
 }
 
+function generateColumnDef(col: DesignerColumn): string {
+  let line = `${escapeIdentifier(col.name)} ${col.type}`;
+  if (col.length && col.type !== 'BOOLEAN' && col.type !== 'JSON') {
+    line += `(${col.length})`;
+  }
+  if (!col.nullable) {
+    line += ' NOT NULL';
+  }
+  if (col.defaultValue) {
+    line += ` DEFAULT ${col.defaultValue}`;
+  }
+  if (col.comment) {
+    line += ` COMMENT '${col.comment.replace(/'/g, "''")}'`;
+  }
+  return line;
+}
+
 function generateCreateTableSQL(
   tableName: string,
   columns: DesignerColumn[],
@@ -119,20 +136,7 @@ function generateCreateTableSQL(
   // Column definitions
   for (const col of columns) {
     if (!col.name) continue;
-    let line = `  ${escapeIdentifier(col.name)} ${col.type}`;
-    if (col.length && col.type !== 'BOOLEAN' && col.type !== 'JSON') {
-      line += `(${col.length})`;
-    }
-    if (!col.nullable) {
-      line += ' NOT NULL';
-    }
-    if (col.defaultValue) {
-      line += ` DEFAULT ${col.defaultValue}`;
-    }
-    if (col.comment) {
-      line += ` COMMENT '${col.comment.replace(/'/g, "''")}'`;
-    }
-    parts.push(line);
+    parts.push(`  ${generateColumnDef(col)}`);
   }
 
   // Index definitions
@@ -165,6 +169,114 @@ function generateCreateTableSQL(
   return `CREATE TABLE ${escapeIdentifier(tableName)} (\n${parts.join(',\n')}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`;
 }
 
+function generateAlterTableSQL(
+  tableName: string,
+  columns: DesignerColumn[],
+  indexes: DesignerIndex[],
+  foreignKeys: DesignerForeignKey[],
+  originalColumns: DesignerColumn[],
+  originalIndexes: DesignerIndex[],
+  originalForeignKeys: DesignerForeignKey[]
+): string {
+  if (!tableName) return '-- Enter table name to generate SQL';
+
+  const alters: string[] = [];
+  const tableRef = escapeIdentifier(tableName);
+
+  // --- 列变更 ---
+  const origColMap = new Map(originalColumns.map((c) => [c.name, c]));
+  const newColMap = new Map(columns.map((c) => [c.name, c]));
+
+  // 新增列
+  for (const col of columns) {
+    if (!col.name) continue;
+    if (!origColMap.has(col.name)) {
+      alters.push(`ALTER TABLE ${tableRef} ADD COLUMN ${generateColumnDef(col)};`);
+    }
+  }
+
+  // 修改列
+  for (const col of columns) {
+    if (!col.name) continue;
+    const orig = origColMap.get(col.name);
+    if (!orig) continue;
+    const hasChanged =
+      orig.type !== col.type ||
+      orig.length !== col.length ||
+      orig.nullable !== col.nullable ||
+      orig.defaultValue !== col.defaultValue ||
+      orig.comment !== col.comment ||
+      orig.isPrimary !== col.isPrimary;
+    if (hasChanged) {
+      alters.push(`ALTER TABLE ${tableRef} MODIFY COLUMN ${generateColumnDef(col)};`);
+    }
+  }
+
+  // 删除列
+  for (const orig of originalColumns) {
+    if (!newColMap.has(orig.name)) {
+      alters.push(`ALTER TABLE ${tableRef} DROP COLUMN ${escapeIdentifier(orig.name)};`);
+    }
+  }
+
+  // --- 索引变更 ---
+  const origIdxMap = new Map(originalIndexes.map((i) => [i.name, i]));
+  const newIdxMap = new Map(indexes.map((i) => [i.name, i]));
+
+  // 删除索引
+  for (const orig of originalIndexes) {
+    if (!newIdxMap.has(orig.name)) {
+      alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(orig.name)};`);
+    }
+  }
+
+  // 新增/修改索引
+  for (const idx of indexes) {
+    if (!idx.name || idx.columns.length === 0) continue;
+    const orig = origIdxMap.get(idx.name);
+    const cols = idx.columns.map(escapeIdentifier).join(', ');
+    const idxChanged =
+      !orig ||
+      orig.type !== idx.type ||
+      orig.columns.length !== idx.columns.length ||
+      orig.columns.some((c, i) => c !== idx.columns[i]);
+    if (idxChanged) {
+      if (orig) {
+        alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(idx.name)};`);
+      }
+      if (idx.type === 'UNIQUE') {
+        alters.push(`ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(idx.name)} UNIQUE (${cols});`);
+      } else {
+        alters.push(`ALTER TABLE ${tableRef} ADD INDEX ${escapeIdentifier(idx.name)} (${cols});`);
+      }
+    }
+  }
+
+  // --- 外键变更 ---
+  const origFkMap = new Map(originalForeignKeys.map((f) => [f.name, f]));
+  const newFkMap = new Map(foreignKeys.map((f) => [f.name, f]));
+
+  // 删除外键
+  for (const orig of originalForeignKeys) {
+    if (!newFkMap.has(orig.name)) {
+      alters.push(`ALTER TABLE ${tableRef} DROP FOREIGN KEY ${escapeIdentifier(orig.name)};`);
+    }
+  }
+
+  // 新增外键
+  for (const fk of foreignKeys) {
+    if (!fk.name || !fk.column || !fk.referencedTable || !fk.referencedColumn) continue;
+    if (!origFkMap.has(fk.name)) {
+      alters.push(
+        `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(fk.name)} FOREIGN KEY (${escapeIdentifier(fk.column)}) REFERENCES ${escapeIdentifier(fk.referencedTable)}(${escapeIdentifier(fk.referencedColumn)}) ON UPDATE ${fk.onUpdate} ON DELETE ${fk.onDelete};`
+      );
+    }
+  }
+
+  if (alters.length === 0) return '-- 没有检测到结构变更';
+  return alters.join('\n');
+}
+
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function TableDesigner({
@@ -174,6 +286,7 @@ export function TableDesigner({
   onSave,
   onCancel,
 }: TableDesignerProps) {
+  const isEditMode = !!propTableName;
   const [activeTab, setActiveTab] = useState('columns');
   const [tableName, setTableName] = useState(propTableName || '');
   const [columns, setColumns] = useState<DesignerColumn[]>([
@@ -182,6 +295,11 @@ export function TableDesigner({
   const [indexes, setIndexes] = useState<DesignerIndex[]>([]);
   const [foreignKeys, setForeignKeys] = useState<DesignerForeignKey[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // 保存原始结构用于生成 ALTER 语句
+  const [originalColumns, setOriginalColumns] = useState<DesignerColumn[]>([]);
+  const [originalIndexes, setOriginalIndexes] = useState<DesignerIndex[]>([]);
+  const [originalForeignKeys, setOriginalForeignKeys] = useState<DesignerForeignKey[]>([]);
 
   const lastLoadedRef = useRef('');
 
@@ -225,6 +343,7 @@ export function TableDesigner({
           };
         });
         setColumns(loadedColumns);
+        setOriginalColumns(loadedColumns.map((c) => ({ ...c })));
 
         // Convert indexes (skip primary key index as it's handled by column's isPrimary)
         const loadedIndexes: DesignerIndex[] = structure.indexes
@@ -236,6 +355,7 @@ export function TableDesigner({
             columns: [idx.column_name],
           }));
         setIndexes(loadedIndexes);
+        setOriginalIndexes(loadedIndexes.map((i) => ({ ...i, columns: [...i.columns] })));
 
         // Convert foreign keys
         const loadedForeignKeys: DesignerForeignKey[] = structure.foreign_keys.map(
@@ -250,6 +370,7 @@ export function TableDesigner({
           })
         );
         setForeignKeys(loadedForeignKeys);
+        setOriginalForeignKeys(loadedForeignKeys.map((f) => ({ ...f })));
 
         lastLoadedRef.current = cacheKey;
       } catch (err) {
@@ -264,10 +385,20 @@ export function TableDesigner({
   }, [connectionId, propTableName, database]);
 
   // ── SQL Preview ────────────────────────────────────────────────────────
-  const sqlPreview = useMemo(
-    () => generateCreateTableSQL(tableName, columns, indexes, foreignKeys),
-    [tableName, columns, indexes, foreignKeys]
-  );
+  const sqlPreview = useMemo(() => {
+    if (isEditMode) {
+      return generateAlterTableSQL(
+        tableName,
+        columns,
+        indexes,
+        foreignKeys,
+        originalColumns,
+        originalIndexes,
+        originalForeignKeys
+      );
+    }
+    return generateCreateTableSQL(tableName, columns, indexes, foreignKeys);
+  }, [tableName, columns, indexes, foreignKeys, originalColumns, originalIndexes, originalForeignKeys, isEditMode]);
 
   // ── Column CRUD ────────────────────────────────────────────────────────
   const addColumn = () => {
@@ -357,7 +488,7 @@ export function TableDesigner({
   };
 
   // ── Save ───────────────────────────────────────────────────────────────
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!tableName) {
       message.error('Please enter a table name');
       return;
@@ -366,8 +497,30 @@ export function TableDesigner({
       message.error('At least one column is required');
       return;
     }
-    onSave?.(sqlPreview);
-    message.success('SQL generated successfully');
+    if (!sqlPreview || sqlPreview.startsWith('--')) {
+      message.info('没有需要执行的 SQL');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // 逐条执行 ALTER 语句
+      const statements = sqlPreview
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s && !s.startsWith('--'));
+
+      for (const stmt of statements) {
+        await api.executeDDL(connectionId, stmt, database);
+      }
+
+      message.success(isEditMode ? '表结构修改成功' : '建表成功');
+      onSave?.(sqlPreview);
+    } catch (err: any) {
+      message.error(`执行失败：${err.message || err}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Column Table Columns ───────────────────────────────────────────────

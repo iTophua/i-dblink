@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"strings"
 
+	"idblink-backend/db"
 	"idblink-backend/models"
 )
 
-func postgresGetDatabases(ctx context.Context, dbConn *sql.DB) ([]string, error) {
+func postgresGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, error) {
 	query := `SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres', 'template0', 'template1') ORDER BY datname`
 	rows, err := dbConn.QueryContext(ctx, query)
 	if err != nil {
@@ -27,7 +28,7 @@ func postgresGetDatabases(ctx context.Context, dbConn *sql.DB) ([]string, error)
 	return result, rows.Err()
 }
 
-func postgresGetTables(ctx context.Context, dbConn *sql.DB, _database *string) ([]models.TableInfo, error) {
+func postgresGetTables(ctx context.Context, dbConn db.Executor, _database *string) ([]models.TableInfo, error) {
 	query := `
 		SELECT c.relname AS table_name,
 			CASE c.relkind WHEN 'r' THEN 'BASE TABLE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'OTHER' END AS table_type,
@@ -63,7 +64,7 @@ func postgresGetTables(ctx context.Context, dbConn *sql.DB, _database *string) (
 	return result, rows.Err()
 }
 
-func postgresGetTablesCategorized(ctx context.Context, dbConn *sql.DB, _database *string, search *string) (models.TablesResult, error) {
+func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, _database *string, search *string) (models.TablesResult, error) {
 	result := models.TablesResult{
 		Tables: []models.TableInfo{},
 		Views:  []models.TableInfo{},
@@ -131,7 +132,7 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn *sql.DB, _database
 	return result, rows.Err()
 }
 
-func postgresGetColumns(ctx context.Context, dbConn *sql.DB, tableName string, _database *string) ([]models.ColumnInfo, error) {
+func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.ColumnInfo, error) {
 	query := `
 		SELECT a.attname AS column_name,
 			pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
@@ -173,7 +174,7 @@ func postgresGetColumns(ctx context.Context, dbConn *sql.DB, tableName string, _
 	return result, rows.Err()
 }
 
-func postgresGetIndexes(ctx context.Context, dbConn *sql.DB, tableName string, _database *string) ([]models.IndexInfo, error) {
+func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.IndexInfo, error) {
 	query := `
 		SELECT i.relname AS index_name, a.attname AS column_name,
 			ix.indisunique AS is_unique, ix.indisprimary AS is_primary,
@@ -202,7 +203,7 @@ func postgresGetIndexes(ctx context.Context, dbConn *sql.DB, tableName string, _
 	return result, rows.Err()
 }
 
-func postgresGetForeignKeys(ctx context.Context, dbConn *sql.DB, tableName string, _database *string) ([]models.ForeignKeyInfo, error) {
+func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.ForeignKeyInfo, error) {
 	query := `
 		SELECT tc.constraint_name, kcu.column_name,
 			ccu.table_name AS referenced_table,
@@ -230,7 +231,7 @@ func postgresGetForeignKeys(ctx context.Context, dbConn *sql.DB, tableName strin
 	return result, rows.Err()
 }
 
-func postgresGetTableStructure(ctx context.Context, dbConn *sql.DB, tableName string, _database *string) (models.TableStructure, error) {
+func postgresGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, _database *string) (models.TableStructure, error) {
 	var result models.TableStructure
 	var err error
 	result.Columns, err = postgresGetColumns(ctx, dbConn, tableName, _database)
@@ -248,7 +249,7 @@ func postgresGetTableStructure(ctx context.Context, dbConn *sql.DB, tableName st
 	return result, nil
 }
 
-func postgresGetRoutines(ctx context.Context, dbConn *sql.DB, _database *string) (models.RoutinesResult, error) {
+func postgresGetRoutines(ctx context.Context, dbConn db.Executor, _database *string) (models.RoutinesResult, error) {
 	var result models.RoutinesResult
 	query := `
 		SELECT routine_name, routine_type, routine_definition
@@ -278,7 +279,7 @@ func postgresGetRoutines(ctx context.Context, dbConn *sql.DB, _database *string)
 	return result, rows.Err()
 }
 
-func postgresGetRoutineBody(ctx context.Context, dbConn *sql.DB, database, routineName, routineType string) (string, error) {
+func postgresGetRoutineBody(ctx context.Context, dbConn db.Executor, database, routineName, routineType string) (string, error) {
 	var def sql.NullString
 	query := `SELECT routine_definition FROM information_schema.routines WHERE routine_schema = $1 AND routine_name = $2 AND routine_type = $3`
 	err := dbConn.QueryRowContext(ctx, query, database, routineName, routineType).Scan(&def)
