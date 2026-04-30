@@ -54,7 +54,16 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
     } finally {
       setLoading(false);
     }
-  }, [connectionId, tableName, database, getColumns, getIndexes, getForeignKeys, getTableInfo, getCreateTableSQL]);
+  }, [
+    connectionId,
+    tableName,
+    database,
+    getColumns,
+    getIndexes,
+    getForeignKeys,
+    getTableInfo,
+    getCreateTableSQL,
+  ]);
 
   useEffect(() => {
     if (connectionId && tableName) {
@@ -70,7 +79,9 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       minWidth: 150,
       render: (text: string, record: ColumnInfo) => (
         <span>
-          {record.column_key === 'PRI' && <KeyOutlined style={{ color: '#faad14', marginRight: 4 }} />}
+          {record.column_key === 'PRI' && (
+            <KeyOutlined style={{ color: '#faad14', marginRight: 4 }} />
+          )}
           {text}
         </span>
       ),
@@ -87,7 +98,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       dataIndex: 'is_nullable',
       key: 'is_nullable',
       width: 60,
-      render: (val: string) => val === 'YES' ? '是' : '否',
+      render: (val: string) => (val === 'YES' ? '是' : '否'),
     },
     {
       title: '默认值',
@@ -140,14 +151,14 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       dataIndex: 'is_unique',
       key: 'is_unique',
       width: 60,
-      render: (val: boolean) => val ? '是' : '否',
+      render: (val: boolean) => (val ? '是' : '否'),
     },
     {
       title: '主键',
       dataIndex: 'is_primary',
       key: 'is_primary',
       width: 60,
-      render: (val: boolean) => val ? <Tag color="gold">是</Tag> : '否',
+      render: (val: boolean) => (val ? <Tag color="gold">是</Tag> : '否'),
     },
     {
       title: '顺序',
@@ -194,7 +205,11 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
   ];
 
   if (loading) {
-    return <div style={{ textAlign: 'center', padding: 40 }}><Spin size="large" /></div>;
+    return (
+      <div style={{ textAlign: 'center', padding: 40 }}>
+        <Spin size="large" />
+      </div>
+    );
   }
 
   return (
@@ -228,7 +243,9 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                     </tr>
                     <tr>
                       <td style={{ padding: '2px 0', fontWeight: 500 }}>引擎</td>
-                      <td><Tag color="blue">{tableInfo.engine || '-'}</Tag></td>
+                      <td>
+                        <Tag color="blue">{tableInfo.engine || '-'}</Tag>
+                      </td>
                     </tr>
                     <tr>
                       <td style={{ padding: '2px 0', fontWeight: 500 }}>行数</td>
@@ -236,15 +253,25 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                     </tr>
                     <tr>
                       <td style={{ padding: '2px 0', fontWeight: 500 }}>数据大小</td>
-                      <td>{tableInfo.data_length ? `${(tableInfo.data_length / 1024).toFixed(2)} KB` : '-'}</td>
+                      <td>
+                        {tableInfo.data_length
+                          ? `${(tableInfo.data_length / 1024).toFixed(2)} KB`
+                          : '-'}
+                      </td>
                     </tr>
                     <tr>
                       <td style={{ padding: '2px 0', fontWeight: 500 }}>索引大小</td>
-                      <td>{tableInfo.index_length ? `${(tableInfo.index_length / 1024).toFixed(2)} KB` : '-'}</td>
+                      <td>
+                        {tableInfo.index_length
+                          ? `${(tableInfo.index_length / 1024).toFixed(2)} KB`
+                          : '-'}
+                      </td>
                     </tr>
                     <tr>
                       <td style={{ padding: '2px 0', fontWeight: 500 }}>排序规则</td>
-                      <td><Tag color="green">{tableInfo.collation || '-'}</Tag></td>
+                      <td>
+                        <Tag color="green">{tableInfo.collation || '-'}</Tag>
+                      </td>
                     </tr>
                     <tr>
                       <td style={{ padding: '2px 0', fontWeight: 500 }}>创建时间</td>
@@ -261,52 +288,63 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                   </tbody>
                 </table>
               </div>
-            ) : <Empty description="暂无表信息" />,
+            ) : (
+              <Empty description="暂无表信息" />
+            ),
           },
           {
             key: 'columns',
             label: `列 (${columns.length})`,
-            children: columns.length > 0 ? (
-              <Table
-                columns={columnDefs}
-                dataSource={columns}
-                rowKey="column_name"
-                size="small"
-                pagination={false}
-                scroll={{ x: 'max-content' }}
-                className="table-compact"
-              />
-            ) : <Empty description="暂无列信息" />,
+            children:
+              columns.length > 0 ? (
+                <Table
+                  columns={columnDefs}
+                  dataSource={columns}
+                  rowKey="column_name"
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: 'max-content' }}
+                  className="table-compact"
+                />
+              ) : (
+                <Empty description="暂无列信息" />
+              ),
           },
           {
             key: 'indexes',
             label: `索引 (${indexes.length})`,
-            children: indexes.length > 0 ? (
-              <Table
-                columns={indexDefs}
-                dataSource={indexes}
-                rowKey={(record) => `${record.index_name}-${record.column_name}`}
-                size="small"
-                pagination={false}
-                scroll={{ x: 'max-content' }}
-                className="table-compact"
-              />
-            ) : <Empty description="暂无索引" />,
+            children:
+              indexes.length > 0 ? (
+                <Table
+                  columns={indexDefs}
+                  dataSource={indexes}
+                  rowKey={(record) => `${record.index_name}-${record.column_name}`}
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: 'max-content' }}
+                  className="table-compact"
+                />
+              ) : (
+                <Empty description="暂无索引" />
+              ),
           },
           {
             key: 'foreign_keys',
             label: `外键 (${foreignKeys.length})`,
-            children: foreignKeys.length > 0 ? (
-              <Table
-                columns={fkDefs}
-                dataSource={foreignKeys}
-                rowKey={(record) => `${record.constraint_name}-${record.column_name}`}
-                size="small"
-                pagination={false}
-                scroll={{ x: 'max-content' }}
-                className="table-compact"
-              />
-            ) : <Empty description="暂无外键" />,
+            children:
+              foreignKeys.length > 0 ? (
+                <Table
+                  columns={fkDefs}
+                  dataSource={foreignKeys}
+                  rowKey={(record) => `${record.constraint_name}-${record.column_name}`}
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: 'max-content' }}
+                  className="table-compact"
+                />
+              ) : (
+                <Empty description="暂无外键" />
+              ),
           },
           {
             key: 'sql',
@@ -318,19 +356,23 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
             ),
             children: createTableSQL ? (
               <div style={{ padding: '8px 0' }}>
-                <pre style={{
-                  background: '#f5f5f5',
-                  padding: 12,
-                  borderRadius: 4,
-                  fontSize: 12,
-                  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                  overflow: 'auto',
-                  maxHeight: 300,
-                }}>
+                <pre
+                  style={{
+                    background: '#f5f5f5',
+                    padding: 12,
+                    borderRadius: 4,
+                    fontSize: 12,
+                    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                    overflow: 'auto',
+                    maxHeight: 300,
+                  }}
+                >
                   {createTableSQL}
                 </pre>
               </div>
-            ) : <Empty description="暂无 SQL" />,
+            ) : (
+              <Empty description="暂无 SQL" />
+            ),
           },
         ]}
       />

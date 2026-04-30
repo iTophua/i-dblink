@@ -18,25 +18,25 @@ src/
 
 ## 核心文件
 
-| 文件 | 作用 | 引用 |
-|------|------|------|
-| `types/api.ts` | 核心类型 (DatabaseType, ConnectionInput, QueryResult) | 6 |
-| `stores/appStore.ts` | Zustand 全局状态 (connections, groups) | 3 |
-| `api/index.ts` | Tauri invoke 封装 | 1 |
-| `hooks/useApi.ts` | 业务逻辑 (连接、分组、数据库操作) | 多 |
+| 文件                 | 作用                                                  | 引用 |
+| -------------------- | ----------------------------------------------------- | ---- |
+| `types/api.ts`       | 核心类型 (DatabaseType, ConnectionInput, QueryResult) | 6    |
+| `stores/appStore.ts` | Zustand 全局状态 (connections, groups)                | 3    |
+| `api/index.ts`       | Tauri invoke 封装                                     | 1    |
+| `hooks/useApi.ts`    | 业务逻辑 (连接、分组、数据库操作)                     | 多   |
 
 ## 组件
 
-| 文件 | 行数 | 复杂度 | 备注 |
-|------|------|--------|------|
-| `MainLayout.tsx` | ~850 | 高 | 布局组件，已集成快捷键 |
-| `TabPanel/index.tsx` | ~650 | 中 | 标签页管理，支持多 SQL 查询 |
-| `SQLEditor.tsx` | ~650 | 中 | Monaco Editor SQL 编辑器 |
-| `DataTable.tsx` | ~600 | 中 | AG Grid 数据表格，已实现右键菜单 |
-| `ConnectionDialog.tsx` | 中 | 连接配置对话框，已实现文件选择 |
-| `EnhancedConnectionTree.tsx` | 高 | 连接树组件，已实现确认对话框 |
-| `TableList.tsx` | 中 | 表列表组件 |
-| `TableDesigner/index.tsx` | ~800 | 中 | 表设计器 |
+| 文件                         | 行数 | 复杂度                         | 备注                             |
+| ---------------------------- | ---- | ------------------------------ | -------------------------------- |
+| `MainLayout.tsx`             | ~850 | 高                             | 布局组件，已集成快捷键           |
+| `TabPanel/index.tsx`         | ~650 | 中                             | 标签页管理，支持多 SQL 查询      |
+| `SQLEditor.tsx`              | ~650 | 中                             | Monaco Editor SQL 编辑器         |
+| `DataTable.tsx`              | ~600 | 中                             | AG Grid 数据表格，已实现右键菜单 |
+| `ConnectionDialog.tsx`       | 中   | 连接配置对话框，已实现文件选择 |
+| `EnhancedConnectionTree.tsx` | 高   | 连接树组件，已实现确认对话框   |
+| `TableList.tsx`              | 中   | 表列表组件                     |
+| `TableDesigner/index.tsx`    | ~800 | 中                             | 表设计器                         |
 
 ## 约定
 

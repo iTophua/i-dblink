@@ -147,7 +147,10 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
                     padding: '10px 16px',
                     cursor: 'pointer',
                     background: index === selectedIndex ? 'var(--row-selected-bg)' : 'transparent',
-                    borderLeft: index === selectedIndex ? '2px solid var(--color-primary)' : '2px solid transparent',
+                    borderLeft:
+                      index === selectedIndex
+                        ? '2px solid var(--color-primary)'
+                        : '2px solid transparent',
                   }}
                   onMouseEnter={() => setSelectedIndex(index)}
                   onClick={() => executeCommand(command)}
@@ -171,7 +174,14 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
                       )}
                     </div>
                     {command.description && (
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, marginLeft: 20 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--text-secondary)',
+                          marginTop: 2,
+                          marginLeft: 20,
+                        }}
+                      >
                         {command.description}
                       </div>
                     )}

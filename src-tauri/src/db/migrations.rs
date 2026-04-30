@@ -114,5 +114,33 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 创建代码片段表
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS snippets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            sql_text TEXT NOT NULL,
+            db_type TEXT,
+            category TEXT DEFAULT '通用',
+            tags TEXT,
+            is_private BOOLEAN DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // 创建索引
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_snippets_category ON snippets(category)")
+        .execute(pool)
+        .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_snippets_db_type ON snippets(db_type)")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }

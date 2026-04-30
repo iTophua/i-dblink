@@ -539,7 +539,25 @@ export const SqlInput: React.FC<SqlInputProps> = ({
       return;
     }
 
-    if (['=', '!=', '<>', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL', 'IN', 'NOT IN', 'BETWEEN'].includes(upperVal) && endsWithSpace) {
+    if (
+      [
+        '=',
+        '!=',
+        '<>',
+        '>',
+        '<',
+        '>=',
+        '<=',
+        'LIKE',
+        'NOT LIKE',
+        'IS NULL',
+        'IS NOT NULL',
+        'IN',
+        'NOT IN',
+        'BETWEEN',
+      ].includes(upperVal) &&
+      endsWithSpace
+    ) {
       isAutoSelectedRef.current = true;
       setAutoOpen(true);
       setTimeout(() => {

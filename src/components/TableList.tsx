@@ -68,143 +68,220 @@ export interface TableListProps {
 }
 
 // Navicat-style grid card component
-const TableGridCard = React.memo(function TableGridCard({
-  table,
-  selected,
-  onClick,
-}: {
-  table: TableData;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '3px 6px',
-        cursor: 'pointer',
-        borderRadius: 3,
-        userSelect: 'none',
-        background: selected ? 'var(--row-selected-bg)' : 'transparent',
-        transition: 'background 0.2s',
-      }}
-      onMouseEnter={(e) => {
-        if (!selected) {
-          e.currentTarget.style.background = 'var(--background-hover)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!selected) {
-          e.currentTarget.style.background = 'transparent';
-        }
-      }}
-    >
-      {table.table_type === 'VIEW' ? (
-        <EyeOutlined style={{ fontSize: 14, color: 'var(--db-color-sqlserver)', flexShrink: 0 }} />
-      ) : (
-        <TableOutlined style={{ fontSize: 14, color: 'var(--color-success)', flexShrink: 0 }} />
-      )}
-      <span
-        title={table.table_name}
+const TableGridCard = React.memo(
+  function TableGridCard({
+    table,
+    selected,
+    onClick,
+  }: {
+    table: TableData;
+    selected: boolean;
+    onClick: () => void;
+  }) {
+    return (
+      <div
+        onClick={onClick}
         style={{
-          fontSize: 12,
-          margin: 0,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '3px 6px',
+          cursor: 'pointer',
+          borderRadius: 3,
           userSelect: 'none',
-          WebkitUserSelect: 'none',
+          background: selected ? 'var(--row-selected-bg)' : 'transparent',
+          transition: 'background 0.2s',
+        }}
+        onMouseEnter={(e) => {
+          if (!selected) {
+            e.currentTarget.style.background = 'var(--background-hover)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!selected) {
+            e.currentTarget.style.background = 'transparent';
+          }
         }}
       >
-        {table.table_name}
-      </span>
-    </div>
-  );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.table === nextProps.table &&
-    prevProps.selected === nextProps.selected &&
-    prevProps.onClick === nextProps.onClick
-  );
-});
-
-// List view row component
-const TableRow = React.memo(function TableRow({
-  table,
-  selected,
-  onClick,
-}: {
-  table: TableData;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const rowCount = table.row_count != null ? table.row_count.toLocaleString() : '-';
-  const createTime = table.create_time ? new Date(table.create_time).toLocaleDateString() : '-';
-  const updateTime = table.update_time ? new Date(table.update_time).toLocaleDateString() : '-';
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '400px 200px 80px 80px 70px 130px 130px',
-        padding: '4px 12px',
-        alignItems: 'center',
-        cursor: 'pointer',
-        userSelect: 'none',
-        borderBottom: '1px solid var(--border)',
-        background: selected ? 'var(--row-selected-bg)' : 'transparent',
-        transition: 'background 0.2s',
-      }}
-      onMouseEnter={(e) => {
-        if (!selected) {
-          e.currentTarget.style.background = 'var(--background-hover)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!selected) {
-          e.currentTarget.style.background = 'transparent';
-        }
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <TableOutlined style={{ color: 'var(--color-success)', flexShrink: 0, fontSize: 12 }} />
-        <span title={table.table_name} style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none' }}>
+        {table.table_type === 'VIEW' ? (
+          <EyeOutlined
+            style={{ fontSize: 14, color: 'var(--db-color-sqlserver)', flexShrink: 0 }}
+          />
+        ) : (
+          <TableOutlined style={{ fontSize: 14, color: 'var(--color-success)', flexShrink: 0 }} />
+        )}
+        <span
+          title={table.table_name}
+          style={{
+            fontSize: 12,
+            margin: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
+        >
           {table.table_name}
         </span>
       </div>
-      <div style={{ minWidth: 0, paddingRight: 8, overflow: 'hidden' }}>
-        <span title={table.comment} style={{ fontSize: 11, color: table.comment ? 'var(--text-tertiary)' : 'var(--text-disabled)', userSelect: 'none', WebkitUserSelect: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-          {table.comment || '-'}
-        </span>
+    );
+  },
+  (prevProps, nextProps) => {
+    return (
+      prevProps.table === nextProps.table &&
+      prevProps.selected === nextProps.selected &&
+      prevProps.onClick === nextProps.onClick
+    );
+  }
+);
+
+// List view row component
+const TableRow = React.memo(
+  function TableRow({
+    table,
+    selected,
+    onClick,
+  }: {
+    table: TableData;
+    selected: boolean;
+    onClick: () => void;
+  }) {
+    const rowCount = table.row_count != null ? table.row_count.toLocaleString() : '-';
+    const createTime = table.create_time ? new Date(table.create_time).toLocaleDateString() : '-';
+    const updateTime = table.update_time ? new Date(table.update_time).toLocaleDateString() : '-';
+
+    return (
+      <div
+        onClick={onClick}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '400px 200px 80px 80px 70px 130px 130px',
+          padding: '4px 12px',
+          alignItems: 'center',
+          cursor: 'pointer',
+          userSelect: 'none',
+          borderBottom: '1px solid var(--border)',
+          background: selected ? 'var(--row-selected-bg)' : 'transparent',
+          transition: 'background 0.2s',
+        }}
+        onMouseEnter={(e) => {
+          if (!selected) {
+            e.currentTarget.style.background = 'var(--background-hover)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!selected) {
+            e.currentTarget.style.background = 'transparent';
+          }
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <TableOutlined style={{ color: 'var(--color-success)', flexShrink: 0, fontSize: 12 }} />
+          <span
+            title={table.table_name}
+            style={{
+              fontSize: 12,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {table.table_name}
+          </span>
+        </div>
+        <div style={{ minWidth: 0, paddingRight: 8, overflow: 'hidden' }}>
+          <span
+            title={table.comment}
+            style={{
+              fontSize: 11,
+              color: table.comment ? 'var(--text-tertiary)' : 'var(--text-disabled)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'block',
+            }}
+          >
+            {table.comment || '-'}
+          </span>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--text-tertiary)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {rowCount}
+          </span>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--text-tertiary)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {table.data_size || '-'}
+          </span>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <span
+            style={{
+              fontSize: 10,
+              color: 'var(--text-secondary)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {table.engine || '-'}
+          </span>
+        </div>
+        <div>
+          <span
+            title={table.create_time}
+            style={{
+              fontSize: 10,
+              color: 'var(--text-tertiary)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {createTime}
+          </span>
+        </div>
+        <div>
+          <span
+            title={table.update_time}
+            style={{
+              fontSize: 10,
+              color: 'var(--text-tertiary)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {updateTime}
+          </span>
+        </div>
       </div>
-      <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{rowCount}</span>
-      </div>
-      <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{table.data_size || '-'}</span>
-      </div>
-      <div style={{ textAlign: 'center' }}>
-        <span style={{ fontSize: 10, color: 'var(--text-secondary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{table.engine || '-'}</span>
-      </div>
-      <div>
-        <span title={table.create_time} style={{ fontSize: 10, color: 'var(--text-tertiary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{createTime}</span>
-      </div>
-      <div>
-        <span title={table.update_time} style={{ fontSize: 10, color: 'var(--text-tertiary)', userSelect: 'none', WebkitUserSelect: 'none' }}>{updateTime}</span>
-      </div>
-    </div>
-  );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.table === nextProps.table &&
-    prevProps.selected === nextProps.selected &&
-    prevProps.onClick === nextProps.onClick
-  );
-});
+    );
+  },
+  (prevProps, nextProps) => {
+    return (
+      prevProps.table === nextProps.table &&
+      prevProps.selected === nextProps.selected &&
+      prevProps.onClick === nextProps.onClick
+    );
+  }
+);
 
 type SortKey = keyof TableData;
 interface SortState {
@@ -266,7 +343,12 @@ function ListHeader({ sort, onSort }: { sort: SortState; onSort: (key: SortKey) 
               userSelect: 'none',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: col.align === 'right' ? 'flex-end' : col.align === 'center' ? 'center' : 'flex-start',
+              justifyContent:
+                col.align === 'right'
+                  ? 'flex-end'
+                  : col.align === 'center'
+                    ? 'center'
+                    : 'flex-start',
               gap: 2,
             }}
             onClick={() => onSort(col.key)}
@@ -322,8 +404,7 @@ function TableListComponent({
   useEffect(() => {
     try {
       localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
-    } catch {
-    }
+    } catch {}
   }, [viewMode]);
 
   useEffect(() => {
@@ -484,38 +565,190 @@ function TableListComponent({
         }}
       >
         <Space size="small">
-          <Tooltip title="打开表" open={!selectedRow ? false : undefined}><span><Button icon={<FolderOpenOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => selectedRow && onTableOpen?.(selectedRow, database)} /></span></Tooltip>
-          <Tooltip title="设计表" open={!selectedRow ? false : undefined}><span><Button icon={<EditOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => selectedRow && onTableDesign?.(selectedRow, database)} /></span></Tooltip>
-          <Tooltip title="新增表"><span><Button icon={<PlusOutlined />} size="small" onClick={onTableNew} /></span></Tooltip>
-          <Tooltip title="清空表" open={!selectedRow ? false : undefined}><span><Button icon={<ClearOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} danger onClick={() => { if (selectedRow) { Modal.confirm({ title: '确认清空表', content: `确定要清空表 "${selectedRow}" 吗？此操作不可撤销。`, okText: '清空', okType: 'danger', onOk: () => onTableTruncate?.(selectedRow, database) }); }}} /></span></Tooltip>
-          <Tooltip title="复制表" open={!selectedRow ? false : undefined}><span><Button icon={<CopyOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => { if (selectedRow) { const newName = `${selectedRow}_copy`; Modal.confirm({ title: '复制表', content: (
-                <div>
-                  <p>将复制表 "{selectedRow}" 到新表</p>
-                  <input id="copy-table-name" autoFocus defaultValue={newName} style={{ width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--background)', color: 'var(--text)' }} />
-                </div>
-              ), okText: '复制', onOk: () => { const input = document.getElementById('copy-table-name') as HTMLInputElement; onTableCopy?.(selectedRow, database); } }); }}} /></span></Tooltip>
-          <Tooltip title="转储SQL" open={!selectedRow ? false : undefined}><span><Button icon={<CodeOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} onClick={() => selectedRow && onTableDump?.(selectedRow, database)} /></span></Tooltip>
-          <Tooltip title="删除表" open={!selectedRow ? false : undefined}><span><Button icon={<DeleteOutlined />} size="small" disabled={!selectedRow} title={selectedRow ? '' : '请先选择一个表'} danger onClick={() => { if (selectedRow) { Modal.confirm({ title: '确认删除', content: `确定要删除表 "${selectedRow}" 吗？`, okText: '删除', okType: 'danger', onOk: () => onTableDelete?.(selectedRow, database) }); }}} /></span></Tooltip>
+          <Tooltip title="打开表" open={!selectedRow ? false : undefined}>
+            <span>
+              <Button
+                icon={<FolderOpenOutlined />}
+                size="small"
+                disabled={!selectedRow}
+                title={selectedRow ? '' : '请先选择一个表'}
+                onClick={() => selectedRow && onTableOpen?.(selectedRow, database)}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title="设计表" open={!selectedRow ? false : undefined}>
+            <span>
+              <Button
+                icon={<EditOutlined />}
+                size="small"
+                disabled={!selectedRow}
+                title={selectedRow ? '' : '请先选择一个表'}
+                onClick={() => selectedRow && onTableDesign?.(selectedRow, database)}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title="新增表">
+            <span>
+              <Button icon={<PlusOutlined />} size="small" onClick={onTableNew} />
+            </span>
+          </Tooltip>
+          <Tooltip title="清空表" open={!selectedRow ? false : undefined}>
+            <span>
+              <Button
+                icon={<ClearOutlined />}
+                size="small"
+                disabled={!selectedRow}
+                title={selectedRow ? '' : '请先选择一个表'}
+                danger
+                onClick={() => {
+                  if (selectedRow) {
+                    Modal.confirm({
+                      title: '确认清空表',
+                      content: `确定要清空表 "${selectedRow}" 吗？此操作不可撤销。`,
+                      okText: '清空',
+                      okType: 'danger',
+                      onOk: () => onTableTruncate?.(selectedRow, database),
+                    });
+                  }
+                }}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title="复制表" open={!selectedRow ? false : undefined}>
+            <span>
+              <Button
+                icon={<CopyOutlined />}
+                size="small"
+                disabled={!selectedRow}
+                title={selectedRow ? '' : '请先选择一个表'}
+                onClick={() => {
+                  if (selectedRow) {
+                    const newName = `${selectedRow}_copy`;
+                    Modal.confirm({
+                      title: '复制表',
+                      content: (
+                        <div>
+                          <p>将复制表 "{selectedRow}" 到新表</p>
+                          <input
+                            id="copy-table-name"
+                            autoFocus
+                            defaultValue={newName}
+                            style={{
+                              width: '100%',
+                              padding: 4,
+                              border: '1px solid var(--border)',
+                              borderRadius: 4,
+                              background: 'var(--background)',
+                              color: 'var(--text)',
+                            }}
+                          />
+                        </div>
+                      ),
+                      okText: '复制',
+                      onOk: () => {
+                        const input = document.getElementById(
+                          'copy-table-name'
+                        ) as HTMLInputElement;
+                        onTableCopy?.(selectedRow, database);
+                      },
+                    });
+                  }
+                }}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title="转储SQL" open={!selectedRow ? false : undefined}>
+            <span>
+              <Button
+                icon={<CodeOutlined />}
+                size="small"
+                disabled={!selectedRow}
+                title={selectedRow ? '' : '请先选择一个表'}
+                onClick={() => selectedRow && onTableDump?.(selectedRow, database)}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title="删除表" open={!selectedRow ? false : undefined}>
+            <span>
+              <Button
+                icon={<DeleteOutlined />}
+                size="small"
+                disabled={!selectedRow}
+                title={selectedRow ? '' : '请先选择一个表'}
+                danger
+                onClick={() => {
+                  if (selectedRow) {
+                    Modal.confirm({
+                      title: '确认删除',
+                      content: `确定要删除表 "${selectedRow}" 吗？`,
+                      okText: '删除',
+                      okType: 'danger',
+                      onOk: () => onTableDelete?.(selectedRow, database),
+                    });
+                  }
+                }}
+              />
+            </span>
+          </Tooltip>
           <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
-          <Tooltip title="导入向导"><span><Button icon={<ImportOutlined />} size="small" onClick={onImport} /></span></Tooltip>
-          <Tooltip title="导出向导"><span><Button icon={<ExportOutlined />} size="small" onClick={onExport} /></span></Tooltip>
+          <Tooltip title="导入向导">
+            <span>
+              <Button icon={<ImportOutlined />} size="small" onClick={onImport} />
+            </span>
+          </Tooltip>
+          <Tooltip title="导出向导">
+            <span>
+              <Button icon={<ExportOutlined />} size="small" onClick={onExport} />
+            </span>
+          </Tooltip>
           <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
-          <Tooltip title="刷新"><span><Button icon={<ReloadOutlined />} size="small" onClick={refreshTables} loading={loading} /></span></Tooltip>
+          <Tooltip title="刷新">
+            <span>
+              <Button
+                icon={<ReloadOutlined />}
+                size="small"
+                onClick={refreshTables}
+                loading={loading}
+              />
+            </span>
+          </Tooltip>
         </Space>
 
         <GlobalInput
           placeholder="搜索表名或注释..."
           prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
           value={searchText}
-          onChange={(e) => { const val = e.target.value; setSearchText(val); handleSearch(val); }}
+          onChange={(e) => {
+            const val = e.target.value;
+            setSearchText(val);
+            handleSearch(val);
+          }}
           allowClear
           size="small"
           style={{ width: 180, marginLeft: 'auto' }}
         />
 
         <Space size="small">
-          {objectType === 'all' ? (<><Tag color="blue">表 {tableCount}</Tag><Tag color="purple">视图 {viewCount}</Tag></>) : objectType === 'table' ? (<Tag color="blue">表 {tableCount}</Tag>) : (<Tag color="purple">视图 {viewCount}</Tag>)}
-          <Tooltip title={viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}><span><Button icon={viewMode === 'list' ? <AppstoreOutlined /> : <UnorderedListOutlined />} size="small" type="text" onClick={() => setViewMode((prev) => (prev === 'list' ? 'grid' : 'list'))} /></span></Tooltip>
+          {objectType === 'all' ? (
+            <>
+              <Tag color="blue">表 {tableCount}</Tag>
+              <Tag color="purple">视图 {viewCount}</Tag>
+            </>
+          ) : objectType === 'table' ? (
+            <Tag color="blue">表 {tableCount}</Tag>
+          ) : (
+            <Tag color="purple">视图 {viewCount}</Tag>
+          )}
+          <Tooltip title={viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}>
+            <span>
+              <Button
+                icon={viewMode === 'list' ? <AppstoreOutlined /> : <UnorderedListOutlined />}
+                size="small"
+                type="text"
+                onClick={() => setViewMode((prev) => (prev === 'list' ? 'grid' : 'list'))}
+              />
+            </span>
+          </Tooltip>
         </Space>
       </div>
 
@@ -540,7 +773,9 @@ function TableListComponent({
             }}
           >
             <Spin size="large" />
-            <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>加载中...</div>
+            <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
+              加载中...
+            </div>
           </div>
         ) : filteredTables.length === 0 ? (
           <div
@@ -558,8 +793,18 @@ function TableListComponent({
             )}
           </div>
         ) : filteredTables.length === 0 ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Empty description={searchText ? "未找到匹配的表" : "暂无表"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Empty
+              description={searchText ? '未找到匹配的表' : '暂无表'}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           </div>
         ) : viewMode === 'list' ? (
           <div style={{ background: 'var(--background-card)' }}>
@@ -568,7 +813,13 @@ function TableListComponent({
           </div>
         ) : (
           <div style={{ padding: 4 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 2 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: 2,
+              }}
+            >
               {tableGridItems}
             </div>
           </div>

@@ -42,5 +42,4 @@ impl DbPool {
     pub fn inner(&self) -> &SqlitePool {
         &self.pool
     }
-
 }

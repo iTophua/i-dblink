@@ -110,7 +110,11 @@ impl ConnectionRepository {
     }
 
     /// 保存连接密码
-    pub async fn save_password(&self, connection_id: &str, password: &str) -> Result<(), sqlx::Error> {
+    pub async fn save_password(
+        &self,
+        connection_id: &str,
+        password: &str,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             INSERT INTO connection_passwords (connection_id, password)
@@ -221,6 +225,129 @@ impl GroupRepository {
 
         // 删除分组
         sqlx::query("DELETE FROM connection_groups WHERE id = ?")
+            .bind(id)
+            .execute(self.pool.inner())
+            .await?;
+
+        Ok(())
+    }
+}
+
+/// 代码片段仓库
+#[derive(Clone)]
+pub struct SnippetRepository {
+    pool: DbPool,
+}
+
+impl SnippetRepository {
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    /// 获取所有代码片段
+    pub async fn get_all(&self) -> Result<Vec<super::models::Snippet>, sqlx::Error> {
+        let snippets = sqlx::query_as::<_, super::models::Snippet>(
+            "SELECT * FROM snippets ORDER BY category, name",
+        )
+        .fetch_all(self.pool.inner())
+        .await?;
+
+        Ok(snippets)
+    }
+
+    /// 按类别获取代码片段
+    pub async fn get_by_category(
+        &self,
+        category: &str,
+    ) -> Result<Vec<super::models::Snippet>, sqlx::Error> {
+        let snippets = sqlx::query_as::<_, super::models::Snippet>(
+            "SELECT * FROM snippets WHERE category = ? ORDER BY name",
+        )
+        .bind(category)
+        .fetch_all(self.pool.inner())
+        .await?;
+
+        Ok(snippets)
+    }
+
+    /// 按数据库类型获取代码片段
+    pub async fn get_by_db_type(
+        &self,
+        db_type: &str,
+    ) -> Result<Vec<super::models::Snippet>, sqlx::Error> {
+        let snippets = sqlx::query_as::<_, super::models::Snippet>(
+            "SELECT * FROM snippets WHERE db_type = ? OR db_type IS NULL ORDER BY name",
+        )
+        .bind(db_type)
+        .fetch_all(self.pool.inner())
+        .await?;
+
+        Ok(snippets)
+    }
+
+    /// 根据 ID 获取代码片段
+    pub async fn get_by_id(&self, id: &str) -> Result<Option<super::models::Snippet>, sqlx::Error> {
+        let snippet =
+            sqlx::query_as::<_, super::models::Snippet>("SELECT * FROM snippets WHERE id = ?")
+                .bind(id)
+                .fetch_optional(self.pool.inner())
+                .await?;
+
+        Ok(snippet)
+    }
+
+    /// 保存代码片段（新增或更新）
+    pub async fn save(&self, snippet: &super::models::Snippet) -> Result<(), sqlx::Error> {
+        let exists = sqlx::query("SELECT 1 FROM snippets WHERE id = ?")
+            .bind(&snippet.id)
+            .fetch_optional(self.pool.inner())
+            .await?
+            .is_some();
+
+        if exists {
+            sqlx::query(
+                r#"
+                UPDATE snippets 
+                SET name = ?, sql_text = ?, db_type = ?, category = ?, 
+                    tags = ?, is_private = ?, updated_at = datetime('now')
+                WHERE id = ?
+                "#,
+            )
+            .bind(&snippet.name)
+            .bind(&snippet.sql_text)
+            .bind(&snippet.db_type)
+            .bind(&snippet.category)
+            .bind(&snippet.tags)
+            .bind(snippet.is_private)
+            .bind(&snippet.id)
+            .execute(self.pool.inner())
+            .await?;
+        } else {
+            sqlx::query(
+                r#"
+                INSERT INTO snippets (id, name, sql_text, db_type, category, tags, is_private, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(&snippet.id)
+            .bind(&snippet.name)
+            .bind(&snippet.sql_text)
+            .bind(&snippet.db_type)
+            .bind(&snippet.category)
+            .bind(&snippet.tags)
+            .bind(snippet.is_private)
+            .bind(&snippet.created_at.to_rfc3339())
+            .bind(&snippet.updated_at.to_rfc3339())
+            .execute(self.pool.inner())
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// 删除代码片段
+    pub async fn delete(&self, id: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM snippets WHERE id = ?")
             .bind(id)
             .execute(self.pool.inner())
             .await?;

@@ -40,10 +40,22 @@ interface GroupDialogProps {
   editingGroup?: ConnectionGroup | null;
   parentGroupId?: string | null;
   onCancel: () => void;
-  onSave: (data: { id?: string; name: string; icon: string; color: string; parent_id?: string }) => void;
+  onSave: (data: {
+    id?: string;
+    name: string;
+    icon: string;
+    color: string;
+    parent_id?: string;
+  }) => void;
 }
 
-export function GroupDialog({ open, editingGroup, parentGroupId, onCancel, onSave }: GroupDialogProps) {
+export function GroupDialog({
+  open,
+  editingGroup,
+  parentGroupId,
+  onCancel,
+  onSave,
+}: GroupDialogProps) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
 

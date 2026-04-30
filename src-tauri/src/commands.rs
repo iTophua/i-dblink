@@ -238,14 +238,22 @@ async fn ensure_connected(
     if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
         if !err.is_empty() {
             // 检测密码错误，返回特定错误码供前端识别
-            if err.contains("password") || err.contains("Password") || err.contains("认证") || err.contains("authentication") {
+            if err.contains("password")
+                || err.contains("Password")
+                || err.contains("认证")
+                || err.contains("authentication")
+            {
                 return Err("PASSWORD_REQUIRED".to_string());
             }
             return Err(err.to_string());
         }
     }
 
-    connections.write().await.add(connection_id.to_string()).await;
+    connections
+        .write()
+        .await
+        .add(connection_id.to_string())
+        .await;
     Ok(())
 }
 
@@ -338,7 +346,10 @@ pub async fn get_connections(
         .ok_or_else(|| "Storage not initialized".to_string())?;
 
     match storage.get_connections().await {
-        Ok(connections) => Ok(connections.into_iter().map(ConnectionOutput::from).collect()),
+        Ok(connections) => Ok(connections
+            .into_iter()
+            .map(ConnectionOutput::from)
+            .collect()),
         Err(e) => Err(format!("Failed to get connections: {}", e)),
     }
 }
@@ -647,8 +658,8 @@ pub async fn get_columns(
             return Ok(vec![]);
         }
     }
-    let resp: Vec<ColumnInfo> = serde_json::from_value(resp_val)
-        .map_err(|e| format!("Invalid columns response: {}", e))?;
+    let resp: Vec<ColumnInfo> =
+        serde_json::from_value(resp_val).map_err(|e| format!("Invalid columns response: {}", e))?;
     Ok(resp)
 }
 
@@ -681,8 +692,8 @@ pub async fn get_indexes(
             return Ok(vec![]);
         }
     }
-    let resp: Vec<IndexInfo> = serde_json::from_value(resp_val)
-        .map_err(|e| format!("Invalid indexes response: {}", e))?;
+    let resp: Vec<IndexInfo> =
+        serde_json::from_value(resp_val).map_err(|e| format!("Invalid indexes response: {}", e))?;
     Ok(resp)
 }
 
@@ -738,13 +749,53 @@ pub async fn execute_query(
     ensure_connected(&connection_id, &state, &connections, sm).await?;
 
     let mut req_map = serde_json::Map::new();
-    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert(
+        "connection_id".to_string(),
+        serde_json::json!(connection_id),
+    );
     req_map.insert("sql".to_string(), serde_json::json!(sql));
     if let Some(db) = database {
         req_map.insert("database".to_string(), serde_json::json!(db));
     }
     let req = serde_json::Value::Object(req_map);
     let resp: QueryResult = sm.post("/query", &req).await?;
+    Ok(resp)
+}
+
+/// 流式导出完整表数据（分批查询）
+#[tauri::command]
+pub async fn stream_export_table(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    batch_size: Option<u32>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let mut req_map = serde_json::Map::new();
+    req_map.insert(
+        "connection_id".to_string(),
+        serde_json::json!(connection_id),
+    );
+    req_map.insert("table_name".to_string(), serde_json::json!(table_name));
+    if let Some(db) = database {
+        req_map.insert("database".to_string(), serde_json::json!(db));
+    }
+    if let Some(bs) = batch_size {
+        req_map.insert("batch_size".to_string(), serde_json::json!(bs));
+    }
+    let req = serde_json::Value::Object(req_map);
+
+    // 流式导出使用 POST /stream-export
+    let resp: serde_json::Value = sm.post("/stream-export", &req).await?;
     Ok(resp)
 }
 
@@ -920,7 +971,10 @@ pub async fn execute_ddl(
     ensure_connected(&connection_id, &state, &connections, sm).await?;
 
     let mut req_map = serde_json::Map::new();
-    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert(
+        "connection_id".to_string(),
+        serde_json::json!(connection_id),
+    );
     req_map.insert("sql".to_string(), serde_json::json!(sql));
     if let Some(db) = database {
         req_map.insert("database".to_string(), serde_json::json!(db));
@@ -953,7 +1007,10 @@ pub async fn truncate_table(
     ensure_connected(&connection_id, &state, &connections, sm).await?;
 
     let mut req_map = serde_json::Map::new();
-    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert(
+        "connection_id".to_string(),
+        serde_json::json!(connection_id),
+    );
     req_map.insert("table_name".to_string(), serde_json::json!(table_name));
     if let Some(db) = database {
         req_map.insert("database".to_string(), serde_json::json!(db));
@@ -986,7 +1043,10 @@ pub async fn drop_table(
     ensure_connected(&connection_id, &state, &connections, sm).await?;
 
     let mut req_map = serde_json::Map::new();
-    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert(
+        "connection_id".to_string(),
+        serde_json::json!(connection_id),
+    );
     req_map.insert("table_name".to_string(), serde_json::json!(table_name));
     if let Some(db) = database {
         req_map.insert("database".to_string(), serde_json::json!(db));
@@ -1019,7 +1079,10 @@ pub async fn drop_view(
     ensure_connected(&connection_id, &state, &connections, sm).await?;
 
     let mut req_map = serde_json::Map::new();
-    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert(
+        "connection_id".to_string(),
+        serde_json::json!(connection_id),
+    );
     req_map.insert("table_name".to_string(), serde_json::json!(view_name));
     if let Some(db) = database {
         req_map.insert("database".to_string(), serde_json::json!(db));
@@ -1053,7 +1116,10 @@ pub async fn rename_table(
     ensure_connected(&connection_id, &state, &connections, sm).await?;
 
     let mut req_map = serde_json::Map::new();
-    req_map.insert("connection_id".to_string(), serde_json::json!(connection_id));
+    req_map.insert(
+        "connection_id".to_string(),
+        serde_json::json!(connection_id),
+    );
     req_map.insert("old_name".to_string(), serde_json::json!(old_name));
     req_map.insert("new_name".to_string(), serde_json::json!(new_name));
     if let Some(db) = database {
@@ -1152,5 +1218,249 @@ pub async fn get_transaction_status(
             return Err(err.to_string());
         }
     }
-    Ok(resp.get("active").and_then(|v| v.as_bool()).unwrap_or(false))
+    Ok(resp
+        .get("active")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false))
+}
+
+/// 服务器信息响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerInfo {
+    pub version: Option<String>,
+    pub server_type: Option<String>,
+    pub character_set: Option<String>,
+    pub collation: Option<String>,
+    pub uptime: Option<String>,
+    pub max_connections: Option<i32>,
+    pub error: Option<String>,
+}
+
+/// 获取数据库服务器信息
+#[tauri::command]
+pub async fn get_server_info(
+    connection_id: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<ServerInfo, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+    });
+    let resp: ServerInfo = sm.post("/server-info", &req).await?;
+    if let Some(err) = &resp.error {
+        return Err(err.clone());
+    }
+    Ok(resp)
+}
+
+/// 获取建表语句请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTableDDLRequest {
+    pub connection_id: String,
+    pub table_name: String,
+    pub database: Option<String>,
+}
+
+/// 获取建表语句
+#[tauri::command]
+pub async fn get_table_ddl(
+    connection_id: String,
+    table_name: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<String>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "table_name": table_name,
+        "database": database,
+    });
+    let resp: serde_json::Value = sm.post("/table-ddl", &req).await?;
+    let ddls: Vec<String> = resp
+        .get("ddls")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if ddls.is_empty() {
+        return Err(format!("no DDL found for table: {}", table_name));
+    }
+
+    Ok(ddls)
+}
+
+/// 获取触发器列表
+#[tauri::command]
+pub async fn get_triggers(
+    connection_id: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+    });
+    let resp: serde_json::Value = sm.post("/triggers", &req).await?;
+    let triggers: Vec<serde_json::Value> = resp
+        .get("triggers")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.clone())
+        .unwrap_or_default();
+
+    Ok(triggers)
+}
+
+/// 获取事件列表 (MySQL)
+#[tauri::command]
+pub async fn get_events(
+    connection_id: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+    });
+    let resp: serde_json::Value = sm.post("/events", &req).await?;
+    let events: Vec<serde_json::Value> = resp
+        .get("events")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.clone())
+        .unwrap_or_default();
+
+    Ok(events)
+}
+
+/// 代码片段模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snippet {
+    pub id: String,
+    pub name: String,
+    pub sql_text: String,
+    pub db_type: Option<String>,
+    pub category: Option<String>,
+    pub tags: Option<String>,
+    pub is_private: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// 保存代码片段
+#[tauri::command]
+pub async fn save_snippet(
+    id: Option<String>,
+    name: String,
+    sql_text: String,
+    db_type: Option<String>,
+    category: Option<String>,
+    tags: Option<String>,
+    is_private: bool,
+    storage: State<'_, tokio::sync::Mutex<Option<Storage>>>,
+) -> Result<String, String> {
+    let storage_guard = storage.lock().await;
+    let storage = storage_guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
+
+    let snippet = crate::db::Snippet::new(name, sql_text, db_type, category, tags, is_private);
+    let mut snippet_to_save = snippet;
+
+    if let Some(existing_id) = id {
+        // 更新现有片段
+        snippet_to_save.id = existing_id.clone();
+        let existing = storage
+            .snippets()
+            .get_by_id(&existing_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        if let Some(exist) = existing {
+            snippet_to_save.created_at = exist.created_at;
+        } else {
+            return Err("Snippet not found".to_string());
+        }
+    }
+
+    storage
+        .snippets()
+        .save(&snippet_to_save)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(snippet_to_save.id)
+}
+
+/// 获取所有代码片段
+#[tauri::command]
+pub async fn get_snippets(
+    storage: State<'_, tokio::sync::Mutex<Option<Storage>>>,
+) -> Result<Vec<Snippet>, String> {
+    let storage_guard = storage.lock().await;
+    let storage = storage_guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
+
+    let snippets = storage
+        .snippets()
+        .get_all()
+        .await
+        .map_err(|e| e.to_string())?;
+    let result: Vec<Snippet> = snippets
+        .into_iter()
+        .map(|s| Snippet {
+            id: s.id,
+            name: s.name,
+            sql_text: s.sql_text,
+            db_type: s.db_type,
+            category: s.category,
+            tags: s.tags,
+            is_private: s.is_private,
+            created_at: s.created_at.to_rfc3339(),
+            updated_at: s.updated_at.to_rfc3339(),
+        })
+        .collect();
+
+    Ok(result)
+}
+
+/// 删除代码片段
+#[tauri::command]
+pub async fn delete_snippet(
+    id: String,
+    storage: State<'_, tokio::sync::Mutex<Option<Storage>>>,
+) -> Result<(), String> {
+    let storage_guard = storage.lock().await;
+    let storage = storage_guard
+        .as_ref()
+        .ok_or_else(|| "Storage not initialized".to_string())?;
+
+    storage
+        .snippets()
+        .delete(&id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }

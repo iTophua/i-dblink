@@ -1,12 +1,36 @@
 # iDBLink 开发计划
 
-> **版本**: v2.1 | **更新日期**: 2026-04-28
+> **版本**: v2.8 | **更新日期**: 2026-04-30
 >
 > 本文档基于 `ui-improvements-vs-navicat.md` v2.1 整理，列出已实现功能、进行中的功能和待办任务。
 
 ---
 
-## 一、本轮迭代完成（v2.1，2026-04-28）
+## 一、本轮迭代完成（v2.8，2026-04-30）
+
+本轮共完成 **1 项功能**，涵盖 P2 优先级。
+
+### 1.1 Ctrl+Z 撤销单元格修改（P2 → ✅）
+- **undoLastCellEdit 函数**：新建撤销单元格编辑函数，移除 pendingChanges 中的最后一条更新。
+- **键盘事件监听**：在 handleKeyDown 中添加 Ctrl+Z 支持，调用 undoLastCellEdit。
+- **输入框保护**：避免在输入框中触发 Ctrl+Z 撤销。
+- **用户反馈**：撤销成功时显示成功消息，无内容可撤销时显示提示。
+
+---
+
+## 二、上一轮完成（v2.7，2026-04-30）
+
+上一轮共完成 **5 项功能**，涵盖 P0/P1/P2 各优先级。
+
+### 2.1 SQL 内容持久化（P0 → ✅）
+### 2.2 状态栏增强（P1 → ✅）
+### 2.3 getServerInfo API（P1 → ✅）
+### 2.4 获取建表语句 getTableDDL（P2 → ✅）
+### 2.5 触发器/事件管理（P2 → ✅）
+
+---
+
+## 三、上一轮完成（v2.1，2026-04-28）
 
 本轮共完成 **14 项功能**，涵盖 P0/P1/P2 各优先级。
 
@@ -78,20 +102,20 @@
 
 | # | 功能 | 说明 | 预估工作量 | 依赖 |
 |---|------|------|-----------|------|
-| 1 | **标签页浮动窗口** | 拖拽 Tab 脱离为独立窗口（Tauri 多窗口 API `Window` + `WebviewWindow`） | 2-3 天 | Tauri v2 多窗口 |
+| ~~1~~ | ~~**标签页浮动窗口**~~ | ~~拖拽 Tab 脱离为独立窗口（Tauri 多窗口 API `Window` + `WebviewWindow`）~~ | ~~2-3 天~~ | ~~Tauri v2 多窗口~~ | ✅ 已完成 (v2.6)，基础实现，支持创建独立窗口 |
 | 2 | **SQL 参数提示** | Monaco Signature Help，函数参数提示（需注册 `signatureHelpProvider`） | 1-2 天 | Monaco API |
-| 3 | **代码片段系统** | 内置常用查询模板（创建表、分页查询等），支持用户自定义，基于 localStorage | 1-2 天 | 无 |
-| 4 | **SQL 内容持久化** | 重启后恢复 SQL 编辑器中的文本内容（workspaceStore 扩展） | 0.5 天 | workspaceStore |
-| 5 | **状态栏丰富信息** | 显示数据库版本、字符集、事务状态、行数统计、执行时间（需后端新增信息查询 API） | 1-2 天 | 后端 API |
-| 6 | **智能补全增强** | Schema/数据库前缀补全（`db.table.column`） | 1 天 | Monaco 补全 |
-| 7 | **流式导出完整表** | 不带 LIMIT 的流式导出（后端分批查询+前端流式写入） | 2 天 | 后端 API |
+| ~~3~~ | ~~**代码片段系统**~~ | ~~内置常用查询模板（创建表、分页查询等），支持用户自定义，基于 localStorage~~ | ~~1-2 天~~ | ~~无~~ | ✅ 已完成 (v2.3)，存储在后端 SQLite |
+| ~~4~~ | ~~**SQL 内容持久化**~~ | ~~重启后恢复 SQL 编辑器中的文本内容（workspaceStore 扩展）~~ | ~~0.5 天~~ | ~~workspaceStore~~ | ✅ 已完成 (v2.2) |
+| ~~5~~ | ~~**状态栏丰富信息**~~ | ~~显示数据库版本、字符集、事务状态、行数统计、执行时间~~ | ~~1-2 天~~ | ~~后端 API~~ | ✅ 已完成 (v2.2) |
+| ~~6~~ | ~~**智能补全增强**~~ | ~~Schema/数据库前缀补全（`db.table.column`）~~ | ~~1 天~~ | ~~Monaco 补全~~ | ✅ 已完成 (v2.4) |
+| ~~7~~ | ~~**流式导出完整表**~~ | ~~不带 LIMIT 的流式导出（后端分批查询+前端流式写入）~~ | ~~2 天~~ | ~~后端 API~~ | ✅ 已完成 (v2.5)，当前实现为移除 LIMIT 限制 |
 
 ### 🟡 P2 - 体验优化（锦上添花）
 
 | # | 功能 | 说明 | 预估工作量 |
 |---|------|------|-----------|
+| ~~16~~ | ~~**Ctrl+Z 撤销单元格修改**~~ | ~~DataTable 支持 Ctrl+Z 撤销最后一次单元格编辑~~ | ~~1 天~~ | ✅ 已完成 (v2.8)，支持 Ctrl+Z 撤销单元格编辑 |
 | 8 | **快捷键冲突检测** | 配置快捷键时检测冲突，支持单键恢复默认 | 1 天 |
-| 9 | **系统托盘支持** | Tauri 托盘菜单：快速连接、显示/隐藏窗口、退出 | 0.5 天 |
 | 10 | **命令行终端 Tab** | 内建数据库原生命令行终端（如 mysql.exe/psql） | 2-3 天 |
 | 11 | **数据同步/结构同步** | 对比两个数据库/表的结构或数据差异，生成同步脚本 | 3-5 天 |
 | 12 | **备份恢复向导** | 数据库级 SQL 备份（导出所有表结构和数据）、恢复 | 2-3 天 |
@@ -99,8 +123,9 @@
 | 14 | **导出 TXT/XML/Markdown** | 扩展导出格式支持 | 0.5 天 |
 | 15 | **每页行数选择器** | DataTable 分页栏增加 10/50/100/500/1000/全部 选择 | 0.5 天 |
 | 16 | **Ctrl+Z 撤销单元格修改** | DataTable 支持 Ctrl+Z 撤销最后一次单元格编辑 | 1 天 |
-| 17 | **触发器/事件节点** | 连接树中增加触发器(Trigger)和事件(Event)对象类型节点 | 1-2 天 |
+| ~~17~~ | ~~**触发器/事件节点**~~ | ~~连接树中增加触发器(Trigger)和事件(Event)对象类型节点~~ | ~~1-2 天~~ | ✅ 后端 API 已完成 (v2.2)，前端集成待做 |
 | 18 | **表维护子菜单** | 右键菜单增加优化(OPTIMIZE)/修复(REPAIR)/分析(ANALYZE) | 1 天 |
+| ~~~~ | ~~**获取建表语句**~~ | ~~获取完整建表语句~~ | ~~1 天~~ | ✅ 已完成 (v2.2) |
 
 ---
 
@@ -119,13 +144,13 @@
 ## 五、后端 API 待补充
 
 | 接口 | 用途 | 优先级 |
-|------|------|--------|
-| `getTriggers(connectionId, database)` | 获取触发器列表 | P1 |
-| `getEvents(connectionId, database)` | 获取事件列表（MySQL） | P2 |
-| `getTableDDL(connectionId, tableName, database)` | 获取完整建表语句 | P1 |
+|------|------|------|
+| ~~`getTriggers(connectionId, database)`~~ | ~~获取触发器列表~~ | ~~P1~~ | ✅ 已完成 (v2.2) |
+| ~~`getEvents(connectionId, database)`~~ | ~~获取事件列表（MySQL）~~ | ~~P2~~ | ✅ 已完成 (v2.2) |
+| ~~`getTableDDL(connectionId, tableName, database)`~~ | ~~获取完整建表语句~~ | ~~P1~~ | ✅ 已完成 (v2.2) |
+| ~~`getServerInfo(connectionId)`~~ | ~~获取服务器版本、字符集等信息（用于状态栏）~~ | ~~P1~~ | ✅ 已完成 (v2.2) |
 | `copyTable(connectionId, sourceTable, targetTable, withData, database)` | 复制表 | P2 |
 | `optimizeTable / analyzeTable / repairTable` | 表维护操作 | P2 |
-| `getServerInfo(connectionId)` | 获取服务器版本、字符集等信息（用于状态栏） | P1 |
 | `exportTable(connectionId, tableName, format, options, database)` | 流式导出完整表 | P1 |
 | `exportQueryResult(connectionId, sql, format, options, database)` | 导出查询结果 | P1 |
 

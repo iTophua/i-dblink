@@ -92,7 +92,10 @@ interface KeyboardShortcutsModalProps {
   onClose: () => void;
 }
 
-export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ open, onClose }) => {
+export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
+  open,
+  onClose,
+}) => {
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
 
@@ -220,7 +223,9 @@ export const useKeyboardShortcuts = (handlers: Record<string, () => void>) => {
 };
 
 export const useConnectionAnimation = () => {
-  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'connecting' | 'success' | 'error'>('idle');
+  const [connectionStatus, setConnectionStatus] = useState<
+    'idle' | 'connecting' | 'success' | 'error'
+  >('idle');
 
   const startConnecting = useCallback(() => {
     setConnectionStatus('connecting');
@@ -239,9 +244,9 @@ export const useConnectionAnimation = () => {
   return { connectionStatus, startConnecting, connectionSuccess, connectionError };
 };
 
-export const ConnectionStatusIndicator: React.FC<{ status: 'idle' | 'connecting' | 'success' | 'error' }> = ({
-  status,
-}) => {
+export const ConnectionStatusIndicator: React.FC<{
+  status: 'idle' | 'connecting' | 'success' | 'error';
+}> = ({ status }) => {
   const getStatusColor = () => {
     switch (status) {
       case 'connecting':

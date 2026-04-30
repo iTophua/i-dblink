@@ -38,6 +38,10 @@ class TTLCache<T> {
       return null;
     }
 
+    // LRU: 访问后重新设置以更新顺序
+    this.cache.delete(key);
+    this.cache.set(key, { ...entry, timestamp: Date.now() });
+
     return entry.data;
   }
 
@@ -77,7 +81,7 @@ const structureCache = new TTLCache<Promise<import('../api').TableStructure>>(10
 
 // Schema 补全缓存：用于智能代码补全
 interface SchemaCompletionEntry {
-  tables: Map<string, string[]>;  // tableName -> columnNames
+  tables: Map<string, string[]>; // tableName -> columnNames
   views: Map<string, string[]>;
   timestamp: number;
 }
@@ -118,12 +122,16 @@ class SchemaCompletionCache {
 
       for (const table of tablesResult) {
         const tableType = (table.table_type || '').toUpperCase().trim();
-        const isView = tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
+        const isView =
+          tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
         const targetMap = isView ? viewsMap : tablesMap;
 
         try {
           const columns = await getColumns(table.table_name);
-          targetMap.set(table.table_name, columns.map(c => c.column_name));
+          targetMap.set(
+            table.table_name,
+            columns.map((c) => c.column_name)
+          );
         } catch {
           targetMap.set(table.table_name, []);
         }
@@ -269,15 +277,19 @@ export const useConnections = () => {
         setLoading(true);
         await api.connectConnection(connectionId);
         setConnections((prev) =>
-          prev.map((c) =>
-            c.id === connectionId ? { ...c, status: 'connected' as const } : c
-          )
+          prev.map((c) => (c.id === connectionId ? { ...c, status: 'connected' as const } : c))
         );
         message.success('连接成功');
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         // 检查是否是密码错误（后端返回 PASSWORD_REQUIRED）
-        if (errorMsg === 'PASSWORD_REQUIRED' || (typeof err === 'object' && err !== null && 'code' in err && (err as Record<string, unknown>).code === 'PASSWORD_REQUIRED')) {
+        if (
+          errorMsg === 'PASSWORD_REQUIRED' ||
+          (typeof err === 'object' &&
+            err !== null &&
+            'code' in err &&
+            (err as Record<string, unknown>).code === 'PASSWORD_REQUIRED')
+        ) {
           setLoading(false);
           const error = new Error('密码错误，请重新输入') as Error & { code: string };
           error.code = 'PASSWORD_REQUIRED';
@@ -299,9 +311,7 @@ export const useConnections = () => {
         setLoading(true);
         await api.disconnectConnection(connectionId);
         setConnections((prev) =>
-          prev.map((c) =>
-            c.id === connectionId ? { ...c, status: 'disconnected' as const } : c
-          )
+          prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
         );
         message.success('已断开连接');
       } catch (err) {
@@ -394,8 +404,15 @@ const tableLoadingPromises = new Map<string, Promise<import('../types/api').Tabl
 
 export const useDatabase = () => {
   const { message } = App.useApp();
-  const { setLoading, setError, setTableData, setTableDataLoading, setTableDataFailed, getTableData, clearTableData } =
-    useAppStore();
+  const {
+    setLoading,
+    setError,
+    setTableData,
+    setTableDataLoading,
+    setTableDataFailed,
+    getTableData,
+    clearTableData,
+  } = useAppStore();
 
   const getTables = useCallback(
     async (connectionId: string, database?: string, forceRefresh = false, search?: string) => {
@@ -431,10 +448,7 @@ export const useDatabase = () => {
         try {
           setTableDataLoading(cacheKey, true);
           const result = await api.getTablesCategorized(connectionId, database, search);
-          const allTables = [
-            ...(result.tables || []),
-            ...(result.views || []),
-          ];
+          const allTables = [...(result.tables || []), ...(result.views || [])];
           setTableData(cacheKey, allTables);
           return allTables;
         } catch (err) {
@@ -527,11 +541,107 @@ export const useDatabase = () => {
     async (connectionId: string, tableName: string, database?: string) => {
       try {
         setLoading(true);
-        const safeDb = database ? escapeSqlString(database) : '';
-        const safeTable = escapeSqlString(tableName);
-        const sql = database
-          ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${safeDb}' AND TABLE_NAME = '${safeTable}'`
-          : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${safeTable}'`;
+        const conn = useAppStore.getState().connections.find((c) => c.id === connectionId);
+        const dbType = conn?.db_type || 'mysql';
+
+        const safeTable = escapeSqlIdentifier(tableName);
+
+        let sql: string;
+        switch (dbType) {
+          case 'mysql':
+          case 'mariadb': {
+            const safeDb = database ? escapeSqlString(database) : '';
+            sql = database
+              ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${safeDb}' AND TABLE_NAME = '${safeTable}'`
+              : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${safeTable}'`;
+            break;
+          }
+          case 'postgresql':
+          case 'kingbase':
+          case 'highgo':
+          case 'vastbase': {
+            const safeDb = database ? escapeSqlString(database) : '';
+            sql = `
+              SELECT c.relname AS table_name,
+                CASE WHEN c.relkind = 'r' THEN 'BASE TABLE' WHEN c.relkind = 'v' THEN 'VIEW' ELSE c.relkind END AS table_type,
+                NULL AS row_count,
+                pg_table_size(c.oid) AS data_size,
+                pg_total_relation_size(c.oid) AS total_size,
+                obj_description(c.oid) AS comment
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE c.relname = '${safeTable}'
+                AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                AND n.nspname NOT LIKE 'pg_toast%'
+            `;
+            if (database) {
+              sql += ` AND n.nspname = '${safeDb}'`;
+            }
+            break;
+          }
+          case 'sqlite': {
+            sql = `
+              SELECT name, type, sql FROM sqlite_master WHERE name = '${safeTable}'
+            `;
+            break;
+          }
+          case 'dameng': {
+            const safeDb = database ? escapeSqlString(database) : '';
+            sql = `
+              SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
+              FROM USER_TABLES t
+              WHERE t.TABLE_NAME = '${safeTable}'
+            `;
+            if (database) {
+              sql = `
+                SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
+                FROM "${escapeSqlString(database)}".USER_TABLES t
+                WHERE t.TABLE_NAME = '${safeTable}'
+              `;
+            }
+            break;
+          }
+          case 'oracle': {
+            const safeDb = database ? escapeSqlString(database) : '';
+            sql = `
+              SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
+              FROM ALL_TABLES t
+              WHERE t.TABLE_NAME = '${safeTable}'
+            `;
+            if (database) {
+              sql = `
+                SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
+                FROM ALL_TABLES t
+                WHERE t.OWNER = '${escapeSqlString(database)}' AND t.TABLE_NAME = '${safeTable}'
+              `;
+            }
+            break;
+          }
+          case 'sqlserver': {
+            const safeDb = database ? escapeSqlString(database) : '';
+            sql = `
+              SELECT OBJECT_NAME(p.object_id) AS table_name,
+                CASE WHEN t.name IS NULL THEN 'BASE TABLE' ELSE 'VIEW' END AS table_type,
+                p.rows AS row_count,
+                SUM(a.total_pages) * 8192 AS data_size
+              FROM sys.partitions p
+              JOIN sys.tables t ON t.object_id = p.object_id
+              JOIN sys.indexes i ON i.object_id = p.object_id AND p.index_id = i.index_id
+              JOIN sys.allocation_units a ON a.container_id = p.hobt_id
+              WHERE OBJECT_NAME(p.object_id) = '${safeTable}'
+            `;
+            if (database) {
+              sql = `USE ${escapeSqlIdentifier(database)}; ${sql}`;
+            }
+            break;
+          }
+          default: {
+            const safeDb = database ? escapeSqlString(database) : '';
+            sql = database
+              ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${safeDb}' AND TABLE_NAME = '${safeTable}'`
+              : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${safeTable}'`;
+          }
+        }
 
         const result = await api.executeQuery(connectionId, sql);
 
@@ -542,17 +652,81 @@ export const useDatabase = () => {
         const columns = result.columns;
         const row = result.rows[0];
 
-        return {
-          table_name: row[columns.indexOf('TABLE_NAME')] as string,
-          engine: row[columns.indexOf('ENGINE')] as string,
-          row_count: row[columns.indexOf('TABLE_ROWS')] as number,
-          data_length: row[columns.indexOf('DATA_LENGTH')] as number,
-          index_length: row[columns.indexOf('INDEX_LENGTH')] as number,
-          create_time: row[columns.indexOf('CREATE_TIME')] as string,
-          update_time: row[columns.indexOf('UPDATE_TIME')] as string,
-          collation: row[columns.indexOf('TABLE_COLLATION')] as string,
-          comment: row[columns.indexOf('TABLE_COMMENT')] as string,
-        };
+        switch (dbType) {
+          case 'mysql':
+          case 'mariadb': {
+            return {
+              table_name: row[columns.indexOf('TABLE_NAME')] as string,
+              engine: row[columns.indexOf('ENGINE')] as string,
+              row_count: row[columns.indexOf('TABLE_ROWS')] as number,
+              data_length: row[columns.indexOf('DATA_LENGTH')] as number,
+              index_length: row[columns.indexOf('INDEX_LENGTH')] as number,
+              create_time: row[columns.indexOf('CREATE_TIME')] as string,
+              update_time: row[columns.indexOf('UPDATE_TIME')] as string,
+              collation: row[columns.indexOf('TABLE_COLLATION')] as string,
+              comment: row[columns.indexOf('TABLE_COMMENT')] as string,
+            };
+          }
+          case 'postgresql':
+          case 'kingbase':
+          case 'highgo':
+          case 'vastbase': {
+            return {
+              table_name: row[columns.indexOf('table_name')] as string,
+              table_type: row[columns.indexOf('table_type')] as string,
+              row_count: undefined,
+              comment: row[columns.indexOf('comment')] as string,
+              data_size: row[columns.indexOf('data_size')] as number,
+              index_size:
+                (row[columns.indexOf('total_size')] as number) -
+                (row[columns.indexOf('data_size')] as number),
+            };
+          }
+          case 'sqlite': {
+            return {
+              table_name: row[columns.indexOf('name')] as string,
+              table_type: row[columns.indexOf('type')] as string,
+              comment: undefined,
+            };
+          }
+          case 'dameng': {
+            return {
+              table_name: row[columns.indexOf('TABLE_NAME')] as string,
+              row_count: row[columns.indexOf('NUM_ROWS')] as number,
+              data_size: row[columns.indexOf('BYTES')] as number,
+              comment: row[columns.indexOf('COMMENTS')] as string,
+            };
+          }
+          case 'oracle': {
+            return {
+              table_name: row[columns.indexOf('TABLE_NAME')] as string,
+              row_count: row[columns.indexOf('NUM_ROWS')] as number,
+              data_size: row[columns.indexOf('BYTES')] as number,
+              comment: row[columns.indexOf('COMMENTS')] as string,
+            };
+          }
+          case 'sqlserver': {
+            return {
+              table_name: row[columns.indexOf('table_name')] as string,
+              table_type: row[columns.indexOf('table_type')] as string,
+              row_count: row[columns.indexOf('rows')] as number,
+              data_size: row[columns.indexOf('data_size')] as number,
+            };
+          }
+          default: {
+            return {
+              table_name: row[columns.indexOf('TABLE_NAME')] as string,
+              engine: row[columns.indexOf('ENGINE')] as string,
+              row_count: row[columns.indexOf('TABLE_ROWS')] as number,
+              data_length: row[columns.indexOf('DATA_LENGTH')] as number,
+              index_length: row[columns.indexOf('INDEX_LENGTH')] as number,
+              create_time: row[columns.indexOf('CREATE_TIME')] as string,
+              update_time: row[columns.indexOf('UPDATE_TIME')] as string,
+              collation: row[columns.indexOf('TABLE_COLLATION')] as string,
+              comment: row[columns.indexOf('TABLE_COMMENT')] as string,
+            };
+          }
+        }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取表信息失败';
         setError(errorMsg);

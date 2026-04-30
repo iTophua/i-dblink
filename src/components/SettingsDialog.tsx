@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, Form, InputNumber, Select, Button, Space, Tag, Tooltip, Switch, Menu, Input, message, type InputRef } from 'antd';
+import {
+  Modal,
+  Form,
+  InputNumber,
+  Select,
+  Button,
+  Space,
+  Tag,
+  Tooltip,
+  Switch,
+  Menu,
+  Input,
+  message,
+  type InputRef,
+} from 'antd';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
 import { ThemePreset, THEME_PRESETS_LIST } from '../styles/theme';
 import { MENU_SHORTCUTS, isMacOS } from '../constants/menuShortcuts';
@@ -77,18 +91,20 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
   const themePreset = Form.useWatch('themePreset', form) ?? 'midnightDeep';
   const themeSyncSystem = Form.useWatch('themeSyncSystem', form) ?? true;
 
-  const menuItems = useMemo(() =>
-    MENU_ITEMS.map(item => ({
-      key: item.key,
-      label: item.label,
-      style: {
-        padding: '8px 16px',
-        borderRadius: 6,
-        margin: '2px 8px',
-        width: 'calc(100% - 16px)',
-      }
-    })),
-  []);
+  const menuItems = useMemo(
+    () =>
+      MENU_ITEMS.map((item) => ({
+        key: item.key,
+        label: item.label,
+        style: {
+          padding: '8px 16px',
+          borderRadius: 6,
+          margin: '2px 8px',
+          width: 'calc(100% - 16px)',
+        },
+      })),
+    []
+  );
 
   return (
     <Modal
@@ -146,11 +162,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
             overflowY: 'auto',
           }}
         >
-          <Form
-            form={form}
-            layout="vertical"
-            initialValues={useSettingsStore.getState().settings}
-          >
+          <Form form={form} layout="vertical" initialValues={useSettingsStore.getState().settings}>
             {activeTab === 'general' && (
               <div>
                 <Form.Item
@@ -194,7 +206,10 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                           color={THEME_PREVIEW_COLORS[item.value].dark}
                           style={{
                             cursor: 'pointer',
-                            border: themePreset === item.value ? '2px solid var(--color-primary)' : '1px solid var(--border-color)',
+                            border:
+                              themePreset === item.value
+                                ? '2px solid var(--color-primary)'
+                                : '1px solid var(--border-color)',
                             padding: '4px 12px',
                             fontSize: 12,
                           }}
@@ -266,9 +281,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
               </div>
             )}
 
-            {activeTab === 'shortcuts' && (
-              <ShortcutsSettings />
-            )}
+            {activeTab === 'shortcuts' && <ShortcutsSettings />}
           </Form>
         </div>
       </div>
@@ -288,7 +301,8 @@ function ShortcutsSettings() {
 
   const handleShortcutClick = (shortcutId: string) => {
     setEditingKey(shortcutId);
-    const current = shortcuts[shortcutId] || MENU_SHORTCUTS.find(s => s.id === shortcutId)?.keys || '';
+    const current =
+      shortcuts[shortcutId] || MENU_SHORTCUTS.find((s) => s.id === shortcutId)?.keys || '';
     setInputValue(current);
   };
 
@@ -329,16 +343,18 @@ function ShortcutsSettings() {
   const getDisplayKeys = (shortcutId: string) => {
     const custom = shortcuts[shortcutId];
     if (custom) {
-      return custom.replace('mod+', isMac ? '⌘' : 'Ctrl+')
+      return custom
+        .replace('mod+', isMac ? '⌘' : 'Ctrl+')
         .replace('shift+', '⇧')
         .replace('alt+', isMac ? '⌥' : 'Alt+')
         .replace('enter', '↵')
         .toUpperCase();
     }
-    const defaultShortcut = MENU_SHORTCUTS.find(s => s.id === shortcutId);
+    const defaultShortcut = MENU_SHORTCUTS.find((s) => s.id === shortcutId);
     if (!defaultShortcut) return '';
     const keys = isMac && defaultShortcut.macKeys ? defaultShortcut.macKeys : defaultShortcut.keys;
-    return keys.replace('mod+', isMac ? '⌘' : 'Ctrl+')
+    return keys
+      .replace('mod+', isMac ? '⌘' : 'Ctrl+')
       .replace('shift+', '⇧')
       .replace('alt+', isMac ? '⌥' : 'Alt+')
       .replace('enter', '↵')
@@ -347,7 +363,7 @@ function ShortcutsSettings() {
 
   const categories = useMemo(() => {
     const cats: Record<string, typeof MENU_SHORTCUTS> = {};
-    MENU_SHORTCUTS.forEach(s => {
+    MENU_SHORTCUTS.forEach((s) => {
       if (!cats[s.category]) cats[s.category] = [];
       cats[s.category].push(s);
     });
@@ -376,7 +392,7 @@ function ShortcutsSettings() {
             {categoryNames[category] || category}
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
-            {shortcuts.map(shortcut => (
+            {shortcuts.map((shortcut) => (
               <div
                 key={shortcut.id}
                 style={{

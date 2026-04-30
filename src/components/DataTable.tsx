@@ -42,10 +42,52 @@ import {
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
+import { useAppStore } from '../stores/appStore';
 import type { ColumnInfo } from '../types/api';
 import { api } from '../api';
-import { exportToExcel, exportToCSV as exportToCSVUtil, exportToJSON as exportToJSONUtil } from '../utils/exportUtils';
+import {
+  exportToExcel,
+  exportToCSV as exportToCSVUtil,
+  exportToJSON as exportToJSONUtil,
+} from '../utils/exportUtils';
 import { ImportWizard } from './DataTable/ImportWizard';
+
+// SQL 标识符转义函数 - 根据数据库类型选择合适的引号
+const escapeIdentifier = (name: string, dbType?: string): string => {
+  const { open, close } = (() => {
+    switch (dbType) {
+      case 'postgresql':
+      case 'kingbase':
+      case 'highgo':
+      case 'vastbase':
+      case 'oracle':
+      case 'dameng':
+        return { open: '"', close: '"' };
+      case 'sqlserver':
+        return { open: '[', close: ']' };
+      default:
+        return { open: '`', close: '`' };
+    }
+  })();
+
+  const escapeQuote = (n: string): string => {
+    switch (dbType) {
+      case 'postgresql':
+      case 'kingbase':
+      case 'highgo':
+      case 'vastbase':
+      case 'oracle':
+      case 'dameng':
+        return n.replace(/"/g, '""');
+      case 'sqlserver':
+        return n.replace(/]/g, ']]');
+      default:
+        return n.replace(/`/g, '``');
+    }
+  };
+
+  return `${open}${escapeQuote(name)}${close}`;
+};
 
 interface FilterCondition {
   id: string;
@@ -136,6 +178,9 @@ export const DataTable = memo(function DataTable({
   pageSize: propPageSize,
   onDirtyChange,
 }: DataTableProps) {
+  const dbType = useAppStore(
+    (state) => state.connections.find((c) => c.id === connectionId)?.db_type
+  );
   const [loading, setLoading] = useState(false);
   const [hasEverLoaded, setHasEverLoaded] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
@@ -203,13 +248,51 @@ export const DataTable = memo(function DataTable({
     onDirtyChangeRef.current?.(hasUnsavedChanges);
   }, [hasUnsavedChanges]);
 
-  // Delete 键标记删除选中行
+  // 撤销最后一次单元格编辑
+  const undoLastCellEdit = useCallback(() => {
+    if (pendingChanges.updates.length === 0) {
+      message.info('没有可撤销的单元格编辑');
+      return;
+    }
+
+    const lastUpdate = pendingChanges.updates[pendingChanges.updates.length - 1];
+    const rowId = lastUpdate.__row_id__;
+
+    // 从 pendingChanges 中移除最后一条更新
+    setPendingChanges((prev) => ({
+      ...prev,
+      updates: prev.updates.slice(0, -1),
+    }));
+
+    // 重新加载该行的原始数据
+    const originalRow = rowData.find((r) => r.__row_id__ === rowId);
+    if (originalRow) {
+      gridApiRef.current?.applyTransaction({
+        update: [originalRow],
+      });
+    }
+
+    message.success('已撤销单元格编辑');
+  }, [pendingChanges.updates, rowData]);
+
+  // Delete 键标记删除选中行，Ctrl+Z 撤销单元格编辑
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Z 撤销最后一次单元格编辑
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+          return;
+        e.preventDefault();
+        undoLastCellEdit();
+        return;
+      }
+
       if (e.key !== 'Delete') return;
       // 避免在输入框中触发
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        return;
       const api = gridApiRef.current;
       if (!api) return;
       const selectedToDelete = api.getSelectedRows();
@@ -227,7 +310,7 @@ export const DataTable = memo(function DataTable({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [primaryKey]);
+  }, [primaryKey, undoLastCellEdit]);
 
   const tc = useThemeColors();
   const isDarkMode = tc.isDark;
@@ -244,7 +327,9 @@ export const DataTable = memo(function DataTable({
       overrideOrderBy?: string
     ) => {
       const offset = (page - 1) * size;
-      const tableRef = database ? `\`${database}\`.\`${tableName}\`` : `\`${tableName}\``;
+      const tableRef = database
+        ? `${escapeIdentifier(database, dbType)}.${escapeIdentifier(tableName, dbType)}`
+        : `${escapeIdentifier(tableName, dbType)}`;
       let query = `SELECT * FROM ${tableRef}`;
 
       const whereToUse = overrideWhere !== undefined ? overrideWhere : whereClause;
@@ -257,14 +342,16 @@ export const DataTable = memo(function DataTable({
       if (orderByToUse) {
         query += ` ORDER BY ${orderByToUse}`;
       } else if (sort && sort.length > 0) {
-        const orderClauses = sort.map((s) => `\`${s.colId}\` ${s.sort.toUpperCase()}`).join(', ');
+        const orderClauses = sort
+          .map((s) => `${escapeIdentifier(s.colId, dbType)} ${s.sort.toUpperCase()}`)
+          .join(', ');
         query += ` ORDER BY ${orderClauses}`;
       }
 
       query += ` LIMIT ${size} OFFSET ${offset}`;
       return query;
     },
-    [tableName, database]
+    [tableName, database, dbType]
   );
 
   const buildWhereClause = useCallback((conditions: FilterCondition[]): string => {
@@ -331,8 +418,12 @@ export const DataTable = memo(function DataTable({
   }, []);
 
   const buildSingleCondition = (cond: FilterCondition, index: number): string => {
-    const field = `\`${cond.field}\``;
-    const escapedValue = cond.value.replace(/\\/g, '\\\\').replace(/'/g, "''");
+    const field = escapeIdentifier(cond.field, dbType);
+    const escapedValue = cond.value
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "''")
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
     let clause = '';
 
     switch (cond.operator) {
@@ -589,7 +680,9 @@ export const DataTable = memo(function DataTable({
   const loadCount = useCallback(
     async (overrideWhere?: string, overrideOrderBy?: string) => {
       try {
-        const tableRef = database ? `\`${database}\`.\`${tableName}\`` : `\`${tableName}\``;
+        const tableRef = database
+          ? `${escapeIdentifier(database, dbType)}.${escapeIdentifier(tableName, dbType)}`
+          : `${escapeIdentifier(tableName, dbType)}`;
         const whereToUse = overrideWhere !== undefined ? overrideWhere : whereClause;
         let query = `SELECT COUNT(*) AS cnt FROM ${tableRef}`;
         if (whereToUse) {
@@ -603,7 +696,7 @@ export const DataTable = memo(function DataTable({
         console.error('Failed to load count:', error);
       }
     },
-    [connectionId, tableName, database, executeQuery]
+    [connectionId, tableName, database, executeQuery, dbType]
   );
 
   loadCountRef.current = loadCount;
@@ -640,28 +733,31 @@ export const DataTable = memo(function DataTable({
     []
   );
 
-  const onCellDoubleClicked = useCallback((event: any) => {
-    const field = event.colDef.field;
-    if (!field) return;
-    const colInfo = columns.find((c) => c.column_name === field);
-    if (!colInfo) return;
-    const dataType = (colInfo.data_type || '').toUpperCase();
-    const isTextBlob =
-      dataType === 'TEXT' ||
-      dataType === 'BLOB' ||
-      dataType === 'LONGTEXT' ||
-      dataType === 'MEDIUMTEXT' ||
-      dataType === 'LONG_BLOB' ||
-      dataType === 'MEDIUMBLOB' ||
-      dataType.includes('TEXT') ||
-      dataType.includes('BLOB') ||
-      dataType === 'BYTEA' ||
-      dataType === 'CLOB';
-    if (!isTextBlob) return;
-    const rowIndex = event.rowIndex;
-    const value = event.value === null || event.value === undefined ? '' : String(event.value);
-    setTextEditModal({ open: true, field, value, rowIndex });
-  }, [columns]);
+  const onCellDoubleClicked = useCallback(
+    (event: any) => {
+      const field = event.colDef.field;
+      if (!field) return;
+      const colInfo = columns.find((c) => c.column_name === field);
+      if (!colInfo) return;
+      const dataType = (colInfo.data_type || '').toUpperCase();
+      const isTextBlob =
+        dataType === 'TEXT' ||
+        dataType === 'BLOB' ||
+        dataType === 'LONGTEXT' ||
+        dataType === 'MEDIUMTEXT' ||
+        dataType === 'LONG_BLOB' ||
+        dataType === 'MEDIUMBLOB' ||
+        dataType.includes('TEXT') ||
+        dataType.includes('BLOB') ||
+        dataType === 'BYTEA' ||
+        dataType === 'CLOB';
+      if (!isTextBlob) return;
+      const rowIndex = event.rowIndex;
+      const value = event.value === null || event.value === undefined ? '' : String(event.value);
+      setTextEditModal({ open: true, field, value, rowIndex });
+    },
+    [columns]
+  );
 
   const onCellValueChanged = useCallback((event: any) => {
     if (event.newValue === event.oldValue) {
@@ -795,7 +891,7 @@ export const DataTable = memo(function DataTable({
         }
 
         const primaryKeyValue = row[primaryKey.column_name];
-        const deleteSQL = `DELETE FROM \`${tableName}\` WHERE \`${primaryKey.column_name}\` = ${escapeSqlValue(primaryKeyValue)}`;
+        const deleteSQL = `DELETE FROM ${escapeIdentifier(tableName, dbType)} WHERE ${escapeIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
         const result = await executeQuery(connectionId, deleteSQL);
 
         if (result.error) {
@@ -819,7 +915,7 @@ export const DataTable = memo(function DataTable({
 
           if (columns_list.length === 0) continue;
 
-          const insertSQL = `INSERT INTO \`${tableName}\` (${columns_list.join(', ')}) VALUES (${values_list.join(', ')})`;
+          const insertSQL = `INSERT INTO ${escapeIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
           const result = await executeQuery(connectionId, insertSQL);
 
           if (result.error) {
@@ -856,14 +952,22 @@ export const DataTable = memo(function DataTable({
             if (newValue !== oldValue) {
               const valueStr =
                 newValue === null || newValue === '' ? 'NULL' : escapeSqlValue(newValue);
-              updates.push(`\`${colName}\` = ${valueStr}`);
+              updates.push(`${escapeIdentifier(colName, dbType)} = ${valueStr}`);
             }
           }
 
           if (updates.length === 0) continue; // 没有实际更改
 
           const primaryKeyValue = row[primaryKey.column_name];
-          const updateSQL = `UPDATE \`${tableName}\` SET ${updates.join(', ')} WHERE \`${primaryKey.column_name}\` = ${escapeSqlValue(primaryKeyValue)}`;
+          const setClause = updates
+            .map((u) => {
+              const eqIdx = u.indexOf(' = ');
+              return eqIdx > 0
+                ? `${escapeIdentifier(u.substring(0, eqIdx), dbType)} = ${u.substring(eqIdx)}`
+                : u;
+            })
+            .join(', ');
+          const updateSQL = `UPDATE ${escapeIdentifier(tableName, dbType)} SET ${setClause} WHERE ${escapeIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
           const result = await executeQuery(connectionId, updateSQL);
 
           if (result.error) {
@@ -901,6 +1005,7 @@ export const DataTable = memo(function DataTable({
     executeQuery,
     loadData,
     loadCount,
+    dbType,
   ]);
 
   const handleUndo = useCallback(async () => {
@@ -1001,7 +1106,7 @@ export const DataTable = memo(function DataTable({
         values[col] === null || values[col] === '' ? 'NULL' : escapeSqlValue(values[col])
       );
 
-      const insertSQL = `INSERT INTO \`${tableName}\` (${columns_list.join(', ')}) VALUES (${values_list.join(', ')})`;
+      const insertSQL = `INSERT INTO ${escapeIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
 
       const result = await executeQuery(connectionId, insertSQL);
 
@@ -1017,7 +1122,7 @@ export const DataTable = memo(function DataTable({
       console.error('Insert error:', error);
       message.error(`插入失败：${error.message || error}`);
     }
-  }, [addForm, tableName, connectionId, executeQuery, loadData, loadCount]);
+  }, [addForm, tableName, connectionId, executeQuery, loadData, loadCount, dbType]);
 
   const handleSaveEditRow = useCallback(async () => {
     try {
@@ -1033,7 +1138,7 @@ export const DataTable = memo(function DataTable({
         .filter(([key, value]) => key !== '__row_id__' && value !== editingRow?.[key])
         .map(
           ([key, value]) =>
-            `\`${key}\` = ${value === null || value === '' ? 'NULL' : escapeSqlValue(value)}`
+            `${escapeIdentifier(key, dbType)} = ${value === null || value === '' ? 'NULL' : escapeSqlValue(value)}`
         )
         .join(', ');
 
@@ -1044,7 +1149,7 @@ export const DataTable = memo(function DataTable({
       }
 
       const primaryKeyValue = editingRow?.[primaryKey.column_name];
-      const updateSQL = `UPDATE \`${tableName}\` SET ${updates} WHERE \`${primaryKey.column_name}\` = ${escapeSqlValue(primaryKeyValue)}`;
+      const updateSQL = `UPDATE ${escapeIdentifier(tableName, dbType)} SET ${updates} WHERE ${escapeIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
 
       const result = await executeQuery(connectionId, updateSQL);
 
@@ -1059,7 +1164,7 @@ export const DataTable = memo(function DataTable({
       console.error('Update error:', error);
       message.error(`更新失败：${error.message || error}`);
     }
-  }, [editForm, columns, editingRow, tableName, connectionId, executeQuery, loadData]);
+  }, [editForm, columns, editingRow, tableName, connectionId, executeQuery, loadData, dbType]);
 
   const exportToCSV = useCallback(() => {
     if (rowData.length === 0) {
@@ -1287,9 +1392,11 @@ export const DataTable = memo(function DataTable({
   }, [columns]);
 
   const handlePageChange = useCallback(
-    (page: number, size?: number) => {
+    (page: number, size?: number | string) => {
       if (size && size !== pageSize) {
-        setPageSize(size);
+        // 处理 "All" 选项
+        const newPageSize = size === 'All' ? 1000000 : Number(size);
+        setPageSize(newPageSize);
         setCurrentPage(1);
       } else {
         setCurrentPage(page);
@@ -1995,17 +2102,26 @@ export const DataTable = memo(function DataTable({
           {hasUnsavedChanges && (
             <>
               {pendingChanges.inserts.length > 0 && (
-                <Tag color="success" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
+                <Tag
+                  color="success"
+                  style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
+                >
                   插入 {pendingChanges.inserts.length}
                 </Tag>
               )}
               {pendingChanges.updates.length > 0 && (
-                <Tag color="warning" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
+                <Tag
+                  color="warning"
+                  style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
+                >
                   更新 {pendingChanges.updates.length}
                 </Tag>
               )}
               {pendingChanges.deletes.length > 0 && (
-                <Tag color="error" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
+                <Tag
+                  color="error"
+                  style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
+                >
                   删除 {pendingChanges.deletes.length}
                 </Tag>
               )}
@@ -2114,7 +2230,11 @@ export const DataTable = memo(function DataTable({
               ],
             }}
           >
-            <Button icon={<DownloadOutlined />} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>
+            <Button
+              icon={<DownloadOutlined />}
+              size="small"
+              style={{ height: 20, padding: '0 4px', fontSize: 11 }}
+            >
               导出
             </Button>
           </Dropdown>
@@ -2190,7 +2310,8 @@ export const DataTable = memo(function DataTable({
             current={currentPage}
             pageSize={pageSize}
             total={totalCount}
-            showSizeChanger={false}
+            showSizeChanger={true}
+            pageSizeOptions={['10', '50', '100', '500', '1000', 'All']}
             onChange={handlePageChange}
             simple
           />
@@ -2347,7 +2468,10 @@ export const DataTable = memo(function DataTable({
               if (pkValue !== undefined) {
                 const setClause = colNames
                   .filter((c) => c !== pkCol.column_name)
-                  .map((c) => `\`${c}\` = ${typeof row[c] === 'string' ? `'${row[c].replace(/'/g, "''")}'` : row[c]}`)
+                  .map(
+                    (c) =>
+                      `\`${c}\` = ${typeof row[c] === 'string' ? `'${row[c].replace(/'/g, "''")}'` : row[c]}`
+                  )
                   .join(', ');
                 const sql = `UPDATE \`${tableName}\` SET ${setClause} WHERE \`${pkCol.column_name}\` = ${typeof pkValue === 'string' ? `'${pkValue.replace(/'/g, "''")}'` : pkValue}`;
                 await api.executeQuery(connectionId, sql, database);

@@ -27,7 +27,11 @@ interface ImportWizardProps {
   onClose: () => void;
   tableName: string;
   columns: ColumnInfo[];
-  onImport: (data: Record<string, any>[], mode: ImportMode, mapping: Record<string, string>) => Promise<void>;
+  onImport: (
+    data: Record<string, any>[],
+    mode: ImportMode,
+    mapping: Record<string, string>
+  ) => Promise<void>;
 }
 
 type ImportMode = 'append' | 'replace' | 'update';
@@ -77,9 +81,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
         // 自动映射同名字段
         const autoMapping: Record<string, string> = {};
         parsed.headers.forEach((header) => {
-          const match = columns.find(
-            (c) => c.column_name.toLowerCase() === header.toLowerCase()
-          );
+          const match = columns.find((c) => c.column_name.toLowerCase() === header.toLowerCase());
           if (match) {
             autoMapping[header] = match.column_name;
           }
@@ -130,9 +132,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
             style={{ width: '100%' }}
             placeholder="映射到..."
             value={fieldMapping[h] || undefined}
-            onChange={(value) =>
-              setFieldMapping((prev) => ({ ...prev, [h]: value }))
-            }
+            onChange={(value) => setFieldMapping((prev) => ({ ...prev, [h]: value }))}
             allowClear
             options={columns.map((c) => ({
               value: c.column_name,
@@ -159,7 +159,13 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       content: (
         <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
           {parseError && (
-            <Alert message={parseError} type="error" showIcon closable onClose={() => setParseError(null)} />
+            <Alert
+              message={parseError}
+              type="error"
+              showIcon
+              closable
+              onClose={() => setParseError(null)}
+            />
           )}
           <Upload.Dragger
             accept=".csv,.xlsx,.xls,.json"
@@ -204,25 +210,18 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
           <Divider />
           <div>
             <div style={{ fontWeight: 500, marginBottom: 8 }}>导入模式</div>
-            <Radio.Group
-              value={importMode}
-              onChange={(e) => setImportMode(e.target.value)}
-            >
+            <Radio.Group value={importMode} onChange={(e) => setImportMode(e.target.value)}>
               <Space direction="vertical">
                 <Radio value="append">
                   追加模式
-                  <Tag style={{ marginLeft: 8, fontSize: 11 }}>
-                    INSERT
-                  </Tag>
+                  <Tag style={{ marginLeft: 8, fontSize: 11 }}>INSERT</Tag>
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                     将数据作为新行追加到表中
                   </div>
                 </Radio>
                 <Radio value="replace">
                   替换模式
-                  <Tag style={{ marginLeft: 8, fontSize: 11 }}>
-                    TRUNCATE + INSERT
-                  </Tag>
+                  <Tag style={{ marginLeft: 8, fontSize: 11 }}>TRUNCATE + INSERT</Tag>
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                     清空表后插入新数据
                   </div>
@@ -255,11 +254,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
           />
           <div style={{ maxHeight: 400, overflow: 'auto' }}>
             <Table
-              dataSource={
-                parsedFile?.rows
-                  .filter((_, i) => selectedRows.has(i))
-                  .slice(0, 10) || []
-              }
+              dataSource={parsedFile?.rows.filter((_, i) => selectedRows.has(i)).slice(0, 10) || []}
               columns={previewColumns}
               size="small"
               pagination={false}

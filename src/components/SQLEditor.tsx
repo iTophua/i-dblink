@@ -36,6 +36,7 @@ import {
   FullscreenOutlined,
   BugOutlined,
   DownloadOutlined,
+  BookOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
@@ -45,6 +46,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { format as formatSql } from 'sql-formatter';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
+import { SnippetManager } from './SnippetManager';
 import { api } from '../api';
 import type { QueryResult, DatabaseType } from '../types/api';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -57,7 +59,12 @@ interface QueryResultWithTiming extends QueryResult {
 declare global {
   interface Window {
     __sqlHistoryApi?: {
-      addHistory: (item: { sql: string; success: boolean; duration?: number; rowCount?: number }) => void;
+      addHistory: (item: {
+        sql: string;
+        success: boolean;
+        duration?: number;
+        rowCount?: number;
+      }) => void;
     };
   }
 }
@@ -68,6 +75,7 @@ interface SQLEditorProps {
   defaultQuery?: string;
   availableDatabases?: string[];
   onDatabaseChange?: (database: string) => void;
+  dbType?: DatabaseType;
 }
 
 // 智能分割 SQL 语句，忽略字符串和注释中的分号
@@ -575,14 +583,18 @@ export function SQLEditor({
   defaultQuery,
   availableDatabases,
   onDatabaseChange,
+  dbType: propDbType,
 }: SQLEditorProps) {
   const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
-  const dbType = useMemo(() => {
-    const conn = connections.find((c) => c.id === connectionId);
-    return conn?.db_type;
-  }, [connections, connectionId]);
+  const dbType =
+    propDbType ||
+    useMemo(() => {
+      const conn = connections.find((c) => c.id === connectionId);
+      return conn?.db_type;
+    }, [connections, connectionId]);
   const [sql, setSql] = useState(defaultQuery || '');
+  const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
 
   // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
   useEffect(() => {
@@ -602,9 +614,11 @@ export function SQLEditor({
   const [transactionActive, setTransactionActive] = useState(false);
   const editorRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const schemaRef = useRef<{ tables: Map<string, string[]>; views: Map<string, string[]> } | null>(
-    null
-  );
+  const schemaRef = useRef<{
+    tables: Map<string, string[]>;
+    views: Map<string, string[]>;
+    databases: Set<string>;
+  } | null>(null);
   const monacoRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -693,7 +707,15 @@ export function SQLEditor({
         }
       }
 
-      schemaRef.current = { tables: tablesMap, views: viewsMap };
+      schemaRef.current = {
+        tables: tablesMap,
+        views: viewsMap,
+        databases: availableDatabases
+          ? new Set(availableDatabases)
+          : database
+            ? new Set([database])
+            : new Set(),
+      };
 
       // 预生成所有 schema 相关的 suggestions，避免每次按键都重建
       completionCacheRef.current = {
@@ -867,6 +889,24 @@ export function SQLEditor({
                 });
               }
             }
+
+            // 添加数据库名.表名.列名的格式（支持跨数据库引用）
+            if (schema.databases && schema.databases.size > 0) {
+              for (const db of schema.databases) {
+                for (const [tableName, columns] of schema.tables) {
+                  for (const column of columns) {
+                    suggestions.push({
+                      label: `${db}.${tableName}.${column}`,
+                      kind: monaco.languages.CompletionItemKind.Field,
+                      insertText: `${db}.${tableName}.${column}`,
+                      range,
+                      detail: `${db}.${tableName} 表的列`,
+                      sortText: '1',
+                    });
+                  }
+                }
+              }
+            }
           }
 
           // 3. 在 SET 后（UPDATE 语句）-> 只提供列名
@@ -947,6 +987,32 @@ export function SQLEditor({
                 detail: `视图 (${columns.length} 列)`,
                 sortText: '2',
               });
+            }
+          }
+
+          // 添加数据库名.表名/视图名的格式（支持跨数据库引用）
+          if (schema.databases && schema.databases.size > 0) {
+            for (const db of schema.databases) {
+              for (const [tableName] of schema.tables) {
+                suggestions.push({
+                  label: `${db}.${tableName}`,
+                  kind: monaco.languages.CompletionItemKind.Class,
+                  insertText: `${db}.${tableName}`,
+                  range,
+                  detail: `${db}.${tableName} 表`,
+                  sortText: '2',
+                });
+              }
+              for (const [viewName] of schema.views) {
+                suggestions.push({
+                  label: `${db}.${viewName}`,
+                  kind: monaco.languages.CompletionItemKind.Class,
+                  insertText: `${db}.${viewName}`,
+                  range,
+                  detail: `${db}.${viewName} 视图`,
+                  sortText: '2',
+                });
+              }
             }
           }
         }
@@ -1192,7 +1258,12 @@ export function SQLEditor({
     try {
       setLoading(true);
 
-      const explainSQL = `EXPLAIN ${sql}`;
+      let trimmedSQL = sql.trim();
+      if (trimmedSQL.endsWith(';')) {
+        trimmedSQL = trimmedSQL.slice(0, -1).trim();
+      }
+
+      const explainSQL = `EXPLAIN ${trimmedSQL}`;
       const result = await executeQueryApi(connectionId, explainSQL, database);
 
       if (result.error) {
@@ -1649,7 +1720,8 @@ export function SQLEditor({
                 if (!model || !selection) return;
                 const selectedText = model.getValueInRange(selection);
                 if (!selectedText) return;
-                const replaced = key === 'upper' ? selectedText.toUpperCase() : selectedText.toLowerCase();
+                const replaced =
+                  key === 'upper' ? selectedText.toUpperCase() : selectedText.toLowerCase();
                 editor.executeEdits('case-transform', [
                   { range: selection, text: replaced, forceMoveMarkers: true },
                 ]);
@@ -1667,6 +1739,7 @@ export function SQLEditor({
                 { key: 'save', label: '保存 SQL', icon: <SaveOutlined /> },
                 { key: 'copy', label: '复制 SQL', icon: <CopyOutlined /> },
                 { key: 'clear', label: '清空编辑器', icon: <ClearOutlined /> },
+                { key: 'snippets', label: '代码片段', icon: <BookOutlined /> },
                 { type: 'divider' },
                 { key: 'history', label: '查询历史', icon: <HistoryOutlined /> },
                 { key: 'export', label: '导出结果', icon: <DownloadOutlined />, disabled: !result },
@@ -1677,6 +1750,7 @@ export function SQLEditor({
                 else if (key === 'clear') clearEditor();
                 else if (key === 'export') exportResult();
                 else if (key === 'history') setHistoryPanelVisible(true);
+                else if (key === 'snippets') setSnippetManagerOpen(true);
               },
             }}
           >
@@ -1857,6 +1931,16 @@ export function SQLEditor({
           storageKey={`sql-history-${connectionId || 'global'}${database ? `-${database}` : ''}`}
         />
       </Drawer>
+
+      {/* 代码片段抽屉 */}
+      <SnippetManager
+        open={snippetManagerOpen}
+        onClose={() => setSnippetManagerOpen(false)}
+        onInsert={(sqlText) => {
+          setSql((prev) => (prev ? prev + '\n' + sqlText : sqlText));
+        }}
+        dbType={dbType}
+      />
     </div>
   );
 }

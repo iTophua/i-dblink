@@ -1,6 +1,11 @@
 import { useState, useCallback, useMemo } from 'react';
 import { List, Tag, Typography, Empty, Button, Space, Popconfirm } from 'antd';
-import { SearchOutlined, ClearOutlined, ReloadOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import {
+  SearchOutlined,
+  ClearOutlined,
+  ReloadOutlined,
+  ClockCircleOutlined,
+} from '@ant-design/icons';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { GlobalInput } from '../GlobalInput';
 
@@ -20,7 +25,11 @@ interface HistoryPanelProps {
   storageKey?: string;
 }
 
-export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-history' }: HistoryPanelProps) {
+export function HistoryPanel({
+  onSelect,
+  maxHistory = 50,
+  storageKey = 'sql-history',
+}: HistoryPanelProps) {
   const [searchText, setSearchText] = useState('');
   const tc = useThemeColors();
 
@@ -37,18 +46,21 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
   const [history, setHistory] = useState<HistoryItem[]>(loadHistory);
 
   // 添加历史记录
-  const addHistory = useCallback((item: Omit<HistoryItem, 'timestamp'>) => {
-    const newItem: HistoryItem = {
-      ...item,
-      timestamp: Date.now(),
-    };
+  const addHistory = useCallback(
+    (item: Omit<HistoryItem, 'timestamp'>) => {
+      const newItem: HistoryItem = {
+        ...item,
+        timestamp: Date.now(),
+      };
 
-    setHistory(prev => {
-      const updated = [newItem, ...prev].slice(0, maxHistory);
-      localStorage.setItem(storageKey, JSON.stringify(updated));
-      return updated;
-    });
-  }, [maxHistory, storageKey]);
+      setHistory((prev) => {
+        const updated = [newItem, ...prev].slice(0, maxHistory);
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        return updated;
+      });
+    },
+    [maxHistory, storageKey]
+  );
 
   // 清空历史记录
   const clearHistory = useCallback(() => {
@@ -59,9 +71,7 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
   // 过滤历史记录
   const filteredHistory = useMemo(() => {
     if (!searchText) return history;
-    return history.filter(item =>
-      item.sql.toLowerCase().includes(searchText.toLowerCase())
-    );
+    return history.filter((item) => item.sql.toLowerCase().includes(searchText.toLowerCase()));
   }, [history, searchText]);
 
   // 格式化时间
@@ -86,17 +96,26 @@ export function HistoryPanel({ onSelect, maxHistory = 50, storageKey = 'sql-hist
   }, [addHistory]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--background-card)' }}>
-      {/* 工具栏 */}
-      <div style={{
-        padding: '8px 12px',
-        borderBottom: `1px solid var(--border)`,
+    <div
+      style={{
+        height: '100%',
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: 'var(--background-toolbar)',
-        flexShrink: 0,
-      }}>
+        flexDirection: 'column',
+        background: 'var(--background-card)',
+      }}
+    >
+      {/* 工具栏 */}
+      <div
+        style={{
+          padding: '8px 12px',
+          borderBottom: `1px solid var(--border)`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'var(--background-toolbar)',
+          flexShrink: 0,
+        }}
+      >
         <Space size="small">
           <GlobalInput
             placeholder="搜索 SQL..."

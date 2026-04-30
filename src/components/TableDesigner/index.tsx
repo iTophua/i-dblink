@@ -245,7 +245,9 @@ function generateAlterTableSQL(
         alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(idx.name)};`);
       }
       if (idx.type === 'UNIQUE') {
-        alters.push(`ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(idx.name)} UNIQUE (${cols});`);
+        alters.push(
+          `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(idx.name)} UNIQUE (${cols});`
+        );
       } else {
         alters.push(`ALTER TABLE ${tableRef} ADD INDEX ${escapeIdentifier(idx.name)} (${cols});`);
       }
@@ -398,7 +400,16 @@ export function TableDesigner({
       );
     }
     return generateCreateTableSQL(tableName, columns, indexes, foreignKeys);
-  }, [tableName, columns, indexes, foreignKeys, originalColumns, originalIndexes, originalForeignKeys, isEditMode]);
+  }, [
+    tableName,
+    columns,
+    indexes,
+    foreignKeys,
+    originalColumns,
+    originalIndexes,
+    originalForeignKeys,
+    isEditMode,
+  ]);
 
   // ── Column CRUD ────────────────────────────────────────────────────────
   const addColumn = () => {

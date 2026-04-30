@@ -39,7 +39,7 @@ func (h *Handler) GetDatabases(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		databases, err = mysqlGetDatabases(ctx, exec)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		databases, err = postgresGetDatabases(ctx, exec)
 	case "sqlite":
 		databases = []string{"main"}
@@ -78,7 +78,7 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		tables, err = mysqlGetTables(ctx, exec, req.Database)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		tables, err = postgresGetTables(ctx, exec, req.Database)
 	case "sqlite":
 		tables, err = sqliteGetTables(ctx, exec, req.Database)
@@ -120,7 +120,7 @@ func (h *Handler) GetTablesCategorized(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		result, err = mysqlGetTablesCategorized(ctx, exec, req.Database, req.Search)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		result, err = postgresGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	case "sqlite":
 		result, err = sqliteGetTablesCategorized(ctx, exec, req.Database, req.Search)
@@ -164,7 +164,7 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		columns, err = mysqlGetColumns(ctx, exec, *req.TableName, req.Database)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		columns, err = postgresGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "sqlite":
 		columns, err = sqliteGetColumns(ctx, exec, *req.TableName, req.Database)
@@ -208,7 +208,7 @@ func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		indexes, err = mysqlGetIndexes(ctx, exec, *req.TableName, req.Database)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		indexes, err = postgresGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "sqlite":
 		indexes, err = sqliteGetIndexes(ctx, exec, *req.TableName, req.Database)
@@ -252,7 +252,7 @@ func (h *Handler) GetForeignKeys(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		fks, err = mysqlGetForeignKeys(ctx, exec, *req.TableName, req.Database)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		fks, err = postgresGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "sqlite":
 		fks, err = sqliteGetForeignKeys(ctx, exec, *req.TableName, req.Database)
@@ -296,7 +296,7 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		structure, err = mysqlGetTableStructure(ctx, exec, *req.TableName, req.Database)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		structure, err = postgresGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "sqlite":
 		structure, err = sqliteGetTableStructure(ctx, exec, *req.TableName, req.Database)
@@ -385,7 +385,7 @@ func (h *Handler) GetProcedures(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		result, err = mysqlGetRoutines(ctx, exec, req.Database)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		result, err = postgresGetRoutines(ctx, exec, req.Database)
 	case "sqlite":
 		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
@@ -428,7 +428,7 @@ func (h *Handler) GetFunctions(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		result, err = mysqlGetRoutines(ctx, exec, req.Database)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		result, err = postgresGetRoutines(ctx, exec, req.Database)
 	case "sqlite":
 		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
@@ -475,7 +475,7 @@ func (h *Handler) GetProcedureBody(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		body, err = mysqlGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		body, err = postgresGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
 	case "dameng":
 		body, err = damengGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
@@ -494,9 +494,9 @@ func (h *Handler) GetProcedureBody(w http.ResponseWriter, r *http.Request) {
 // GetFunctionBody 获取函数定义
 func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ConnectionID  string `json:"connection_id"`
-		FunctionName  string `json:"function_name"`
-		Database      string `json:"database"`
+		ConnectionID string `json:"connection_id"`
+		FunctionName string `json:"function_name"`
+		Database     string `json:"database"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, "invalid request body")
@@ -516,7 +516,7 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		body, err = mysqlGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		body, err = postgresGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
 	case "dameng":
 		body, err = damengGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
@@ -531,5 +531,3 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewEncoder(w).Encode(map[string]string{"body": body})
 }
-
-

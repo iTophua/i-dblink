@@ -13,6 +13,7 @@ export interface SavedSqlTab {
   title: string;
   connectionId?: string;
   database?: string;
+  content?: string;
 }
 
 export interface SavedDesignerTab {
@@ -47,6 +48,23 @@ const defaultWorkspace: WorkspaceSnapshot = {
   expandedKeys: [],
 };
 
+const VERSION = 2;
+
+function migrate(state: any, version: number | undefined): Partial<WorkspaceState> {
+  if (version === undefined) {
+    return { ...defaultWorkspace };
+  }
+  if (version === 1) {
+    if (state.openedSqlTabs) {
+      state.openedSqlTabs = state.openedSqlTabs.map((t: any) => ({
+        ...t,
+        content: t.content || t.defaultQuery || undefined,
+      }));
+    }
+  }
+  return { ...defaultWorkspace, ...state };
+}
+
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set) => ({
@@ -60,6 +78,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }),
     {
       name: 'idblink-workspace',
+      version: VERSION,
+      migrate: migrate,
     }
   )
 );

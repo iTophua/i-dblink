@@ -64,7 +64,7 @@ const getStyles = () => ({
     flexDirection: 'column' as const,
     minHeight: 0,
   },
-tabPanelContainer: {
+  tabPanelContainer: {
     flex: 1,
     minHeight: 0,
     display: 'flex',
@@ -88,7 +88,18 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [searchText, setSearchText] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [connectionDatabases, setConnectionDatabases] = useState<
-    Record<string, { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean; procedures?: string[]; functions?: string[]; routinesLoaded?: boolean }[]>
+    Record<
+      string,
+      {
+        database: string;
+        tables: TableInfo[];
+        loaded: boolean;
+        loadFailed?: boolean;
+        procedures?: string[];
+        functions?: string[];
+        routinesLoaded?: boolean;
+      }[]
+    >
   >({});
   const [tableStructures, setTableStructures] = useState<
     Record<string, { columns: ColumnInfo[]; indexes: IndexInfo[]; loaded: boolean }>
@@ -97,11 +108,19 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [editingConnection, setEditingConnection] = useState<ConnectionFormData | undefined>();
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [passwordDialogConn, setPasswordDialogConn] = useState<{ id: string; name: string } | null>(null);
+  const [passwordDialogConn, setPasswordDialogConn] = useState<{ id: string; name: string } | null>(
+    null
+  );
   const [passwordForm] = Form.useForm();
   const tabPanelRef = useRef<TabPanelRef>(null);
   const workspaceRestoredRef = useRef(false);
-  const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo>({ type: 'objects', title: '对象列表' });
+  const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo>({
+    type: 'objects',
+    title: '对象列表',
+  });
+  const [transactionActive, setTransactionActive] = useState(false);
+  const [currentResultRows, setCurrentResultRows] = useState<number>(0);
+  const [currentExecutionTime, setCurrentExecutionTime] = useState<number>(0);
 
   // 恢复侧边栏工作区状态
   useEffect(() => {
@@ -148,79 +167,111 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     if (activeTabInfo.title && activeTabInfo.type !== 'objects') parts.push(activeTabInfo.title);
     const title = parts.length > 0 ? `${parts.join(' > ')} - iDBLink` : 'iDBLink';
     document.title = title;
-    try {
-      const appWindow = getCurrentWindow();
-      appWindow.setTitle(title);
-    } catch (e) {
-      // 忽略 Tauri 未初始化时的错误
-    }
+
+    // Tauri 窗口标题
+    getCurrentWindow()
+      .setTitle(title)
+      .catch(() => {});
   }, [selectedConnectionId, connections, activeTabInfo]);
+
+  // 监听活跃 Tab 变化，更新状态栏信息
+  useEffect(() => {
+    if (activeTabInfo.type === 'sql') {
+      // 查询 Tab：监听事务状态
+      if (selectedConnectionId) {
+        api
+          .getTransactionStatus(selectedConnectionId)
+          .then(setTransactionActive)
+          .catch(() => {});
+      } else {
+        setTransactionActive(false);
+      }
+      setCurrentResultRows(0);
+      setCurrentExecutionTime(0);
+    } else if (activeTabInfo.type === 'data') {
+      // 数据 Tab：重置事务状态
+      setTransactionActive(false);
+      setCurrentResultRows(0);
+      setCurrentExecutionTime(0);
+    } else {
+      setTransactionActive(false);
+      setCurrentResultRows(0);
+      setCurrentExecutionTime(0);
+    }
+  }, [activeTabInfo.type, activeTabInfo.connectionId, selectedConnectionId]);
 
   const { getTables, refreshTables, getDatabases, getColumns, getIndexes } = useDatabase();
 
   useInitApp();
 
-  const menuActions = useMemo(() => ({
-    onNewConnection: () => setConnectionDialogOpen(true),
-    onOpenConnection: () => setConnectionDialogOpen(true),
-    onSaveConnection: () => {},
-    onSaveAs: () => {},
-    onImport: () => {},
-    onExport: () => {},
-    onQuit: () => {},
-    onUndo: () => {},
-    onRedo: () => {},
-    onCut: () => {},
-    onCopy: () => {},
-    onPaste: () => {},
-    onDelete: () => {},
-    onSelectAll: () => {},
-    onFindReplace: () => {},
-    onRefresh: () => {
-      if (selectedConnectionId && selectedDatabase) {
-        loadDatabaseTables(selectedConnectionId, selectedDatabase, true);
-      }
-    },
-    onZoomIn: () => {},
-    onZoomOut: () => {},
-    onZoomReset: () => {},
-    onToggleFullscreen: () => {
-      const elem = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-      elem.catch(() => {});
-    },
-    onConnectSelected: () => {
-      if (selectedConnectionId) {
-        handleConnect(selectedConnectionId);
-      }
-    },
-    onDisconnect: () => {
-      if (selectedConnectionId) {
-        handleDisconnect(selectedConnectionId);
-      }
-    },
-    onNewQuery: () => {
-      if (selectedConnectionId) {
-        handleNewQuery(selectedConnectionId);
-      }
-    },
-    onExecuteQuery: () => {
-      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'execute-query' } }));
-    },
-    onSettings: () => setSettingsDialogOpen(true),
-    onNewTab: () => {
-      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } }));
-    },
-    onCloseTab: () => {
-      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'close-tab' } }));
-    },
-    onNextTab: () => {
-      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'next-tab' } }));
-    },
-    onPreviousTab: () => {
-      window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'previous-tab' } }));
-    },
-    onHelp: () => {},
-  }), [selectedConnectionId, selectedDatabase]);
+  const menuActions = useMemo(
+    () => ({
+      onNewConnection: () => setConnectionDialogOpen(true),
+      onOpenConnection: () => setConnectionDialogOpen(true),
+      onSaveConnection: () => {},
+      onSaveAs: () => {},
+      onImport: () => {},
+      onExport: () => {},
+      onQuit: () => {},
+      onUndo: () => {},
+      onRedo: () => {},
+      onCut: () => {},
+      onCopy: () => {},
+      onPaste: () => {},
+      onDelete: () => {},
+      onSelectAll: () => {},
+      onFindReplace: () => {},
+      onRefresh: () => {
+        if (selectedConnectionId && selectedDatabase) {
+          loadDatabaseTables(selectedConnectionId, selectedDatabase, true);
+        }
+      },
+      onZoomIn: () => {},
+      onZoomOut: () => {},
+      onZoomReset: () => {},
+      onToggleFullscreen: () => {
+        const elem = document.fullscreenElement
+          ? document.exitFullscreen()
+          : document.documentElement.requestFullscreen();
+        elem.catch(() => {});
+      },
+      onConnectSelected: () => {
+        if (selectedConnectionId) {
+          handleConnect(selectedConnectionId);
+        }
+      },
+      onDisconnect: () => {
+        if (selectedConnectionId) {
+          handleDisconnect(selectedConnectionId);
+        }
+      },
+      onNewQuery: () => {
+        if (selectedConnectionId) {
+          handleNewQuery(selectedConnectionId);
+        }
+      },
+      onExecuteQuery: () => {
+        window.dispatchEvent(
+          new CustomEvent('tab-action', { detail: { action: 'execute-query' } })
+        );
+      },
+      onSettings: () => setSettingsDialogOpen(true),
+      onNewTab: () => {
+        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } }));
+      },
+      onCloseTab: () => {
+        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'close-tab' } }));
+      },
+      onNextTab: () => {
+        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'next-tab' } }));
+      },
+      onPreviousTab: () => {
+        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'previous-tab' } }));
+      },
+      onHelp: () => {},
+    }),
+    [selectedConnectionId, selectedDatabase]
+  );
 
   useMenuShortcuts(menuActions);
 
@@ -399,39 +450,36 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     [getTables]
   );
 
-  const loadDatabaseRoutines = useCallback(
-    async (connectionId: string, database: string) => {
-      try {
-        const [procedures, functions] = await Promise.all([
-          api.getProcedures(connectionId, database),
-          api.getFunctions(connectionId, database),
-        ]);
+  const loadDatabaseRoutines = useCallback(async (connectionId: string, database: string) => {
+    try {
+      const [procedures, functions] = await Promise.all([
+        api.getProcedures(connectionId, database),
+        api.getFunctions(connectionId, database),
+      ]);
 
-        setConnectionDatabases((prev) => {
-          const dbList = prev[connectionId] || [];
-          const dbIndex = dbList.findIndex((db) => db.database === database);
+      setConnectionDatabases((prev) => {
+        const dbList = prev[connectionId] || [];
+        const dbIndex = dbList.findIndex((db) => db.database === database);
 
-          if (dbIndex >= 0) {
-            const newDbList = [...dbList];
-            newDbList[dbIndex] = {
-              ...newDbList[dbIndex],
-              procedures,
-              functions,
-              routinesLoaded: true,
-            };
-            return {
-              ...prev,
-              [connectionId]: newDbList,
-            };
-          }
-          return prev;
-        });
-      } catch (err) {
-        console.error('Failed to load routines:', err);
-      }
-    },
-    []
-  );
+        if (dbIndex >= 0) {
+          const newDbList = [...dbList];
+          newDbList[dbIndex] = {
+            ...newDbList[dbIndex],
+            procedures,
+            functions,
+            routinesLoaded: true,
+          };
+          return {
+            ...prev,
+            [connectionId]: newDbList,
+          };
+        }
+        return prev;
+      });
+    } catch (err) {
+      console.error('Failed to load routines:', err);
+    }
+  }, []);
 
   const handleTableSelect = useCallback((table: string | null, database?: string) => {
     setSelectedTable(table);
@@ -476,9 +524,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         clearTableData(connectionId);
         // 重置连接状态为断开
         setConnections((prev) =>
-          prev.map((c) =>
-            c.id === connectionId ? { ...c, status: 'disconnected' as const } : c
-          )
+          prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
         );
         // 确保全局 loading 状态被重置
         setLoading(false);
@@ -604,8 +650,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         );
         setTableStructures((prev) => {
           const newData = { ...prev };
-          const keysToDelete = Object.keys(newData).filter(
-            (key) => key.startsWith(`${connectionId}::${database}::`)
+          const keysToDelete = Object.keys(newData).filter((key) =>
+            key.startsWith(`${connectionId}::${database}::`)
           );
           keysToDelete.forEach((key) => delete newData[key]);
           return newData;
@@ -793,7 +839,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       setSelectedConnectionId(connectionId);
       setActiveConnection(connectionId);
       window.dispatchEvent(
-        new CustomEvent('tab-action', { detail: { action: 'new-sql-tab', connectionId, database: selectedDatabase } })
+        new CustomEvent('tab-action', {
+          detail: { action: 'new-sql-tab', connectionId, database: selectedDatabase },
+        })
       );
     },
     [connections, handleConnect, setActiveConnection]
@@ -1066,6 +1114,10 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         selectedConnectionId={selectedConnectionId}
         connections={connections}
         selectedTable={selectedTable}
+        selectedDatabase={selectedDatabase}
+        transactionActive={transactionActive}
+        resultRows={currentResultRows}
+        executionTime={currentExecutionTime}
       />
 
       <ConnectionDialog
@@ -1096,10 +1148,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         destroyOnClose
       >
         <Form form={passwordForm} layout="vertical">
-          <Form.Item
-            name="password"
-            rules={[{ required: true, message: '请输入密码' }]}
-          >
+          <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
             <Input.Password autoFocus placeholder="请输入数据库密码" />
           </Form.Item>
         </Form>

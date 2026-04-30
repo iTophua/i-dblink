@@ -125,6 +125,19 @@ func (m *Manager) Get(connectionID string) (*sql.DB, error) {
 	return info.db, nil
 }
 
+// GetPool 获取连接池及其类型信息
+func (m *Manager) GetPool(connectionID string) (*DBPool, error) {
+	m.mu.RLock()
+	info, ok := m.pools[connectionID]
+	m.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("connection %s not found", connectionID)
+	}
+
+	return &DBPool{db: info.db, DbType: info.dbType}, nil
+}
+
 // GetDBType 获取连接的数据库类型
 func (m *Manager) GetDBType(connectionID string) (string, error) {
 	m.mu.RLock()

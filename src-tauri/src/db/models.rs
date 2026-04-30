@@ -72,3 +72,41 @@ impl ConnectionGroup {
         }
     }
 }
+
+/// 代码片段
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Snippet {
+    pub id: String,
+    pub name: String,
+    pub sql_text: String,
+    pub db_type: Option<String>,
+    pub category: Option<String>,
+    pub tags: Option<String>,
+    pub is_private: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl Snippet {
+    pub fn new(
+        name: String,
+        sql_text: String,
+        db_type: Option<String>,
+        category: Option<String>,
+        tags: Option<String>,
+        is_private: bool,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name,
+            sql_text,
+            db_type,
+            category,
+            tags,
+            is_private,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}

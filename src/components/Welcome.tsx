@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Button, Card, Typography, Divider, Space, Empty } from 'antd';
-import { DatabaseOutlined, PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import {
+  DatabaseOutlined,
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  PlayCircleOutlined,
+} from '@ant-design/icons';
 import { useAppStore, Connection } from '../stores/appStore';
 import type { DatabaseType, ConnectionStatus } from '../types/api';
 import { invoke } from '@tauri-apps/api/core';
@@ -30,7 +36,7 @@ interface BackendGroup {
 export function Welcome() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingData, setEditingData] = useState<ConnectionFormData | undefined>();
-  
+
   const connections = useAppStore((state) => state.connections);
   const groups = useAppStore((state) => state.groups);
   const addConnection = useAppStore((state) => state.addConnection);
@@ -56,7 +62,7 @@ export function Welcome() {
         port: c.port,
         username: c.username,
         status: c.status as ConnectionStatus,
-        group_id: c.group_id
+        group_id: c.group_id,
       }));
       setConnections(appConnections);
     } catch (error) {
@@ -68,13 +74,13 @@ export function Welcome() {
     try {
       const backendGroups = await invoke<BackendGroup[]>('get_groups');
       backendGroups.forEach((g: BackendGroup) => {
-        const exists = groups.find(grp => grp.id === g.id);
+        const exists = groups.find((grp) => grp.id === g.id);
         if (!exists) {
           addGroup({
             id: g.id,
             name: g.name,
             icon: g.icon,
-            color: g.color
+            color: g.color,
           });
         }
       });
@@ -154,7 +160,7 @@ export function Welcome() {
         iDBLink - 数据库管理工具
       </Title>
 
-      <Card 
+      <Card
         title="连接列表"
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={handleNewConnection}>
@@ -163,16 +169,19 @@ export function Welcome() {
         }
       >
         {connections.length === 0 ? (
-          <Empty 
-            description="暂无连接"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          >
+          <Empty description="暂无连接" image={Empty.PRESENTED_IMAGE_SIMPLE}>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleNewConnection}>
               创建第一个连接
             </Button>
           </Empty>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: 12,
+            }}
+          >
             {connections.map((conn) => (
               <Card
                 key={conn.id}
@@ -195,7 +204,9 @@ export function Welcome() {
                   description={
                     <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                       <div>{conn.db_type.toUpperCase()}</div>
-                      <div>{conn.host}:{conn.port}</div>
+                      <div>
+                        {conn.host}:{conn.port}
+                      </div>
                       <div>{conn.username}</div>
                     </div>
                   }

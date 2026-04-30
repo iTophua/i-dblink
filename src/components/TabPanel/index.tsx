@@ -14,15 +14,17 @@ import {
   AppstoreOutlined,
   HomeOutlined,
   CloseOutlined,
+  PushpinOutlined,
 } from '@ant-design/icons';
 import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
 import { TableList } from '../TableList';
 import { TableStructure } from '../TableStructure';
 import { TableDesigner } from '../TableDesigner';
-import type { TableInfo } from '../../types/api';
+import type { TableInfo, DatabaseType } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { api } from '../../api';
+import { useFloatingWindowManager } from '../../hooks/useFloatingWindowManager';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
@@ -41,7 +43,13 @@ interface TabPanelProps {
   /** 当前连接的数据库列表 */
   connectionDatabases?: Record<
     string,
-    { database: string; tables: TableInfo[]; loaded: boolean; loadFailed?: boolean }[]
+    {
+      database: string;
+      tables: TableInfo[];
+      loaded: boolean;
+      loadFailed?: boolean;
+      db_type?: string;
+    }[]
   >;
 }
 
@@ -59,6 +67,8 @@ interface OpenedSqlTab {
   connectionId?: string;
   database?: string;
   defaultQuery?: string;
+  isFloating?: boolean;
+  floatingWindowId?: string;
 }
 
 interface OpenedDesignerTab {
@@ -80,7 +90,13 @@ export interface ActiveTabInfo {
 
 export interface TabPanelRef {
   openDesignerTab: (tableName?: string) => void;
-  openSqlTab: (options: { connectionId?: string; database?: string; title?: string; defaultQuery?: string }) => void;
+  openSqlTab: (options: {
+    connectionId?: string;
+    database?: string;
+    title?: string;
+    defaultQuery?: string;
+    content?: string;
+  }) => void;
   hasConnectionTabs: (connectionId: string) => boolean;
   hasDatabaseTabs: (connectionId: string, database: string) => boolean;
   closeConnectionTabs: (connectionId: string) => void;
@@ -88,6 +104,7 @@ export interface TabPanelRef {
   getConnectionTabInfo: (connectionId: string) => { dataTabCount: number; sqlTabCount: number };
   getDatabaseTabInfo: (connectionId: string, database: string) => { dataTabCount: number };
   getActiveTabInfo: () => ActiveTabInfo;
+  getQueryStatus: () => { resultRows?: number; executionTime?: number };
 }
 
 export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanelInner(
@@ -128,6 +145,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       const restoredSqlTabs = ws.openedSqlTabs.map((t) => ({
         ...t,
         key: `sql-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        defaultQuery: t.content || undefined,
       }));
       setOpenedTables(ws.openedTables.map((t) => ({ ...t, isDirty: false })));
       setOpenedSqlTabs(restoredSqlTabs);
@@ -136,8 +154,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       const validKeys = new Set([
         'objects',
         ...ws.openedTables.map((t) => {
-          const base = t.database ? `${t.name}@${t.database}` : t.name;
-          return `${base}-data`;
+          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
+          return `${baseKey}-data`;
         }),
         ...restoredSqlTabs.map((t) => t.key),
         ...ws.openedDesignerTabs.map((t) => t.key),
@@ -153,7 +171,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     const timer = setTimeout(() => {
       useWorkspaceStore.getState().updateWorkspace({
         openedTables: openedTables.map(({ isDirty, ...rest }) => rest),
-        openedSqlTabs,
+        openedSqlTabs: openedSqlTabs.map(({ defaultQuery: _dp, ...rest }) => rest),
         openedDesignerTabs,
         activeKey,
       });
@@ -165,7 +183,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     openDesignerTab: (tableName?: string) => {
       openDesignerTab(tableName);
     },
-    openSqlTab: (options: { connectionId?: string; database?: string; title?: string; defaultQuery?: string }) => {
+    openSqlTab: (options: {
+      connectionId?: string;
+      database?: string;
+      title?: string;
+      defaultQuery?: string;
+      content?: string;
+    }) => {
       const newSqlKey = `sql-${Date.now()}`;
       setOpenedSqlTabs((prev) => [
         ...prev,
@@ -174,7 +198,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           title: options.title || 'SQL 查询',
           connectionId: options.connectionId,
           database: options.database,
-          defaultQuery: options.defaultQuery,
+          defaultQuery: options.content || options.defaultQuery,
         },
       ]);
       setActiveKey(newSqlKey);
@@ -277,6 +301,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       }
       return { type: 'objects' as const, title: '对象列表' };
     },
+    getQueryStatus: () => ({ resultRows: 0, executionTime: 0 }),
   }));
 
   // 通知父组件 SQL Tab 数量变化
@@ -503,6 +528,40 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       setActiveKey(dataTabKey);
     },
     [selectedConnectionId, selectedConnectionName, openedTables]
+  );
+
+  // 将 SQL 标签页浮动到独立窗口
+  const floatSqlTab = useCallback(
+    async (sqlTabKey: string) => {
+      const sqlTab = openedSqlTabs.find((t) => t.key === sqlTabKey);
+      if (!sqlTab) return;
+
+      try {
+        // 创建新的 Tauri 窗口并加载应用 URL
+        const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+
+        const windowId = `floating-sql-${sqlTabKey}`;
+        const appWindow = new WebviewWindow(windowId, {
+          url: `/?floating=true&tabKey=${encodeURIComponent(sqlTabKey)}`,
+          title: `SQL 查询 - ${sqlTab.title}`,
+          width: 1000,
+          height: 700,
+        });
+
+        // 更新状态，标记这个标签页已浮动
+        setOpenedSqlTabs((prev) =>
+          prev.map((t) =>
+            t.key === sqlTabKey ? { ...t, isFloating: true, floatingWindowId: windowId } : t
+          )
+        );
+
+        message.success('已在独立窗口中打开 SQL 查询');
+      } catch (error) {
+        console.error('Failed to create floating window:', error);
+        message.error('创建浮动窗口失败');
+      }
+    },
+    [openedSqlTabs, message]
   );
 
   // 打开表设计器 Tab
@@ -802,7 +861,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   try {
                     await api.dropTable(selectedConnectionId, tableName, db);
                     message.success(`表 ${tableName} 已删除`);
-                    window.dispatchEvent(new CustomEvent('refresh-connection-tree', { detail: { connectionId: selectedConnectionId } }));
+                    window.dispatchEvent(
+                      new CustomEvent('refresh-connection-tree', {
+                        detail: { connectionId: selectedConnectionId },
+                      })
+                    );
                   } catch (e: any) {
                     message.error(`删除失败：${e.message || e}`);
                   }
@@ -811,7 +874,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   try {
                     await api.truncateTable(selectedConnectionId, tableName, db);
                     message.success(`表 ${tableName} 已清空`);
-                    window.dispatchEvent(new CustomEvent('refresh-connection-tree', { detail: { connectionId: selectedConnectionId } }));
+                    window.dispatchEvent(
+                      new CustomEvent('refresh-connection-tree', {
+                        detail: { connectionId: selectedConnectionId },
+                      })
+                    );
                   } catch (e: any) {
                     message.error(`清空失败：${e.message || e}`);
                   }
@@ -936,6 +1003,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             connectionId={selectedConnectionId}
             database={sqlTab.database || selectedDatabase}
             defaultQuery={sqlTab.defaultQuery}
+            dbType={
+              selectedConnectionId
+                ? (connectionDatabases?.[selectedConnectionId]?.[0]?.db_type as
+                    | DatabaseType
+                    | undefined)
+                : undefined
+            }
             availableDatabases={
               selectedConnectionId && connectionDatabases?.[selectedConnectionId]
                 ? connectionDatabases[selectedConnectionId].map((db) => db.database)

@@ -57,7 +57,17 @@ const createFileInput = (config: FileInputConfig) => {
 export interface ConnectionFormData {
   id?: string;
   name: string;
-  dbType: 'mysql' | 'postgresql' | 'sqlite' | 'sqlserver' | 'oracle' | 'mariadb' | 'dameng' | 'kingbase' | 'highgo' | 'vastbase';
+  dbType:
+    | 'mysql'
+    | 'postgresql'
+    | 'sqlite'
+    | 'sqlserver'
+    | 'oracle'
+    | 'mariadb'
+    | 'dameng'
+    | 'kingbase'
+    | 'highgo'
+    | 'vastbase';
   host: string;
   port: number;
   username: string;
@@ -120,7 +130,16 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   const [testing, setTesting] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
   const [dbType, setDbType] = useState<
-    'mysql' | 'postgresql' | 'sqlite' | 'sqlserver' | 'oracle' | 'mariadb' | 'dameng' | 'kingbase' | 'highgo' | 'vastbase'
+    | 'mysql'
+    | 'postgresql'
+    | 'sqlite'
+    | 'sqlserver'
+    | 'oracle'
+    | 'mariadb'
+    | 'dameng'
+    | 'kingbase'
+    | 'highgo'
+    | 'vastbase'
   >(editingData?.dbType || 'mysql');
   const testCancelledRef = useRef(false);
 
@@ -221,8 +240,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
     onCancel();
   }, [form, onCancel]);
 
-  const currentDbInfo = DB_TYPE_OPTIONS.find(opt => opt.value === dbType);
-  const currentDbColor = DB_TYPE_COLORS[dbType as keyof typeof DB_TYPE_COLORS] || DB_TYPE_COLORS.default;
+  const currentDbInfo = DB_TYPE_OPTIONS.find((opt) => opt.value === dbType);
+  const currentDbColor =
+    DB_TYPE_COLORS[dbType as keyof typeof DB_TYPE_COLORS] || DB_TYPE_COLORS.default;
 
   const tabs = [
     { key: 'general', label: '常规', icon: <DatabaseOutlined /> },
@@ -285,7 +305,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   const dbInfo = DB_TYPE_OPTIONS.find((opt) => opt.value === dbValue);
                   if (!dbInfo) return null;
                   const isActive = dbType === dbValue;
-                  const color = DB_TYPE_COLORS[dbValue as keyof typeof DB_TYPE_COLORS] || DB_TYPE_COLORS.default;
+                  const color =
+                    DB_TYPE_COLORS[dbValue as keyof typeof DB_TYPE_COLORS] ||
+                    DB_TYPE_COLORS.default;
 
                   return (
                     <div
@@ -406,7 +428,8 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  borderBottom: activeTab === tab.key ? `2px solid ${currentDbColor}` : '2px solid transparent',
+                  borderBottom:
+                    activeTab === tab.key ? `2px solid ${currentDbColor}` : '2px solid transparent',
                   color: activeTab === tab.key ? currentDbColor : 'var(--text-secondary)',
                   fontWeight: activeTab === tab.key ? 600 : 500,
                   transition: 'all 0.2s ease',
@@ -469,7 +492,13 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                         <GlobalInput placeholder="例如：/path/to/database.db" />
                         <AntButton
                           icon={<FolderOutlined />}
-                          onClick={() => createFileInput({ form, fieldName: 'host', accept: '.db,.sqlite,.sqlite3,.db3' })}
+                          onClick={() =>
+                            createFileInput({
+                              form,
+                              fieldName: 'host',
+                              accept: '.db,.sqlite,.sqlite3,.db3',
+                            })
+                          }
                         >
                           浏览
                         </AntButton>
@@ -517,7 +546,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                       <Form.Item
                         name="password"
                         label="密码"
-                        rules={[{ required: !editingData && dbType !== 'sqlite', message: '请输入密码' }]}
+                        rules={[
+                          { required: !editingData && dbType !== 'sqlite', message: '请输入密码' },
+                        ]}
                         style={{ marginBottom: 16 }}
                       >
                         <GlobalInputPassword
@@ -552,7 +583,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                         icon={<UploadOutlined />}
                         size="small"
                         onClick={() =>
-                          createFileInput({ form, fieldName: 'ssl_ca_cert', accept: '.crt,.pem,.ca' })
+                          createFileInput({
+                            form,
+                            fieldName: 'ssl_ca_cert',
+                            accept: '.crt,.pem,.ca',
+                          })
                         }
                       />
                     </Space.Compact>
@@ -560,7 +595,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                   <Row gutter={16}>
                     <Col span={12}>
-                      <Form.Item name="ssl_client_cert" label="客户端证书" style={{ marginBottom: 16 }}>
+                      <Form.Item
+                        name="ssl_client_cert"
+                        label="客户端证书"
+                        style={{ marginBottom: 16 }}
+                      >
                         <Space.Compact style={{ width: '100%' }}>
                           <GlobalInput placeholder="选择证书" readOnly />
                           <AntButton
@@ -578,14 +617,22 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item name="ssl_client_key" label="客户端私钥" style={{ marginBottom: 16 }}>
+                      <Form.Item
+                        name="ssl_client_key"
+                        label="客户端私钥"
+                        style={{ marginBottom: 16 }}
+                      >
                         <Space.Compact style={{ width: '100%' }}>
                           <GlobalInput placeholder="选择私钥" readOnly />
                           <AntButton
                             icon={<UploadOutlined />}
                             size="small"
                             onClick={() =>
-                              createFileInput({ form, fieldName: 'ssl_client_key', accept: '.key,.pem' })
+                              createFileInput({
+                                form,
+                                fieldName: 'ssl_client_key',
+                                accept: '.key,.pem',
+                              })
                             }
                           />
                         </Space.Compact>
@@ -617,7 +664,12 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                       </Form.Item>
                     </Col>
                     <Col span={6}>
-                      <Form.Item name="ssh_port" label="端口" initialValue={22} style={{ marginBottom: 16 }}>
+                      <Form.Item
+                        name="ssh_port"
+                        label="端口"
+                        initialValue={22}
+                        style={{ marginBottom: 16 }}
+                      >
                         <InputNumber min={1} max={65535} style={{ width: '100%' }} />
                       </Form.Item>
                     </Col>
@@ -643,7 +695,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                         icon={<UploadOutlined />}
                         size="small"
                         onClick={() =>
-                          createFileInput({ form, fieldName: 'ssh_key_path', accept: '.pem,.key,.ppk' })
+                          createFileInput({
+                            form,
+                            fieldName: 'ssh_key_path',
+                            accept: '.pem,.key,.ppk',
+                          })
                         }
                       />
                     </Space.Compact>
@@ -680,7 +736,12 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     </Col>
                   </Row>
 
-                  <Form.Item name="charset" label="字符集" initialValue="utf8mb4" style={{ marginBottom: 16 }}>
+                  <Form.Item
+                    name="charset"
+                    label="字符集"
+                    initialValue="utf8mb4"
+                    style={{ marginBottom: 16 }}
+                  >
                     <Select>
                       <Select.Option value="utf8mb4">utf8mb4</Select.Option>
                       <Select.Option value="utf8">utf8</Select.Option>

@@ -57,7 +57,8 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
           width: 80,
           height: 80,
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, var(--row-hover-bg) 0%, var(--background-card) 100%)',
+          background:
+            'linear-gradient(135deg, var(--row-hover-bg) 0%, var(--background-card) 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -346,7 +347,8 @@ export const QuickStartGuide: React.FC<{
             width: 56,
             height: 56,
             borderRadius: 12,
-            background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--primary-active) 100%)',
+            background:
+              'linear-gradient(135deg, var(--color-primary) 0%, var(--primary-active) 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

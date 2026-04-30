@@ -38,6 +38,44 @@ const defaultSettings: AppSettings = {
   shortcuts: {},
 };
 
+const VERSION = 1;
+
+function migrate(state: any, version: number | undefined): Partial<SettingsState> {
+  if (version === undefined) {
+    return { settings: defaultSettings };
+  }
+
+  // 迁移逻辑：从旧版格式迁移到新版格式
+  if (state.settings && state.settings.theme && !state.settings.themePreset) {
+    const oldSettings = state.settings;
+    const preset =
+      oldSettings.theme === 'dark'
+        ? 'midnightDeep'
+        : oldSettings.theme === 'light'
+          ? 'nordicFrost'
+          : 'midnightDeep';
+    const mode =
+      oldSettings.theme === 'system'
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light'
+        : oldSettings.theme;
+    return {
+      settings: {
+        ...defaultSettings,
+        ...oldSettings,
+        themePreset: preset,
+        themeMode: mode as ThemeMode,
+        themeSyncSystem: oldSettings.theme === 'system',
+      },
+    };
+  }
+
+  return {
+    settings: { ...defaultSettings, ...state.settings },
+  };
+}
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
@@ -46,11 +84,12 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           settings: { ...state.settings, ...updates },
         })),
-      resetSettings: () =>
-        set({ settings: defaultSettings }),
+      resetSettings: () => set({ settings: defaultSettings }),
     }),
     {
       name: 'idblink-settings',
+      version: VERSION,
+      migrate: migrate,
     }
   )
 );

@@ -119,3 +119,69 @@ type MetadataRequest struct {
 	TableName    *string `json:"table_name,omitempty"`
 	Search       *string `json:"search,omitempty"`
 }
+
+// TriggerInfo 触发器信息
+type TriggerInfo struct {
+	TriggerName string  `json:"trigger_name"`
+	Event       string  `json:"event"`
+	Table       string  `json:"table"`
+	Timing      string  `json:"timing"`
+	Definition  *string `json:"definition,omitempty"`
+}
+
+// EventInfo 事件信息
+type EventInfo struct {
+	EventName string  `json:"event_name"`
+	Schedule  string  `json:"schedule"`
+	Status    string  `json:"status"`
+	Definition *string `json:"definition,omitempty"`
+}
+
+// SaveSnippetRequest 保存代码片段请求
+type SaveSnippetRequest struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	SQLText   string `json:"sql_text"`
+	DBType    string `json:"db_type"`
+	Category  string `json:"category"`
+	Tags      string `json:"tags"`
+	IsPrivate bool   `json:"is_private"`
+	UserID    string `json:"user_id"`
+}
+
+// GetSnippetsRequest 获取代码片段请求
+type GetSnippetsRequest struct {
+	Category string `json:"category"`
+	DBType   string `json:"db_type"`
+	UserID   string `json:"user_id"`
+}
+
+// DeleteSnippetRequest 删除代码片段请求
+type DeleteSnippetRequest struct {
+	ID string `json:"id"`
+}
+
+// GetSnippetsResponse 获取代码片段响应
+type GetSnippetsResponse struct {
+	Snippets []Snippet `json:"snippets"`
+}
+
+// Snippet 代码片段模型
+type Snippet struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	SQLText   string `json:"sql_text"`
+	DBType    string `json:"db_type"`
+	Category  string `json:"category"`
+	Tags      string `json:"tags"`
+	IsPrivate bool   `json:"is_private"`
+	UserID    string `json:"user_id"`
+}
+
+// StreamExportRequest 流式导出请求
+type StreamExportRequest struct {
+	ConnectionID string `json:"connection_id"`
+	Database     string `json:"database,omitempty"`
+	TableName    string `json:"table_name"`
+	BatchSize    int    `json:"batch_size"`
+}

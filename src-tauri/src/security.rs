@@ -13,9 +13,11 @@ fn get_machine_id() -> String {
     let mut id = String::new();
 
     // 主机名
-    id.push_str(&hostname::get()
-        .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "default-host".to_string()));
+    id.push_str(
+        &hostname::get()
+            .map(|h| h.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "default-host".to_string()),
+    );
 
     // 用户名
     id.push_str(&std::env::var("USER").unwrap_or_else(|_| {
@@ -58,7 +60,9 @@ pub fn encrypt_password(password: &str) -> Result<String, String> {
 }
 
 pub fn decrypt_password(encrypted: &str) -> Result<String, String> {
-    let data = BASE64.decode(encrypted).map_err(|e| format!("Invalid base64: {}", e))?;
+    let data = BASE64
+        .decode(encrypted)
+        .map_err(|e| format!("Invalid base64: {}", e))?;
 
     if data.len() < 12 {
         return Err("Invalid encrypted data".to_string());

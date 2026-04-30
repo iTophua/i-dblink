@@ -66,12 +66,28 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 	mux.HandleFunc("POST /drop-table", recoverMiddleware(h.DropTable))
 	mux.HandleFunc("POST /drop-view", recoverMiddleware(h.DropView))
 	mux.HandleFunc("POST /rename-table", recoverMiddleware(h.RenameTable))
+	mux.HandleFunc("POST /table-ddl", recoverMiddleware(h.GetTableDDL))
 
 	// 事务控制
 	mux.HandleFunc("POST /begin-transaction", recoverMiddleware(h.BeginTransaction))
 	mux.HandleFunc("POST /commit-transaction", recoverMiddleware(h.CommitTransaction))
 	mux.HandleFunc("POST /rollback-transaction", recoverMiddleware(h.RollbackTransaction))
 	mux.HandleFunc("POST /transaction-status", recoverMiddleware(h.GetTransactionStatus))
+
+	// 服务器信息
+	mux.HandleFunc("POST /server-info", recoverMiddleware(h.GetServerInfo))
+
+	// 触发器/事件
+	mux.HandleFunc("POST /triggers", recoverMiddleware(h.GetTriggers))
+	mux.HandleFunc("POST /events", recoverMiddleware(h.GetEvents))
+
+	// 代码片段
+	mux.HandleFunc("POST /save-snippet", recoverMiddleware(h.SaveSnippet))
+	mux.HandleFunc("POST /get-snippets", recoverMiddleware(h.GetSnippets))
+	mux.HandleFunc("POST /delete-snippet", recoverMiddleware(h.DeleteSnippet))
+
+	// 流式导出
+	mux.HandleFunc("POST /stream-export", recoverMiddleware(h.StreamExport))
 }
 
 // Handler HTTP 处理器

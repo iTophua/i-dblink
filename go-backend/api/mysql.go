@@ -31,12 +31,7 @@ func mysqlGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, error
 }
 
 func mysqlGetTables(ctx context.Context, dbConn db.Executor, database *string) ([]models.TableInfo, error) {
-	dbFilter := "DATABASE()"
-	if database != nil {
-		dbFilter = fmt.Sprintf("'%s'", *database)
-	}
-
-	query := fmt.Sprintf(`
+	query := `
 		SELECT TABLE_NAME, TABLE_TYPE, TABLE_ROWS,
 			COALESCE(TABLE_COMMENT, '') AS TABLE_COMMENT,
 			COALESCE(ENGINE, '') AS ENGINE,
@@ -45,11 +40,27 @@ func mysqlGetTables(ctx context.Context, dbConn db.Executor, database *string) (
 			COALESCE(DATE_FORMAT(UPDATE_TIME, '%%Y-%%m-%%d %%H:%%i:%%s'), '') AS UPDATE_TIME,
 			COALESCE(TABLE_COLLATION, '') AS TABLE_COLLATION
 		FROM information_schema.TABLES
-		WHERE TABLE_SCHEMA = %s AND TABLE_TYPE != 'SYSTEM VIEW'
+		WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE != 'SYSTEM VIEW'
 		ORDER BY TABLE_NAME
-	`, dbFilter)
+	`
+	var args []any
+	if database != nil {
+		query = `
+			SELECT TABLE_NAME, TABLE_TYPE, TABLE_ROWS,
+				COALESCE(TABLE_COMMENT, '') AS TABLE_COMMENT,
+				COALESCE(ENGINE, '') AS ENGINE,
+				DATA_LENGTH, INDEX_LENGTH,
+				COALESCE(DATE_FORMAT(CREATE_TIME, '%%Y-%%m-%%d %%H:%%i:%%s'), '') AS CREATE_TIME,
+				COALESCE(DATE_FORMAT(UPDATE_TIME, '%%Y-%%m-%%d %%H:%%i:%%s'), '') AS UPDATE_TIME,
+				COALESCE(TABLE_COLLATION, '') AS TABLE_COLLATION
+			FROM information_schema.TABLES
+			WHERE TABLE_SCHEMA = ? AND TABLE_TYPE != 'SYSTEM VIEW'
+			ORDER BY TABLE_NAME
+		`
+		args = append(args, *database)
+	}
 
-	rows, err := dbConn.QueryContext(ctx, query)
+	rows, err := dbConn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -156,20 +167,27 @@ func mysqlGetTablesCategorized(ctx context.Context, dbConn db.Executor, database
 }
 
 func mysqlGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
-	dbFilter := "DATABASE()"
-	if database != nil {
-		dbFilter = fmt.Sprintf("'%s'", *database)
-	}
-
-	query := fmt.Sprintf(`
+	query := `
 		SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY,
 			COLUMN_DEFAULT, EXTRA, COALESCE(COLUMN_COMMENT, '') AS COLUMN_COMMENT
 		FROM information_schema.COLUMNS
-		WHERE TABLE_NAME = '%s' AND TABLE_SCHEMA = %s
+		WHERE TABLE_NAME = ? AND TABLE_SCHEMA = DATABASE()
 		ORDER BY ORDINAL_POSITION
-	`, strings.ReplaceAll(tableName, "'", "\\'"), dbFilter)
+	`
+	var args []any
+	if database != nil {
+		query = `
+			SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY,
+				COLUMN_DEFAULT, EXTRA, COALESCE(COLUMN_COMMENT, '') AS COLUMN_COMMENT
+			FROM information_schema.COLUMNS
+			WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?
+			ORDER BY ORDINAL_POSITION
+		`
+		args = append(args, *database)
+	}
+	args = append(args, tableName)
 
-	rows, err := dbConn.QueryContext(ctx, query)
+	rows, err := dbConn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -232,19 +250,25 @@ func mysqlGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, 
 }
 
 func mysqlGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ForeignKeyInfo, error) {
-	dbFilter := "DATABASE()"
-	if database != nil {
-		dbFilter = fmt.Sprintf("'%s'", *database)
-	}
-
-	query := fmt.Sprintf(`
+	query := `
 		SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
 		FROM information_schema.KEY_COLUMN_USAGE
-		WHERE TABLE_NAME = '%s' AND REFERENCED_TABLE_NAME IS NOT NULL AND TABLE_SCHEMA = %s
+		WHERE TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL AND TABLE_SCHEMA = DATABASE()
 		ORDER BY ORDINAL_POSITION
-	`, strings.ReplaceAll(tableName, "'", "\\'"), dbFilter)
+	`
+	var args []any
+	if database != nil {
+		query = `
+			SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+			FROM information_schema.KEY_COLUMN_USAGE
+			WHERE TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL AND TABLE_SCHEMA = ?
+			ORDER BY ORDINAL_POSITION
+		`
+		args = append(args, *database)
+	}
+	args = append(args, tableName)
 
-	rows, err := dbConn.QueryContext(ctx, query)
+	rows, err := dbConn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -283,10 +307,10 @@ func mysqlGetRoutines(ctx context.Context, dbConn db.Executor, database *string)
 	var result models.RoutinesResult
 
 	dbFilter := "DATABASE()"
-	bindDB := false
+	var procArgs []any
 	if database != nil {
 		dbFilter = "?"
-		bindDB = true
+		procArgs = append(procArgs, *database)
 	}
 
 	// Procedures
@@ -296,20 +320,18 @@ func mysqlGetRoutines(ctx context.Context, dbConn db.Executor, database *string)
 		WHERE ROUTINE_SCHEMA = %s AND ROUTINE_TYPE = 'PROCEDURE'
 		ORDER BY ROUTINE_NAME
 	`, dbFilter)
-	procRows, err := dbConn.QueryContext(ctx, procQuery)
-	if bindDB && database != nil {
-		procRows, err = dbConn.QueryContext(ctx, procQuery, *database)
+	procRows, err := dbConn.QueryContext(ctx, procQuery, procArgs...)
+	if err != nil {
+		return result, nil
 	}
-	if err == nil {
-		defer procRows.Close()
-		for procRows.Next() {
-			var r models.RoutineInfo
-			var def, comment sql.NullString
-			if err := procRows.Scan(&r.RoutineName, &r.RoutineType, &def, &comment); err == nil {
-				r.Definition = nullStr(def)
-				r.Comment = nullStr(comment)
-				result.Procedures = append(result.Procedures, r)
-			}
+	defer procRows.Close()
+	for procRows.Next() {
+		var r models.RoutineInfo
+		var def, comment sql.NullString
+		if err := procRows.Scan(&r.RoutineName, &r.RoutineType, &def, &comment); err == nil {
+			r.Definition = nullStr(def)
+			r.Comment = nullStr(comment)
+			result.Procedures = append(result.Procedures, r)
 		}
 	}
 
@@ -320,20 +342,18 @@ func mysqlGetRoutines(ctx context.Context, dbConn db.Executor, database *string)
 		WHERE ROUTINE_SCHEMA = %s AND ROUTINE_TYPE = 'FUNCTION'
 		ORDER BY ROUTINE_NAME
 	`, dbFilter)
-	funcRows, err := dbConn.QueryContext(ctx, funcQuery)
-	if bindDB && database != nil {
-		funcRows, err = dbConn.QueryContext(ctx, funcQuery, *database)
+	funcRows, err := dbConn.QueryContext(ctx, funcQuery, procArgs...)
+	if err != nil {
+		return result, nil
 	}
-	if err == nil {
-		defer funcRows.Close()
-		for funcRows.Next() {
-			var r models.RoutineInfo
-			var def, comment sql.NullString
-			if err := funcRows.Scan(&r.RoutineName, &r.RoutineType, &def, &comment); err == nil {
-				r.Definition = nullStr(def)
-				r.Comment = nullStr(comment)
-				result.Functions = append(result.Functions, r)
-			}
+	defer funcRows.Close()
+	for funcRows.Next() {
+		var r models.RoutineInfo
+		var def, comment sql.NullString
+		if err := funcRows.Scan(&r.RoutineName, &r.RoutineType, &def, &comment); err == nil {
+			r.Definition = nullStr(def)
+			r.Comment = nullStr(comment)
+			result.Functions = append(result.Functions, r)
 		}
 	}
 

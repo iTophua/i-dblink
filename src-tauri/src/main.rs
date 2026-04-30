@@ -389,6 +389,7 @@ fn main() {
             commands::get_indexes,
             commands::get_foreign_keys,
             commands::execute_query,
+            commands::stream_export_table,
             commands::get_procedures,
             commands::get_functions,
             commands::get_procedure_body,
@@ -403,7 +404,14 @@ fn main() {
             commands::begin_transaction,
             commands::commit_transaction,
             commands::rollback_transaction,
-            commands::get_transaction_status
+            commands::get_transaction_status,
+            commands::get_server_info,
+            commands::get_table_ddl,
+            commands::get_triggers,
+            commands::get_events,
+            commands::save_snippet,
+            commands::get_snippets,
+            commands::delete_snippet
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

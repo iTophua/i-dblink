@@ -1,4 +1,14 @@
-export type DatabaseType = 'mysql' | 'postgresql' | 'sqlite' | 'sqlserver' | 'oracle' | 'mariadb' | 'dameng' | 'kingbase' | 'highgo' | 'vastbase';
+export type DatabaseType =
+  | 'mysql'
+  | 'postgresql'
+  | 'sqlite'
+  | 'sqlserver'
+  | 'oracle'
+  | 'mariadb'
+  | 'dameng'
+  | 'kingbase'
+  | 'highgo'
+  | 'vastbase';
 
 export type ConnectionStatus = 'connected' | 'disconnected' | 'loading';
 

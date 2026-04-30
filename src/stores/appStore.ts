@@ -26,7 +26,7 @@ interface AppState {
   groups: ConnectionGroup[];
   isLoading: boolean;
   error: string | null;
-  
+
   // Table data cache: key = `${connectionId}::${database}`
   tableDataCache: Record<string, TableDataCache>;
 
@@ -43,7 +43,7 @@ interface AppState {
 
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  
+
   // Table data cache methods
   setTableData: (key: string, tables: TableInfo[]) => void;
   setTableDataLoading: (key: string, loading: boolean) => void;
@@ -61,106 +61,119 @@ export const useAppStore = create<AppState>((set, get) => ({
       name: '不分组',
       icon: '📁',
       color: '#6d6d6d',
-      parent_id: undefined
-    }
+      parent_id: undefined,
+    },
   ],
   isLoading: false,
   error: null,
   tableDataCache: {},
 
-  addConnection: (connection) => set((state) => ({
-    connections: [...state.connections, connection]
-  })),
+  addConnection: (connection) =>
+    set((state) => ({
+      connections: [...state.connections, connection],
+    })),
 
-  setConnections: (connections) => set((state) => ({
-    connections: typeof connections === 'function' ? connections(state.connections) : connections,
-  })),
+  setConnections: (connections) =>
+    set((state) => ({
+      connections: typeof connections === 'function' ? connections(state.connections) : connections,
+    })),
 
-  updateConnection: (id, updated) => set((state) => ({
-    connections: state.connections.map(conn =>
-      conn.id === id ? { ...conn, ...updated } : conn
-    )
-  })),
+  updateConnection: (id, updated) =>
+    set((state) => ({
+      connections: state.connections.map((conn) =>
+        conn.id === id ? { ...conn, ...updated } : conn
+      ),
+    })),
 
-  deleteConnection: (id) => set((state) => ({
-    connections: state.connections.filter(conn => conn.id !== id),
-    activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId
-  })),
+  deleteConnection: (id) =>
+    set((state) => ({
+      connections: state.connections.filter((conn) => conn.id !== id),
+      activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
+    })),
 
-  setActiveConnection: (id) => set((state) => ({
-    activeConnectionId: typeof id === 'function' ? id(state.activeConnectionId) : id,
-  })),
+  setActiveConnection: (id) =>
+    set((state) => ({
+      activeConnectionId: typeof id === 'function' ? id(state.activeConnectionId) : id,
+    })),
 
-  addGroup: (group) => set((state) => ({
-    groups: [...state.groups, group]
-  })),
+  addGroup: (group) =>
+    set((state) => ({
+      groups: [...state.groups, group],
+    })),
 
-  setGroups: (groups) => set((state) => ({
-    groups: typeof groups === 'function' ? groups(state.groups) : groups,
-  })),
+  setGroups: (groups) =>
+    set((state) => ({
+      groups: typeof groups === 'function' ? groups(state.groups) : groups,
+    })),
 
-  updateGroup: (id, updated) => set((state) => ({
-    groups: state.groups.map(g => g.id === id ? { ...g, ...updated } : g)
-  })),
+  updateGroup: (id, updated) =>
+    set((state) => ({
+      groups: state.groups.map((g) => (g.id === id ? { ...g, ...updated } : g)),
+    })),
 
-  deleteGroup: (id) => set((state) => ({
-    groups: state.groups.filter(g => g.id !== id)
-  })),
+  deleteGroup: (id) =>
+    set((state) => ({
+      groups: state.groups.filter((g) => g.id !== id),
+    })),
 
   setLoading: (loading) => set({ isLoading: loading }),
 
   setError: (error) => set({ error }),
-  
-  // Table data cache methods
-  setTableData: (key, tables) => set((state) => ({
-    tableDataCache: {
-      ...state.tableDataCache,
-      [key]: {
-        tables,
-        loaded: true,
-        loading: false,
-        lastUpdated: Date.now(),
-      }
-    }
-  })),
-  
-  setTableDataLoading: (key, loading) => set((state) => ({
-    tableDataCache: {
-      ...state.tableDataCache,
-      [key]: {
-        ...(state.tableDataCache[key] || { tables: [], loaded: false }),
-        loading,
-      }
-    }
-  })),
 
-  setTableDataFailed: (key, failed) => set((state) => ({
-    tableDataCache: {
-      ...state.tableDataCache,
-      [key]: {
-        ...(state.tableDataCache[key] || { tables: [], loaded: false }),
-        loadFailed: failed,
-        loading: false,  // 失败时重置 loading 状态
-      }
-    }
-  })),
+  // Table data cache methods
+  setTableData: (key, tables) =>
+    set((state) => ({
+      tableDataCache: {
+        ...state.tableDataCache,
+        [key]: {
+          tables,
+          loaded: true,
+          loading: false,
+          lastUpdated: Date.now(),
+        },
+      },
+    })),
+
+  setTableDataLoading: (key, loading) =>
+    set((state) => ({
+      tableDataCache: {
+        ...state.tableDataCache,
+        [key]: {
+          ...(state.tableDataCache[key] || { tables: [], loaded: false }),
+          loading,
+        },
+      },
+    })),
+
+  setTableDataFailed: (key, failed) =>
+    set((state) => ({
+      tableDataCache: {
+        ...state.tableDataCache,
+        [key]: {
+          ...(state.tableDataCache[key] || { tables: [], loaded: false }),
+          loadFailed: failed,
+          loading: false, // 失败时重置 loading 状态
+        },
+      },
+    })),
 
   getTableData: (key) => {
     const state = get();
     return state.tableDataCache[key];
   },
-  
-  clearTableData: (connectionId) => set((state) => {
-    if (connectionId) {
-      // Clear cache for specific connection
-      const newCache = { ...state.tableDataCache };
-      Object.keys(newCache).forEach(key => {
-        if (key.startsWith(`${connectionId}::`)) {
-          delete newCache[key];
-        }
-      });
-      return { tableDataCache: newCache };
-    }
-    return { tableDataCache: {} };
-  }),
+
+  clearTableData: (connectionId) =>
+    set((state) => {
+      if (connectionId) {
+        // Clear cache for specific connection
+        const newCache = { ...state.tableDataCache };
+        Object.keys(newCache).forEach((key) => {
+          if (key.startsWith(`${connectionId}::`)) {
+            delete newCache[key];
+          }
+        });
+        return { tableDataCache: newCache };
+      }
+      return { tableDataCache: {} };
+    }),
 }));

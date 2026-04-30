@@ -298,7 +298,12 @@ type ConnectionTreeProps = {
   onEditConnection: (connection: Connection) => void;
   onDeleteConnection: (connectionId: string) => void;
   onNewQuery: (connectionId: string) => void;
-  onOpenRoutine?: (connectionId: string, database: string, name: string, type: 'procedure' | 'function') => void;
+  onOpenRoutine?: (
+    connectionId: string,
+    database: string,
+    name: string,
+    type: 'procedure' | 'function'
+  ) => void;
   onDatabaseExpand: (connectionId: string, database: string) => void;
   onDatabaseRefresh?: (connectionId: string, database: string) => void;
   onDatabaseClose?: (connectionId: string, database: string) => void;
@@ -1248,15 +1253,34 @@ export function EnhancedConnectionTree({
                 }}
               >
                 {(() => {
-                  const isSystemDb = ['mysql', 'information_schema', 'performance_schema', 'sys',
-                    'postgres', 'template0', 'template1',
-                    'master', 'tempdb', 'model', 'msdb'].includes(db.database.toLowerCase());
+                  const isSystemDb = [
+                    'mysql',
+                    'information_schema',
+                    'performance_schema',
+                    'sys',
+                    'postgres',
+                    'template0',
+                    'template1',
+                    'master',
+                    'tempdb',
+                    'model',
+                    'msdb',
+                  ].includes(db.database.toLowerCase());
                   return (
                     <>
-                      <DatabaseOutlined style={{ color: isSystemDb ? 'var(--text-disabled)' : 'var(--color-primary)', fontSize: 12 }} />
+                      <DatabaseOutlined
+                        style={{
+                          color: isSystemDb ? 'var(--text-disabled)' : 'var(--color-primary)',
+                          fontSize: 12,
+                        }}
+                      />
                       <span
                         style={{
-                          color: isSystemDb ? 'var(--text-disabled)' : db.loaded ? 'var(--color-success)' : undefined,
+                          color: isSystemDb
+                            ? 'var(--text-disabled)'
+                            : db.loaded
+                              ? 'var(--color-success)'
+                              : undefined,
                           fontWeight: db.loaded ? 500 : undefined,
                           userSelect: 'none',
                         }}

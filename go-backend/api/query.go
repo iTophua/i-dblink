@@ -6,12 +6,21 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 	"unicode/utf8"
 
 	"idblink-backend/db"
 	"idblink-backend/models"
 )
+
+var debugEnabled = os.Getenv("IDBLINK_DEBUG") == "1" || os.Getenv("IDBLINK_DEBUG") == "true"
+
+func debugLog(format string, args ...interface{}) {
+	if debugEnabled {
+		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", args...)
+	}
+}
 
 // Query 执行 SQL 查询
 func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +30,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("[DEBUG] Query: connectionID=%s, database=%s, sql=%s\n", req.ConnectionID, req.Database, req.SQL)
+	debugLog("Query: connectionID=%s, database=%s, sql=%s", req.ConnectionID, req.Database, req.SQL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -45,22 +54,22 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 }
 
 func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.QueryResult, error) {
-	fmt.Fprintf(os.Stderr, "[DEBUG] executeSQL start: sql=%s\n", sqlStr)
+	debugLog("executeSQL start: sql=%s", sqlStr)
 
 	rows, err := exec.QueryContext(ctx, sqlStr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[DEBUG] QueryContext error: %v\n", err)
+		debugLog("QueryContext error: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
-	fmt.Fprintf(os.Stderr, "[DEBUG] QueryContext success\n")
+	debugLog("QueryContext success")
 
 	columns, err := rows.Columns()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[DEBUG] rows.Columns error: %v\n", err)
+		debugLog("rows.Columns error: %v", err)
 		return nil, err
 	}
-	fmt.Fprintf(os.Stderr, "[DEBUG] columns=%v\n", columns)
+	debugLog("columns=%v", columns)
 
 	result := &models.QueryResult{
 		Columns: columns,
@@ -76,7 +85,7 @@ func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.Q
 		}
 
 		if err := rows.Scan(rowPtrs...); err != nil {
-			fmt.Fprintf(os.Stderr, "[DEBUG] rows.Scan error at row %d: %v\n", rowCount, err)
+			debugLog("rows.Scan error at row %d: %v", rowCount, err)
 			return nil, err
 		}
 
@@ -88,10 +97,10 @@ func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.Q
 		result.Rows = append(result.Rows, jsonRow)
 		rowCount++
 	}
-	fmt.Fprintf(os.Stderr, "[DEBUG] rows scanned: %d\n", rowCount)
+	debugLog("rows scanned: %d", rowCount)
 
 	if err := rows.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "[DEBUG] rows.Err: %v\n", err)
+		debugLog("rows.Err: %v", err)
 		return nil, err
 	}
 
@@ -103,7 +112,7 @@ func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.Q
 		result.RowsAffected = nil
 	}
 
-	fmt.Fprintf(os.Stderr, "[DEBUG] executeSQL end\n")
+	debugLog("executeSQL end")
 	return result, nil
 }
 

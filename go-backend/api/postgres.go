@@ -161,13 +161,14 @@ func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName strin
 	var result []models.ColumnInfo
 	for rows.Next() {
 		var c models.ColumnInfo
-		var key, comment string
+		var key, comment, extra string
 		var def sql.NullString
-		if err := rows.Scan(&c.ColumnName, &c.DataType, &c.IsNullable, &key, &def, &comment, &comment); err != nil {
+		if err := rows.Scan(&c.ColumnName, &c.DataType, &c.IsNullable, &key, &def, &extra, &comment); err != nil {
 			return nil, err
 		}
 		c.ColumnKey = strPtr(key)
 		c.ColumnDefault = nullStrEmpty(def)
+		c.Extra = strPtr(extra)
 		c.Comment = strPtr(comment)
 		result = append(result, c)
 	}

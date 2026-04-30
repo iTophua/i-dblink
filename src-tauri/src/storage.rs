@@ -1,4 +1,6 @@
-use crate::db::{ConnectionGroup, ConnectionRepository, DbConnection, DbPool, GroupRepository};
+use crate::db::{
+    ConnectionGroup, ConnectionRepository, DbConnection, DbPool, GroupRepository, SnippetRepository,
+};
 use crate::security::{decrypt_password, encrypt_password};
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -73,10 +75,12 @@ pub async fn init_storage(app_handle: &AppHandle) -> Result<Storage, anyhow::Err
     // 创建仓库
     let connection_repo = ConnectionRepository::new(pool.clone());
     let group_repo = GroupRepository::new(pool.clone());
+    let snippet_repo = SnippetRepository::new(pool.clone());
 
     Ok(Storage {
         connection_repo,
         group_repo,
+        snippet_repo,
         _pool: pool,
     })
 }
@@ -86,6 +90,7 @@ pub async fn init_storage(app_handle: &AppHandle) -> Result<Storage, anyhow::Err
 pub struct Storage {
     connection_repo: ConnectionRepository,
     group_repo: GroupRepository,
+    snippet_repo: SnippetRepository,
     _pool: DbPool,
 }
 
@@ -103,8 +108,7 @@ impl Storage {
         let conn = self.connection_repo.get_by_id(id).await?;
         if let Some(connection) = conn {
             let encrypted = self.connection_repo.get_password(id).await?;
-            let password = encrypted
-                .and_then(|pwd| decrypt_password(&pwd).ok());
+            let password = encrypted.and_then(|pwd| decrypt_password(&pwd).ok());
             Ok(Some((connection, password)))
         } else {
             Ok(None)
@@ -122,9 +126,11 @@ impl Storage {
 
         // 加密并保存密码
         if let Some(pwd) = password {
-            let encrypted = encrypt_password(pwd)
-                .map_err(|e| anyhow::anyhow!("Encryption error: {}", e))?;
-            self.connection_repo.save_password(&conn.id, &encrypted).await?;
+            let encrypted =
+                encrypt_password(pwd).map_err(|e| anyhow::anyhow!("Encryption error: {}", e))?;
+            self.connection_repo
+                .save_password(&conn.id, &encrypted)
+                .await?;
         }
 
         Ok(())
@@ -180,10 +186,14 @@ impl Storage {
 
     /// 更新连接密码
     pub async fn update_password(&self, id: &str, password: &str) -> Result<(), anyhow::Error> {
-        let encrypted = encrypt_password(password)
-            .map_err(|e| anyhow::anyhow!("Encryption error: {}", e))?;
+        let encrypted =
+            encrypt_password(password).map_err(|e| anyhow::anyhow!("Encryption error: {}", e))?;
         self.connection_repo.save_password(id, &encrypted).await?;
         Ok(())
     }
 
+    /// 获取代码片段仓库
+    pub fn snippets(&self) -> &SnippetRepository {
+        &self.snippet_repo
+    }
 }

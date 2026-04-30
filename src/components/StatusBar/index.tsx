@@ -1,22 +1,59 @@
-import React from 'react';
-import { Layout, Space, Typography, Divider } from 'antd';
-import { CheckCircleOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Layout, Space, Typography, Divider, Tag } from 'antd';
+import { CheckCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import type { Connection } from '../../stores/appStore';
+import { api } from '../../api';
 
 type StatusBarProps = {
   selectedConnectionId: string | null;
   connections: Connection[];
   selectedTable: string | null;
+  selectedDatabase?: string;
+  transactionActive?: boolean;
+  resultRows?: number;
+  executionTime?: number;
 };
 
-export function StatusBar({ selectedConnectionId, connections, selectedTable }: StatusBarProps) {
+export function StatusBar({
+  selectedConnectionId,
+  connections,
+  selectedTable,
+  selectedDatabase,
+  transactionActive,
+  resultRows,
+  executionTime,
+}: StatusBarProps) {
   const { Footer } = Layout;
   const { Text } = Typography;
 
   const selectedConnection = selectedConnectionId
-    ? connections.find(c => c.id === selectedConnectionId)
+    ? connections.find((c) => c.id === selectedConnectionId)
     : null;
   const isConnected = selectedConnection?.status === 'connected';
+
+  const [serverInfo, setServerInfo] = useState<{
+    version?: string;
+    server_type?: string;
+    character_set?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isConnected || !selectedConnectionId) {
+      setServerInfo(null);
+      return;
+    }
+
+    api
+      .getServerInfo(selectedConnectionId, selectedDatabase)
+      .then((info) => {
+        setServerInfo(info);
+      })
+      .catch(() => {
+        // 忽略错误，不显示服务器信息
+      });
+  }, [isConnected, selectedConnectionId, selectedDatabase]);
+
+  const dbTypeLabel = selectedConnection?.db_type?.toUpperCase() || '';
 
   return (
     <Footer
@@ -42,18 +79,43 @@ export function StatusBar({ selectedConnectionId, connections, selectedTable }: 
               已连接：{selectedConnection?.name || '未知'}
             </span>
           ) : selectedConnection ? (
-            <span style={{ color: 'var(--text-tertiary)' }}>
-              未连接：{selectedConnection.name}
-            </span>
+            <span style={{ color: 'var(--text-tertiary)' }}>未连接：{selectedConnection.name}</span>
           ) : (
             '未连接'
           )}
         </Text>
         {selectedTable && <Text>表：{selectedTable}</Text>}
+        {isConnected && dbTypeLabel && (
+          <Tag color="blue" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
+            {dbTypeLabel}
+          </Tag>
+        )}
+        {isConnected && serverInfo?.version && (
+          <Text style={{ fontSize: 11 }} title={serverInfo.version}>
+            {serverInfo.version.split('\n')[0].substring(0, 30)}
+            {serverInfo.version.length > 30 ? '...' : ''}
+          </Text>
+        )}
+        {transactionActive && (
+          <Tag color="orange" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
+            事务中
+          </Tag>
+        )}
+        {resultRows !== undefined && resultRows > 0 && (
+          <Text style={{ fontSize: 11 }}>行数：{resultRows.toLocaleString()}</Text>
+        )}
+        {executionTime !== undefined && executionTime > 0 && (
+          <Text style={{ fontSize: 11 }}>
+            耗时：
+            {executionTime < 1000 ? `${executionTime}ms` : `${(executionTime / 1000).toFixed(2)}s`}
+          </Text>
+        )}
       </Space>
       <Space separator={<Divider orientation="vertical" style={{ margin: '0 8px' }} />}>
-        <Text>UTF-8</Text>
+        {isConnected && serverInfo?.character_set && <Text>{serverInfo.character_set}</Text>}
+        {!isConnected && <Text>UTF-8</Text>}
         <Text>v1.0.0</Text>
+        <QuestionCircleOutlined style={{ fontSize: 11, cursor: 'help' }} />
       </Space>
     </Footer>
   );

@@ -165,7 +165,9 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
           </div>
         ))}
         {filteredValues.length === 0 && (
-          <div style={{ color: 'var(--text-tertiary)', fontSize: 12, textAlign: 'center', padding: 8 }}>
+          <div
+            style={{ color: 'var(--text-tertiary)', fontSize: 12, textAlign: 'center', padding: 8 }}
+          >
             无匹配项
           </div>
         )}

@@ -30,7 +30,12 @@ impl SidecarManager {
     pub fn start() -> Result<Self, String> {
         eprintln!("DEBUG: SidecarManager::start() BEGIN");
         eprintln!("DEBUG: Current dir: {:?}", std::env::current_dir());
-        eprintln!("DEBUG: EXE dir: {:?}", std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.to_path_buf())));
+        eprintln!(
+            "DEBUG: EXE dir: {:?}",
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        );
         eprintln!("DEBUG: Calling find_binary()...");
         let binary_path = find_binary();
         eprintln!("DEBUG: find_binary() returned: {:?}", binary_path);
@@ -236,7 +241,10 @@ impl SidecarManager {
 
 /// 查找 Go 后端二进制文件
 fn find_binary() -> Result<PathBuf, String> {
-    eprintln!("DEBUG find_binary: current_dir = {:?}", std::env::current_dir().ok());
+    eprintln!(
+        "DEBUG find_binary: current_dir = {:?}",
+        std::env::current_dir().ok()
+    );
     // 开发模式候选路径（相对于项目根目录和 src-tauri 目录）
     let dev_candidates = [
         // 相对于 src-tauri 目录
@@ -247,26 +255,38 @@ fn find_binary() -> Result<PathBuf, String> {
         PathBuf::from("../go-backend/go-backend.exe"),
     ];
     for candidate in &dev_candidates {
-        eprintln!("DEBUG find_binary: checking {:?} (exists: {})", candidate, candidate.exists());
+        eprintln!(
+            "DEBUG find_binary: checking {:?} (exists: {})",
+            candidate,
+            candidate.exists()
+        );
         if candidate.exists() {
             return Ok(candidate.clone());
         }
     }
 
     // 尝试从可执行文件所在目录查找（适用于打包后的应用）
-    if let Ok(exe_dir) = std::env::current_exe().and_then(|p| p.parent().map(PathBuf::from).ok_or(std::io::Error::new(std::io::ErrorKind::NotFound, "no parent"))) {
+    if let Ok(exe_dir) = std::env::current_exe().and_then(|p| {
+        p.parent().map(PathBuf::from).ok_or(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no parent",
+        ))
+    }) {
         let mut bundled_candidates: Vec<PathBuf> = Vec::new();
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        bundled_candidates.push(exe_dir.join("../Resources/sidecars/go-backend-aarch64-apple-darwin"));
+        bundled_candidates
+            .push(exe_dir.join("../Resources/sidecars/go-backend-aarch64-apple-darwin"));
         #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-        bundled_candidates.push(exe_dir.join("../Resources/sidecars/go-backend-x86_64-apple-darwin"));
+        bundled_candidates
+            .push(exe_dir.join("../Resources/sidecars/go-backend-x86_64-apple-darwin"));
         #[cfg(target_os = "macos")]
-        bundled_candidates.push(exe_dir.join("../Resources/sidecars/go-backend-x86_64-apple-darwin")); // aarch64 回退到 x86_64 (Rosetta)
+        bundled_candidates
+            .push(exe_dir.join("../Resources/sidecars/go-backend-x86_64-apple-darwin")); // aarch64 回退到 x86_64 (Rosetta)
         #[cfg(target_os = "linux")]
         bundled_candidates.push(exe_dir.join("sidecars/go-backend-x86_64-unknown-linux-gnu"));
         #[cfg(target_os = "windows")]
         bundled_candidates.push(exe_dir.join("sidecars/go-backend-x86_64-pc-windows-msvc.exe"));
-        
+
         for candidate in &bundled_candidates {
             if candidate.exists() {
                 return Ok(candidate.clone());
@@ -325,5 +345,8 @@ fn find_binary() -> Result<PathBuf, String> {
         }
     }
 
-    Err("Go backend binary not found. Please build it first:\n  cd go-backend && go build".to_string())
+    Err(
+        "Go backend binary not found. Please build it first:\n  cd go-backend && go build"
+            .to_string(),
+    )
 }

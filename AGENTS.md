@@ -1,139 +1,96 @@
-# PROJECT KNOWLEDGE BASE
+# AGENTS.md — iDBLink
 
-**Generated:** 2026-04-01 22:37:12
-**Commit:** N/A (not a git repo)
-**Branch:** N/A
+**Last verified:** 2026-04-30
 
-## OVERVIEW
-
-iDBLink - 跨平台数据库管理工具（类似Navicat）。React 18 + TypeScript + Vite 前端，Tauri v2 (Rust) 后端，支持 MySQL/PostgreSQL/SQLite/SQL Server/Oracle/MariaDB/达梦。
-
-## STRUCTURE
-
-```
-i-dblink/
-├── src/                          # 前端源码 (TypeScript/React)
-│   ├── api/                      # Tauri invoke API 封装 (1 文件)
-│   ├── components/               # React 组件 (20+ 文件)
-│   ├── hooks/                    # 自定义 Hooks (2 文件，广泛引用)
-│   ├── stores/                   # Zustand 状态管理 (2 文件)
-│   ├── types/                    # TypeScript 类型定义 (被 6 文件引用)
-│   ├── styles/                   # Ant Design 主题配置
-│   └── constants/                # 快捷键配置 (1 文件)
-├── src-tauri/                    # Rust 后端（桌面壳 + 本地存储）
-│   ├── src/
-│   │   ├── db/                   # 本地 SQLite 存储模块 (连接/分组配置)
-│   │   ├── commands.rs           # Tauri 命令（HTTP 转发到 Go Sidecar）
-│   │   ├── main.rs               # Rust 入口（启动 Go Sidecar）
-│   │   ├── security.rs           # 密钥链安全
-│   │   ├── sidecar.rs            # Go Sidecar 进程管理
-│   │   └── storage.rs            # 本地存储
-│   └── icons/                    # 应用图标 (15 文件)
-├── go-backend/                   # Go 后端（数据库引擎）
-│   ├── api/                      # HTTP API 路由与处理器
-│   ├── db/                       # 数据库连接池管理器
-│   ├── models/                   # 共享结构体（JSON 契约）
-│   ├── main.go                   # HTTP 服务入口
-│   └── server.go                 # 服务启动
-├── doc/                          # 项目文档 (6+ 个 markdown)
-└── public/                       # 静态资源
-```
-
-## WHERE TO LOOK
-
-| 任务 | 位置 | 备注 |
-|------|------|------|
-| 前端组件 | `src/components/` | 20+ 组件文件，含 MainLayout, SQLEditor, DataTable 等 |
-| 前端状态 | `src/stores/` | Zustand 全局状态 (appStore, settingsStore) |
-| 前端类型 | `src/types/api.ts` | 核心类型定义，被 6 文件引用 |
-| 前端 Hooks | `src/hooks/` | useApi (业务逻辑 + TTL 缓存)，useMenuShortcuts |
-| 前端 API | `src/api/index.ts` | 封装 12 个 Tauri invoke 调用 |
-| Rust 入口 | `src-tauri/src/main.rs` | 应用启动、菜单初始化 |
-| Rust 命令转发 | `src-tauri/src/commands.rs` | Tauri invoke → HTTP → Go |
-| Go 数据库引擎 | `go-backend/` | MySQL/PostgreSQL/SQLite/达梦 驱动 |
-| Rust Sidecar 管理 | `src-tauri/src/sidecar.rs` | Go 进程启动与生命周期 |
-| 安全存储 | `src-tauri/src/security.rs` | 系统密钥链密码管理 |
-
-## CODE MAP
-
-| 符号 | 类型 | 位置 | 引用 | 角色 |
-|------|------|------|------|------|
-| `useAppStore` | Zustand Store | `src/stores/appStore.ts` | 3 | 全局状态管理 |
-| `api` | API 对象 | `src/api/index.ts` | 1 | Tauri invoke 封装 |
-| `useConnections` | Hook | `src/hooks/useApi.ts` | 多 | 连接 CRUD 逻辑 |
-| `useGroups` | Hook | `src/hooks/useApi.ts` | 多 | 分组 CRUD 逻辑 |
-| `useDatabase` | Hook | `src/hooks/useApi.ts` | 多 | 数据库查询逻辑 |
-| `DatabaseType` | 类型 | `src/types/api.ts` | 6 | 数据库类型联合 |
-| `ConnectionInput` | 接口 | `src/types/api.ts` | 多 | 连接输入结构 |
-| `QueryResult` | 接口 | `src/types/api.ts` | 多 | 查询结果结构 |
-| `PasswordManager` | Struct | `src-tauri/src/security.rs` | 多 | 密码管理 |
-| `LocalStorage` | Struct | `src-tauri/src/storage.rs` | 多 | 配置存储 |
-
-## CONVENTIONS
-
-### 前端
-- **状态管理**: Zustand，单一 store (`useAppStore`)
-- **API 调用**: 统一通过 `src/api/index.ts` 封装 Tauri invoke
-- **组件命名**: PascalCase (`ConnectionDialog.tsx`)
-- **Hooks 命名**: camelCase (`useApi`, `useMenuShortcuts`)
-- **类型定义**: 集中在 `src/types/api.ts`
-
-### 后端
-- **模块命名**: snake_case (`sidecar.rs`)
-- **数据库驱动**: Go `database/sql` + 各数据库官方驱动（通过 Go Sidecar）
-- **Rust ↔ Go 通信**: HTTP/JSON (localhost)
-- **密码存储**: 系统密钥链 (keyring crate)
-- **配置存储**: 本地 SQLite 文件（sqlx，仅用于连接/分组配置）
-
-### 配置缺失
-- **无 ESLint/Prettier**: 无代码格式化规范
-- **无测试框架**: 无自动化测试
-- **无 CI/CD**: 无自动化构建/发布
-- **无 .editorconfig**: 无编辑器配置统一
-
-## ANTI-PATTERNS (THIS PROJECT)
-
-1. ~~**重复代码**: `commands.rs` 中 MySQL/PostgreSQL/SQLite 连接逻辑~~ ✅ **已修复**: 迁移到 Go Sidecar
-2. ~~**Rust 驱动限制**: sqlx 不支持达梦/Oracle 等数据库~~ ✅ **已修复**: 通过 Go Sidecar 支持达梦官方驱动
-3. ~~**空目录**: `commands/`, `models/`, `utils/`~~ ✅ **已清理**: 删除了空目录
-4. ~~**重复嵌套**: `src-tauri/src-tauri/.dev-data`~~ ✅ **已清理**: 删除了重复目录
-5. **无测试**: 零测试覆盖，需要添加
-6. **组件复杂度**: 部分组件职责过多，可进一步拆分
-
-## UNIQUE STYLES
-
-1. **前后端通信**: 前端通过 `src/api/index.ts` 统一封装 Tauri `invoke` 调用
-2. **状态管理**: Zustand 轻量级 store，无 Redux/Context
-3. **SQL 编辑器**: Monaco Editor 集成，自定义语法高亮
-4. **数据表格**: AG Grid 企业级表格，支持 CRUD
-5. **快捷键系统**: 跨平台快捷键映射 (macOS/Ctrl 兼容)
-6. **主题系统**: Ant Design 5 主题配置 (`src/styles/theme.ts`)
-
-## COMMANDS
+## Quick commands
 
 ```bash
-# 开发模式 (启动 Vite + Tauri，需先编译 Go 后端)
-cd go-backend && go build -o go-backend
-cd .. && pnpm tauri dev
-
-# 构建生产版本（Tauri 会自动打包 Go sidecar）
-pnpm tauri build
-
-# 安装前端依赖
-pnpm install
-
-# TypeScript 类型检查
-pnpm exec tsc --noEmit
-
-# Go 后端开发
-cd go-backend && go run .
+pnpm install                          # Install deps
+pnpm tauri dev                        # Dev mode (Vite + Tauri window; auto-builds Go sidecar)
+pnpm tauri build                      # Production build → src-tauri/target/release/bundle/
+pnpm test                             # Vitest (jsdom env)
+pnpm lint                             # ESLint (ignores src-tauri/)
+pnpm lint:fix
+pnpm format                           # Prettier write
+pnpm exec tsc --noEmit                # Type check
 ```
 
-## NOTES
+## Architecture (what actually exists)
 
-1. **项目阶段**: 早期开发 (v0.1.0)，功能不完整
-2. **数据库支持**: MySQL/PostgreSQL/SQLite/达梦 已支持（Go Sidecar），SQL Server/Oracle 计划中
-3. **构建产物**: `src-tauri/target/` 为 Rust 编译缓存，勿手动修改
-4. **密钥存储**: 密码通过系统密钥链管理，不存明文
-5. **开发端口**: Vite 固定 1420，Tauri 开发窗口自动连接
-6. **文档目录**: `doc/` 含需求、UI 设计、技术选型等详细文档
+Three-layer architecture: **React frontend → Tauri v2 Rust shell → Go sidecar**
+
+```
+src/                          # Frontend (React 18 + TS + Vite)
+  api/index.ts                # Tauri invoke wrappers (create/update/delete/query connections, DB ops)
+  types/api.ts                # Core types: DatabaseType, ConnectionInput, QueryResult (referenced everywhere)
+  stores/                     # Zustand stores: appStore, settingsStore, workspaceStore
+  hooks/                      # useApi (CRUD + TTL cache), useMenuShortcuts, useTableScrollHeight, useThemeColors
+  components/                 # ~30 React components (MainLayout, SQLEditor, DataTable, ConnectionDialog, etc.)
+
+src-tauri/src/
+  main.rs                     # Rust entry, Tauri setup, menu
+  sidecar.rs                  # Go sidecar process lifecycle (start/stop)
+  commands.rs                 # Tauri commands → HTTP → Go sidecar (1156 lines, NEEDS REFACTORING)
+  security.rs                 # System keychain password storage (keyring crate)
+  storage.rs                  # Local SQLite for connection/group configs (sqlx)
+  db/                         # Models, pool, migrations, repository (local DB config only)
+
+go-backend/                   # Go sidecar (database engine — NOT in Rust)
+  db/                         # Drivers: MySQL, PostgreSQL, SQLite, Dameng(达梦), Kingbase, Highgo, VastBase
+  api/                        # HTTP handlers: connection, query, metadata, DDL, transactions
+  models/models.go            # Shared structs (JSON contract with Rust)
+```
+
+**Key fact:** All database drivers live in `go-backend/`, NOT in Rust. Rust `commands.rs` forwards HTTP requests to the Go sidecar. The old docs mentioning `src-tauri/src/drivers/` are stale — that directory does not exist.
+
+## Communication patterns
+
+- **Frontend → Rust:** `src/api/index.ts` wraps Tauri `invoke()` calls
+- **Rust → Go:** HTTP/JSON to localhost (port determined by Go sidecar)
+- **Rust → Frontend:** `window.emit("menu-action", ...)` / frontend `listen()`
+
+## Configuration facts
+
+- **Vite port:** 5100 (configured in `vite.config.ts`)
+- **Tauri CLI:** `@tauri-apps/cli@^2.10.1` (NOT v1.x)
+- **Ant Design:** v6 (not v5)
+- **ESLint:** `eslint.config.mjs` (flat config, ignores `src-tauri/`)
+- **Prettier:** `.prettierrc.json` (semi, singleQuote, printWidth 100)
+- **EditorConfig:** `.editorconfig` (2-space indent, LF, UTF-8)
+- **Go deps:** `go-backend/go.mod` — uses `dm` (达梦), `gokb` (Kingbase), `modernc/sqlite`
+- **Dev data:** `.dev-data/` (gitignored, contains `connections.db`)
+- **Build artifacts:** `go-backend/go-backend`, `src-tauri/target/` (gitignored)
+
+## Gotchas
+
+1. **`commands.rs` is 1156 lines** with repetitive switch logic. Refactor into modules when touching DB commands.
+2. **Go sidecar must exist** for DB operations. Vite plugin auto-builds it from `go-backend/` on dev startup. If `go-backend/` is missing, sidecar features are unavailable but Vite still starts.
+3. **Production build:** `scripts/build-sidecar-release.js` compiles Go sidecar into `sidecars/` directory. Tauri bundler picks it up.
+4. **Three Zustand stores:** `appStore`, `settingsStore`, `workspaceStore` — not just one.
+5. **Four hooks:** `useApi`, `useMenuShortcuts`, `useTableScrollHeight`, `useThemeColors` — not just two.
+6. **Test setup:** `src/__tests__/setupTests.ts` required by vitest. Environment is `jsdom`.
+
+## Database support (via Go sidecar)
+
+| Database | Status |
+|----------|--------|
+| MySQL | ✅ |
+| PostgreSQL | ✅ |
+| SQLite | ✅ |
+| Dameng (达梦) | ✅ |
+| Kingbase (人大金仓) | ✅ |
+| Highgo (瀚高) | ✅ |
+| VastBase (人大金仓衍生) | ✅ |
+| SQL Server | ⏳ Planned |
+| Oracle | ⏳ Planned |
+| MariaDB | ⏳ Planned |
+
+## Files to check when stuck
+
+- Frontend API: `src/api/index.ts`
+- Types: `src/types/api.ts`
+- DB commands: `src-tauri/src/commands.rs`
+- Sidecar lifecycle: `src-tauri/src/sidecar.rs`
+- Go DB drivers: `go-backend/db/`
+- Go HTTP handlers: `go-backend/api/`
+- Tests: `src/__tests__/`

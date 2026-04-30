@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { Modal, Tabs, Button, Space, Select, Input, message, Progress } from 'antd';
 import { UploadOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import { api } from '../../api';
+import { useAppStore } from '../../stores/appStore';
 
 const { TextArea } = Input;
 
@@ -32,6 +33,9 @@ export function ImportExportModal({
   tableName,
   database,
 }: ImportExportModalProps) {
+  const dbType = useAppStore(
+    (state) => state.connections.find((c) => c.id === connectionId)?.db_type
+  );
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -50,21 +54,42 @@ export function ImportExportModal({
 
   const [importSql, setImportSql] = useState('');
 
+  // 根据数据库类型转义标识符
+  const escapeId = (name: string): string => {
+    switch (dbType) {
+      case 'postgresql':
+      case 'kingbase':
+      case 'highgo':
+      case 'vastbase':
+      case 'oracle':
+      case 'dameng':
+        return `"${name.replace(/"/g, '""')}"`;
+      case 'sqlserver':
+        return `[${name.replace(/]/g, ']]')}]`;
+      default:
+        return `\`${name.replace(/`/g, '``')}\``;
+    }
+  };
+
   // 导出数据
   const handleExport = useCallback(async () => {
     setExportLoading(true);
     setProgress(0);
 
     try {
-      // 获取表数据
+      // 获取表数据（带 LIMIT，防止内存溢出）
+      const tableRef = database
+        ? `${escapeId(database)}.${escapeId(tableName)}`
+        : escapeId(tableName);
       const result = await api.executeQuery(
         connectionId,
-        `SELECT * FROM \`${tableName}\` LIMIT 10000`,
+        `SELECT * FROM ${tableRef} LIMIT 10000`,
         database
       );
 
       if (result.error) {
         message.error(`导出失败：${result.error}`);
+        setExportLoading(false);
         return;
       }
 
@@ -72,6 +97,7 @@ export function ImportExportModal({
 
       if (rows.length === 0) {
         message.warning('没有数据可导出');
+        setExportLoading(false);
         return;
       }
 
@@ -126,7 +152,7 @@ export function ImportExportModal({
             return `'${String(v).replace(/'/g, "''")}'`;
           });
           lines.push(
-            `INSERT INTO \`${tableName}\` (${columns.map((c) => `\`${c}\``).join(', ')}) VALUES (${values.join(', ')});`
+            `INSERT INTO ${escapeId(tableName)} (${columns.map((c) => escapeId(c)).join(', ')}) VALUES (${values.join(', ')});`
           );
         }
         content = lines.join('\n');
@@ -154,7 +180,7 @@ export function ImportExportModal({
       setExportLoading(false);
       setProgress(0);
     }
-  }, [connectionId, tableName, database, exportOptions]);
+  }, [connectionId, tableName, database, exportOptions, dbType, escapeId]);
 
   // 导入数据
   const handleImport = useCallback(async () => {

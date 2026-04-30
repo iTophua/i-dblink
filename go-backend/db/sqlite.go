@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 
 	_ "modernc.org/sqlite"
 )
@@ -17,7 +18,8 @@ func openSQLite(args ConnectArgs) (*sql.DB, error) {
 	if dbPath == ":memory:" {
 		dsn = ":memory:"
 	} else {
-		dsn = fmt.Sprintf("file:%s?mode=rwc", dbPath)
+		encodedPath := url.PathEscape(dbPath)
+		dsn = fmt.Sprintf("file:%s?mode=rwc", encodedPath)
 	}
 
 	return sql.Open("sqlite", dsn)

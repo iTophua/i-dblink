@@ -84,7 +84,9 @@ const TableNode = memo(({ data }: { data: TableNodeData }) => {
             >
               <span style={{ width: 14, display: 'flex', justifyContent: 'center' }}>
                 {isPk && <KeyOutlined style={{ fontSize: 10, color: 'var(--color-warning)' }} />}
-                {!isPk && isFk && <LinkOutlined style={{ fontSize: 10, color: 'var(--color-primary)' }} />}
+                {!isPk && isFk && (
+                  <LinkOutlined style={{ fontSize: 10, color: 'var(--color-primary)' }} />
+                )}
               </span>
               <span
                 style={{
@@ -208,7 +210,9 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
       const cols = tableColumns.get(table.table_name) || [];
       const isFocus = selectedTable && table.table_name === selectedTable;
 
-      const pkColumns = new Set(cols.filter((c) => c.column_key === 'PRI').map((c) => c.column_name));
+      const pkColumns = new Set(
+        cols.filter((c) => c.column_key === 'PRI').map((c) => c.column_name)
+      );
       const fkColumns = new Set(fks.map((f) => f.column_name));
 
       return {
@@ -326,7 +330,14 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
       </div>
 
       {loading && tables.length === 0 ? (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100%',
+          }}
+        >
           <Spin size="large" tip="加载表结构..." />
         </div>
       ) : (
@@ -346,14 +357,19 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
         >
           <Background />
           <Controls />
-          <MiniMap
-            nodeColor={() => 'var(--color-success)'}
-          />
+          <MiniMap nodeColor={() => 'var(--color-success)'} />
         </ReactFlow>
       )}
 
       {!loading && tables.length === 0 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100%',
+          }}
+        >
           <Card>
             <Space direction="vertical" align="center">
               <div style={{ color: 'var(--text-secondary)' }}>暂无表数据</div>

@@ -1,67 +1,52 @@
 import { MainLayout } from './components/MainLayout';
 import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSettingsStore } from './stores/settingsStore';
-import { getThemeConfig, ThemePreset, ThemeMode } from './styles/theme';
+import { getThemeConfig, ThemeMode } from './styles/theme';
 import './style.css';
 import './App.css';
 
 function App() {
-  const { settings, updateSettings } = useSettingsStore();
+  const { updateSettings } = useSettingsStore();
+  const persistedSettings = useSettingsStore.getState().settings;
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem('idblink-settings');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (parsed.state?.settings) {
-          const oldSettings = parsed.state.settings;
-          if (oldSettings.theme && !oldSettings.themePreset) {
-            const preset = oldSettings.theme === 'dark' ? 'midnightDeep' :
-                          oldSettings.theme === 'light' ? 'nordicFrost' : 'midnightDeep';
-            const mode = oldSettings.theme === 'system'
-              ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-              : oldSettings.theme;
-            updateSettings({
-              themePreset: preset,
-              themeMode: mode,
-              themeSyncSystem: oldSettings.theme === 'system',
-            });
-          }
-        }
-      } catch (e) {
-        console.error('Failed to migrate settings:', e);
-      }
-    }
+    // Zustand persist 的 migrate 已处理版本升级，无需手动读取 localStorage
     setIsHydrated(true);
-  }, [updateSettings]);
+  }, []);
 
-  const { themePreset, themeMode, themeSyncSystem } = settings;
+  const themePreset = persistedSettings.themePreset;
+  const themeMode = persistedSettings.themeMode;
+  const themeSyncSystem = persistedSettings.themeSyncSystem;
 
   const effectiveMode: ThemeMode = themeSyncSystem
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light'
     : themeMode;
 
   // 缓存主题配置，避免每次渲染都重新计算
-  const themeConfig = useMemo(() => 
-    getThemeConfig(themePreset, effectiveMode), 
+  const themeConfig = useMemo(
+    () => getThemeConfig(themePreset, effectiveMode),
     [themePreset, effectiveMode]
   );
 
   useEffect(() => {
     const unlisten = listen<string>('menu-action', (event) => {
       console.log('Menu action received:', event.payload);
-      window.dispatchEvent(new CustomEvent('menu-action', {
-        detail: { action: event.payload }
-      }));
+      window.dispatchEvent(
+        new CustomEvent('menu-action', {
+          detail: { action: event.payload },
+        })
+      );
     });
 
     return () => {
-      unlisten.then(fn => fn());
+      unlisten.then((fn) => fn());
     };
   }, []);
 
@@ -171,7 +156,8 @@ function App() {
       colorTextQuaternary: themeConfig.neutralColors.textDisabled,
       borderRadius: 6,
       fontSize: 14,
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      fontFamily:
+        "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
     },
     components: {
       Layout: {
@@ -241,10 +227,7 @@ function App() {
   };
 
   return (
-    <ConfigProvider
-      locale={zhCN}
-      theme={antdThemeConfig}
-    >
+    <ConfigProvider locale={zhCN} theme={antdThemeConfig}>
       <AntdApp>
         <MainLayout />
       </AntdApp>

@@ -59,7 +59,9 @@ export function useThemeColors(): ThemeColors {
   const { themePreset, themeMode, themeSyncSystem } = settings;
 
   const effectiveMode = themeSyncSystem
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light'
     : themeMode;
 
   const config = getThemeConfig(themePreset, effectiveMode);

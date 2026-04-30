@@ -85,23 +85,43 @@ export const api = {
     return await invoke('get_tables', { connectionId, database });
   },
 
-  async getTablesCategorized(connectionId: string, database?: string, search?: string): Promise<TablesResult> {
+  async getTablesCategorized(
+    connectionId: string,
+    database?: string,
+    search?: string
+  ): Promise<TablesResult> {
     return await invoke('get_tables_categorized', { connectionId, database, search });
   },
 
-  async getTableStructure(connectionId: string, tableName: string, database?: string): Promise<TableStructure> {
+  async getTableStructure(
+    connectionId: string,
+    tableName: string,
+    database?: string
+  ): Promise<TableStructure> {
     return await invoke('get_table_structure', { connectionId, tableName, database });
   },
 
-  async getColumns(connectionId: string, tableName: string, database?: string): Promise<ColumnInfo[]> {
+  async getColumns(
+    connectionId: string,
+    tableName: string,
+    database?: string
+  ): Promise<ColumnInfo[]> {
     return await invoke('get_columns', { connectionId, tableName, database });
   },
 
-  async getIndexes(connectionId: string, tableName: string, database?: string): Promise<IndexInfo[]> {
+  async getIndexes(
+    connectionId: string,
+    tableName: string,
+    database?: string
+  ): Promise<IndexInfo[]> {
     return await invoke('get_indexes', { connectionId, tableName, database });
   },
 
-  async getForeignKeys(connectionId: string, tableName: string, database?: string): Promise<ForeignKeyInfo[]> {
+  async getForeignKeys(
+    connectionId: string,
+    tableName: string,
+    database?: string
+  ): Promise<ForeignKeyInfo[]> {
     return await invoke('get_foreign_keys', { connectionId, tableName, database });
   },
 
@@ -113,11 +133,19 @@ export const api = {
     return await invoke('get_functions', { connectionId, database });
   },
 
-  async getProcedureBody(connectionId: string, procedureName: string, database?: string): Promise<string> {
+  async getProcedureBody(
+    connectionId: string,
+    procedureName: string,
+    database?: string
+  ): Promise<string> {
     return await invoke('get_procedure_body', { connectionId, procedureName, database });
   },
 
-  async getFunctionBody(connectionId: string, functionName: string, database?: string): Promise<string> {
+  async getFunctionBody(
+    connectionId: string,
+    functionName: string,
+    database?: string
+  ): Promise<string> {
     return await invoke('get_function_body', { connectionId, functionName, database });
   },
 
@@ -141,7 +169,12 @@ export const api = {
     return await invoke('drop_view', { connectionId, viewName, database });
   },
 
-  async renameTable(connectionId: string, oldName: string, newName: string, database?: string): Promise<void> {
+  async renameTable(
+    connectionId: string,
+    oldName: string,
+    newName: string,
+    database?: string
+  ): Promise<void> {
     return await invoke('rename_table', { connectionId, oldName, newName, database });
   },
 
@@ -159,5 +192,74 @@ export const api = {
 
   async getTransactionStatus(connectionId: string): Promise<boolean> {
     return await invoke('get_transaction_status', { connectionId });
+  },
+
+  async getServerInfo(
+    connectionId: string,
+    database?: string
+  ): Promise<{
+    version?: string;
+    server_type?: string;
+    character_set?: string;
+    collation?: string;
+    uptime?: string;
+    max_connections?: number;
+  }> {
+    return await invoke('get_server_info', { connectionId, database });
+  },
+
+  async getTableDDL(connectionId: string, tableName: string, database?: string): Promise<string[]> {
+    return await invoke('get_table_ddl', { connectionId, table_name: tableName, database });
+  },
+
+  async getTriggers(connectionId: string, database?: string): Promise<any[]> {
+    return await invoke('get_triggers', { connectionId, database });
+  },
+
+  async getEvents(connectionId: string, database?: string): Promise<any[]> {
+    return await invoke('get_events', { connectionId, database });
+  },
+
+  async saveSnippet(params: {
+    id?: string;
+    name: string;
+    sql_text: string;
+    db_type?: string;
+    category?: string;
+    tags?: string;
+    is_private?: boolean;
+  }): Promise<string> {
+    return await invoke('save_snippet', {
+      id: params.id,
+      name: params.name,
+      sql_text: params.sql_text,
+      db_type: params.db_type,
+      category: params.category,
+      tags: params.tags,
+      is_private: params.is_private || false,
+    });
+  },
+
+  async getSnippets(): Promise<any[]> {
+    return await invoke('get_snippets');
+  },
+
+  async deleteSnippet(id: string): Promise<void> {
+    return await invoke('delete_snippet', { id });
+  },
+
+  async streamExportTable(
+    connectionId: string,
+    tableName: string,
+    database?: string,
+    batchSize?: number
+  ): Promise<any> {
+    const result = await invoke('stream_export_table', {
+      connectionId,
+      tableName,
+      database,
+      batchSize: batchSize || 1000,
+    });
+    return result;
   },
 };

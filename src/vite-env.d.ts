@@ -1,7 +1,12 @@
 /// <reference types="vite/client" />
 
 interface SqlHistoryApi {
-  addHistory: (item: { sql: string; success: boolean; duration?: number; rowCount?: number }) => void;
+  addHistory: (item: {
+    sql: string;
+    success: boolean;
+    duration?: number;
+    rowCount?: number;
+  }) => void;
 }
 
 declare global {
