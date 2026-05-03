@@ -178,6 +178,15 @@ export const api = {
     return await invoke('rename_table', { connectionId, oldName, newName, database });
   },
 
+  async maintainTable(
+    connectionId: string,
+    tableName: string,
+    operation: string,
+    database?: string
+  ): Promise<void> {
+    return await invoke('maintain_table', { connectionId, tableName, operation, database });
+  },
+
   async beginTransaction(connectionId: string): Promise<void> {
     return await invoke('begin_transaction', { connectionId });
   },

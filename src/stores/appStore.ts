@@ -26,6 +26,7 @@ interface AppState {
   groups: ConnectionGroup[];
   isLoading: boolean;
   error: string | null;
+  transactionStartTime: number | null;
 
   // Table data cache: key = `${connectionId}::${database}`
   tableDataCache: Record<string, TableDataCache>;
@@ -43,6 +44,7 @@ interface AppState {
 
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setTransactionStartTime: (time: number | null) => void;
 
   // Table data cache methods
   setTableData: (key: string, tables: TableInfo[]) => void;
@@ -66,6 +68,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   ],
   isLoading: false,
   error: null,
+  transactionStartTime: null,
   tableDataCache: {},
 
   addConnection: (connection) =>
@@ -119,6 +122,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   setError: (error) => set({ error }),
+
+  setTransactionStartTime: (time) => set({ transactionStartTime: time }),
 
   // Table data cache methods
   setTableData: (key, tables) =>

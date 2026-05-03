@@ -104,6 +104,12 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 为 connections 表添加 color 列（如果不存在）
+    sqlx::query("ALTER TABLE connections ADD COLUMN color TEXT")
+        .execute(pool)
+        .await
+        .ok(); // 忽略错误（列已存在时）
+
     // 插入默认分组（如果不存在）
     sqlx::query(
         r#"

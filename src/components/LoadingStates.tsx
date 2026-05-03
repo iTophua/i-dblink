@@ -26,6 +26,7 @@ export interface EnhancedEmptyStateProps {
     label: string;
     onClick: () => void;
     icon?: React.ReactNode;
+    disabled?: boolean;
   };
   tips?: string[];
 }
@@ -112,6 +113,7 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
             onClick={secondaryAction.onClick}
             size="large"
             block
+            disabled={secondaryAction.disabled}
             style={{
               height: 44,
               fontSize: 15,

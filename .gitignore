@@ -26,6 +26,12 @@ src-tauri/target/
 go-backend/go-backend
 go-backend/*.exe
 
+# Tauri sidecars (compiled Go binaries for each platform)
+src-tauri/sidecars/
+
+# Tauri auto-generated schemas
+src-tauri/gen/
+
 # Development data directory (for iDBLink)
 .dev-data
 

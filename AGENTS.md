@@ -1,6 +1,6 @@
 # AGENTS.md — iDBLink
 
-**Last verified:** 2026-04-30
+**Last verified:** 2026-05-03
 
 ## Quick commands
 
@@ -24,8 +24,8 @@ src/                          # Frontend (React 18 + TS + Vite)
   api/index.ts                # Tauri invoke wrappers (create/update/delete/query connections, DB ops)
   types/api.ts                # Core types: DatabaseType, ConnectionInput, QueryResult (referenced everywhere)
   stores/                     # Zustand stores: appStore, settingsStore, workspaceStore
-  hooks/                      # useApi (CRUD + TTL cache), useMenuShortcuts, useTableScrollHeight, useThemeColors
-  components/                 # ~30 React components (MainLayout, SQLEditor, DataTable, ConnectionDialog, etc.)
+  hooks/                      # useApi (CRUD + TTL cache), useMenuShortcuts, useTableScrollHeight, useThemeColors, useViewStats
+  components/                 # ~35 React components (MainLayout, SQLEditor, DataTable, ConnectionDialog, DatabaseProperties, ViewDefinition, etc.)
 
 src-tauri/src/
   main.rs                     # Rust entry, Tauri setup, menu
@@ -69,6 +69,7 @@ go-backend/                   # Go sidecar (database engine — NOT in Rust)
 4. **Three Zustand stores:** `appStore`, `settingsStore`, `workspaceStore` — not just one.
 5. **Four hooks:** `useApi`, `useMenuShortcuts`, `useTableScrollHeight`, `useThemeColors` — not just two.
 6. **Test setup:** `src/__tests__/setupTests.ts` required by vitest. Environment is `jsdom`.
+7. **P0/P1 completed:** All P0 (experience fixes) and P1 (interaction enhancements) tasks are implemented. See `doc/DEVELOPMENT_PLAN.md` for status.
 
 ## Database support (via Go sidecar)
 

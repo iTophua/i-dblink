@@ -49,6 +49,9 @@ import {
   exportToExcel,
   exportToCSV as exportToCSVUtil,
   exportToJSON as exportToJSONUtil,
+  exportToTXT,
+  exportToXML,
+  exportToMarkdown,
 } from '../utils/exportUtils';
 import { ImportWizard } from './DataTable/ImportWizard';
 
@@ -227,9 +230,17 @@ export const DataTable = memo(function DataTable({
     y: number;
     rowData: RowData | null;
   }>({ visible: false, x: 0, y: 0, rowData: null });
-  const loadDataRef = useRef<() => void>(() => {});
-  const overrideWhereRef = useRef<string | undefined>();
-  const overrideOrderByRef = useRef<string | undefined>();
+  const [cellContextMenu, setCellContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    colId: string;
+    value: any;
+    rowNode: any;
+  }>({ visible: false, x: 0, y: 0, colId: '', value: null, rowNode: null });
+  const loadDataRef = useRef<(overrideWhere?: string, overrideOrderBy?: string) => void>(() => {});
+  const overrideWhereRef = useRef<string | undefined>(undefined);
+  const overrideOrderByRef = useRef<string | undefined>(undefined);
   const loadTriggerRef = useRef(0);
   const loadCountRef = useRef<(where?: string) => void>(() => {});
   const onDirtyChangeRef = useRef(onDirtyChange);
@@ -351,7 +362,7 @@ export const DataTable = memo(function DataTable({
       query += ` LIMIT ${size} OFFSET ${offset}`;
       return query;
     },
-    [tableName, database, dbType]
+    [tableName, database, dbType, whereClause, orderByClause]
   );
 
   const buildWhereClause = useCallback((conditions: FilterCondition[]): string => {
@@ -519,7 +530,7 @@ export const DataTable = memo(function DataTable({
             rowData.__original_data__ = originalData;
             return rowData;
           });
-          setColumns(colResult);
+          setColumns(colResult || []);
           setRowData(data);
           setHasUnsavedChanges(false);
           setPendingChanges({ inserts: [], updates: [], deletes: [] });
@@ -696,7 +707,7 @@ export const DataTable = memo(function DataTable({
         console.error('Failed to load count:', error);
       }
     },
-    [connectionId, tableName, database, executeQuery, dbType]
+    [connectionId, tableName, database, executeQuery, dbType, whereClause]
   );
 
   loadCountRef.current = loadCount;
@@ -705,20 +716,20 @@ export const DataTable = memo(function DataTable({
     setHasEverLoaded(false);
     setSortModel([]);
     isInitialLoadRef.current = true;
-    loadData();
-    loadCount(whereClause);
+    loadDataRef.current();
+    loadCountRef.current(whereClause);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionId, tableName, database]);
 
   useEffect(() => {
     if (hasEverLoaded && !isInitialLoadRef.current) {
-      loadData(overrideWhereRef.current, overrideOrderByRef.current);
+      loadDataRef.current(overrideWhereRef.current, overrideOrderByRef.current);
       overrideWhereRef.current = undefined;
       overrideOrderByRef.current = undefined;
     } else if (hasEverLoaded && isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
     }
-  }, [hasEverLoaded, currentPage, pageSize, sortModel, loadData]);
+  }, [hasEverLoaded, currentPage, pageSize, sortModel]);
 
   const defaultColDef = useMemo<ColDef>(
     () => ({
@@ -1966,7 +1977,15 @@ export const DataTable = memo(function DataTable({
               }}
               onCellContextMenu={(event) => {
                 if (event.data && event.event) {
-                  handleContextMenu(event.event as unknown as React.MouseEvent, event.data);
+                  const mouseEvent = event.event as unknown as React.MouseEvent;
+                  setCellContextMenu({
+                    visible: true,
+                    x: mouseEvent.clientX,
+                    y: mouseEvent.clientY,
+                    colId: event.column.getColId(),
+                    value: event.value,
+                    rowNode: event.node,
+                  });
                 }
               }}
               rowSelection="multiple"
@@ -2058,6 +2077,11 @@ export const DataTable = memo(function DataTable({
               }}
             />
           </div>
+        ) : hasEverLoaded ? (
+          <Empty
+            description="无法获取表结构，请检查连接或刷新重试"
+            style={{ marginTop: '20%' }}
+          />
         ) : (
           <div
             style={{
@@ -2227,6 +2251,88 @@ export const DataTable = memo(function DataTable({
                     }
                   },
                 },
+                { type: 'divider' as const },
+                {
+                  key: 'txt',
+                  label: '导出 TXT',
+                  icon: <FileTextOutlined />,
+                  onClick: () => {
+                    try {
+                      const exportCols = columns.map((c) => ({
+                        field: c.column_name,
+                        headerName: c.column_name,
+                      }));
+                      const cleanData = rowData.map((row) => {
+                        const newRow: Record<string, any> = {};
+                        columns.forEach((c) => {
+                          const val = row[c.column_name];
+                          newRow[c.column_name] = val === null ? '' : val;
+                        });
+                        return newRow;
+                      });
+                      exportToTXT(cleanData, exportCols, {
+                        filename: `${tableName}_${Date.now()}.txt`,
+                      });
+                      message.success('已导出 TXT');
+                    } catch (e: any) {
+                      message.error(`导出失败：${e.message}`);
+                    }
+                  },
+                },
+                {
+                  key: 'xml',
+                  label: '导出 XML',
+                  icon: <FileTextOutlined />,
+                  onClick: () => {
+                    try {
+                      const exportCols = columns.map((c) => ({
+                        field: c.column_name,
+                        headerName: c.column_name,
+                      }));
+                      const cleanData = rowData.map((row) => {
+                        const newRow: Record<string, any> = {};
+                        columns.forEach((c) => {
+                          const val = row[c.column_name];
+                          newRow[c.column_name] = val === null ? '' : val;
+                        });
+                        return newRow;
+                      });
+                      exportToXML(cleanData, exportCols, {
+                        filename: `${tableName}_${Date.now()}.xml`,
+                      });
+                      message.success('已导出 XML');
+                    } catch (e: any) {
+                      message.error(`导出失败：${e.message}`);
+                    }
+                  },
+                },
+                {
+                  key: 'markdown',
+                  label: '导出 Markdown',
+                  icon: <FileTextOutlined />,
+                  onClick: () => {
+                    try {
+                      const exportCols = columns.map((c) => ({
+                        field: c.column_name,
+                        headerName: c.column_name,
+                      }));
+                      const cleanData = rowData.map((row) => {
+                        const newRow: Record<string, any> = {};
+                        columns.forEach((c) => {
+                          const val = row[c.column_name];
+                          newRow[c.column_name] = val === null ? '' : val;
+                        });
+                        return newRow;
+                      });
+                      exportToMarkdown(cleanData, exportCols, {
+                        filename: `${tableName}_${Date.now()}.md`,
+                      });
+                      message.success('已导出 Markdown');
+                    } catch (e: any) {
+                      message.error(`导出失败：${e.message}`);
+                    }
+                  },
+                },
               ],
             }}
           >
@@ -2290,10 +2396,12 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ width: 80, fontSize: 11 }}
             options={[
+              { label: '10', value: 10 },
               { label: '50', value: 50 },
               { label: '100', value: 100 },
               { label: '500', value: 500 },
               { label: '1000', value: 1000 },
+              { label: '全部', value: 'All' },
             ]}
           />
           <span
@@ -2532,6 +2640,158 @@ export const DataTable = memo(function DataTable({
             position: 'fixed',
             left: contextMenu.x,
             top: contextMenu.y,
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: 'none',
+          }}
+        />
+      </Dropdown>
+
+      {/* 单元格右键菜单 */}
+      <Dropdown
+        open={cellContextMenu.visible}
+        onOpenChange={(visible) => {
+          if (!visible) setCellContextMenu((prev) => ({ ...prev, visible: false }));
+        }}
+        menu={{
+          items: [
+            {
+              key: 'copy-cell-value',
+              label: '复制单元格值',
+              icon: <CopyOutlined />,
+              onClick: () => {
+                navigator.clipboard.writeText(String(cellContextMenu.value ?? 'NULL'));
+                setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                message.success('已复制单元格值');
+              },
+            },
+            {
+              key: 'copy-insert',
+              label: '复制为 INSERT',
+              onClick: () => {
+                if (!tableName || !columns.length) {
+                  message.warning('无法确定表结构');
+                  setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                  return;
+                }
+                const row = cellContextMenu.rowNode.data;
+                const values = columns.map((_, i) => row[String(i)] ?? null);
+                const colStr = columns.map((c) => escapeIdentifier(c.column_name, dbType)).join(', ');
+                const valStr = values.map(escapeSqlValue).join(', ');
+                const sql = `INSERT INTO ${escapeIdentifier(tableName, dbType)} (${colStr}) VALUES (${valStr});`;
+                navigator.clipboard.writeText(sql);
+                setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                message.success('已复制 INSERT 语句');
+              },
+            },
+            {
+              key: 'copy-update',
+              label: '复制为 UPDATE',
+              disabled: !primaryKey,
+              onClick: () => {
+                if (!tableName || !primaryKey || !columns.length) {
+                  message.warning('无法生成 UPDATE 语句');
+                  setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                  return;
+                }
+                const row = cellContextMenu.rowNode.data;
+                const pkIdx = columns.findIndex((c) => c.column_name === primaryKey.column_name);
+                if (pkIdx < 0) {
+                  message.warning('未找到主键列');
+                  setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                  return;
+                }
+                const values = columns.map((_, i) => row[String(i)] ?? null);
+                const setters = columns
+                  .map((c, i) => `${escapeIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i])}`)
+                  .filter((_, i) => i !== pkIdx)
+                  .join(', ');
+                const sql = `UPDATE ${escapeIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(values[pkIdx])};`;
+                navigator.clipboard.writeText(sql);
+                setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                message.success('已复制 UPDATE 语句');
+              },
+            },
+            { type: 'divider' },
+            {
+              key: 'set-null',
+              label: '设为 NULL',
+              disabled: !primaryKey,
+              onClick: () => {
+                if (!primaryKey) {
+                  message.warning('需要主键才能修改数据');
+                  setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                  return;
+                }
+                const rowNode = cellContextMenu.rowNode;
+                const colId = cellContextMenu.colId;
+                if (!rowNode || !colId) {
+                  setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                  return;
+                }
+                const updatedRow = { ...rowNode.data };
+                updatedRow[colId] = null;
+                if (!updatedRow.__status__ || updatedRow.__status__ !== 'new') {
+                  updatedRow.__status__ = 'modified';
+                }
+                gridApiRef.current?.applyTransaction({ update: [updatedRow] });
+                setHasUnsavedChanges(true);
+                setPendingChanges((prev) => {
+                  const filteredUpdates = prev.updates.filter(
+                    (r) => r.__row_id__ !== updatedRow.__row_id__
+                  );
+                  return {
+                    ...prev,
+                    updates: [...filteredUpdates, updatedRow],
+                  };
+                });
+                setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                message.success(`已将 ${colId} 设为 NULL`);
+              },
+            },
+            { type: 'divider' },
+            {
+              key: 'filter-column',
+              label: `按此列筛选 (${cellContextMenu.colId})`,
+              onClick: () => {
+                const colName = cellContextMenu.colId;
+                const filterValue = String(cellContextMenu.value ?? '');
+                const newFilter = `${colName} = '${filterValue.replace(/'/g, "''")}'`;
+                setWhereClause(newFilter);
+                setCurrentPage(1);
+                setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                message.success(`已添加筛选条件: ${colName} = ${filterValue}`);
+              },
+            },
+            {
+              key: 'sort-asc',
+              label: `按此列升序 (${cellContextMenu.colId} ↑)`,
+              onClick: () => {
+                const colName = cellContextMenu.colId;
+                setSortModel([{ colId: colName, sort: 'asc' }]);
+                setCurrentPage(1);
+                setCellContextMenu((prev) => ({ ...prev, visible: false }));
+              },
+            },
+            {
+              key: 'sort-desc',
+              label: `按此列降序 (${cellContextMenu.colId} ↓)`,
+              onClick: () => {
+                const colName = cellContextMenu.colId;
+                setSortModel([{ colId: colName, sort: 'desc' }]);
+                setCurrentPage(1);
+                setCellContextMenu((prev) => ({ ...prev, visible: false }));
+              },
+            },
+          ],
+        }}
+      >
+        <div
+          style={{
+            position: 'fixed',
+            left: cellContextMenu.x,
+            top: cellContextMenu.y,
             width: 1,
             height: 1,
             opacity: 0,

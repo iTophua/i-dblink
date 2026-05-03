@@ -1,14 +1,12 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"idblink-backend/db"
-	"idblink-backend/models"
 )
 
 // GetTableDDLRequest 获取建表语句请求

@@ -294,13 +294,36 @@ function ShortcutsSettings() {
   const updateSettings = useSettingsStore((s) => s.updateSettings);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
+  const [conflictKey, setConflictKey] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const isMac = isMacOS();
 
-  const shortcuts = settings.shortcuts || {};
+  const shortcuts: Record<string, string> = settings.shortcuts || {};
+
+  // 获取当前生效的快捷键映射 (id -> keys)
+  const effectiveShortcuts = useMemo(() => {
+    const map: Record<string, string> = {};
+    MENU_SHORTCUTS.forEach((s) => {
+      const effective = isMac && s.macKeys ? s.macKeys : s.keys;
+      map[s.id] = shortcuts[s.id] || effective;
+    });
+    return map;
+  }, [shortcuts, isMac]);
+
+  // 检查快捷键冲突，返回冲突的快捷键 id，无冲突返回 null
+  const checkConflict = (targetKey: string, newKeys: string): string | null => {
+    const normalized = newKeys.toLowerCase();
+    for (const [id, k] of Object.entries(effectiveShortcuts)) {
+      if (id !== targetKey && k.toLowerCase() === normalized) {
+        return id;
+      }
+    }
+    return null;
+  };
 
   const handleShortcutClick = (shortcutId: string) => {
     setEditingKey(shortcutId);
+    setConflictKey(null);
     const current =
       shortcuts[shortcutId] || MENU_SHORTCUTS.find((s) => s.id === shortcutId)?.keys || '';
     setInputValue(current);
@@ -308,6 +331,15 @@ function ShortcutsSettings() {
 
   const handleShortcutSave = () => {
     if (editingKey) {
+      const conflict = checkConflict(editingKey, inputValue);
+      if (conflict) {
+        const conflictDesc = MENU_SHORTCUTS.find((s) => s.id === conflict)?.description || conflict;
+        messageApi.warning(
+          `快捷键与「${conflictDesc}」冲突，请使用其他组合键`,
+          3
+        );
+        return;
+      }
       const newShortcuts = { ...shortcuts };
       if (inputValue) {
         newShortcuts[editingKey] = inputValue;
@@ -319,6 +351,7 @@ function ShortcutsSettings() {
     }
     setEditingKey(null);
     setInputValue('');
+    setConflictKey(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -331,13 +364,25 @@ function ShortcutsSettings() {
       keys.push(e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase());
     }
     if (keys.length > 0) {
-      setInputValue(keys.join('+'));
+      const newKeys = keys.join('+');
+      setInputValue(newKeys);
+      // 实时检测冲突
+      const conflict = editingKey ? checkConflict(editingKey, newKeys) : null;
+      setConflictKey(conflict);
     }
   };
 
   const handleCancel = () => {
     setEditingKey(null);
     setInputValue('');
+    setConflictKey(null);
+  };
+
+  const handleRestoreDefault = (shortcutId: string) => {
+    const newShortcuts = { ...shortcuts };
+    delete newShortcuts[shortcutId];
+    updateSettings({ shortcuts: newShortcuts });
+    messageApi.success('已恢复默认快捷键');
   };
 
   const getDisplayKeys = (shortcutId: string) => {
@@ -386,13 +431,13 @@ function ShortcutsSettings() {
       <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12 }}>
         点击快捷键进行修改。修改后自动生效，无需保存。
       </div>
-      {Object.entries(categories).map(([category, shortcuts]) => (
+      {Object.entries(categories).map(([category, catShortcuts]) => (
         <div key={category} style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>
             {categoryNames[category] || category}
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
-            {shortcuts.map((shortcut) => (
+            {catShortcuts.map((shortcut) => (
               <div
                 key={shortcut.id}
                 style={{
@@ -407,35 +452,65 @@ function ShortcutsSettings() {
               >
                 <span style={{ fontSize: 13 }}>{shortcut.description}</span>
                 {editingKey === shortcut.id ? (
-                  <Space size="small">
-                    <Input
-                      size="small"
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      style={{ width: 140, fontFamily: 'monospace', fontSize: 12 }}
-                      autoFocus
-                      placeholder="按下组合键"
-                    />
-                    <Button size="small" type="primary" onClick={handleShortcutSave}>
-                      确定
-                    </Button>
-                    <Button size="small" onClick={handleCancel}>
-                      取消
-                    </Button>
-                  </Space>
+                  <div>
+                    <Space size="small" align="center">
+                      <Input
+                        size="small"
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        style={{
+                          width: 140,
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          ...(conflictKey
+                            ? { borderColor: 'var(--color-error)', boxShadow: '0 0 0 2px rgba(255,77,79,0.2)' }
+                            : {}),
+                        }}
+                        autoFocus
+                        placeholder="按下组合键"
+                        status={conflictKey ? 'error' : undefined}
+                      />
+                      <Button size="small" type="primary" onClick={handleShortcutSave}>
+                        确定
+                      </Button>
+                      <Button size="small" onClick={handleCancel}>
+                        取消
+                      </Button>
+                    </Space>
+                    {conflictKey && (
+                      <div style={{ color: 'var(--color-error)', fontSize: 11, marginTop: 2 }}>
+                        ⚠ 与「{MENU_SHORTCUTS.find((s) => s.id === conflictKey)?.description || conflictKey}
+                        」冲突
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <Tag
-                    style={{
-                      cursor: 'pointer',
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      padding: '2px 8px',
-                    }}
-                    onClick={() => handleShortcutClick(shortcut.id)}
-                  >
-                    {getDisplayKeys(shortcut.id)}
-                  </Tag>
+                  <Space size="small">
+                    <Tag
+                      style={{
+                        cursor: 'pointer',
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        padding: '2px 8px',
+                      }}
+                      onClick={() => handleShortcutClick(shortcut.id)}
+                    >
+                      {getDisplayKeys(shortcut.id)}
+                    </Tag>
+                    {shortcuts[shortcut.id] && (
+                      <Tooltip title="恢复默认">
+                        <Button
+                          size="small"
+                          type="text"
+                          style={{ fontSize: 11, padding: '0 4px', height: 20 }}
+                          onClick={() => handleRestoreDefault(shortcut.id)}
+                        >
+                          默认
+                        </Button>
+                      </Tooltip>
+                    )}
+                  </Space>
                 )}
               </div>
             ))}

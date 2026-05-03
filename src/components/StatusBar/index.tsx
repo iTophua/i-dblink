@@ -10,8 +10,10 @@ type StatusBarProps = {
   selectedTable: string | null;
   selectedDatabase?: string;
   transactionActive?: boolean;
+  transactionStartTime?: number | null;
   resultRows?: number;
   executionTime?: number;
+  isQuerying?: boolean;
 };
 
 export function StatusBar({
@@ -20,11 +22,26 @@ export function StatusBar({
   selectedTable,
   selectedDatabase,
   transactionActive,
+  transactionStartTime,
   resultRows,
   executionTime,
+  isQuerying,
 }: StatusBarProps) {
   const { Footer } = Layout;
   const { Text } = Typography;
+
+  const [txDuration, setTxDuration] = useState<number>(0);
+
+  useEffect(() => {
+    if (!transactionActive || !transactionStartTime) {
+      setTxDuration(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setTxDuration(Math.floor((Date.now() - transactionStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [transactionActive, transactionStartTime]);
 
   const selectedConnection = selectedConnectionId
     ? connections.find((c) => c.id === selectedConnectionId)
@@ -84,7 +101,15 @@ export function StatusBar({
             '未连接'
           )}
         </Text>
+        {selectedDatabase && (
+          <Text>库：{selectedDatabase}</Text>
+        )}
         {selectedTable && <Text>表：{selectedTable}</Text>}
+        {isQuerying && (
+          <Tag color="processing" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
+            查询中...
+          </Tag>
+        )}
         {isConnected && dbTypeLabel && (
           <Tag color="blue" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
             {dbTypeLabel}
@@ -98,7 +123,7 @@ export function StatusBar({
         )}
         {transactionActive && (
           <Tag color="orange" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
-            事务中
+            事务中 {txDuration > 0 ? `${txDuration}s` : ''}
           </Tag>
         )}
         {resultRows !== undefined && resultRows > 0 && (

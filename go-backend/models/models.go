@@ -185,3 +185,34 @@ type StreamExportRequest struct {
 	TableName    string `json:"table_name"`
 	BatchSize    int    `json:"batch_size"`
 }
+
+// ExecuteDDLRequest DDL 执行请求
+type ExecuteDDLRequest struct {
+	ConnectionID string `json:"connection_id"`
+	Database     string `json:"database,omitempty"`
+	SQL          string `json:"sql"`
+}
+
+// TableOperationRequest 表操作请求(truncate/drop 等)
+type TableOperationRequest struct {
+	ConnectionID string `json:"connection_id"`
+	Database     string `json:"database,omitempty"`
+	TableName    string `json:"table_name"`
+	ViewName     string `json:"view_name,omitempty"`
+}
+
+// RenameTableRequest 重命名表请求
+type RenameTableRequest struct {
+	ConnectionID string `json:"connection_id"`
+	Database     string `json:"database,omitempty"`
+	OldName      string `json:"old_name"`
+	NewName      string `json:"new_name"`
+}
+
+// TableMaintenanceRequest 表维护请求
+type TableMaintenanceRequest struct {
+	ConnectionID string `json:"connection_id"`
+	Database     string `json:"database,omitempty"`
+	TableName    string `json:"table_name"`
+	Operation    string `json:"operation"` // optimize / analyze / repair
+}

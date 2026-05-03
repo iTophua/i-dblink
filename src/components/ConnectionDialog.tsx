@@ -12,6 +12,7 @@ import {
   Col,
   Divider,
   Input,
+  ColorPicker,
 } from 'antd';
 import {
   UploadOutlined,
@@ -74,6 +75,7 @@ export interface ConnectionFormData {
   password?: string;
   database?: string;
   group_id?: string;
+  color?: string;
 }
 
 interface ConnectionDialogProps {
@@ -156,6 +158,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         username: editingData?.username,
         password: editingData?.password,
         database: editingData?.database,
+        color: editingData?.color,
       });
     } else {
       form.resetFields();
@@ -226,6 +229,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         password: values.password,
         database: isSqlite ? values.host : values.database,
         group_id: editingData?.group_id,
+        color: values.color,
       });
     } catch (error: any) {
       if (error.errorFields) return;
@@ -561,6 +565,15 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                   <Form.Item name="database" label="数据库名" style={{ marginBottom: 16 }}>
                     <GlobalInput placeholder="例如：mydb（可选）" />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="color"
+                    label="标记颜色"
+                    style={{ marginBottom: 16 }}
+                    extra="可选：为连接添加颜色标记以便区分"
+                  >
+                    <ColorPicker showText />
                   </Form.Item>
                 </>
               )}

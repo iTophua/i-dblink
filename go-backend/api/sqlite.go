@@ -212,5 +212,14 @@ func sqliteGetTableStructure(ctx context.Context, dbConn db.Executor, tableName 
 	if err != nil {
 		return result, err
 	}
+	if result.Columns == nil {
+		result.Columns = []models.ColumnInfo{}
+	}
+	if result.Indexes == nil {
+		result.Indexes = []models.IndexInfo{}
+	}
+	if result.ForeignKeys == nil {
+		result.ForeignKeys = []models.ForeignKeyInfo{}
+	}
 	return result, nil
 }

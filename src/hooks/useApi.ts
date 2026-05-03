@@ -516,7 +516,7 @@ export const useDatabase = () => {
   const getColumns = useCallback(
     async (connectionId: string, tableName: string, database?: string) => {
       const result = await getTableStructureCached(connectionId, tableName, database);
-      return result.columns;
+      return result.columns || [];
     },
     [getTableStructureCached]
   );
@@ -524,7 +524,7 @@ export const useDatabase = () => {
   const getIndexes = useCallback(
     async (connectionId: string, tableName: string, database?: string) => {
       const result = await getTableStructureCached(connectionId, tableName, database);
-      return result.indexes;
+      return result.indexes || [];
     },
     [getTableStructureCached]
   );
@@ -532,7 +532,7 @@ export const useDatabase = () => {
   const getForeignKeys = useCallback(
     async (connectionId: string, tableName: string, database?: string) => {
       const result = await getTableStructureCached(connectionId, tableName, database);
-      return result.foreign_keys;
+      return result.foreign_keys || [];
     },
     [getTableStructureCached]
   );

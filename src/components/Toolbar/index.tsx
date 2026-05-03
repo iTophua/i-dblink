@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { type JSX, useCallback, useState } from 'react';
 import { Layout, Button, Dropdown, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -115,11 +115,11 @@ export function Toolbar(): JSX.Element {
   const toolsMenuItems: MenuProps['items'] = [
     { key: 'options', icon: <SettingOutlined />, label: '选项/设置... (O)' },
     { type: 'divider' },
-    { key: 'data-sync', icon: <SyncOutlined />, label: '数据同步... (S)' },
-    { key: 'backup', icon: <DatabaseOutlined />, label: '备份数据库... (B)' },
-    { key: 'restore', icon: <DatabaseOutlined />, label: '恢复数据库... (R)' },
+    { key: 'data-sync', icon: <SyncOutlined />, label: '数据同步... (S)', disabled: true },
+    { key: 'backup', icon: <DatabaseOutlined />, label: '备份数据库... (B)', disabled: true },
+    { key: 'restore', icon: <DatabaseOutlined />, label: '恢复数据库... (R)', disabled: true },
     { type: 'divider' },
-    { key: 'model-designer', label: '模型设计器... (M)' },
+    { key: 'model-designer', label: '模型设计器... (M)', disabled: true },
   ];
 
   const windowMenuItems: MenuProps['items'] = [

@@ -155,6 +155,122 @@ function exportToJson(columns: string[], rows: unknown[][]): string {
   return JSON.stringify(objs, null, 2);
 }
 
+function escapeTxt(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  const str = String(val);
+  if (str.includes('\t') || str.includes('\n') || str.includes('\r')) {
+    return str.replace(/\t/g, ' ').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+  }
+  return str;
+}
+
+function exportToTxt(columns: string[], rows: unknown[][]): string {
+  const header = columns.map(escapeTxt).join('\t');
+  const body = rows.map((row) => row.map(escapeTxt).join('\t')).join('\n');
+  return '\uFEFF' + header + '\n' + body;
+}
+
+function escapeXml(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function sanitizeXmlTag(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_\u4e00-\u9fff.-]/g, '_');
+}
+
+function exportToXml(columns: string[], rows: unknown[][]): string {
+  const lines: string[] = ['<?xml version="1.0" encoding="UTF-8"?>', '<data>'];
+  for (const row of rows) {
+    lines.push('  <row>');
+    columns.forEach((col, i) => {
+      const tag = sanitizeXmlTag(col);
+      const val = escapeXml(row[i] ?? '');
+      lines.push(`    <${tag}>${val}</${tag}>`);
+    });
+    lines.push('  </row>');
+  }
+  lines.push('</data>');
+  return lines.join('\n');
+}
+
+function escapeMd(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  return String(val).replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+}
+
+// === 列统计辅助函数 ===
+
+interface ColumnStats {
+  columnName: string;
+  count: number;
+  sum?: number;
+  avg?: number;
+  min?: number;
+  max?: number;
+  nullCount: number;
+  isNumeric: boolean;
+}
+
+function formatNumber(num: number, decimals?: number): string {
+  if (decimals !== undefined) {
+    return num.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+  if (Number.isInteger(num)) {
+    return num.toLocaleString();
+  }
+  return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function computeColumnStats(
+  columns: string[],
+  rows: unknown[][]
+): ColumnStats[] {
+  const maxRows = rows.length > 10000 ? 5000 : rows.length;
+  const sampleRows = rows.slice(0, maxRows);
+
+  return columns.map((col, colIdx) => {
+    const values = sampleRows.map((r) => r[colIdx]);
+    const nonNull = values.filter((v) => v !== null && v !== undefined);
+    const numericValues = nonNull
+      .map((v) => Number(v))
+      .filter((n) => !isNaN(n));
+    const isNumeric =
+      numericValues.length > 0 && numericValues.length >= nonNull.length * 0.8;
+
+    const stat: ColumnStats = {
+      columnName: col,
+      count: nonNull.length,
+      nullCount: values.length - nonNull.length,
+      isNumeric,
+    };
+
+    if (isNumeric && numericValues.length > 0) {
+      stat.sum = numericValues.reduce((a, b) => a + b, 0);
+      stat.avg = stat.sum / numericValues.length;
+      stat.min = Math.min(...numericValues);
+      stat.max = Math.max(...numericValues);
+    }
+
+    return stat;
+  });
+}
+
+function exportToMd(columns: string[], rows: unknown[][]): string {
+  const headers = columns.map(escapeMd);
+  const headerLine = '| ' + headers.join(' | ') + ' |';
+  const separatorLine = '| ' + headers.map(() => '---').join(' | ') + ' |';
+  const bodyLines = rows.map(
+    (row) => '| ' + row.map((v) => escapeMd(v)).join(' | ') + ' |'
+  );
+  return '\uFEFF' + [headerLine, separatorLine, ...bodyLines].join('\n');
+}
+
 // === ResultGrid 主组件 ===
 
 export function ResultGrid({
@@ -675,6 +791,12 @@ export function ResultGrid({
 
   const hasChanges = modifiedRows.size > 0 || deletedRowIndices.size > 0;
 
+  // 列统计
+  const columnStats = useMemo(() => {
+    if (queryResult.rows.length === 0) return [];
+    return computeColumnStats(queryResult.columns, queryResult.rows);
+  }, [queryResult.columns, queryResult.rows]);
+
   return (
     <div
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
@@ -778,6 +900,37 @@ export function ResultGrid({
                   message.success('已导出 JSON');
                 },
               },
+              { type: 'divider' as const },
+              {
+                key: 'txt',
+                label: '导出 TXT',
+                icon: <FileTextOutlined />,
+                onClick: () => {
+                  const txt = exportToTxt(queryResult.columns, queryResult.rows);
+                  downloadBlob(txt, `result_${Date.now()}.txt`, 'text/plain;charset=utf-8;');
+                  message.success('已导出 TXT');
+                },
+              },
+              {
+                key: 'xml',
+                label: '导出 XML',
+                icon: <FileTextOutlined />,
+                onClick: () => {
+                  const xml = exportToXml(queryResult.columns, queryResult.rows);
+                  downloadBlob(xml, `result_${Date.now()}.xml`, 'application/xml;charset=utf-8;');
+                  message.success('已导出 XML');
+                },
+              },
+              {
+                key: 'markdown',
+                label: '导出 Markdown',
+                icon: <FileTextOutlined />,
+                onClick: () => {
+                  const md = exportToMd(queryResult.columns, queryResult.rows);
+                  downloadBlob(md, `result_${Date.now()}.md`, 'text/markdown;charset=utf-8;');
+                  message.success('已导出 Markdown');
+                },
+              },
             ],
           }}
         >
@@ -865,6 +1018,62 @@ export function ResultGrid({
           onSelectionChanged={onSelectionChanged}
         />
       </div>
+
+      {/* 列统计栏 */}
+      {queryResult.rows.length > 0 && (
+        <div
+          style={{
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 12px',
+            background: 'var(--background-toolbar)',
+            borderTop: '1px solid var(--border)',
+            gap: 8,
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            overflowX: 'auto',
+            flexShrink: 0,
+          }}
+        >
+          <span>记录: {queryResult.rows.length.toLocaleString()}</span>
+          {columnStats.map((stat) => (
+            <Tag
+              key={stat.columnName}
+              style={{
+                margin: 0,
+                fontSize: 10,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {stat.columnName}:
+              {stat.isNumeric ? (
+                <>
+                  {' '}
+                  SUM={formatNumber(stat.sum!)}
+                  {' '}
+                  AVG={formatNumber(stat.avg!, 2)}
+                  {' '}
+                  MIN={formatNumber(stat.min!)}
+                  {' '}
+                  MAX={formatNumber(stat.max!)}
+                </>
+              ) : (
+                <>
+                  {' '}
+                  COUNT={stat.count}
+                </>
+              )}
+              {stat.nullCount > 0 && (
+                <span style={{ opacity: 0.7 }}>
+                  {' '}
+                  NULL={stat.nullCount}
+                </span>
+              )}
+            </Tag>
+          ))}
+        </div>
+      )}
 
       {/* 底部操作 SQL 栏（Navicat 风格） */}
       {isEditable && operationSql && (

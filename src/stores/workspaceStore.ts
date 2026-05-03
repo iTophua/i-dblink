@@ -25,10 +25,19 @@ export interface SavedDesignerTab {
   isNewTable?: boolean;
 }
 
+export interface SavedViewDefTab {
+  key?: string;
+  title: string;
+  connectionId: string;
+  database?: string;
+  viewName: string;
+}
+
 export interface WorkspaceSnapshot {
   openedTables: SavedTableTab[];
   openedSqlTabs: SavedSqlTab[];
   openedDesignerTabs: SavedDesignerTab[];
+  openedViewDefTabs: SavedViewDefTab[];
   activeKey: string;
   sidebarCollapsed: boolean;
   expandedKeys: string[];
@@ -43,12 +52,13 @@ const defaultWorkspace: WorkspaceSnapshot = {
   openedTables: [],
   openedSqlTabs: [],
   openedDesignerTabs: [],
+  openedViewDefTabs: [],
   activeKey: 'objects',
   sidebarCollapsed: false,
   expandedKeys: [],
 };
 
-const VERSION = 2;
+const VERSION = 3;
 
 function migrate(state: any, version: number | undefined): Partial<WorkspaceState> {
   if (version === undefined) {
@@ -60,6 +70,11 @@ function migrate(state: any, version: number | undefined): Partial<WorkspaceStat
         ...t,
         content: t.content || t.defaultQuery || undefined,
       }));
+    }
+  }
+  if (version === 2) {
+    if (!state.openedViewDefTabs) {
+      state.openedViewDefTabs = [];
     }
   }
   return { ...defaultWorkspace, ...state };

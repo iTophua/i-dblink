@@ -76,6 +76,7 @@ interface SQLEditorProps {
   availableDatabases?: string[];
   onDatabaseChange?: (database: string) => void;
   dbType?: DatabaseType;
+  onQueryStatusChange?: (isQuerying: boolean) => void;
 }
 
 // 智能分割 SQL 语句，忽略字符串和注释中的分号
@@ -584,6 +585,7 @@ export function SQLEditor({
   availableDatabases,
   onDatabaseChange,
   dbType: propDbType,
+  onQueryStatusChange,
 }: SQLEditorProps) {
   const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
@@ -621,6 +623,53 @@ export function SQLEditor({
   } | null>(null);
   const monacoRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const errorMarkersRef = useRef<any[]>([]);
+
+  // 错误行号解析
+  const parseErrorLine = useCallback((errorMsg: string): number | null => {
+    const mysqlMatch = errorMsg.match(/at line (\d+)/i);
+    if (mysqlMatch) return parseInt(mysqlMatch[1], 10);
+    const pgMatch = errorMsg.match(/LINE (\d+):/i);
+    if (pgMatch) return parseInt(pgMatch[1], 10);
+    const genericMatch = errorMsg.match(/line (\d+)/i);
+    if (genericMatch) return parseInt(genericMatch[1], 10);
+    return null;
+  }, []);
+
+  // 高亮错误行
+  const highlightError = useCallback(
+    (errorMsg: string) => {
+      if (!editorRef.current || !monacoRef.current) return;
+      const errorLine = parseErrorLine(errorMsg);
+      if (errorLine === null) return;
+      const model = editorRef.current.getModel();
+      if (!model) return;
+      const monaco = monacoRef.current;
+      const markers = [
+        {
+          severity: monaco.MarkerSeverity.Error,
+          message: errorMsg,
+          startLineNumber: errorLine,
+          startColumn: 1,
+          endLineNumber: errorLine,
+          endColumn: model.getLineMaxColumn(errorLine),
+        },
+      ];
+      monaco.editor.setModelMarkers(model, 'sql-error', markers);
+      errorMarkersRef.current = markers;
+    },
+    [parseErrorLine]
+  );
+
+  // 清除错误标记
+  const clearErrorMarkers = useCallback(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+    const model = editorRef.current.getModel();
+    if (model) {
+      monacoRef.current.editor.setModelMarkers(model, 'sql-error', []);
+      errorMarkersRef.current = [];
+    }
+  }, []);
 
   // 可拖拽调整编辑器/结果面板高度
   const [editorRatio, setEditorRatio] = useState(0.6); // 默认编辑器占 60%
@@ -1084,7 +1133,9 @@ export function SQLEditor({
       setResult(null);
       setResults([]);
       setExplainPlan([]);
+      clearErrorMarkers();
       abortControllerRef.current = new AbortController();
+      onQueryStatusChange?.(true);
 
       // 检测是否多语句（按分号分割，忽略字符串内的分号）
       const statements = splitSqlStatements(sqlToExecute);
@@ -1118,6 +1169,7 @@ export function SQLEditor({
             if (queryResult.error) {
               msgs.push(`语句 ${i + 1} ✗：${queryResult.error}`);
               totalErrors++;
+              highlightError(queryResult.error);
               window.__sqlHistoryApi?.addHistory({
                 sql: stmt,
                 success: false,
@@ -1177,6 +1229,7 @@ export function SQLEditor({
           setMessages([`✗ 错误：${queryResult.error}`]);
           setActiveTab('messages');
           message.error(`SQL 执行失败：${queryResult.error}`);
+          highlightError(queryResult.error);
           setResult({ ...queryResult, executionTime });
           window.__sqlHistoryApi?.addHistory({
             sql: sqlToExecute,
@@ -1191,6 +1244,8 @@ export function SQLEditor({
           const affectedRows = queryResult.rows_affected || 0;
 
           setResult({ ...queryResult, rows: truncatedRows, executionTime });
+
+          clearErrorMarkers();
 
           if (rowCount > 0) {
             let msg = `✓ 查询成功，返回 ${rowCount} 条记录，耗时 ${executionTime}ms`;
@@ -1222,9 +1277,11 @@ export function SQLEditor({
       setMessages([`✗ 错误：${error.message || error}`]);
       setActiveTab('messages');
       message.error(`SQL 执行失败：${error.message || error}`);
+      highlightError(error.message || error);
     } finally {
       setLoading(false);
       abortControllerRef.current = null;
+      onQueryStatusChange?.(false);
     }
   }, [sql, connectionId, database, executeQueryApi]);
 
@@ -1239,10 +1296,11 @@ export function SQLEditor({
       setLoading(false);
       setMessages((prev) => [...prev, '⚠ 查询已停止']);
       message.warning('查询已停止');
+      onQueryStatusChange?.(false);
     } else {
       message.info('没有正在执行的查询');
     }
-  }, []);
+  }, [onQueryStatusChange]);
 
   const showExplainPlan = useCallback(async () => {
     if (!sql.trim()) {

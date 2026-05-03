@@ -1,10 +1,20 @@
 use crate::db::{ConnectionGroup, DbConnection};
 use crate::sidecar::{SidecarManager, SidecarState};
 use crate::storage::Storage;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
 use tauri::State;
 use tokio::sync::{Mutex, RwLock};
+
+/// 自定义反序列化：将 JSON null 视为默认值（空 Vec）
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    let opt = Option::<T>::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
+}
 
 #[tauri::command]
 pub fn greet(name: &str) -> String {
@@ -23,6 +33,7 @@ pub struct ConnectionInput {
     pub password: Option<String>,
     pub database: Option<String>,
     pub group_id: Option<String>,
+    pub color: Option<String>,
 }
 
 /// 返回给前端的连接对象（不包含密码）
@@ -36,6 +47,7 @@ pub struct ConnectionOutput {
     pub username: String,
     pub database: Option<String>,
     pub group_id: Option<String>,
+    pub color: Option<String>,
     pub status: String,
 }
 
@@ -50,6 +62,7 @@ impl From<DbConnection> for ConnectionOutput {
             username: conn.username,
             database: conn.database,
             group_id: conn.group_id,
+            color: conn.color,
             status: "disconnected".to_string(),
         }
     }
@@ -139,11 +152,11 @@ pub struct TablesResult {
 /// 表结构结果（包含列、索引、外键）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableStructure {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub columns: Vec<ColumnInfo>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub indexes: Vec<IndexInfo>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub foreign_keys: Vec<ForeignKeyInfo>,
     pub error: Option<String>,
 }
@@ -381,6 +394,7 @@ pub async fn save_connection(
             updated.username = input.username.clone();
             updated.database = input.database.clone();
             updated.group_id = input.group_id.clone();
+            updated.color = input.color.clone();
 
             storage
                 .update_connection(&id, &updated, input.password.as_deref())
@@ -398,6 +412,7 @@ pub async fn save_connection(
                 input.username,
                 input.database,
                 input.group_id,
+                input.color,
             );
 
             storage
@@ -658,8 +673,10 @@ pub async fn get_columns(
             return Ok(vec![]);
         }
     }
-    let resp: Vec<ColumnInfo> =
-        serde_json::from_value(resp_val).map_err(|e| format!("Invalid columns response: {}", e))?;
+    let resp: Vec<ColumnInfo> = match resp_val {
+        serde_json::Value::Null => vec![],
+        v => serde_json::from_value(v).map_err(|e| format!("Invalid columns response: {}", e))?,
+    };
     Ok(resp)
 }
 
@@ -692,8 +709,10 @@ pub async fn get_indexes(
             return Ok(vec![]);
         }
     }
-    let resp: Vec<IndexInfo> =
-        serde_json::from_value(resp_val).map_err(|e| format!("Invalid indexes response: {}", e))?;
+    let resp: Vec<IndexInfo> = match resp_val {
+        serde_json::Value::Null => vec![],
+        v => serde_json::from_value(v).map_err(|e| format!("Invalid indexes response: {}", e))?,
+    };
     Ok(resp)
 }
 
@@ -726,8 +745,10 @@ pub async fn get_foreign_keys(
             return Ok(vec![]);
         }
     }
-    let resp: Vec<ForeignKeyInfo> = serde_json::from_value(resp_val)
-        .map_err(|e| format!("Invalid foreign keys response: {}", e))?;
+    let resp: Vec<ForeignKeyInfo> = match resp_val {
+        serde_json::Value::Null => vec![],
+        v => serde_json::from_value(v).map_err(|e| format!("Invalid foreign keys response: {}", e))?,
+    };
     Ok(resp)
 }
 
@@ -1083,7 +1104,7 @@ pub async fn drop_view(
         "connection_id".to_string(),
         serde_json::json!(connection_id),
     );
-    req_map.insert("table_name".to_string(), serde_json::json!(view_name));
+    req_map.insert("view_name".to_string(), serde_json::json!(view_name));
     if let Some(db) = database {
         req_map.insert("database".to_string(), serde_json::json!(db));
     }
@@ -1127,6 +1148,44 @@ pub async fn rename_table(
     }
     let req = serde_json::Value::Object(req_map);
     let resp: serde_json::Value = sm.post("/rename-table", &req).await?;
+    if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(err.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 表维护操作(OPTIMIZE/ANALYZE/REPAIR)
+#[tauri::command]
+pub async fn maintain_table(
+    connection_id: String,
+    table_name: String,
+    operation: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let mut req_map = serde_json::Map::new();
+    req_map.insert(
+        "connection_id".to_string(),
+        serde_json::json!(connection_id),
+    );
+    req_map.insert("table_name".to_string(), serde_json::json!(table_name));
+    req_map.insert("operation".to_string(), serde_json::json!(operation));
+    if let Some(db) = database {
+        req_map.insert("database".to_string(), serde_json::json!(db));
+    }
+    let req = serde_json::Value::Object(req_map);
+    let resp: serde_json::Value = sm.post("/table-maintenance", &req).await?;
     if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
         if !err.is_empty() {
             return Err(err.to_string());

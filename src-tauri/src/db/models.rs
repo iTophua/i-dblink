@@ -14,6 +14,7 @@ pub struct DbConnection {
     pub username: String,
     pub database: Option<String>,
     pub group_id: Option<String>,
+    pub color: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -40,6 +41,7 @@ impl DbConnection {
         username: String,
         database: Option<String>,
         group_id: Option<String>,
+        color: Option<String>,
     ) -> Self {
         let now = Utc::now();
         Self {
@@ -51,6 +53,7 @@ impl DbConnection {
             username,
             database,
             group_id,
+            color,
             created_at: now,
             updated_at: now,
         }

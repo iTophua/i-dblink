@@ -401,6 +401,7 @@ fn main() {
             commands::drop_table,
             commands::drop_view,
             commands::rename_table,
+            commands::maintain_table,
             commands::begin_transaction,
             commands::commit_transaction,
             commands::rollback_transaction,

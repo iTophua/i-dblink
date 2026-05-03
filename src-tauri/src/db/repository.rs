@@ -47,7 +47,7 @@ impl ConnectionRepository {
                 r#"
                 UPDATE connections 
                 SET name = ?, db_type = ?, host = ?, port = ?, 
-                    username = ?, database = ?, group_id = ?, 
+                    username = ?, database = ?, group_id = ?, color = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 "#,
@@ -59,6 +59,7 @@ impl ConnectionRepository {
             .bind(&conn.username)
             .bind(&conn.database)
             .bind(&conn.group_id)
+            .bind(&conn.color)
             .bind(&conn.id)
             .execute(self.pool.inner())
             .await?;
@@ -66,8 +67,8 @@ impl ConnectionRepository {
             // 新增
             sqlx::query(
                 r#"
-                INSERT INTO connections (id, name, db_type, host, port, username, database, group_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO connections (id, name, db_type, host, port, username, database, group_id, color, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
             )
             .bind(&conn.id)
@@ -78,6 +79,7 @@ impl ConnectionRepository {
             .bind(&conn.username)
             .bind(&conn.database)
             .bind(&conn.group_id)
+            .bind(&conn.color)
             .bind(&conn.created_at.to_rfc3339())
             .bind(&conn.updated_at.to_rfc3339())
             .execute(self.pool.inner())

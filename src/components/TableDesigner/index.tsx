@@ -65,6 +65,7 @@ export interface TableDesignerProps {
   connectionId: string;
   tableName?: string;
   database?: string;
+  dbType?: string;
   onSave?: (sql: string) => void;
   onCancel?: () => void;
 }
@@ -98,16 +99,221 @@ const COMMON_TYPES = [
   'UUID',
 ];
 
+const DB_TYPE_FIELDS: Record<string, string[]> = {
+  mysql: [
+    'INT',
+    'BIGINT',
+    'SMALLINT',
+    'TINYINT',
+    'MEDIUMINT',
+    'VARCHAR',
+    'CHAR',
+    'TEXT',
+    'MEDIUMTEXT',
+    'LONGTEXT',
+    'TINYTEXT',
+    'DECIMAL',
+    'FLOAT',
+    'DOUBLE',
+    'BOOLEAN',
+    'DATE',
+    'DATETIME',
+    'TIMESTAMP',
+    'TIME',
+    'YEAR',
+    'JSON',
+    'BLOB',
+    'MEDIUMBLOB',
+    'LONGBLOB',
+    'BINARY',
+    'ENUM',
+    'SET',
+  ],
+  postgresql: [
+    'SMALLINT',
+    'INTEGER',
+    'BIGINT',
+    'SERIAL',
+    'BIGSERIAL',
+    'VARCHAR',
+    'CHAR',
+    'TEXT',
+    'DECIMAL',
+    'NUMERIC',
+    'REAL',
+    'DOUBLE PRECISION',
+    'BOOLEAN',
+    'DATE',
+    'TIMESTAMP',
+    'TIMESTAMPTZ',
+    'TIME',
+    'TIMETZ',
+    'JSON',
+    'JSONB',
+    'UUID',
+    'BYTEA',
+    'INET',
+    'CIDR',
+    'MACADDR',
+  ],
+  sqlite: [
+    'INTEGER',
+    'REAL',
+    'TEXT',
+    'BLOB',
+    'NUMERIC',
+    'BOOLEAN',
+    'VARCHAR',
+    'CHAR',
+    'DATETIME',
+    'DATE',
+    'TIMESTAMP',
+  ],
+  dameng: [
+    'INT',
+    'BIGINT',
+    'SMALLINT',
+    'TINYINT',
+    'VARCHAR',
+    'CHAR',
+    'TEXT',
+    'CLOB',
+    'DECIMAL',
+    'NUMBER',
+    'FLOAT',
+    'DOUBLE',
+    'BOOLEAN',
+    'DATE',
+    'TIMESTAMP',
+    'TIMESTAMP WITH TIME ZONE',
+    'BLOB',
+    'BFILE',
+  ],
+  kingbase: [
+    'SMALLINT',
+    'INTEGER',
+    'BIGINT',
+    'SERIAL',
+    'BIGSERIAL',
+    'VARCHAR',
+    'CHAR',
+    'TEXT',
+    'DECIMAL',
+    'NUMERIC',
+    'REAL',
+    'DOUBLE PRECISION',
+    'BOOLEAN',
+    'DATE',
+    'TIMESTAMP',
+    'TIMESTAMPTZ',
+    'JSON',
+    'JSONB',
+    'UUID',
+    'BYTEA',
+  ],
+  highgo: [
+    'SMALLINT',
+    'INTEGER',
+    'BIGINT',
+    'SERIAL',
+    'BIGINT',
+    'VARCHAR',
+    'CHAR',
+    'TEXT',
+    'DECIMAL',
+    'NUMERIC',
+    'REAL',
+    'DOUBLE PRECISION',
+    'BOOLEAN',
+    'DATE',
+    'TIMESTAMP',
+    'TIMESTAMPTZ',
+    'JSON',
+    'JSONB',
+    'UUID',
+  ],
+  vastbase: [
+    'INT',
+    'BIGINT',
+    'SMALLINT',
+    'TINYINT',
+    'VARCHAR',
+    'CHAR',
+    'TEXT',
+    'DECIMAL',
+    'FLOAT',
+    'DOUBLE',
+    'BOOLEAN',
+    'DATE',
+    'DATETIME',
+    'TIMESTAMP',
+    'JSON',
+    'BLOB',
+  ],
+  sqlserver: [
+    'INT',
+    'BIGINT',
+    'SMALLINT',
+    'TINYINT',
+    'VARCHAR',
+    'CHAR',
+    'TEXT',
+    'NVARCHAR',
+    'NCHAR',
+    'DECIMAL',
+    'FLOAT',
+    'REAL',
+    'DOUBLE PRECISION',
+    'BIT',
+    'DATE',
+    'DATETIME',
+    'DATETIME2',
+    'SMALLDATETIME',
+    'TIMESTAMP',
+    'BLOB',
+    'XML',
+    'UNIQUEIDENTIFIER',
+  ],
+};
+
+function getFieldTypes(dbType?: string): string[] {
+  if (!dbType) return COMMON_TYPES;
+  const key = dbType.toLowerCase();
+  return DB_TYPE_FIELDS[key] || COMMON_TYPES;
+}
+
 const genKey = () => Math.random().toString(36).slice(2, 10);
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function escapeIdentifier(name: string): string {
-  return `\`${name.replace(/`/g, '``')}\``;
+function escapeIdentifier(name: string, dbType?: string): string {
+  let open = '`';
+  let close = '`';
+  let escapeQuote = (n: string) => n.replace(/`/g, '``');
+
+  switch (dbType) {
+    case 'postgresql':
+    case 'kingbase':
+    case 'highgo':
+    case 'vastbase':
+    case 'oracle':
+    case 'dameng':
+      open = '"';
+      close = '"';
+      escapeQuote = (n) => n.replace(/"/g, '""');
+      break;
+    case 'sqlserver':
+      open = '[';
+      close = ']';
+      escapeQuote = (n) => n.replace(/\]/g, ']]');
+      break;
+  }
+
+  return `${open}${escapeQuote(name)}${close}`;
 }
 
-function generateColumnDef(col: DesignerColumn): string {
-  let line = `${escapeIdentifier(col.name)} ${col.type}`;
+function generateColumnDef(col: DesignerColumn, dbType?: string): string {
+  let line = `${escapeIdentifier(col.name, dbType)} ${col.type}`;
   if (col.length && col.type !== 'BOOLEAN' && col.type !== 'JSON') {
     line += `(${col.length})`;
   }
@@ -115,9 +321,30 @@ function generateColumnDef(col: DesignerColumn): string {
     line += ' NOT NULL';
   }
   if (col.defaultValue) {
-    line += ` DEFAULT ${col.defaultValue}`;
+    const val = col.defaultValue.trim();
+    // 处理特殊默认值（根据数据库类型）
+    const upperVal = val.toUpperCase();
+    if (
+      upperVal === 'CURRENT_TIMESTAMP' ||
+      upperVal === 'NOW()' ||
+      upperVal === 'NULL' ||
+      upperVal === 'TRUE' ||
+      upperVal === 'FALSE'
+    ) {
+      // 保留关键字和函数原样
+      line += ` DEFAULT ${val}`;
+    } else if (/^-?\d+(\.\d+)?$/.test(val)) {
+      // 纯数字
+      line += ` DEFAULT ${val}`;
+    } else {
+      // 字符串默认值：需要加引号
+      // 根据数据库类型选择引号风格
+      const quote = dbType === 'sqlserver' ? "'" : "'";
+      const escaped = val.replace(/'/g, "''");
+      line += ` DEFAULT ${quote}${escaped}${quote}`;
+    }
   }
-  if (col.comment) {
+  if (col.comment && (dbType === 'mysql' || dbType === 'mariadb')) {
     line += ` COMMENT '${col.comment.replace(/'/g, "''")}'`;
   }
   return line;
@@ -127,7 +354,8 @@ function generateCreateTableSQL(
   tableName: string,
   columns: DesignerColumn[],
   indexes: DesignerIndex[],
-  foreignKeys: DesignerForeignKey[]
+  foreignKeys: DesignerForeignKey[],
+  dbType?: string
 ): string {
   if (!tableName) return '-- Enter table name to generate SQL';
 
@@ -136,24 +364,24 @@ function generateCreateTableSQL(
   // Column definitions
   for (const col of columns) {
     if (!col.name) continue;
-    parts.push(`  ${generateColumnDef(col)}`);
+    parts.push(`  ${generateColumnDef(col, dbType)}`);
   }
 
   // Index definitions
   for (const idx of indexes) {
     if (!idx.name || idx.columns.length === 0) continue;
-    const cols = idx.columns.map(escapeIdentifier).join(', ');
+    const cols = idx.columns.map((c) => escapeIdentifier(c, dbType)).join(', ');
     if (idx.type === 'PRIMARY') {
       parts.push(`  PRIMARY KEY (${cols})`);
     } else if (idx.type === 'UNIQUE') {
-      parts.push(`  CONSTRAINT ${escapeIdentifier(idx.name)} UNIQUE (${cols})`);
+      parts.push(`  CONSTRAINT ${escapeIdentifier(idx.name, dbType)} UNIQUE (${cols})`);
     } else {
-      parts.push(`  INDEX ${escapeIdentifier(idx.name)} (${cols})`);
+      parts.push(`  INDEX ${escapeIdentifier(idx.name, dbType)} (${cols})`);
     }
   }
 
   // Auto-add primary key from column flag if no explicit PK index
-  const pkColumns = columns.filter((c) => c.isPrimary).map((c) => escapeIdentifier(c.name));
+  const pkColumns = columns.filter((c) => c.isPrimary).map((c) => escapeIdentifier(c.name, dbType));
   if (pkColumns.length > 0 && !indexes.some((i) => i.type === 'PRIMARY')) {
     parts.push(`  PRIMARY KEY (${pkColumns.join(', ')})`);
   }
@@ -162,11 +390,14 @@ function generateCreateTableSQL(
   for (const fk of foreignKeys) {
     if (!fk.name || !fk.column || !fk.referencedTable || !fk.referencedColumn) continue;
     parts.push(
-      `  CONSTRAINT ${escapeIdentifier(fk.name)} FOREIGN KEY (${escapeIdentifier(fk.column)}) REFERENCES ${escapeIdentifier(fk.referencedTable)}(${escapeIdentifier(fk.referencedColumn)}) ON UPDATE ${fk.onUpdate} ON DELETE ${fk.onDelete}`
+      `  CONSTRAINT ${escapeIdentifier(fk.name, dbType)} FOREIGN KEY (${escapeIdentifier(fk.column, dbType)}) REFERENCES ${escapeIdentifier(fk.referencedTable, dbType)}(${escapeIdentifier(fk.referencedColumn, dbType)}) ON UPDATE ${fk.onUpdate} ON DELETE ${fk.onDelete}`
     );
   }
 
-  return `CREATE TABLE ${escapeIdentifier(tableName)} (\n${parts.join(',\n')}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`;
+  const isMySQL = dbType === 'mysql' || dbType === 'mariadb';
+  const tableSuffix = isMySQL ? '\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;' : '\n);';
+
+  return `CREATE TABLE ${escapeIdentifier(tableName, dbType)} (\n${parts.join(',\n')}${tableSuffix}`;
 }
 
 function generateAlterTableSQL(
@@ -176,12 +407,13 @@ function generateAlterTableSQL(
   foreignKeys: DesignerForeignKey[],
   originalColumns: DesignerColumn[],
   originalIndexes: DesignerIndex[],
-  originalForeignKeys: DesignerForeignKey[]
+  originalForeignKeys: DesignerForeignKey[],
+  dbType?: string
 ): string {
   if (!tableName) return '-- Enter table name to generate SQL';
 
   const alters: string[] = [];
-  const tableRef = escapeIdentifier(tableName);
+  const tableRef = escapeIdentifier(tableName, dbType);
 
   // --- 列变更 ---
   const origColMap = new Map(originalColumns.map((c) => [c.name, c]));
@@ -191,7 +423,7 @@ function generateAlterTableSQL(
   for (const col of columns) {
     if (!col.name) continue;
     if (!origColMap.has(col.name)) {
-      alters.push(`ALTER TABLE ${tableRef} ADD COLUMN ${generateColumnDef(col)};`);
+      alters.push(`ALTER TABLE ${tableRef} ADD COLUMN ${generateColumnDef(col, dbType)};`);
     }
   }
 
@@ -208,14 +440,14 @@ function generateAlterTableSQL(
       orig.comment !== col.comment ||
       orig.isPrimary !== col.isPrimary;
     if (hasChanged) {
-      alters.push(`ALTER TABLE ${tableRef} MODIFY COLUMN ${generateColumnDef(col)};`);
+      alters.push(`ALTER TABLE ${tableRef} MODIFY COLUMN ${generateColumnDef(col, dbType)};`);
     }
   }
 
   // 删除列
   for (const orig of originalColumns) {
     if (!newColMap.has(orig.name)) {
-      alters.push(`ALTER TABLE ${tableRef} DROP COLUMN ${escapeIdentifier(orig.name)};`);
+      alters.push(`ALTER TABLE ${tableRef} DROP COLUMN ${escapeIdentifier(orig.name, dbType)};`);
     }
   }
 
@@ -226,7 +458,7 @@ function generateAlterTableSQL(
   // 删除索引
   for (const orig of originalIndexes) {
     if (!newIdxMap.has(orig.name)) {
-      alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(orig.name)};`);
+      alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(orig.name, dbType)};`);
     }
   }
 
@@ -234,7 +466,7 @@ function generateAlterTableSQL(
   for (const idx of indexes) {
     if (!idx.name || idx.columns.length === 0) continue;
     const orig = origIdxMap.get(idx.name);
-    const cols = idx.columns.map(escapeIdentifier).join(', ');
+    const cols = idx.columns.map((c) => escapeIdentifier(c, dbType)).join(', ');
     const idxChanged =
       !orig ||
       orig.type !== idx.type ||
@@ -242,14 +474,14 @@ function generateAlterTableSQL(
       orig.columns.some((c, i) => c !== idx.columns[i]);
     if (idxChanged) {
       if (orig) {
-        alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(idx.name)};`);
+        alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(idx.name, dbType)};`);
       }
       if (idx.type === 'UNIQUE') {
         alters.push(
-          `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(idx.name)} UNIQUE (${cols});`
+          `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(idx.name, dbType)} UNIQUE (${cols});`
         );
       } else {
-        alters.push(`ALTER TABLE ${tableRef} ADD INDEX ${escapeIdentifier(idx.name)} (${cols});`);
+        alters.push(`ALTER TABLE ${tableRef} ADD INDEX ${escapeIdentifier(idx.name, dbType)} (${cols});`);
       }
     }
   }
@@ -261,7 +493,7 @@ function generateAlterTableSQL(
   // 删除外键
   for (const orig of originalForeignKeys) {
     if (!newFkMap.has(orig.name)) {
-      alters.push(`ALTER TABLE ${tableRef} DROP FOREIGN KEY ${escapeIdentifier(orig.name)};`);
+      alters.push(`ALTER TABLE ${tableRef} DROP FOREIGN KEY ${escapeIdentifier(orig.name, dbType)};`);
     }
   }
 
@@ -270,7 +502,7 @@ function generateAlterTableSQL(
     if (!fk.name || !fk.column || !fk.referencedTable || !fk.referencedColumn) continue;
     if (!origFkMap.has(fk.name)) {
       alters.push(
-        `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(fk.name)} FOREIGN KEY (${escapeIdentifier(fk.column)}) REFERENCES ${escapeIdentifier(fk.referencedTable)}(${escapeIdentifier(fk.referencedColumn)}) ON UPDATE ${fk.onUpdate} ON DELETE ${fk.onDelete};`
+        `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(fk.name, dbType)} FOREIGN KEY (${escapeIdentifier(fk.column, dbType)}) REFERENCES ${escapeIdentifier(fk.referencedTable, dbType)}(${escapeIdentifier(fk.referencedColumn, dbType)}) ON UPDATE ${fk.onUpdate} ON DELETE ${fk.onDelete};`
       );
     }
   }
@@ -285,6 +517,7 @@ export function TableDesigner({
   connectionId,
   tableName: propTableName,
   database,
+  dbType,
   onSave,
   onCancel,
 }: TableDesignerProps) {
@@ -396,10 +629,11 @@ export function TableDesigner({
         foreignKeys,
         originalColumns,
         originalIndexes,
-        originalForeignKeys
+        originalForeignKeys,
+        dbType
       );
     }
-    return generateCreateTableSQL(tableName, columns, indexes, foreignKeys);
+    return generateCreateTableSQL(tableName, columns, indexes, foreignKeys, dbType);
   }, [
     tableName,
     columns,
@@ -409,6 +643,7 @@ export function TableDesigner({
     originalIndexes,
     originalForeignKeys,
     isEditMode,
+    dbType,
   ]);
 
   // ── Column CRUD ────────────────────────────────────────────────────────
@@ -606,7 +841,7 @@ export function TableDesigner({
           size="small"
           style={{ width: '100%' }}
           value={val}
-          options={COMMON_TYPES.map((t) => ({ label: t, value: t }))}
+          options={getFieldTypes(dbType).map((t) => ({ label: t, value: t }))}
           onChange={(v) => updateColumn(record.key, 'type', v)}
           showSearch
           optionFilterProp="label"

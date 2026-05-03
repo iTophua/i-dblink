@@ -6,6 +6,7 @@ import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/use
 import { useMenuShortcuts } from '../hooks/useMenuShortcuts';
 import { Toolbar } from './Toolbar';
 import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
+import { DatabaseProperties } from './DatabaseProperties';
 import { TabPanel, type TabPanelRef, type ActiveTabInfo } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
@@ -83,7 +84,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [selectedDatabase, setSelectedDatabase] = useState<string | undefined>();
   const [selectedObjectType, setSelectedObjectType] = useState<'table' | 'view' | 'all'>('all');
   // 双击表时触发，用于在 TabPanel 中打开新 Tab
-  const [tableToOpen, setTableToOpen] = useState<{ name: string; database?: string } | null>(null);
+  const [tableToOpen, setTableToOpen] = useState<{ name: string; database?: string; isView?: boolean } | null>(null);
   const [sqlTabCount, setSqlTabCount] = useState(0);
   const [searchText, setSearchText] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
@@ -97,6 +98,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         loadFailed?: boolean;
         procedures?: string[];
         functions?: string[];
+        triggers?: import('../types/api').TriggerInfo[];
         routinesLoaded?: boolean;
       }[]
     >
@@ -121,6 +123,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [transactionActive, setTransactionActive] = useState(false);
   const [currentResultRows, setCurrentResultRows] = useState<number>(0);
   const [currentExecutionTime, setCurrentExecutionTime] = useState<number>(0);
+  const [isQuerying, setIsQuerying] = useState(false);
 
   // 恢复侧边栏工作区状态
   useEffect(() => {
@@ -452,9 +455,10 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
   const loadDatabaseRoutines = useCallback(async (connectionId: string, database: string) => {
     try {
-      const [procedures, functions] = await Promise.all([
+      const [procedures, functions, triggers] = await Promise.all([
         api.getProcedures(connectionId, database),
         api.getFunctions(connectionId, database),
+        api.getTriggers(connectionId, database),
       ]);
 
       setConnectionDatabases((prev) => {
@@ -467,6 +471,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
             ...newDbList[dbIndex],
             procedures,
             functions,
+            triggers,
             routinesLoaded: true,
           };
           return {
@@ -620,6 +625,23 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   );
 
   const closingDbModalRef = useRef(false);
+
+  const handleDatabaseProperties = useCallback(
+    (connectionId: string, databaseName: string) => {
+      Modal.info({
+        title: `数据库属性: ${databaseName}`,
+        width: 800,
+        content: (
+          <DatabaseProperties
+            connectionId={connectionId}
+            databaseName={databaseName}
+          />
+        ),
+        okText: '关闭',
+      });
+    },
+    []
+  );
 
   const handleDatabaseClose = useCallback(
     (connectionId: string, database: string) => {
@@ -966,7 +988,6 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         case 'backup':
         case 'restore':
         case 'model-designer':
-          console.log(`Menu action ${action} not yet implemented`);
           break;
         default:
           console.log(`Unknown menu action: ${action}`);
@@ -1025,11 +1046,28 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                 onTableOpen={(tableName, database) => {
                   setTableToOpen(null);
                   setTimeout(() => {
-                    setTableToOpen({ name: tableName, database });
+                    setTableToOpen({ name: tableName, database, isView: false });
+                  }, 0);
+                }}
+                onViewOpen={(viewName, database) => {
+                  setTableToOpen(null);
+                  setTimeout(() => {
+                    setTableToOpen({ name: viewName, database, isView: true });
                   }, 0);
                 }}
                 onOpenDesigner={(tableName, database) => {
                   tabPanelRef.current?.openDesignerTab(tableName);
+                }}
+                onOpenViewDefinition={(viewName, database) => {
+                  tabPanelRef.current?.openViewDefTab(viewName);
+                }}
+                onOpenTrigger={(connectionId, database, name) => {
+                  tabPanelRef.current?.openSqlTab({
+                    connectionId,
+                    database,
+                    title: `触发器: ${name}`,
+                    defaultQuery: `-- 触发器 ${name}\nSELECT 1;`,
+                  });
                 }}
                 onExpand={handleConnectionExpand}
                 collapsed={collapsed}
@@ -1062,6 +1100,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                 onDatabaseExpand={handleDatabaseExpand}
                 onDatabaseRefresh={handleDatabaseRefresh}
                 onDatabaseClose={handleDatabaseClose}
+                onDatabaseProperties={handleDatabaseProperties}
                 onLoadDatabases={handleLoadDatabases}
                 onTableExpand={handleTableExpand}
                 onSaveConnection={handleSaveConnection}
@@ -1103,6 +1142,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
               tableToOpen={tableToOpen}
               onSqlTabCountChange={setSqlTabCount}
               onActiveTabChange={setActiveTabInfo}
+              onQueryStatusChange={setIsQuerying}
               pageSize={useSettingsStore.getState().settings.pageSize}
               connectionDatabases={connectionDatabases}
             />
@@ -1116,8 +1156,10 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         selectedTable={selectedTable}
         selectedDatabase={selectedDatabase}
         transactionActive={transactionActive}
+        transactionStartTime={useAppStore.getState().transactionStartTime}
         resultRows={currentResultRows}
         executionTime={currentExecutionTime}
+        isQuerying={isQuerying}
       />
 
       <ConnectionDialog

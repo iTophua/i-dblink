@@ -15,12 +15,14 @@ import {
   HomeOutlined,
   CloseOutlined,
   PushpinOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
 import { TableList } from '../TableList';
 import { TableStructure } from '../TableStructure';
 import { TableDesigner } from '../TableDesigner';
+import { ViewDefinition } from '../ViewDefinition';
 import type { TableInfo, DatabaseType } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { api } from '../../api';
@@ -33,11 +35,13 @@ interface TabPanelProps {
   selectedDatabase?: string;
   selectedObjectType?: 'table' | 'view' | 'all';
   /** 双击表时设置此值，TabPanel 会打开新的数据浏览 Tab */
-  tableToOpen?: { name: string; database?: string } | null;
+  tableToOpen?: { name: string; database?: string; isView?: boolean } | null;
   /** 当有 SQL 查询 Tab 打开时回调，用于控制日志面板显示 */
   onSqlTabCountChange?: (count: number) => void;
   /** 活跃 Tab 变化时回调 */
   onActiveTabChange?: (info: ActiveTabInfo) => void;
+  /** 查询状态变化回调 */
+  onQueryStatusChange?: (isQuerying: boolean) => void;
   /** 分页大小 */
   pageSize?: number;
   /** 当前连接的数据库列表 */
@@ -49,6 +53,7 @@ interface TabPanelProps {
       loaded: boolean;
       loadFailed?: boolean;
       db_type?: string;
+      triggers?: import('../../types/api').TriggerInfo[];
     }[]
   >;
 }
@@ -58,7 +63,8 @@ interface OpenedTable {
   connectionId: string;
   connectionName: string;
   database?: string;
-  isDirty?: boolean; // 是否有未保存的更改
+  isDirty?: boolean;
+  isView?: boolean;
 }
 
 interface OpenedSqlTab {
@@ -80,6 +86,14 @@ interface OpenedDesignerTab {
   isNewTable?: boolean;
 }
 
+interface OpenedViewDefTab {
+  key: string;
+  title: string;
+  connectionId: string;
+  database?: string;
+  viewName: string;
+}
+
 export interface ActiveTabInfo {
   type: 'objects' | 'data' | 'sql' | 'designer';
   title: string;
@@ -90,6 +104,7 @@ export interface ActiveTabInfo {
 
 export interface TabPanelRef {
   openDesignerTab: (tableName?: string) => void;
+  openViewDefTab: (viewName: string) => void;
   openSqlTab: (options: {
     connectionId?: string;
     database?: string;
@@ -117,6 +132,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     tableToOpen,
     onSqlTabCountChange,
     onActiveTabChange,
+    onQueryStatusChange,
     pageSize,
     connectionDatabases,
   },
@@ -129,6 +145,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const [openedSqlTabs, setOpenedSqlTabs] = useState<OpenedSqlTab[]>([]);
   // 表设计器 Tab 列表
   const [openedDesignerTabs, setOpenedDesignerTabs] = useState<OpenedDesignerTab[]>([]);
+  // 视图定义 Tab 列表
+  const [openedViewDefTabs, setOpenedViewDefTabs] = useState<OpenedViewDefTab[]>([]);
   const [activeKey, setActiveKey] = useState('objects');
   const isRestoredRef = useRef(false);
 
@@ -169,12 +187,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   useEffect(() => {
     if (!isRestoredRef.current) return;
     const timer = setTimeout(() => {
-      useWorkspaceStore.getState().updateWorkspace({
-        openedTables: openedTables.map(({ isDirty, ...rest }) => rest),
-        openedSqlTabs: openedSqlTabs.map(({ defaultQuery: _dp, ...rest }) => rest),
-        openedDesignerTabs,
-        activeKey,
-      });
+    useWorkspaceStore.getState().updateWorkspace({
+      openedTables: openedTables.map(({ isDirty, ...rest }) => rest),
+      openedSqlTabs: openedSqlTabs.map(({ defaultQuery: _dp, ...rest }) => rest),
+      openedDesignerTabs,
+      openedViewDefTabs: openedViewDefTabs.map(({ key: _k, ...rest }) => rest),
+      activeKey,
+    });
     }, 500);
     return () => clearTimeout(timer);
   }, [openedTables, openedSqlTabs, openedDesignerTabs, activeKey]);
@@ -182,6 +201,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   useImperativeHandle(ref, () => ({
     openDesignerTab: (tableName?: string) => {
       openDesignerTab(tableName);
+    },
+    openViewDefTab: (viewName: string) => {
+      openViewDefTab(viewName);
     },
     openSqlTab: (options: {
       connectionId?: string;
@@ -290,6 +312,17 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           };
         }
       }
+      if (activeKey.startsWith('viewdef-')) {
+        const viewDef = openedViewDefTabs.find((t) => t.key === activeKey);
+        if (viewDef) {
+          return {
+            type: 'sql' as const,
+            title: `视图定义: ${viewDef.viewName}`,
+            connectionId: viewDef.connectionId,
+            database: viewDef.database,
+          };
+        }
+      }
       const sqlTab = openedSqlTabs.find((t) => t.key === activeKey);
       if (sqlTab) {
         return {
@@ -343,6 +376,17 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           };
         }
       }
+      if (activeKey.startsWith('viewdef-')) {
+        const viewDef = openedViewDefTabs.find((t) => t.key === activeKey);
+        if (viewDef) {
+          return {
+            type: 'sql' as const,
+            title: `视图定义: ${viewDef.viewName}`,
+            connectionId: viewDef.connectionId,
+            database: viewDef.database,
+          };
+        }
+      }
       const sqlTab = openedSqlTabs.find((t) => t.key === activeKey);
       if (sqlTab) {
         return {
@@ -355,7 +399,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       return { type: 'objects' as const, title: '对象列表' };
     })();
     onActiveTabChange(info);
-  }, [activeKey, openedTables, openedSqlTabs, openedDesignerTabs, onActiveTabChange]);
+  }, [activeKey, openedTables, openedSqlTabs, openedDesignerTabs, openedViewDefTabs, onActiveTabChange]);
 
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{
@@ -503,7 +547,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
   // 双击表时调用（来自树或表列表），打开新的数据浏览 Tab
   const openTableTab = useCallback(
-    (tableName: string, database?: string) => {
+    (tableName: string, database?: string, isView?: boolean) => {
       if (!selectedConnectionId) return;
 
       const baseKey = database ? `${tableName}@${database}` : tableName;
@@ -522,6 +566,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             connectionName: selectedConnectionName || selectedConnectionId,
             database,
             isDirty: false,
+            isView,
           },
         ]);
       }
@@ -594,10 +639,35 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     [selectedConnectionId, selectedDatabase, openedDesignerTabs]
   );
 
+  // 打开视图定义 Tab
+  const openViewDefTab = useCallback(
+    (viewName: string) => {
+      if (!selectedConnectionId) return;
+
+      const tabKey = `viewdef-${viewName}`;
+
+      const exists = openedViewDefTabs.find((t) => t.viewName === viewName && t.connectionId === selectedConnectionId);
+      if (!exists) {
+        setOpenedViewDefTabs((prev) => [
+          ...prev,
+          {
+            key: tabKey,
+            title: `视图定义: ${viewName}`,
+            connectionId: selectedConnectionId,
+            database: selectedDatabase,
+            viewName,
+          },
+        ]);
+      }
+      setActiveKey(tabKey);
+    },
+    [selectedConnectionId, selectedDatabase, openedViewDefTabs]
+  );
+
   // 监听 tableToOpen 变化，当双击树中的表时打开新 Tab
   useEffect(() => {
     if (tableToOpen && selectedConnectionId) {
-      openTableTab(tableToOpen.name, tableToOpen.database);
+      openTableTab(tableToOpen.name, tableToOpen.database, tableToOpen.isView);
     }
   }, [tableToOpen, selectedConnectionId, openTableTab]);
 
@@ -665,6 +735,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       } else if (key.startsWith('designer-')) {
         // 关闭表设计器 Tab
         setOpenedDesignerTabs((prev) => prev.filter((tab) => tab.key !== key));
+        if (activeKey === key) {
+          setActiveKey('objects');
+        }
+      } else if (key.startsWith('viewdef-')) {
+        // 关闭视图定义 Tab
+        setOpenedViewDefTabs((prev) => prev.filter((tab) => tab.key !== key));
         if (activeKey === key) {
           setActiveKey('objects');
         }
@@ -884,10 +960,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   }
                 }}
                 onTableCopy={(tableName) => {
-                  message.info('复制表功能开发中...');
+                  message.warning('复制表功能即将推出');
                 }}
                 onTableDump={(tableName) => {
-                  message.info('转储SQL功能开发中...');
+                  message.warning('转储 SQL 功能即将推出');
                 }}
               />
             )
@@ -930,7 +1006,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   maxWidth: 160,
                 }}
               >
-                <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />
+                {table.isView ? <EyeOutlined style={{ marginRight: 4, flexShrink: 0 }} /> : <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />}
                 <span
                   style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                 >
@@ -1020,6 +1096,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 prev.map((t) => (t.key === sqlTab.key ? { ...t, database } : t))
               );
             }}
+            onQueryStatusChange={onQueryStatusChange}
           />
         </div>
       ),
@@ -1043,16 +1120,66 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             connectionId={designerTab.connectionId}
             tableName={designerTab.tableName}
             database={designerTab.database}
-            onSave={(sql) => {
-              console.log('TableDesigner save:', sql);
-              // 关闭 Tab
-              setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
-              setActiveKey('objects');
+            dbType={
+              designerTab.connectionId
+                ? (connectionDatabases?.[designerTab.connectionId]?.[0]?.db_type as
+                    | DatabaseType
+                    | undefined)
+                : undefined
+            }
+            onSave={async (sql: string) => {
+              try {
+                const statements = sql.split(';').filter((s) => s.trim());
+                for (const stmt of statements) {
+                  if (stmt.trim()) {
+                    await api.executeDDL(
+                      designerTab.connectionId,
+                      stmt.trim(),
+                      designerTab.database
+                    );
+                  }
+                }
+                message.success(designerTab.isNewTable ? '表已创建' : '表结构已更新');
+                setOpenedDesignerTabs((prev) =>
+                  prev.filter((t) => t.key !== designerTab.key)
+                );
+                setActiveKey('objects');
+                window.dispatchEvent(
+                  new CustomEvent('refresh-connection-tree', {
+                    detail: { connectionId: designerTab.connectionId },
+                  })
+                );
+              } catch (err: any) {
+                message.error(`执行失败：${err.message || err}`);
+              }
             }}
             onCancel={() => {
               setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
               setActiveKey('objects');
             }}
+          />
+        </div>
+      ),
+      closable: true,
+    })),
+    // 视图定义 Tab
+    ...openedViewDefTabs.map((viewDefTab) => ({
+      key: viewDefTab.key,
+      label: (
+        <span
+          onContextMenu={(e) => handleTabContextMenu(e, viewDefTab.key)}
+          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        >
+          <EyeOutlined style={{ marginRight: 4 }} />
+          {viewDefTab.title}
+        </span>
+      ),
+      children: (
+        <div style={{ height: '100%' }}>
+          <ViewDefinition
+            connectionId={viewDefTab.connectionId}
+            viewName={viewDefTab.viewName}
+            database={viewDefTab.database}
           />
         </div>
       ),

@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"idblink-backend/db"
-	"idblink-backend/models"
 )
 
 // GetTriggersRequest 获取触发器请求

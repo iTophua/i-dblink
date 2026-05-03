@@ -179,6 +179,9 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, err.Error())
 		return
 	}
+	if columns == nil {
+		columns = []models.ColumnInfo{}
+	}
 	json.NewEncoder(w).Encode(columns)
 }
 

@@ -150,6 +150,14 @@ const TableNode = React.memo<TableNodeProps>(
         ? 'var(--row-hover-bg)'
         : 'transparent';
 
+    const formatRowCount = (count: number): string => {
+      if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
+      if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+      if (count >= 10_000) return `${(count / 1_000).toFixed(0)}K`;
+      if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+      return String(count);
+    };
+
     return (
       <Dropdown menu={onContextMenu(connId, table.table_name, database)} trigger={['contextMenu']}>
         <span
@@ -171,6 +179,11 @@ const TableNode = React.memo<TableNodeProps>(
         >
           <TableOutlined style={{ color: 'var(--color-success)', fontSize: 11 }} />
           <span style={{ fontSize: 12 }}>{table.table_name}</span>
+          {table.row_count !== undefined && (
+            <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
+              ({formatRowCount(table.row_count)})
+            </span>
+          )}
           {hovered && (
             <>
               <QuickActionButton
@@ -206,6 +219,7 @@ interface ViewNodeProps {
   selectedTableId: string | null;
   onTableClick: (tableName: string, database: string) => void;
   onTableOpen: (tableName: string, database: string) => void;
+  onViewOpen?: (viewName: string, database: string) => void;
   onContextMenu: (connId: string, tableName: string, database?: string) => MenuProps;
   onNewQuery: (connId: string) => void;
 }
@@ -218,6 +232,7 @@ const ViewNode = React.memo<ViewNodeProps>(
     selectedTableId,
     onTableClick,
     onTableOpen,
+    onViewOpen,
     onContextMenu,
     onNewQuery,
   }) => {
@@ -245,11 +260,28 @@ const ViewNode = React.memo<ViewNodeProps>(
           }}
           onDoubleClick={(e) => {
             e.stopPropagation();
-            onTableOpen(view.table_name, database);
+            if (onViewOpen) {
+              onViewOpen(view.table_name, database);
+            } else {
+              onTableOpen(view.table_name, database);
+            }
           }}
         >
           <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 11 }} />
           <span style={{ fontSize: 12 }}>{view.table_name}</span>
+          {view.row_count !== undefined && (
+            <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
+              ({view.row_count >= 1_000_000_000
+                ? `${(view.row_count / 1_000_000_000).toFixed(1)}B`
+                : view.row_count >= 1_000_000
+                  ? `${(view.row_count / 1_000_000).toFixed(1)}M`
+                  : view.row_count >= 10_000
+                    ? `${(view.row_count / 1_000).toFixed(0)}K`
+                    : view.row_count >= 1_000
+                      ? `${(view.row_count / 1_000).toFixed(1)}K`
+                      : String(view.row_count)})
+            </span>
+          )}
           {hovered && (
             <QuickActionButton
               icon={<PlayCircleOutlined />}
@@ -276,7 +308,9 @@ type ConnectionTreeProps = {
   onTableSelect: (table: string | null, database?: string) => void;
   onObjectTypeSelect?: (objectType: 'table' | 'view' | 'all', database?: string) => void;
   onTableOpen: (tableName: string, database?: string) => void;
+  onViewOpen?: (viewName: string, database?: string) => void;
   onOpenDesigner?: (tableName: string, database?: string) => void;
+  onOpenViewDefinition?: (viewName: string, database?: string) => void;
   onExpand: (connectionId: string, expanded: boolean) => void;
   collapsed: boolean;
   searchText: string;
@@ -289,6 +323,9 @@ type ConnectionTreeProps = {
       tables: TableInfo[];
       loaded: boolean;
       loadFailed?: boolean;
+      procedures?: string[];
+      functions?: string[];
+      triggers?: import('../../types/api').TriggerInfo[];
       routinesLoaded?: boolean;
     }[]
   >;
@@ -304,9 +341,11 @@ type ConnectionTreeProps = {
     name: string,
     type: 'procedure' | 'function'
   ) => void;
+  onOpenTrigger?: (connectionId: string, database: string, name: string) => void;
   onDatabaseExpand: (connectionId: string, database: string) => void;
   onDatabaseRefresh?: (connectionId: string, database: string) => void;
   onDatabaseClose?: (connectionId: string, database: string) => void;
+  onDatabaseProperties?: (connectionId: string, databaseName: string) => void;
   onLoadDatabases?: (connectionId: string) => void;
   onTableExpand: (connectionId: string, database: string, tableName: string) => void;
   onSaveConnection: (data: any) => Promise<void>;
@@ -338,7 +377,9 @@ export function EnhancedConnectionTree({
   onTableSelect,
   onObjectTypeSelect,
   onTableOpen,
+  onViewOpen,
   onOpenDesigner,
+  onOpenViewDefinition,
   onExpand,
   collapsed,
   searchText,
@@ -352,9 +393,11 @@ export function EnhancedConnectionTree({
   onDeleteConnection,
   onNewQuery,
   onOpenRoutine,
+  onOpenTrigger,
   onDatabaseExpand,
   onDatabaseRefresh,
   onDatabaseClose,
+  onDatabaseProperties,
   onLoadDatabases,
   onTableExpand,
   onSaveConnection,
@@ -609,10 +652,10 @@ export function EnhancedConnectionTree({
         { key: 'refresh-db', label: '刷新数据库', icon: <ReloadOutlined /> },
         { key: 'close-db', label: '关闭数据库', icon: <DisconnectOutlined /> },
         { type: 'divider' },
-        { key: 'dump-structure', label: '转储 SQL 文件 → 仅结构' },
-        { key: 'dump-full', label: '转储 SQL 文件 → 结构和数据' },
+        { key: 'dump-structure', label: '转储 SQL 文件 → 仅结构', disabled: true },
+        { key: 'dump-full', label: '转储 SQL 文件 → 结构和数据', disabled: true },
         { type: 'divider' },
-        { key: 'run-sql-file', label: '运行 SQL 文件' },
+        { key: 'run-sql-file', label: '运行 SQL 文件', disabled: true },
         { type: 'divider' },
         { key: 'db-properties', label: '数据库属性' },
       ],
@@ -638,12 +681,12 @@ export function EnhancedConnectionTree({
               closingDbModalRef.current = false;
             },
           });
-        } else {
-          message.info('功能开发中...');
+        } else if (key === 'db-properties') {
+          onDatabaseProperties?.(connId, dbName);
         }
       },
     }),
-    [onNewQuery, onDatabaseRefresh, onDatabaseClose]
+    [onNewQuery, onDatabaseRefresh, onDatabaseClose, onDatabaseProperties]
   );
 
   const getTableMenu = useCallback(
@@ -652,15 +695,25 @@ export function EnhancedConnectionTree({
         { key: 'open-table', label: '打开表（浏览数据）' },
         { key: 'design-table', label: '设计表' },
         { type: 'divider' },
-        { key: 'copy-table', label: '复制表 → 仅结构' },
-        { key: 'copy-table-data', label: '复制表 → 结构和数据' },
+        { key: 'copy-table', label: '复制表 → 仅结构', disabled: true },
+        { key: 'copy-table-data', label: '复制表 → 结构和数据', disabled: true },
         { type: 'divider' },
         { key: 'truncate-table', label: '清空表', danger: true },
         { key: 'drop-table', label: '删除表', danger: true },
         { type: 'divider' },
-        { key: 'dump-table', label: '转储 SQL 文件' },
-        { key: 'import-csv', label: '导入 CSV' },
-        { key: 'export-csv', label: '导出 CSV' },
+        {
+          key: 'table-maintenance',
+          label: '表维护',
+          children: [
+            { key: 'optimize-table', label: '优化表 (OPTIMIZE)' },
+            { key: 'analyze-table', label: '分析表 (ANALYZE)' },
+            { key: 'repair-table', label: '修复表 (REPAIR)' },
+          ],
+        },
+        { type: 'divider' },
+        { key: 'dump-table', label: '转储 SQL 文件', disabled: true },
+        { key: 'import-csv', label: '导入 CSV', disabled: true },
+        { key: 'export-csv', label: '导出 CSV', disabled: true },
       ],
       onClick: async ({ key }) => {
         if (key === 'open-table') {
@@ -701,8 +754,27 @@ export function EnhancedConnectionTree({
               }
             },
           });
-        } else {
-          message.info('功能开发中...');
+        } else if (key === 'optimize-table') {
+          try {
+            await api.maintainTable(connId, tableName, 'optimize', database);
+            message.success(`表 "${tableName}" 已优化`);
+          } catch (err: any) {
+            message.error(`优化表失败：${err.message || err}`);
+          }
+        } else if (key === 'analyze-table') {
+          try {
+            await api.maintainTable(connId, tableName, 'analyze', database);
+            message.success(`表 "${tableName}" 已分析`);
+          } catch (err: any) {
+            message.error(`分析表失败：${err.message || err}`);
+          }
+        } else if (key === 'repair-table') {
+          try {
+            await api.maintainTable(connId, tableName, 'repair', database);
+            message.success(`表 "${tableName}" 已修复`);
+          } catch (err: any) {
+            message.error(`修复表失败：${err.message || err}`);
+          }
         }
       },
     }),
@@ -715,15 +787,17 @@ export function EnhancedConnectionTree({
         { key: 'open-view', label: '打开视图（浏览数据）' },
         { key: 'design-view', label: '设计视图' },
         { type: 'divider' },
-        { key: 'rename-view', label: '重命名视图' },
+        { key: 'rename-view', label: '重命名视图', disabled: true },
         { key: 'drop-view', label: '删除视图', danger: true },
         { type: 'divider' },
-        { key: 'view-dependencies', label: '查看依赖关系' },
-        { key: 'view-properties', label: '属性' },
+        { key: 'view-dependencies', label: '查看依赖关系', disabled: true },
+        { key: 'view-properties', label: '属性', disabled: true },
       ],
       onClick: async ({ key }) => {
-        if (key === 'open-view' || key === 'design-view') {
-          message.info('视图功能开发中...');
+        if (key === 'open-view') {
+          onViewOpen?.(viewName, database);
+        } else if (key === 'design-view') {
+          onOpenViewDefinition?.(viewName, database);
         } else if (key === 'drop-view') {
           Modal.confirm({
             title: '确认删除视图',
@@ -741,12 +815,10 @@ export function EnhancedConnectionTree({
               }
             },
           });
-        } else {
-          message.info('功能开发中...');
         }
       },
     }),
-    [onDatabaseRefresh]
+    [onTableOpen, onOpenDesigner, onOpenViewDefinition, onDatabaseRefresh]
   );
 
   const handleCopyConnection = useCallback(
@@ -857,7 +929,11 @@ export function EnhancedConnectionTree({
         if (parts.length >= 4) {
           const database = parts[2];
           const viewName = parts.slice(3).join('::');
-          onTableOpen(viewName, database);
+          if (onViewOpen) {
+            onViewOpen(viewName, database);
+          } else {
+            onTableOpen(viewName, database);
+          }
         }
       } else if (key.startsWith('db::')) {
         const parts = key.split('::');
@@ -937,6 +1013,7 @@ export function EnhancedConnectionTree({
         loadFailed?: boolean;
         procedures?: string[];
         functions?: string[];
+        triggers?: import('../../types/api').TriggerInfo[];
         routinesLoaded?: boolean;
       },
       allTableItems: TableInfo[] | undefined,
@@ -1072,6 +1149,7 @@ export function EnhancedConnectionTree({
                     selectedTableId={selectedTableId}
                     onTableClick={handleTableClick}
                     onTableOpen={onTableOpen}
+                    onViewOpen={onViewOpen}
                     onContextMenu={getViewMenu}
                     onNewQuery={onNewQuery}
                   />
@@ -1224,14 +1302,86 @@ export function EnhancedConnectionTree({
               ],
       };
 
+      const triggersFolderKey = `triggers::${connId}::${db.database}`;
+      const isTriggersFolderExpanded = expandedKeys.includes(triggersFolderKey);
+
+      const triggersNode = {
+        key: triggersFolderKey,
+        title: db.routinesLoaded ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
+            <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
+            <span>触发器 ({db.triggers?.length || 0})</span>
+          </span>
+        ) : isDbExpanded ? (
+          <span
+            style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}
+          >
+            <Spin size="small" />
+            <span>触发器 (加载中...)</span>
+          </span>
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
+            <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
+            <span>触发器</span>
+          </span>
+        ),
+        isLeaf: false,
+        children: !db.routinesLoaded
+          ? [
+              {
+                key: `init-triggers::${connId}::${db.database}`,
+                title: (
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                    点击展开加载...
+                  </span>
+                ),
+                isLeaf: true,
+                selectable: false,
+              },
+            ]
+          : db.triggers && db.triggers.length > 0
+            ? isTriggersFolderExpanded
+              ? db.triggers.map((trigger) => ({
+                  key: `trigger::${connId}::${db.database}::${trigger.name}`,
+                  isLeaf: true,
+                  title: (
+                    <span
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                      onClick={() => {
+                        onOpenTrigger?.(connId, db.database, trigger.name);
+                      }}
+                    >
+                      <ThunderboltOutlined
+                        style={{ color: 'var(--color-error)', fontSize: 11 }}
+                      />
+                      <span style={{ fontSize: 12 }}>{trigger.name}</span>
+                    </span>
+                  ),
+                }))
+              : undefined
+            : [
+                {
+                  key: `no-triggers::${connId}::${db.database}`,
+                  title: (
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                      暂无触发器
+                    </span>
+                  ),
+                  isLeaf: true,
+                  selectable: false,
+                },
+              ],
+      };
+
       const dbChildren = q
         ? [
             ...(filteredTables.length ? [tablesNode] : []),
             ...(filteredViews.length ? [viewsNode] : []),
             proceduresNode,
             functionsNode,
+            triggersNode,
           ]
-        : [tablesNode, viewsNode, proceduresNode, functionsNode];
+        : [tablesNode, viewsNode, proceduresNode, functionsNode, triggersNode];
 
       return {
         key: `db::${connId}::${db.database}`,
@@ -1352,23 +1502,35 @@ export function EnhancedConnectionTree({
                 }}
               >
                 {conn.name}
-              </span>
-              {conn.status === 'connected' ? (
-                <Tooltip title="已连接">
+                {conn.color && (
                   <span
                     style={{
-                      width: 6,
-                      height: 6,
+                      width: 8,
+                      height: 8,
                       borderRadius: '50%',
-                      background: 'var(--color-success)',
-                      animation: 'pulse 2s infinite',
+                      background: conn.color,
+                      display: 'inline-block',
+                      marginLeft: 4,
+                      border: '1px solid rgba(255,255,255,0.2)',
                     }}
                   />
-                </Tooltip>
-              ) : (
-                <Tooltip title="未连接">
-                  <span
-                    style={{
+                )}
+                {conn.status === 'connected' ? (
+                  <Tooltip title="已连接">
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--color-success)',
+                        animation: 'pulse 2s infinite',
+                      }}
+                    />
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="未连接">
+                    <span
+                      style={{
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
@@ -1391,11 +1553,12 @@ export function EnhancedConnectionTree({
                   />
                 </Tooltip>
               )}
-              {conn.database && (
-                <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                  ({conn.database})
-                </span>
-              )}
+            </span>
+            {conn.database && (
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                ({conn.database})
+              </span>
+            )}
             </div>
           </Dropdown>
         </div>
@@ -1516,9 +1679,11 @@ export function EnhancedConnectionTree({
     renameValue,
     handleTableClick,
     onTableOpen,
+    onViewOpen,
     getTableMenu,
     onNewQuery,
     onOpenRoutine,
+    onOpenTrigger,
     handleDoubleClick,
     getConnectionMenu,
     getGroupMenu,
@@ -1633,6 +1798,20 @@ export function EnhancedConnectionTree({
       }
 
       if (key.startsWith('functions::') && info.expanded) {
+        const parts = key.split('::');
+        if (parts.length >= 3) {
+          const connectionId = parts[1];
+          const database = parts[2];
+          const dbList = connectionDatabasesRef.current[connectionId] || [];
+          const db = dbList.find((d) => d.database === database);
+          if (db?.loadFailed) return;
+          if (!db || !db.loaded || !db.routinesLoaded) {
+            onDatabaseExpand(connectionId, database);
+          }
+        }
+      }
+
+      if (key.startsWith('triggers::') && info.expanded) {
         const parts = key.split('::');
         if (parts.length >= 3) {
           const connectionId = parts[1];
@@ -1845,8 +2024,9 @@ export function EnhancedConnectionTree({
             }}
             secondaryAction={{
               label: '导入连接',
-              onClick: () => message.info('导入功能开发中...'),
+              onClick: () => {},
               icon: <FolderOutlined />,
+              disabled: true,
             }}
             tips={[
               '点击左侧「新建连接」按钮创建您的第一个数据库连接',

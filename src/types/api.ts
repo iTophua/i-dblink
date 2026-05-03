@@ -22,6 +22,7 @@ export interface ConnectionInput {
   password?: string;
   database?: string;
   group_id?: string;
+  color?: string;
 }
 
 export interface ConnectionOutput {
@@ -34,6 +35,7 @@ export interface ConnectionOutput {
   database?: string;
   group_id?: string;
   status: ConnectionStatus;
+  color?: string;
 }
 
 export interface GroupInput {
@@ -88,6 +90,13 @@ export interface ForeignKeyInfo {
   column_name: string;
   referenced_table: string;
   referenced_column: string;
+}
+
+export interface TriggerInfo {
+  name: string;
+  event: string;
+  timing: string;
+  table: string;
 }
 
 export interface QueryResult {

@@ -61,12 +61,13 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 	mux.HandleFunc("POST /function-body", recoverMiddleware(h.GetFunctionBody))
 
 	// DDL 操作
+	mux.HandleFunc("POST /table-ddl", recoverMiddleware(h.GetTableDDL))
 	mux.HandleFunc("POST /execute-ddl", recoverMiddleware(h.ExecuteDDL))
 	mux.HandleFunc("POST /truncate-table", recoverMiddleware(h.TruncateTable))
 	mux.HandleFunc("POST /drop-table", recoverMiddleware(h.DropTable))
 	mux.HandleFunc("POST /drop-view", recoverMiddleware(h.DropView))
 	mux.HandleFunc("POST /rename-table", recoverMiddleware(h.RenameTable))
-	mux.HandleFunc("POST /table-ddl", recoverMiddleware(h.GetTableDDL))
+	mux.HandleFunc("POST /table-maintenance", recoverMiddleware(h.MaintainTable))
 
 	// 事务控制
 	mux.HandleFunc("POST /begin-transaction", recoverMiddleware(h.BeginTransaction))
@@ -81,11 +82,6 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 	mux.HandleFunc("POST /triggers", recoverMiddleware(h.GetTriggers))
 	mux.HandleFunc("POST /events", recoverMiddleware(h.GetEvents))
 
-	// 代码片段
-	mux.HandleFunc("POST /save-snippet", recoverMiddleware(h.SaveSnippet))
-	mux.HandleFunc("POST /get-snippets", recoverMiddleware(h.GetSnippets))
-	mux.HandleFunc("POST /delete-snippet", recoverMiddleware(h.DeleteSnippet))
-
 	// 流式导出
 	mux.HandleFunc("POST /stream-export", recoverMiddleware(h.StreamExport))
 }
@@ -93,6 +89,19 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 // Handler HTTP 处理器
 type Handler struct {
 	mgr *db.Manager
+}
+
+// getConnAndType 获取连接执行器和数据库类型
+func (h *Handler) getConnAndType(connectionID string) (db.Executor, string, error) {
+	exec, err := h.mgr.GetExecutor(connectionID, "")
+	if err != nil {
+		return nil, "", err
+	}
+	dbType, err := h.mgr.GetDBType(connectionID)
+	if err != nil {
+		return nil, "", err
+	}
+	return exec, dbType, nil
 }
 
 func writeJSONError(w http.ResponseWriter, err string) {

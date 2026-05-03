@@ -44,7 +44,7 @@ func mysqlGetTables(ctx context.Context, dbConn db.Executor, database *string) (
 		ORDER BY TABLE_NAME
 	`
 	var args []any
-	if database != nil {
+	if database != nil && *database != "" {
 		query = `
 			SELECT TABLE_NAME, TABLE_TYPE, TABLE_ROWS,
 				COALESCE(TABLE_COMMENT, '') AS TABLE_COMMENT,
@@ -175,7 +175,7 @@ func mysqlGetColumns(ctx context.Context, dbConn db.Executor, tableName string, 
 		ORDER BY ORDINAL_POSITION
 	`
 	var args []any
-	if database != nil {
+	if database != nil && *database != "" {
 		query = `
 			SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY,
 				COLUMN_DEFAULT, EXTRA, COALESCE(COLUMN_COMMENT, '') AS COLUMN_COMMENT
@@ -183,9 +183,11 @@ func mysqlGetColumns(ctx context.Context, dbConn db.Executor, tableName string, 
 			WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?
 			ORDER BY ORDINAL_POSITION
 		`
+		args = append(args, tableName)
 		args = append(args, *database)
+	} else {
+		args = append(args, tableName)
 	}
-	args = append(args, tableName)
 
 	rows, err := dbConn.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -213,7 +215,7 @@ func mysqlGetColumns(ctx context.Context, dbConn db.Executor, tableName string, 
 func mysqlGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.IndexInfo, error) {
 	safeTable := strings.ReplaceAll(tableName, "`", "``")
 	var query string
-	if database != nil {
+	if database != nil && *database != "" {
 		safeDb := strings.ReplaceAll(*database, "`", "``")
 		query = fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", safeDb, safeTable)
 	} else {
@@ -257,7 +259,7 @@ func mysqlGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName stri
 		ORDER BY ORDINAL_POSITION
 	`
 	var args []any
-	if database != nil {
+	if database != nil && *database != "" {
 		query = `
 			SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
 			FROM information_schema.KEY_COLUMN_USAGE
@@ -300,6 +302,15 @@ func mysqlGetTableStructure(ctx context.Context, dbConn db.Executor, tableName s
 	if err != nil {
 		return result, err
 	}
+	if result.Columns == nil {
+		result.Columns = []models.ColumnInfo{}
+	}
+	if result.Indexes == nil {
+		result.Indexes = []models.IndexInfo{}
+	}
+	if result.ForeignKeys == nil {
+		result.ForeignKeys = []models.ForeignKeyInfo{}
+	}
 	return result, nil
 }
 
@@ -308,7 +319,7 @@ func mysqlGetRoutines(ctx context.Context, dbConn db.Executor, database *string)
 
 	dbFilter := "DATABASE()"
 	var procArgs []any
-	if database != nil {
+	if database != nil && *database != "" {
 		dbFilter = "?"
 		procArgs = append(procArgs, *database)
 	}

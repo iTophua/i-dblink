@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"idblink-backend/db"
-	"idblink-backend/models"
 )
 
 // ServerInfoRequest 服务器信息请求
@@ -67,7 +66,7 @@ func getServerInfo(pool *db.DBPool, database string) (ServerInfoResponse, error)
 
 	switch pool.DbType {
 	case "mysql", "mariadb":
-		var version, charset, collation, uptime string
+		var version, charset, collation string
 		var maxConns int
 		err := db.QueryRow("SELECT VERSION(), @@character_set_server, @@collation_server, @@global.max_connections").
 			Scan(&version, &charset, &collation, &maxConns)
@@ -93,7 +92,6 @@ func getServerInfo(pool *db.DBPool, database string) (ServerInfoResponse, error)
 
 	case "dameng", "kingbase":
 		var version string
-		var maxConns int
 		err := db.QueryRow("SELECT banner FROM v$version WHERE rownum = 1").
 			Scan(&version)
 		if err != nil {
