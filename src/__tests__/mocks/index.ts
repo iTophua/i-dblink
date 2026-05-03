@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { vi } from 'vitest';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -58,11 +59,13 @@ vi.mock('antd', () => ({
 }));
 
 vi.mock('../stores/settingsStore', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useSettingsStore: Original } = require('./mocks/settingsStore');
   return { useSettingsStore: Original };
 });
 
 vi.mock('../stores/workspaceStore', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useWorkspaceStore: Original } = require('./mocks/workspaceStore');
   return { useWorkspaceStore: Original };
 });

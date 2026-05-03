@@ -293,19 +293,19 @@ describe('filterByDbType', () => {
   };
 
   it('returns all items when dbType is undefined', () => {
-    const items = [
+    const items: SqlKeyword[] = [
       { label: 'SELECT' },
-      { label: 'LIMIT', groups: ['mysql-like'] },
+      { label: 'LIMIT', groups: ['mysql-like'] as DbGroup[] },
     ];
     const result = filterByDbType(items, undefined);
     expect(result).toHaveLength(2);
   });
 
   it('filters items by database group', () => {
-    const items = [
+    const items: SqlKeyword[] = [
       { label: 'SELECT' },
-      { label: 'LIMIT', groups: ['mysql-like'] },
-      { label: 'TOP', groups: ['mssql-like'] },
+      { label: 'LIMIT', groups: ['mysql-like'] as DbGroup[] },
+      { label: 'TOP', groups: ['mssql-like'] as DbGroup[] },
     ];
     const result = filterByDbType(items, 'mysql');
     expect(result).toHaveLength(2);
@@ -313,10 +313,10 @@ describe('filterByDbType', () => {
   });
 
   it('excludes items not matching database group', () => {
-    const items = [
-      { label: 'LIMIT', groups: ['mysql-like'] },
-      { label: 'TOP', groups: ['mssql-like'] },
-      { label: 'ROWNUM', groups: ['oracle-like'] },
+    const items: SqlKeyword[] = [
+      { label: 'LIMIT', groups: ['mysql-like'] as DbGroup[] },
+      { label: 'TOP', groups: ['mssql-like'] as DbGroup[] },
+      { label: 'ROWNUM', groups: ['oracle-like'] as DbGroup[] },
     ];
     const result = filterByDbType(items, 'postgresql');
     expect(result).toHaveLength(0);

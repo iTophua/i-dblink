@@ -29,7 +29,24 @@ export const api = {
     port: number,
     username: string,
     password: string,
-    database?: string
+    database?: string,
+    sshConfig?: {
+      ssh_enabled?: boolean;
+      ssh_host?: string;
+      ssh_port?: number;
+      ssh_username?: string;
+      ssh_auth_method?: 'password' | 'key';
+      ssh_password?: string;
+      ssh_private_key_path?: string;
+      ssh_passphrase?: string;
+    },
+    sslConfig?: {
+      ssl_enabled?: boolean;
+      ssl_ca_path?: string;
+      ssl_cert_path?: string;
+      ssl_key_path?: string;
+      ssl_skip_verify?: boolean;
+    }
   ): Promise<boolean> {
     return await invoke('test_connection', {
       dbType,
@@ -38,6 +55,8 @@ export const api = {
       username,
       password,
       database,
+      ...sshConfig,
+      ...sslConfig,
     });
   },
 
@@ -270,5 +289,113 @@ export const api = {
       batchSize: batchSize || 1000,
     });
     return result;
+  },
+
+  async checkBackupTool(dbType: string): Promise<{ available: boolean; path?: string; error?: string }> {
+    return await invoke('check_backup_tool', { dbType });
+  },
+
+  async backup(params: {
+    connectionId: string;
+    database: string;
+    tables?: string[];
+    includeStructure: boolean;
+    includeData: boolean;
+    filePath: string;
+  }): Promise<{ file_path?: string; error?: string }> {
+    return await invoke('backup_database', params);
+  },
+
+  async restore(params: {
+    connectionId: string;
+    database: string;
+    filePath: string;
+  }): Promise<{ error?: string }> {
+    return await invoke('restore_database', params);
+  },
+
+  async getUsers(connectionId: string, database?: string): Promise<any> {
+    return await invoke('get_users', { connectionId, database });
+  },
+
+  async getUserPrivileges(
+    connectionId: string,
+    username: string,
+    host: string,
+    database?: string
+  ): Promise<any> {
+    return await invoke('get_user_privileges', {
+      connectionId,
+      username,
+      host,
+      database,
+    });
+  },
+
+  async getTablePrivileges(
+    connectionId: string,
+    username: string,
+    host: string,
+    database?: string
+  ): Promise<any[]> {
+    return await invoke('get_table_privileges', {
+      connectionId,
+      username,
+      host,
+      database,
+    });
+  },
+
+  async createUser(params: {
+    connectionId: string;
+    username: string;
+    password: string;
+    host: string;
+    database?: string;
+  }): Promise<void> {
+    return await invoke('create_user', params);
+  },
+
+  async dropUser(params: {
+    connectionId: string;
+    username: string;
+    host: string;
+    database?: string;
+  }): Promise<void> {
+    return await invoke('drop_user', params);
+  },
+
+  async grantPrivilege(params: {
+    connectionId: string;
+    username: string;
+    host: string;
+    privileges: string[];
+    databaseAll: boolean;
+    database?: string;
+    table?: string;
+  }): Promise<void> {
+    return await invoke('grant_privilege', params);
+  },
+
+  async revokePrivilege(params: {
+    connectionId: string;
+    username: string;
+    host: string;
+    privileges: string[];
+    databaseAll: boolean;
+    database?: string;
+    table?: string;
+  }): Promise<void> {
+    return await invoke('revoke_privilege', params);
+  },
+
+  async compareSchema(params: {
+    sourceConnectionId: string;
+    sourceDatabase: string;
+    targetConnectionId: string;
+    targetDatabase: string;
+    tableName?: string;
+  }): Promise<any> {
+    return await invoke('compare_schema', params);
   },
 };

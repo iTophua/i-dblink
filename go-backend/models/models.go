@@ -80,13 +80,26 @@ type RoutinesResult struct {
 
 // ConnectRequest 连接请求
 type ConnectRequest struct {
-	ConnectionID string `json:"connection_id"`
-	DbType       string `json:"db_type"`
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	Username     string `json:"username"`
-	Password     string `json:"password"`
-	Database     string `json:"database,omitempty"`
+	ConnectionID       string `json:"connection_id"`
+	DbType             string `json:"db_type"`
+	Host               string `json:"host"`
+	Port               int    `json:"port"`
+	Username           string `json:"username"`
+	Password           string `json:"password"`
+	Database           string `json:"database,omitempty"`
+	SSHEnabled         bool   `json:"ssh_enabled"`
+	SSHHost            string `json:"ssh_host,omitempty"`
+	SSHPort            int    `json:"ssh_port,omitempty"`
+	SSHUsername        string `json:"ssh_username,omitempty"`
+	SSHAuthMethod      string `json:"ssh_auth_method,omitempty"` // "password" | "key"
+	SSHPassword        string `json:"ssh_password,omitempty"`
+	SSHPrivateKeyPath  string `json:"ssh_private_key_path,omitempty"`
+	SSHPassphrase      string `json:"ssh_passphrase,omitempty"`
+	SSLEnabled         bool   `json:"ssl_enabled"`
+	SSLCAPath          string `json:"ssl_ca_path,omitempty"`
+	SSLCertPath        string `json:"ssl_cert_path,omitempty"`
+	SSLKeyPath         string `json:"ssl_key_path,omitempty"`
+	SSLSkipVerify      bool   `json:"ssl_skip_verify"`
 }
 
 // ConnectResponse 连接响应

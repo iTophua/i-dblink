@@ -76,6 +76,21 @@ export interface ConnectionFormData {
   database?: string;
   group_id?: string;
   color?: string;
+  // SSH
+  sshEnabled?: boolean;
+  sshHost?: string;
+  sshPort?: number;
+  sshUsername?: string;
+  sshAuthMethod?: 'password' | 'key';
+  sshPassword?: string;
+  sshPrivateKeyPath?: string;
+  sshPassphrase?: string;
+  // SSL
+  sslEnabled?: boolean;
+  sslCaPath?: string;
+  sslCertPath?: string;
+  sslKeyPath?: string;
+  sslSkipVerify?: boolean;
 }
 
 interface ConnectionDialogProps {
@@ -159,6 +174,20 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         password: editingData?.password,
         database: editingData?.database,
         color: editingData?.color,
+        // SSH
+        use_ssh: editingData?.sshEnabled || false,
+        ssh_host: editingData?.sshHost,
+        ssh_port: editingData?.sshPort || 22,
+        ssh_username: editingData?.sshUsername,
+        ssh_auth_method: editingData?.sshAuthMethod || 'password',
+        ssh_password: editingData?.sshPassword,
+        ssh_key_path: editingData?.sshPrivateKeyPath,
+        ssh_passphrase: editingData?.sshPassphrase,
+        // SSL
+        use_ssl: editingData?.sslEnabled || false,
+        ssl_ca_cert: editingData?.sslCaPath,
+        ssl_client_cert: editingData?.sslCertPath,
+        ssl_client_key: editingData?.sslKeyPath,
       });
     } else {
       form.resetFields();
@@ -191,6 +220,19 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         username: isSqlite ? '' : values.username,
         password: values.password || '',
         database: isSqlite ? values.host : values.database,
+        sshEnabled: values.use_ssh || false,
+        sshHost: values.ssh_host,
+        sshPort: values.ssh_port,
+        sshUsername: values.ssh_username,
+        sshAuthMethod: values.ssh_auth_method || 'password',
+        sshPassword: values.ssh_password,
+        sshPrivateKeyPath: values.ssh_key_path,
+        sshPassphrase: values.ssh_passphrase,
+        sslEnabled: values.use_ssl || false,
+        sslCaPath: values.ssl_ca_cert,
+        sslCertPath: values.ssl_client_cert,
+        sslKeyPath: values.ssl_client_key,
+        sslSkipVerify: false,
       });
 
       if (testCancelledRef.current) return;
@@ -230,6 +272,19 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         database: isSqlite ? values.host : values.database,
         group_id: editingData?.group_id,
         color: values.color,
+        sshEnabled: values.use_ssh || false,
+        sshHost: values.ssh_host,
+        sshPort: values.ssh_port,
+        sshUsername: values.ssh_username,
+        sshAuthMethod: values.ssh_auth_method || 'password',
+        sshPassword: values.ssh_password,
+        sshPrivateKeyPath: values.ssh_key_path,
+        sshPassphrase: values.ssh_passphrase,
+        sslEnabled: values.use_ssl || false,
+        sslCaPath: values.ssl_ca_cert,
+        sslCertPath: values.ssl_client_cert,
+        sslKeyPath: values.ssl_client_key,
+        sslSkipVerify: false,
       });
     } catch (error: any) {
       if (error.errorFields) return;

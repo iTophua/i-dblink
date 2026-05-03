@@ -33,6 +33,12 @@ import { GroupDialog } from './GroupDialog';
 import { EnhancedEmptyState } from '../LoadingStates';
 import { GlobalInput } from '../GlobalInput';
 import { DatabaseIcon } from '../DatabaseIcon';
+import { CopyTableDialog } from '../CopyTableDialog';
+import { DumpDialog } from '../DumpDialog';
+import { RunSqlFileDialog } from '../RunSqlFileDialog';
+import { BackupRestoreDialog } from '../BackupRestoreDialog';
+import { UserManagementDialog } from '../UserManagementDialog';
+import { SchemaCompareDialog } from '../SchemaCompareDialog';
 import { api } from '../../api';
 
 const isBaseTable = (tableType: string): boolean => {
@@ -346,6 +352,7 @@ type ConnectionTreeProps = {
   onDatabaseRefresh?: (connectionId: string, database: string) => void;
   onDatabaseClose?: (connectionId: string, database: string) => void;
   onDatabaseProperties?: (connectionId: string, databaseName: string) => void;
+  onBackupRestore?: (connectionId: string, database: string, mode: 'backup' | 'restore') => void;
   onLoadDatabases?: (connectionId: string) => void;
   onTableExpand: (connectionId: string, database: string, tableName: string) => void;
   onSaveConnection: (data: any) => Promise<void>;
@@ -398,6 +405,7 @@ export function EnhancedConnectionTree({
   onDatabaseRefresh,
   onDatabaseClose,
   onDatabaseProperties,
+  onBackupRestore,
   onLoadDatabases,
   onTableExpand,
   onSaveConnection,
@@ -413,6 +421,18 @@ export function EnhancedConnectionTree({
   const [parentGroupId, setParentGroupId] = useState<string | null>(null);
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [copyTarget, setCopyTarget] = useState<{ tableName: string; database?: string; connId: string } | null>(null);
+  const [dumpDialogOpen, setDumpDialogOpen] = useState(false);
+  const [dumpTarget, setDumpTarget] = useState<{ tableName: string; database?: string; connId: string } | null>(null);
+  const [runSqlDialogOpen, setRunSqlDialogOpen] = useState(false);
+  const [runSqlTarget, setRunSqlTarget] = useState<{ connId: string; database?: string } | null>(null);
+  const [backupRestoreOpen, setBackupRestoreOpen] = useState(false);
+  const [backupRestoreMode, setBackupRestoreMode] = useState<'backup' | 'restore'>('backup');
+  const [backupRestoreTarget, setBackupRestoreTarget] = useState<{ connId: string; database: string } | null>(null);
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
+  const [userManagementTarget, setUserManagementTarget] = useState<{ connId: string; database?: string } | null>(null);
+  const [schemaCompareOpen, setSchemaCompareOpen] = useState(false);
   const prevTableCountsRef = useRef<Map<string, number>>(new Map());
   const connectionDatabasesRef = useRef(connectionDatabases);
   const closingDbModalRef = useRef(false);
@@ -655,7 +675,12 @@ export function EnhancedConnectionTree({
         { key: 'dump-structure', label: '转储 SQL 文件 → 仅结构', disabled: true },
         { key: 'dump-full', label: '转储 SQL 文件 → 结构和数据', disabled: true },
         { type: 'divider' },
-        { key: 'run-sql-file', label: '运行 SQL 文件', disabled: true },
+        { key: 'backup-db', label: '备份数据库' },
+        { key: 'restore-db', label: '恢复数据库' },
+        { key: 'user-management', label: '用户权限管理' },
+        { key: 'schema-compare', label: '结构比较' },
+        { type: 'divider' },
+        { key: 'run-sql-file', label: '运行 SQL 文件' },
         { type: 'divider' },
         { key: 'db-properties', label: '数据库属性' },
       ],
@@ -681,6 +706,22 @@ export function EnhancedConnectionTree({
               closingDbModalRef.current = false;
             },
           });
+        } else if (key === 'backup-db') {
+          setBackupRestoreTarget({ connId, database: dbName });
+          setBackupRestoreMode('backup');
+          setBackupRestoreOpen(true);
+        } else if (key === 'restore-db') {
+          setBackupRestoreTarget({ connId, database: dbName });
+          setBackupRestoreMode('restore');
+          setBackupRestoreOpen(true);
+        } else if (key === 'user-management') {
+          setUserManagementTarget({ connId, database: dbName });
+          setUserManagementOpen(true);
+        } else if (key === 'schema-compare') {
+          setSchemaCompareOpen(true);
+        } else if (key === 'run-sql-file') {
+          setRunSqlTarget({ connId, database: dbName });
+          setRunSqlDialogOpen(true);
         } else if (key === 'db-properties') {
           onDatabaseProperties?.(connId, dbName);
         }
@@ -695,8 +736,8 @@ export function EnhancedConnectionTree({
         { key: 'open-table', label: '打开表（浏览数据）' },
         { key: 'design-table', label: '设计表' },
         { type: 'divider' },
-        { key: 'copy-table', label: '复制表 → 仅结构', disabled: true },
-        { key: 'copy-table-data', label: '复制表 → 结构和数据', disabled: true },
+        { key: 'copy-table', label: '复制表 → 仅结构' },
+        { key: 'copy-table-data', label: '复制表 → 结构和数据' },
         { type: 'divider' },
         { key: 'truncate-table', label: '清空表', danger: true },
         { key: 'drop-table', label: '删除表', danger: true },
@@ -711,8 +752,8 @@ export function EnhancedConnectionTree({
           ],
         },
         { type: 'divider' },
-        { key: 'dump-table', label: '转储 SQL 文件', disabled: true },
-        { key: 'import-csv', label: '导入 CSV', disabled: true },
+        { key: 'dump-table', label: '转储 SQL 文件' },
+        { key: 'import-csv', label: '导入数据' },
         { key: 'export-csv', label: '导出 CSV', disabled: true },
       ],
       onClick: async ({ key }) => {
@@ -720,6 +761,14 @@ export function EnhancedConnectionTree({
           onTableOpen(tableName, database);
         } else if (key === 'design-table') {
           onOpenDesigner?.(tableName, database);
+        } else if (key === 'copy-table' || key === 'copy-table-data') {
+          setCopyTarget({ tableName, database, connId });
+          setCopyDialogOpen(true);
+        } else if (key === 'dump-table') {
+          setDumpTarget({ tableName, database, connId });
+          setDumpDialogOpen(true);
+        } else if (key === 'import-csv') {
+          onTableOpen(tableName, database);
         } else if (key === 'truncate-table') {
           Modal.confirm({
             title: '确认清空表',
@@ -2088,6 +2137,90 @@ export function EnhancedConnectionTree({
           setParentGroupId(null);
         }}
         onSave={handleGroupSave}
+      />
+
+      <CopyTableDialog
+        open={copyDialogOpen}
+        sourceTable={copyTarget?.tableName || ''}
+        sourceDatabase={copyTarget?.database}
+        connectionId={copyTarget?.connId || ''}
+        databases={
+          copyTarget
+            ? connectionDatabases[copyTarget.connId]?.map((d) => d.database) || []
+            : []
+        }
+        onCancel={() => {
+          setCopyDialogOpen(false);
+          setCopyTarget(null);
+        }}
+        onSuccess={() => {
+          setCopyDialogOpen(false);
+          setCopyTarget(null);
+          if (copyTarget?.database) {
+            onDatabaseRefresh?.(copyTarget.connId, copyTarget.database);
+          }
+        }}
+      />
+
+      <DumpDialog
+        open={dumpDialogOpen}
+        tableName={dumpTarget?.tableName || ''}
+        database={dumpTarget?.database}
+        connectionId={dumpTarget?.connId || ''}
+        onCancel={() => {
+          setDumpDialogOpen(false);
+          setDumpTarget(null);
+        }}
+        onSuccess={() => {
+          setDumpDialogOpen(false);
+          setDumpTarget(null);
+        }}
+      />
+
+      <RunSqlFileDialog
+        open={runSqlDialogOpen}
+        connectionId={runSqlTarget?.connId || ''}
+        database={runSqlTarget?.database}
+        onCancel={() => {
+          setRunSqlDialogOpen(false);
+          setRunSqlTarget(null);
+        }}
+        onSuccess={() => {
+          setRunSqlDialogOpen(false);
+          setRunSqlTarget(null);
+        }}
+      />
+
+      <BackupRestoreDialog
+        open={backupRestoreOpen}
+        mode={backupRestoreMode}
+        connectionId={backupRestoreTarget?.connId || ''}
+        database={backupRestoreTarget?.database}
+        dbType={connections.find((c) => c.id === backupRestoreTarget?.connId)?.db_type || ''}
+        onCancel={() => {
+          setBackupRestoreOpen(false);
+          setBackupRestoreTarget(null);
+        }}
+        onSuccess={() => {
+          setBackupRestoreOpen(false);
+          setBackupRestoreTarget(null);
+        }}
+      />
+
+      <UserManagementDialog
+        open={userManagementOpen}
+        connectionId={userManagementTarget?.connId || ''}
+        database={userManagementTarget?.database}
+        onClose={() => {
+          setUserManagementOpen(false);
+          setUserManagementTarget(null);
+        }}
+      />
+
+      <SchemaCompareDialog
+        open={schemaCompareOpen}
+        connections={connections}
+        onClose={() => setSchemaCompareOpen(false)}
       />
     </div>
   );

@@ -47,6 +47,8 @@ import { format as formatSql } from 'sql-formatter';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
 import { SnippetManager } from './SnippetManager';
+import { ParamDialog } from './ParamDialog';
+import { extractParams, replaceParams } from '../utils/sqlParams';
 import { api } from '../api';
 import type { QueryResult, DatabaseType } from '../types/api';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -614,6 +616,9 @@ export function SQLEditor({
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
   const [transactionActive, setTransactionActive] = useState(false);
+  const [paramDialogOpen, setParamDialogOpen] = useState(false);
+  const [paramDialogParams, setParamDialogParams] = useState<string[]>([]);
+  const [pendingSql, setPendingSql] = useState<string>('');
   const editorRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const schemaRef = useRef<{
@@ -1082,7 +1087,7 @@ export function SQLEditor({
       ?.getValueInRange(editorRef.current.getSelection())
       ?.trim();
 
-    const sqlToExecute = selectedSql || sql;
+    let sqlToExecute = selectedSql || sql;
 
     if (!sqlToExecute.trim()) {
       message.warning('请输入 SQL 语句');
@@ -1097,6 +1102,20 @@ export function SQLEditor({
     if (!database) {
       message.warning('请先选择一个数据库');
       return;
+    }
+
+    // 查询参数化：检测参数并弹出输入对话框
+    const params = extractParams(sqlToExecute);
+    if (params.length > 0 && !pendingSql) {
+      setParamDialogParams(params);
+      setPendingSql(sqlToExecute);
+      setParamDialogOpen(true);
+      return;
+    }
+
+    if (pendingSql) {
+      sqlToExecute = pendingSql;
+      setPendingSql('');
     }
 
     // 大数据保护：检测无 LIMIT 的 SELECT 查询
@@ -1998,6 +2017,25 @@ export function SQLEditor({
           setSql((prev) => (prev ? prev + '\n' + sqlText : sqlText));
         }}
         dbType={dbType}
+      />
+
+      {/* 参数输入对话框 */}
+      <ParamDialog
+        open={paramDialogOpen}
+        params={paramDialogParams}
+        onCancel={() => {
+          setParamDialogOpen(false);
+          setPendingSql('');
+        }}
+        onExecute={(values) => {
+          setParamDialogOpen(false);
+          const finalSql = replaceParams(pendingSql, values);
+          setPendingSql('');
+          // 设置替换后的 SQL 并执行
+          setSql(finalSql);
+          // 延迟执行以确保状态更新
+          setTimeout(() => handleExecuteQuery(), 0);
+        }}
       />
     </div>
   );

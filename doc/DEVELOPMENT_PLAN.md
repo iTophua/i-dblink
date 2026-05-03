@@ -115,7 +115,7 @@ go-backend/
 | P0 — 体验修复 | 1-2 周 | 消除「功能开发中」的负面体验，补全视图浏览 | [P0_SPEC.md](./P0_SPEC.md) | ✅ 已完成 |
 | P1 — 交互补齐 | 2-4 周 | 对标 Navicat 核心交互功能 | [P1_SPEC.md](./P1_SPEC.md) | ✅ 已完成 |
 | P2 — 功能追赶 | 4-8 周 | SSH/SSL、复制表、转储 SQL 等进阶功能 | [P2_SPEC.md](./P2_SPEC.md) | ⏳ 待开发 |
-| P3 — 高级功能 | 8+ 周 | ER 图、数据同步、备份恢复 | [P3_SPEC.md](./P3_SPEC.md) | ⏳ 待开发 |
+| P3 — 高级功能 | 8+ 周 | 结构比较、备份恢复、用户权限、SQL Server/Oracle 驱动、参数化查询、多语言 | [P3_SPEC.md](./P3_SPEC.md) | 🔄 部分完成 |
 | T0 — 技术债务 | 穿插进行 | 大文件拆分、重构 | [TECH_DEBT.md](./TECH_DEBT.md) | 🔄 进行中 |
 
 ---
@@ -163,13 +163,13 @@ go-backend/
 
 | # | 任务 | 说明 | 预估 |
 |---|------|------|------|
-| P3-1 | 数据同步/比较 | 结构对比+数据对比工具 | 40h |
-| P3-2 | 备份恢复 | mysqldump/pg_dump 封装 | 16h |
-| P3-3 | 用户权限管理 | 可视化 GRANT/REVOKE | 12h |
-| P3-4 | SQL Server 驱动 | go-mssqldb 集成 | 8h |
-| P3-5 | Oracle 驱动 | go-ora 集成 | 8h |
-| P3-6 | 查询参数化 | `:param` 变量替换 | 6h |
-| P3-7 | 多语言 | i18n 框架 (react-i18next) | 20h |
+| P3-1 | 结构比较 | 结构对比（列/索引/外键差异+ALTER SQL） | 40h | ✅ 已完成（数据对比待开发） |
+| P3-2 | 备份恢复 | mysqldump/pg_dump 封装 | 16h | ✅ 已完成 |
+| P3-3 | 用户权限管理 | 可视化 GRANT/REVOKE | 12h | ✅ 已完成 |
+| P3-4 | SQL Server 驱动 | go-mssqldb 集成 | 8h | ✅ 已完成 |
+| P3-5 | Oracle 驱动 | go-ora 集成 | 8h | ✅ 已完成 |
+| P3-6 | 查询参数化 | `:param` 变量替换 | 6h | ✅ 已完成 |
+| P3-7 | 多语言 | i18n 框架 (react-i18next) | 20h | ⏳ 待开发 |
 
 ---
 

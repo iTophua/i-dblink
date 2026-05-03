@@ -134,6 +134,53 @@ func getTriggers(pool *db.DBPool, database string) ([]map[string]interface{}, er
 				})
 			}
 		}
+
+	case "sqlserver":
+		rows, err := db.Query(`
+			SELECT t.name AS trigger_name,
+				OBJECT_NAME(t.parent_id) AS table_name,
+				m.definition
+			FROM sys.triggers t
+			JOIN sys.sql_modules m ON m.object_id = t.object_id
+			WHERE t.is_ms_shipped = 0
+		`)
+		if err != nil {
+			return nil, fmt.Errorf("get triggers failed: %v", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var name, table, def string
+			if err := rows.Scan(&name, &table, &def); err == nil {
+				triggers = append(triggers, map[string]interface{}{
+					"name":       name,
+					"table_name": table,
+					"definition": def,
+				})
+			}
+		}
+
+	case "oracle":
+		rows, err := db.Query(`
+			SELECT trigger_name, table_name, trigger_body
+			FROM user_triggers
+			ORDER BY trigger_name
+		`)
+		if err != nil {
+			return nil, fmt.Errorf("get triggers failed: %v", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var name, table, def string
+			if err := rows.Scan(&name, &table, &def); err == nil {
+				triggers = append(triggers, map[string]interface{}{
+					"name":       name,
+					"table_name": table,
+					"definition": def,
+				})
+			}
+		}
 	}
 
 	return triggers, nil

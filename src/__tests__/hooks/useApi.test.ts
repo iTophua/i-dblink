@@ -95,6 +95,10 @@ describe('TTLCache behavior', () => {
         }
       }
     }
+
+    get size(): number {
+      return this.cache.size;
+    }
   }
 
   let cache: TTLCache<string>;
@@ -129,7 +133,7 @@ describe('TTLCache behavior', () => {
     cache.set('b', '2');
     vi.advanceTimersByTime(1500);
     cache.cleanup();
-    expect(cache.size || cache.cache.size).toBe(0);
+    expect(cache.size).toBe(0);
   });
 });
 

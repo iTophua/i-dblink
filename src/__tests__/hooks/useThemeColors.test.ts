@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { useThemeColors } from '../hooks/useThemeColors';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 describe('useThemeColors', () => {
   it('returns a ThemeColors interface', () => {

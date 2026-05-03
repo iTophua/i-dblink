@@ -4,7 +4,7 @@ import {
   MACOS_SHORTCUTS,
   getShortcutsByCategory,
   isMacOS,
-} from '../constants/menuShortcuts';
+} from '../../constants/menuShortcuts';
 
 describe('MENU_SHORTCUTS', () => {
   it('contains expected categories', () => {
@@ -64,7 +64,7 @@ describe('getShortcutsByCategory', () => {
     expect(getShortcutsByCategory('file').length).toBe(6);
     expect(getShortcutsByCategory('edit').length).toBe(8);
     expect(getShortcutsByCategory('view').length).toBe(5);
-    expect(getShortcutsByCategory('connection').length).toBe(5);
+    expect(getShortcutsByCategory('connection').length).toBe(4);
     expect(getShortcutsByCategory('tools').length).toBe(1);
     expect(getShortcutsByCategory('window').length).toBe(4);
     expect(getShortcutsByCategory('help').length).toBe(1);

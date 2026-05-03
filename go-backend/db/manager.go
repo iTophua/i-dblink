@@ -43,6 +43,27 @@ func NewManager() *Manager {
 	}
 }
 
+// SSHTunnelArgs SSH 隧道参数
+type SSHTunnelArgs struct {
+	Enabled        bool
+	Host           string
+	Port           int
+	Username       string
+	AuthMethod     string
+	Password       string
+	PrivateKeyPath string
+	Passphrase     string
+}
+
+// SSLArgs SSL/TLS 参数
+type SSLArgs struct {
+	Enabled    bool
+	CAPath     string
+	CertPath   string
+	KeyPath    string
+	SkipVerify bool
+}
+
 // ConnectArgs 连接参数
 type ConnectArgs struct {
 	DbType   string
@@ -51,6 +72,8 @@ type ConnectArgs struct {
 	Username string
 	Password string
 	Database string
+	SSH      SSHTunnelArgs
+	SSL      SSLArgs
 }
 
 // Connect 建立数据库连接
@@ -351,6 +374,10 @@ func openDB(args ConnectArgs) (*sql.DB, error) {
 		return openHighgo(args)
 	case "vastbase":
 		return openVastbase(args)
+	case "sqlserver":
+		return openSQLServer(args)
+	case "oracle":
+		return openOracle(args)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", args.DbType)
 	}

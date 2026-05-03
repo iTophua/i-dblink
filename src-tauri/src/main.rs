@@ -412,7 +412,18 @@ fn main() {
             commands::get_events,
             commands::save_snippet,
             commands::get_snippets,
-            commands::delete_snippet
+            commands::delete_snippet,
+            commands::check_backup_tool,
+            commands::backup_database,
+            commands::restore_database,
+            commands::get_users,
+            commands::get_user_privileges,
+            commands::get_table_privileges,
+            commands::create_user,
+            commands::drop_user,
+            commands::grant_privilege,
+            commands::revoke_privilege,
+            commands::compare_schema,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

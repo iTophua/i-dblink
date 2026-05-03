@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-
-	_ "github.com/lib/pq"
 )
 
 func openPostgres(args ConnectArgs) (*sql.DB, error) {
@@ -19,6 +17,15 @@ func openPostgres(args ConnectArgs) (*sql.DB, error) {
 		dbName = "postgres"
 	}
 
+	// SSL/TLS 配置
+	if args.SSL.Enabled {
+		if args.SSL.SkipVerify {
+			sslMode = "require"
+		} else {
+			sslMode = "verify-ca"
+		}
+	}
+
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		args.Username,
 		url.QueryEscape(args.Password),
@@ -27,6 +34,19 @@ func openPostgres(args ConnectArgs) (*sql.DB, error) {
 		dbName,
 		sslMode,
 	)
+
+	// 添加 SSL 证书参数
+	if args.SSL.Enabled {
+		if args.SSL.CAPath != "" {
+			dsn += fmt.Sprintf("&sslrootcert=%s", url.QueryEscape(args.SSL.CAPath))
+		}
+		if args.SSL.CertPath != "" {
+			dsn += fmt.Sprintf("&sslcert=%s", url.QueryEscape(args.SSL.CertPath))
+		}
+		if args.SSL.KeyPath != "" {
+			dsn += fmt.Sprintf("&sslkey=%s", url.QueryEscape(args.SSL.KeyPath))
+		}
+	}
 
 	return sql.Open("postgres", dsn)
 }

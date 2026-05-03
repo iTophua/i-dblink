@@ -23,6 +23,21 @@ export interface ConnectionInput {
   database?: string;
   group_id?: string;
   color?: string;
+  // SSH 隧道配置
+  ssh_enabled?: boolean;
+  ssh_host?: string;
+  ssh_port?: number;
+  ssh_username?: string;
+  ssh_auth_method?: 'password' | 'key';
+  ssh_password?: string;
+  ssh_private_key_path?: string;
+  ssh_passphrase?: string;
+  // SSL/TLS 配置
+  ssl_enabled?: boolean;
+  ssl_ca_path?: string;
+  ssl_cert_path?: string;
+  ssl_key_path?: string;
+  ssl_skip_verify?: boolean;
 }
 
 export interface ConnectionOutput {

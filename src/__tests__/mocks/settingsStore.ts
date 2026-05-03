@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ThemePreset } from '../styles/theme';
+import { ThemePreset } from '../../styles/theme';
 
 export type ThemeMode = 'light' | 'dark';
 

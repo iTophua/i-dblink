@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MENU_SHORTCUTS } from '../constants/menuShortcuts';
+import { MENU_SHORTCUTS, isMacOS } from '../../constants/menuShortcuts';
 
 describe('shortcut display format', () => {
   it('formats shortcut for macOS', () => {

@@ -182,7 +182,7 @@ describe('ConnectionDialog test connection flow', () => {
 
 describe('ConnectionDialog save flow', () => {
   it('saves new connection', () => {
-    const input = {
+    const input: Record<string, unknown> = {
       name: 'Test DB',
       db_type: 'mysql' as const,
       host: 'localhost',

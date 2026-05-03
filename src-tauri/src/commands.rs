@@ -34,6 +34,24 @@ pub struct ConnectionInput {
     pub database: Option<String>,
     pub group_id: Option<String>,
     pub color: Option<String>,
+    // SSH 隧道配置
+    #[serde(default)]
+    pub ssh_enabled: bool,
+    pub ssh_host: Option<String>,
+    pub ssh_port: Option<u16>,
+    pub ssh_username: Option<String>,
+    pub ssh_auth_method: Option<String>,
+    pub ssh_password: Option<String>,
+    pub ssh_private_key_path: Option<String>,
+    pub ssh_passphrase: Option<String>,
+    // SSL/TLS 配置
+    #[serde(default)]
+    pub ssl_enabled: bool,
+    pub ssl_ca_path: Option<String>,
+    pub ssl_cert_path: Option<String>,
+    pub ssl_key_path: Option<String>,
+    #[serde(default)]
+    pub ssl_skip_verify: bool,
 }
 
 /// 返回给前端的连接对象（不包含密码）
@@ -49,6 +67,12 @@ pub struct ConnectionOutput {
     pub group_id: Option<String>,
     pub color: Option<String>,
     pub status: String,
+    // SSH 隧道配置（仅显示是否启用）
+    #[serde(default)]
+    pub ssh_enabled: bool,
+    // SSL/TLS 配置（仅显示是否启用）
+    #[serde(default)]
+    pub ssl_enabled: bool,
 }
 
 impl From<DbConnection> for ConnectionOutput {
@@ -64,6 +88,8 @@ impl From<DbConnection> for ConnectionOutput {
             group_id: conn.group_id,
             color: conn.color,
             status: "disconnected".to_string(),
+            ssh_enabled: conn.ssh_host.is_some(),
+            ssl_enabled: conn.ssl_enabled.unwrap_or(false),
         }
     }
 }
@@ -245,6 +271,16 @@ async fn ensure_connected(
         "username": conn_config.username,
         "password": password,
         "database": conn_config.database,
+        "ssh_host": conn_config.ssh_host,
+        "ssh_port": conn_config.ssh_port,
+        "ssh_username": conn_config.ssh_username,
+        "ssh_auth_method": conn_config.ssh_auth_method,
+        "ssh_private_key_path": conn_config.ssh_private_key_path,
+        "ssl_enabled": conn_config.ssl_enabled,
+        "ssl_ca_path": conn_config.ssl_ca_path,
+        "ssl_cert_path": conn_config.ssl_cert_path,
+        "ssl_key_path": conn_config.ssl_key_path,
+        "ssl_skip_verify": conn_config.ssl_skip_verify,
     });
 
     let resp: serde_json::Value = sm.post("/connect", &req).await?;
@@ -279,6 +315,19 @@ pub async fn test_connection(
     username: &str,
     password: &str,
     database: Option<&str>,
+    ssh_enabled: bool,
+    ssh_host: Option<&str>,
+    ssh_port: Option<u16>,
+    ssh_username: Option<&str>,
+    ssh_auth_method: Option<&str>,
+    ssh_password: Option<&str>,
+    ssh_private_key_path: Option<&str>,
+    ssh_passphrase: Option<&str>,
+    ssl_enabled: bool,
+    ssl_ca_path: Option<&str>,
+    ssl_cert_path: Option<&str>,
+    ssl_key_path: Option<&str>,
+    ssl_skip_verify: bool,
     sidecar: State<'_, SidecarState>,
 ) -> Result<bool, String> {
     let sidecar_guard = sidecar.lock().await;
@@ -294,6 +343,19 @@ pub async fn test_connection(
         "username": username,
         "password": password,
         "database": database,
+        "ssh_enabled": ssh_enabled,
+        "ssh_host": ssh_host,
+        "ssh_port": ssh_port,
+        "ssh_username": ssh_username,
+        "ssh_auth_method": ssh_auth_method,
+        "ssh_password": ssh_password,
+        "ssh_private_key_path": ssh_private_key_path,
+        "ssh_passphrase": ssh_passphrase,
+        "ssl_enabled": ssl_enabled,
+        "ssl_ca_path": ssl_ca_path,
+        "ssl_cert_path": ssl_cert_path,
+        "ssl_key_path": ssl_key_path,
+        "ssl_skip_verify": ssl_skip_verify,
     });
 
     let resp: serde_json::Value = sm.post("/test", &req).await?;
@@ -395,6 +457,18 @@ pub async fn save_connection(
             updated.database = input.database.clone();
             updated.group_id = input.group_id.clone();
             updated.color = input.color.clone();
+            // SSH
+            updated.ssh_host = if input.ssh_enabled { input.ssh_host.clone() } else { None };
+            updated.ssh_port = if input.ssh_enabled { input.ssh_port.map(|p| p as i32) } else { None };
+            updated.ssh_username = if input.ssh_enabled { input.ssh_username.clone() } else { None };
+            updated.ssh_auth_method = if input.ssh_enabled { input.ssh_auth_method.clone() } else { None };
+            updated.ssh_private_key_path = if input.ssh_enabled { input.ssh_private_key_path.clone() } else { None };
+            // SSL
+            updated.ssl_enabled = Some(input.ssl_enabled);
+            updated.ssl_ca_path = input.ssl_ca_path.clone();
+            updated.ssl_cert_path = input.ssl_cert_path.clone();
+            updated.ssl_key_path = input.ssl_key_path.clone();
+            updated.ssl_skip_verify = Some(input.ssl_skip_verify);
 
             storage
                 .update_connection(&id, &updated, input.password.as_deref())
@@ -404,7 +478,7 @@ pub async fn save_connection(
             Ok(ConnectionOutput::from(updated))
         }
         None => {
-            let new_conn = DbConnection::new(
+            let mut new_conn = DbConnection::new(
                 input.name,
                 input.db_type,
                 input.host,
@@ -414,6 +488,18 @@ pub async fn save_connection(
                 input.group_id,
                 input.color,
             );
+            // SSH
+            new_conn.ssh_host = if input.ssh_enabled { input.ssh_host.clone() } else { None };
+            new_conn.ssh_port = if input.ssh_enabled { input.ssh_port.map(|p| p as i32) } else { None };
+            new_conn.ssh_username = if input.ssh_enabled { input.ssh_username.clone() } else { None };
+            new_conn.ssh_auth_method = if input.ssh_enabled { input.ssh_auth_method.clone() } else { None };
+            new_conn.ssh_private_key_path = if input.ssh_enabled { input.ssh_private_key_path.clone() } else { None };
+            // SSL
+            new_conn.ssl_enabled = Some(input.ssl_enabled);
+            new_conn.ssl_ca_path = input.ssl_ca_path.clone();
+            new_conn.ssl_cert_path = input.ssl_cert_path.clone();
+            new_conn.ssl_key_path = input.ssl_key_path.clone();
+            new_conn.ssl_skip_verify = Some(input.ssl_skip_verify);
 
             storage
                 .save_connection(&new_conn, input.password.as_deref())
@@ -1522,4 +1608,315 @@ pub async fn delete_snippet(
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// 检测备份工具
+#[tauri::command]
+pub async fn check_backup_tool(
+    db_type: String,
+    sidecar: State<'_, SidecarState>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    let req = serde_json::json!({ "db_type": db_type });
+    let resp: serde_json::Value = sm.post("/check-backup-tool", &req).await?;
+    Ok(resp)
+}
+
+/// 备份数据库
+#[tauri::command]
+pub async fn backup_database(
+    connection_id: String,
+    database: String,
+    tables: Option<Vec<String>>,
+    include_structure: bool,
+    include_data: bool,
+    file_path: String,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+        "tables": tables,
+        "include_structure": include_structure,
+        "include_data": include_data,
+        "file_path": file_path,
+    });
+    let resp: serde_json::Value = sm.post("/backup", &req).await?;
+    Ok(resp)
+}
+
+/// 恢复数据库
+#[tauri::command]
+pub async fn restore_database(
+    connection_id: String,
+    database: String,
+    file_path: String,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+        "file_path": file_path,
+    });
+    let resp: serde_json::Value = sm.post("/restore", &req).await?;
+    Ok(resp)
+}
+
+/// 获取用户列表
+#[tauri::command]
+pub async fn get_users(
+    connection_id: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+    });
+    let resp: serde_json::Value = sm.post("/users", &req).await?;
+    Ok(resp)
+}
+
+/// 获取用户权限
+#[tauri::command]
+pub async fn get_user_privileges(
+    connection_id: String,
+    username: String,
+    host: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "username": username,
+        "host": host,
+        "database": database,
+    });
+    let resp: serde_json::Value = sm.post("/privileges", &req).await?;
+    Ok(resp)
+}
+
+/// 获取表级权限
+#[tauri::command]
+pub async fn get_table_privileges(
+    connection_id: String,
+    username: String,
+    host: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "username": username,
+        "host": host,
+        "database": database,
+    });
+    let resp: serde_json::Value = sm.post("/table-privileges", &req).await?;
+    Ok(resp)
+}
+
+/// 创建用户
+#[tauri::command]
+pub async fn create_user(
+    connection_id: String,
+    username: String,
+    password: String,
+    host: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "username": username,
+        "password": password,
+        "host": host,
+        "database": database,
+    });
+    let _: serde_json::Value = sm.post("/create-user", &req).await?;
+    Ok(())
+}
+
+/// 删除用户
+#[tauri::command]
+pub async fn drop_user(
+    connection_id: String,
+    username: String,
+    host: String,
+    database: Option<String>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "username": username,
+        "host": host,
+        "database": database,
+    });
+    let _: serde_json::Value = sm.post("/drop-user", &req).await?;
+    Ok(())
+}
+
+/// 授予权限
+#[tauri::command]
+pub async fn grant_privilege(
+    connection_id: String,
+    username: String,
+    host: String,
+    privileges: Vec<String>,
+    database_all: bool,
+    database: Option<String>,
+    table: Option<String>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "username": username,
+        "host": host,
+        "privileges": privileges,
+        "database_all": database_all,
+        "database": database,
+        "table": table,
+    });
+    let _: serde_json::Value = sm.post("/grant", &req).await?;
+    Ok(())
+}
+
+/// 撤销权限
+#[tauri::command]
+pub async fn revoke_privilege(
+    connection_id: String,
+    username: String,
+    host: String,
+    privileges: Vec<String>,
+    database_all: bool,
+    database: Option<String>,
+    table: Option<String>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "username": username,
+        "host": host,
+        "privileges": privileges,
+        "database_all": database_all,
+        "database": database,
+        "table": table,
+    });
+    let _: serde_json::Value = sm.post("/revoke", &req).await?;
+    Ok(())
+}
+
+/// 比较数据库/表结构
+#[tauri::command]
+pub async fn compare_schema(
+    source_connection_id: String,
+    source_database: String,
+    target_connection_id: String,
+    target_database: String,
+    table_name: Option<String>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&source_connection_id, &state, &connections, sm).await?;
+    ensure_connected(&target_connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "source_connection_id": source_connection_id,
+        "source_database": source_database,
+        "target_connection_id": target_connection_id,
+        "target_database": target_database,
+        "table_name": table_name,
+    });
+    let resp: serde_json::Value = sm.post("/compare-schema", &req).await?;
+    Ok(resp)
 }

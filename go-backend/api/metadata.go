@@ -45,6 +45,10 @@ func (h *Handler) GetDatabases(w http.ResponseWriter, r *http.Request) {
 		databases = []string{"main"}
 	case "dameng":
 		databases, err = damengGetDatabases(ctx, exec)
+	case "sqlserver":
+		databases, err = sqlserverGetDatabases(ctx, exec)
+	case "oracle":
+		databases, err = oracleGetDatabases(ctx, exec)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -84,6 +88,10 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 		tables, err = sqliteGetTables(ctx, exec, req.Database)
 	case "dameng":
 		tables, err = damengGetTables(ctx, exec, req.Database)
+	case "sqlserver":
+		tables, err = sqlserverGetTables(ctx, exec, req.Database)
+	case "oracle":
+		tables, err = oracleGetTables(ctx, exec, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -126,6 +134,10 @@ func (h *Handler) GetTablesCategorized(w http.ResponseWriter, r *http.Request) {
 		result, err = sqliteGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	case "dameng":
 		result, err = damengGetTablesCategorized(ctx, exec, req.Database, req.Search)
+	case "sqlserver":
+		result, err = sqlserverGetTablesCategorized(ctx, exec, req.Database, req.Search)
+	case "oracle":
+		result, err = oracleGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -170,6 +182,10 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 		columns, err = sqliteGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
 		columns, err = damengGetColumns(ctx, exec, *req.TableName, req.Database)
+	case "sqlserver":
+		columns, err = sqlserverGetColumns(ctx, exec, *req.TableName, req.Database)
+	case "oracle":
+		columns, err = oracleGetColumns(ctx, exec, *req.TableName, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -217,6 +233,10 @@ func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 		indexes, err = sqliteGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
 		indexes, err = damengGetIndexes(ctx, exec, *req.TableName, req.Database)
+	case "sqlserver":
+		indexes, err = sqlserverGetIndexes(ctx, exec, *req.TableName, req.Database)
+	case "oracle":
+		indexes, err = oracleGetIndexes(ctx, exec, *req.TableName, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -261,6 +281,10 @@ func (h *Handler) GetForeignKeys(w http.ResponseWriter, r *http.Request) {
 		fks, err = sqliteGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
 		fks, err = damengGetForeignKeys(ctx, exec, *req.TableName, req.Database)
+	case "sqlserver":
+		fks, err = sqlserverGetForeignKeys(ctx, exec, *req.TableName, req.Database)
+	case "oracle":
+		fks, err = oracleGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -305,6 +329,10 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 		structure, err = sqliteGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
 		structure, err = damengGetTableStructure(ctx, exec, *req.TableName, req.Database)
+	case "sqlserver":
+		structure, err = sqlserverGetTableStructure(ctx, exec, *req.TableName, req.Database)
+	case "oracle":
+		structure, err = oracleGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -394,6 +422,8 @@ func (h *Handler) GetProcedures(w http.ResponseWriter, r *http.Request) {
 		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
 	case "dameng":
 		result, err = damengGetRoutines(ctx, exec, req.Database)
+	case "sqlserver":
+		result, err = sqlserverGetRoutines(ctx, exec, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -437,6 +467,8 @@ func (h *Handler) GetFunctions(w http.ResponseWriter, r *http.Request) {
 		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
 	case "dameng":
 		result, err = damengGetRoutines(ctx, exec, req.Database)
+	case "sqlserver":
+		result, err = sqlserverGetRoutines(ctx, exec, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -482,6 +514,10 @@ func (h *Handler) GetProcedureBody(w http.ResponseWriter, r *http.Request) {
 		body, err = postgresGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
 	case "dameng":
 		body, err = damengGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
+	case "sqlserver":
+		body, err = sqlserverGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
+	case "oracle":
+		body, err = oracleGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -523,6 +559,10 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 		body, err = postgresGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
 	case "dameng":
 		body, err = damengGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
+	case "sqlserver":
+		body, err = sqlserverGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
+	case "oracle":
+		body, err = oracleGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}

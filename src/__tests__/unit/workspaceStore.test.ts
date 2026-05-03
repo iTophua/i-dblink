@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useWorkspaceStore } from '../__tests__/mocks/workspaceStore';
+import { useWorkspaceStore } from '../mocks/workspaceStore';
 
 describe('workspaceStore', () => {
   beforeEach(() => {

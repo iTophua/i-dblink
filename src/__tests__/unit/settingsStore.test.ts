@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useSettingsStore } from '../__tests__/mocks/settingsStore';
-import type { AppSettings } from '../stores/settingsStore';
+import { useSettingsStore } from '../mocks/settingsStore';
+import type { AppSettings } from '../../stores/settingsStore';
 
 const defaultSettings: AppSettings = {
   pageSize: 1000,

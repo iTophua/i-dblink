@@ -110,6 +110,17 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         .await
         .ok(); // 忽略错误（列已存在时）
 
+    // 为 connections 表添加 SSH 和 SSL 列
+    let ssh_ssl_columns = [
+        "ssh_host", "ssh_port", "ssh_username", "ssh_auth_method",
+        "ssh_private_key_path", "ssl_enabled", "ssl_ca_path",
+        "ssl_cert_path", "ssl_key_path", "ssl_skip_verify",
+    ];
+    for col in &ssh_ssl_columns {
+        let sql = format!("ALTER TABLE connections ADD COLUMN {} TEXT", col);
+        sqlx::query(&sql).execute(pool).await.ok();
+    }
+
     // 插入默认分组（如果不存在）
     sqlx::query(
         r#"

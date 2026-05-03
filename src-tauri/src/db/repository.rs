@@ -48,6 +48,9 @@ impl ConnectionRepository {
                 UPDATE connections 
                 SET name = ?, db_type = ?, host = ?, port = ?, 
                     username = ?, database = ?, group_id = ?, color = ?,
+                    ssh_host = ?, ssh_port = ?, ssh_username = ?, ssh_auth_method = ?,
+                    ssh_private_key_path = ?, ssl_enabled = ?, ssl_ca_path = ?,
+                    ssl_cert_path = ?, ssl_key_path = ?, ssl_skip_verify = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 "#,
@@ -60,6 +63,16 @@ impl ConnectionRepository {
             .bind(&conn.database)
             .bind(&conn.group_id)
             .bind(&conn.color)
+            .bind(&conn.ssh_host)
+            .bind(conn.ssh_port)
+            .bind(&conn.ssh_username)
+            .bind(&conn.ssh_auth_method)
+            .bind(&conn.ssh_private_key_path)
+            .bind(conn.ssl_enabled)
+            .bind(&conn.ssl_ca_path)
+            .bind(&conn.ssl_cert_path)
+            .bind(&conn.ssl_key_path)
+            .bind(conn.ssl_skip_verify)
             .bind(&conn.id)
             .execute(self.pool.inner())
             .await?;
@@ -67,8 +80,13 @@ impl ConnectionRepository {
             // 新增
             sqlx::query(
                 r#"
-                INSERT INTO connections (id, name, db_type, host, port, username, database, group_id, color, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO connections (
+                    id, name, db_type, host, port, username, database, group_id, color,
+                    ssh_host, ssh_port, ssh_username, ssh_auth_method, ssh_private_key_path,
+                    ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path, ssl_skip_verify,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
             )
             .bind(&conn.id)
@@ -80,6 +98,16 @@ impl ConnectionRepository {
             .bind(&conn.database)
             .bind(&conn.group_id)
             .bind(&conn.color)
+            .bind(&conn.ssh_host)
+            .bind(conn.ssh_port)
+            .bind(&conn.ssh_username)
+            .bind(&conn.ssh_auth_method)
+            .bind(&conn.ssh_private_key_path)
+            .bind(conn.ssl_enabled)
+            .bind(&conn.ssl_ca_path)
+            .bind(&conn.ssl_cert_path)
+            .bind(&conn.ssl_key_path)
+            .bind(conn.ssl_skip_verify)
             .bind(&conn.created_at.to_rfc3339())
             .bind(&conn.updated_at.to_rfc3339())
             .execute(self.pool.inner())

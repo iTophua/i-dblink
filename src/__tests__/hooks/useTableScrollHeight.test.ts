@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { useTableScrollHeight } from '../hooks/useTableScrollHeight';
+import { useTableScrollHeight } from '../../hooks/useTableScrollHeight';
 
 describe('useTableScrollHeight logic', () => {
   it('calculates height: container - toolbar - statusbar - border', () => {
@@ -63,6 +63,7 @@ describe('useTableScrollHeight logic', () => {
     const mockObserver = {
       observe: vi.fn(),
       disconnect: vi.fn(),
+      unobserve: vi.fn(),
     };
 
     global.ResizeObserver = vi.fn(() => mockObserver);

@@ -69,7 +69,7 @@ go-backend/                   # Go sidecar (database engine — NOT in Rust)
 4. **Three Zustand stores:** `appStore`, `settingsStore`, `workspaceStore` — not just one.
 5. **Four hooks:** `useApi`, `useMenuShortcuts`, `useTableScrollHeight`, `useThemeColors` — not just two.
 6. **Test setup:** `src/__tests__/setupTests.ts` required by vitest. Environment is `jsdom`.
-7. **P0/P1 completed:** All P0 (experience fixes) and P1 (interaction enhancements) tasks are implemented. See `doc/DEVELOPMENT_PLAN.md` for status.
+7. **P0/P1/P3 partially completed:** P0 (experience fixes), P1 (interaction enhancements) fully done. P3 (advanced features) partially done — structure compare, backup/restore, user management, SQL Server/Oracle drivers, query parameterization implemented. i18n not yet started. See `doc/DEVELOPMENT_PLAN.md` for status.
 
 ## Database support (via Go sidecar)
 
@@ -82,9 +82,9 @@ go-backend/                   # Go sidecar (database engine — NOT in Rust)
 | Kingbase (人大金仓) | ✅ |
 | Highgo (瀚高) | ✅ |
 | VastBase (人大金仓衍生) | ✅ |
-| SQL Server | ⏳ Planned |
-| Oracle | ⏳ Planned |
-| MariaDB | ⏳ Planned |
+| SQL Server | ✅ |
+| Oracle | ✅ |
+| MariaDB | ✅ |
 
 ## Files to check when stuck
 

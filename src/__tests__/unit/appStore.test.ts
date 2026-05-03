@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useAppStore } from '../stores/appStore';
-import type { Connection, ConnectionGroup } from '../stores/appStore';
+import { useAppStore } from '../../stores/appStore';
+import type { Connection, ConnectionGroup } from '../../stores/appStore';
 
 const createMockConnection = (overrides = {}): Connection => ({
   id: 'conn-1',

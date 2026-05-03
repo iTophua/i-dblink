@@ -99,7 +99,24 @@ func getServerInfo(pool *db.DBPool, database string) (ServerInfoResponse, error)
 		}
 		resp.Version = version
 		resp.CharacterSet = "utf-8"
-		// 达梦/金仓 max_connections 需要查询 v$parameter，此处暂不获取
+
+	case "sqlserver":
+		var version string
+		err := db.QueryRow("SELECT @@VERSION").Scan(&version)
+		if err != nil {
+			return resp, fmt.Errorf("get server info failed: %v", err)
+		}
+		resp.Version = version
+		resp.CharacterSet = "utf-8"
+
+	case "oracle":
+		var version string
+		err := db.QueryRow("SELECT banner FROM v$version WHERE rownum = 1").Scan(&version)
+		if err != nil {
+			return resp, fmt.Errorf("get server info failed: %v", err)
+		}
+		resp.Version = version
+		resp.CharacterSet = "utf-8"
 
 	default:
 		resp.Version = "Unknown"

@@ -35,7 +35,10 @@ func recoverMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 // RegisterRoutes 注册所有 API 路由
 func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
-	h := &Handler{mgr: manager}
+	h := &Handler{
+		mgr:    manager,
+		tunnel: NewTunnelManager(),
+	}
 
 	mux.HandleFunc("GET /health", recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -84,11 +87,29 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 
 	// 流式导出
 	mux.HandleFunc("POST /stream-export", recoverMiddleware(h.StreamExport))
+
+	// 备份恢复
+	mux.HandleFunc("POST /check-backup-tool", recoverMiddleware(h.CheckBackupTool))
+	mux.HandleFunc("POST /backup", recoverMiddleware(h.Backup))
+	mux.HandleFunc("POST /restore", recoverMiddleware(h.Restore))
+
+	// 用户权限管理
+	mux.HandleFunc("POST /users", recoverMiddleware(h.GetUsers))
+	mux.HandleFunc("POST /privileges", recoverMiddleware(h.GetPrivileges))
+	mux.HandleFunc("POST /table-privileges", recoverMiddleware(h.GetTablePrivileges))
+	mux.HandleFunc("POST /create-user", recoverMiddleware(h.CreateUser))
+	mux.HandleFunc("POST /drop-user", recoverMiddleware(h.DropUser))
+	mux.HandleFunc("POST /grant", recoverMiddleware(h.GrantPrivilege))
+	mux.HandleFunc("POST /revoke", recoverMiddleware(h.RevokePrivilege))
+
+	// 结构比较
+	mux.HandleFunc("POST /compare-schema", recoverMiddleware(h.CompareSchema))
 }
 
 // Handler HTTP 处理器
 type Handler struct {
-	mgr *db.Manager
+	mgr    *db.Manager
+	tunnel *TunnelManager
 }
 
 // getConnAndType 获取连接执行器和数据库类型
