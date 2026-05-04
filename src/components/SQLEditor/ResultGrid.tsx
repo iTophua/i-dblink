@@ -16,6 +16,7 @@ import {
 import { useDatabase } from '../../hooks/useApi';
 import type { QueryResult, DatabaseType, ColumnInfo } from '../../types/api';
 import { exportToExcel } from '../../utils/exportUtils';
+import { escapeSqlValue, escapeSqlIdentifier } from '../../utils/sqlUtils';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
@@ -31,27 +32,6 @@ export interface ResultGridProps {
   database?: string;
   originalSql?: string;
   dbType?: DatabaseType;
-}
-
-// === SQL 辅助函数 ===
-
-function escapeSqlValue(val: unknown): string {
-  if (val === null || val === undefined) return 'NULL';
-  const str = String(val);
-  const escaped = str.replace(/\\/g, '\\\\').replace(/'/g, "''");
-  return `'${escaped}'`;
-}
-
-function escapeSqlIdentifier(name: string, dbType?: DatabaseType): string {
-  if (
-    dbType === 'postgresql' ||
-    dbType === 'kingbase' ||
-    dbType === 'highgo' ||
-    dbType === 'vastbase'
-  ) {
-    return `"${name.replace(/"/g, '""')}"`;
-  }
-  return `\`${name.replace(/\`/g, '``')}\``;
 }
 
 /** 从简单 SELECT 语句中提取单表名，遇到 JOIN/UNION/子查询返回 null */

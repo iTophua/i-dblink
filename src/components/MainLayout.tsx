@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Layout, theme, Modal, Form, Input } from 'antd';
-import { GlobalSearch } from './GlobalInput';
+import { GlobalInput } from './GlobalInput';
+import { GlobalSearch } from './GlobalSearch';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
 import { useMenuShortcuts } from '../hooks/useMenuShortcuts';
 import { Toolbar } from './Toolbar';
@@ -18,60 +19,9 @@ import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { api } from '../api';
+import { getMainLayoutStyles } from './MainLayout/styles';
 
 const { Sider, Content } = Layout;
-
-const getStyles = () => ({
-  root: { height: '100vh' as const, overflow: 'hidden' as const },
-  mainLayout: { flex: 1, overflow: 'hidden' as const, display: 'flex' as const },
-  sider: {
-    background: 'var(--background-card)',
-    borderRight: '1px solid var(--border-color)',
-  },
-  siderContent: { display: 'flex' as const, flexDirection: 'column' as const, height: '100%' },
-  searchContainer: { padding: '8px 8px 4px', flexShrink: 0 },
-  searchInput: {
-    borderRadius: 4,
-    background: 'var(--background-card)',
-  },
-  connectionTreeContainer: { flex: 1, minHeight: 0, overflow: 'auto' as const, marginBottom: 0 },
-  collapseButton: {
-    height: 28,
-    flexShrink: 0,
-    background: 'var(--background-card)',
-    borderTop: '1px solid var(--border-color)',
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    cursor: 'pointer' as const,
-    transition: 'background 0.2s ease',
-  },
-  collapseButtonText: {
-    color: 'var(--text-secondary)',
-    fontSize: 11,
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    gap: 4,
-  },
-  content: {
-    flex: 1,
-    background: 'var(--background)',
-    margin: 0,
-    marginLeft: 0,
-    padding: 0,
-    borderRadius: 0,
-    overflow: 'hidden' as const,
-    display: 'flex' as const,
-    flexDirection: 'column' as const,
-    minHeight: 0,
-  },
-  tabPanelContainer: {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-  },
-});
 
 interface MainLayoutProps {
   children?: React.ReactNode;
@@ -124,6 +74,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [currentResultRows, setCurrentResultRows] = useState<number>(0);
   const [currentExecutionTime, setCurrentExecutionTime] = useState<number>(0);
   const [isQuerying, setIsQuerying] = useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
 
   // 恢复侧边栏工作区状态
   useEffect(() => {
@@ -145,7 +96,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgLayout === '#1f1f1f';
-  const styles = useMemo(() => getStyles(), []);
+  const styles = useMemo(() => getMainLayoutStyles(), []);
 
   const {
     connections,
@@ -259,6 +210,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         );
       },
       onSettings: () => setSettingsDialogOpen(true),
+      onGlobalSearch: () => setGlobalSearchOpen(true),
       onNewTab: () => {
         window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } }));
       },
@@ -1017,10 +969,10 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           <div style={styles.siderContent} className="sidebar-content">
             {!collapsed && (
               <div style={styles.searchContainer} className="search-container">
-                <GlobalSearch
+                <GlobalInput
                   placeholder="搜索..."
                   value={searchText}
-                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onChange={(e: any) => handleSearchChange(e.target.value)}
                   style={styles.searchInput}
                   size="small"
                   allowClear
@@ -1176,6 +1128,17 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       />
 
       <SettingsDialog open={settingsDialogOpen} onCancel={() => setSettingsDialogOpen(false)} />
+
+      <GlobalSearch
+        open={globalSearchOpen}
+        onClose={() => setGlobalSearchOpen(false)}
+        onSelectTable={(connectionId, database, tableName) => {
+          handleConnectionSelect(connectionId);
+          setSelectedConnectionId(connectionId);
+          setTableToOpen({ name: tableName, database });
+        }}
+        connectionDatabases={connectionDatabases}
+      />
 
       <Modal
         title={`连接 "${passwordDialogConn?.name}" 需要密码`}

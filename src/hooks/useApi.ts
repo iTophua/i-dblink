@@ -4,9 +4,7 @@ import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
 
-const escapeSqlString = (value: string): string => value.replace(/\\/g, '\\\\').replace(/'/g, "''");
-
-const escapeSqlIdentifier = (value: string): string => value.replace(/`/g, '``');
+import { escapeSqlIdentifier, escapeSqlValue } from '../utils/sqlUtils';
 
 // 防重复调用：跟踪正在加载的 cacheKey
 const loadingTablesKeys = new Set<string>();
@@ -550,7 +548,7 @@ export const useDatabase = () => {
         switch (dbType) {
           case 'mysql':
           case 'mariadb': {
-            const safeDb = database ? escapeSqlString(database) : '';
+            const safeDb = database ? escapeSqlValue(database) : '';
             sql = database
               ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${safeDb}' AND TABLE_NAME = '${safeTable}'`
               : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${safeTable}'`;
@@ -560,7 +558,7 @@ export const useDatabase = () => {
           case 'kingbase':
           case 'highgo':
           case 'vastbase': {
-            const safeDb = database ? escapeSqlString(database) : '';
+            const safeDb = database ? escapeSqlValue(database) : '';
             sql = `
               SELECT c.relname AS table_name,
                 CASE WHEN c.relkind = 'r' THEN 'BASE TABLE' WHEN c.relkind = 'v' THEN 'VIEW' ELSE c.relkind END AS table_type,
@@ -586,7 +584,7 @@ export const useDatabase = () => {
             break;
           }
           case 'dameng': {
-            const safeDb = database ? escapeSqlString(database) : '';
+            const safeDb = database ? escapeSqlValue(database) : '';
             sql = `
               SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
               FROM USER_TABLES t
@@ -595,14 +593,14 @@ export const useDatabase = () => {
             if (database) {
               sql = `
                 SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
-                FROM "${escapeSqlString(database)}".USER_TABLES t
+                FROM "${escapeSqlValue(database)}".USER_TABLES t
                 WHERE t.TABLE_NAME = '${safeTable}'
               `;
             }
             break;
           }
           case 'oracle': {
-            const safeDb = database ? escapeSqlString(database) : '';
+            const safeDb = database ? escapeSqlValue(database) : '';
             sql = `
               SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
               FROM ALL_TABLES t
@@ -612,13 +610,13 @@ export const useDatabase = () => {
               sql = `
                 SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
                 FROM ALL_TABLES t
-                WHERE t.OWNER = '${escapeSqlString(database)}' AND t.TABLE_NAME = '${safeTable}'
+                WHERE t.OWNER = '${escapeSqlValue(database)}' AND t.TABLE_NAME = '${safeTable}'
               `;
             }
             break;
           }
           case 'sqlserver': {
-            const safeDb = database ? escapeSqlString(database) : '';
+            const safeDb = database ? escapeSqlValue(database) : '';
             sql = `
               SELECT OBJECT_NAME(p.object_id) AS table_name,
                 CASE WHEN t.name IS NULL THEN 'BASE TABLE' ELSE 'VIEW' END AS table_type,
@@ -636,7 +634,7 @@ export const useDatabase = () => {
             break;
           }
           default: {
-            const safeDb = database ? escapeSqlString(database) : '';
+            const safeDb = database ? escapeSqlValue(database) : '';
             sql = database
               ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${safeDb}' AND TABLE_NAME = '${safeTable}'`
               : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${safeTable}'`;

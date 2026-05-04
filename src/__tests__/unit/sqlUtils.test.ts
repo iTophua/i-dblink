@@ -1,135 +1,59 @@
 import { describe, it, expect } from 'vitest';
+import { escapeSqlValue, escapeSqlIdentifier, splitSqlStatements } from '../../utils/sqlUtils';
 
-const escapeSqlString = (value: string): string =>
-  value.replace(/\\/g, '\\\\').replace(/'/g, "''");
-
-const escapeSqlIdentifier = (value: string): string =>
-  value.replace(/`/g, '``');
-
-const splitSqlStatements = (sql: string): string[] => {
-  const statements: string[] = [];
-  let current = '';
-  let inString = false;
-  let stringChar = '';
-  let inLineComment = false;
-  let inBlockComment = false;
-
-  for (let i = 0; i < sql.length; i++) {
-    const char = sql[i];
-    const nextChar = sql[i + 1];
-
-    if (inLineComment) {
-      if (char === '\n') {
-        inLineComment = false;
-      }
-      current += char;
-      continue;
-    }
-
-    if (inBlockComment) {
-      if (char === '*' && nextChar === '/') {
-        inBlockComment = false;
-        current += char;
-        current += nextChar;
-        i++;
-        continue;
-      }
-      current += char;
-      continue;
-    }
-
-    if (inString) {
-      if (char === '\\' && nextChar) {
-        current += char;
-        current += nextChar;
-        i++;
-        continue;
-      }
-      if (char === stringChar) {
-        inString = false;
-      }
-      current += char;
-      continue;
-    }
-
-    if (char === '-' && nextChar === '-') {
-      inLineComment = true;
-      current += char;
-      continue;
-    }
-
-    if (char === '/' && nextChar === '*') {
-      inBlockComment = true;
-      current += char;
-      current += nextChar;
-      i++;
-      continue;
-    }
-
-    if (char === "'" || char === '"' || char === '`') {
-      inString = true;
-      stringChar = char;
-      current += char;
-      continue;
-    }
-
-    if (char === ';') {
-      const trimmed = current.trim();
-      if (trimmed) {
-        statements.push(trimmed);
-      }
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  const trimmed = current.trim();
-  if (trimmed) {
-    statements.push(trimmed);
-  }
-
-  return statements;
-};
-
-describe('escapeSqlString', () => {
+describe('escapeSqlValue', () => {
   it('escapes backslashes', () => {
-    expect(escapeSqlString('C:\\path')).toBe('C:\\\\path');
+    expect(escapeSqlValue('C:\\path')).toBe("'C:\\\\path'");
   });
 
   it('escapes single quotes', () => {
-    expect(escapeSqlString("it's")).toBe("it''s");
+    expect(escapeSqlValue("it's")).toBe("'it''s'");
   });
 
   it('escapes both backslashes and quotes', () => {
-    expect(escapeSqlString("C:\\it's")).toBe('C:\\\\it\'\'s');
+    expect(escapeSqlValue("C:\\it's")).toBe("'C:\\\\it''s'");
   });
 
-  it('returns unchanged for safe strings', () => {
-    expect(escapeSqlString('hello')).toBe('hello');
+  it('returns NULL for null', () => {
+    expect(escapeSqlValue(null)).toBe('NULL');
   });
 
-  it('handles empty string', () => {
-    expect(escapeSqlString('')).toBe('');
+  it('returns NULL for undefined', () => {
+    expect(escapeSqlValue(undefined)).toBe('NULL');
+  });
+
+  it('returns NULL for empty string', () => {
+    expect(escapeSqlValue('')).toBe('NULL');
   });
 
   it('handles string with only special chars', () => {
-    expect(escapeSqlString("''")).toBe("''''");
+    expect(escapeSqlValue("''")).toBe("''''''");
   });
 });
 
 describe('escapeSqlIdentifier', () => {
-  it('escapes backticks', () => {
-    expect(escapeSqlIdentifier('my`table')).toBe('my``table');
+  it('escapes backticks for MySQL', () => {
+    expect(escapeSqlIdentifier('my`table', 'mysql')).toBe('`my``table`');
   });
 
-  it('returns unchanged for safe identifiers', () => {
-    expect(escapeSqlIdentifier('my_table')).toBe('my_table');
+  it('escapes double quotes for PostgreSQL', () => {
+    expect(escapeSqlIdentifier('my"table', 'postgresql')).toBe('"my""table"');
+  });
+
+  it('escapes brackets for SQL Server', () => {
+    expect(escapeSqlIdentifier('my]table', 'sqlserver')).toBe('[my]]table]');
+  });
+
+  it('returns wrapped for safe identifiers', () => {
+    expect(escapeSqlIdentifier('my_table', 'mysql')).toBe('`my_table`');
   });
 
   it('handles empty string', () => {
-    expect(escapeSqlIdentifier('')).toBe('');
+    expect(escapeSqlIdentifier('')).toBe('``');
+  });
+
+  it('uses backticks by default', () => {
+    expect(escapeSqlIdentifier('test')).toBe('`test`');
   });
 });
 
@@ -153,7 +77,7 @@ describe('splitSqlStatements', () => {
     const sql = "SELECT * FROM users WHERE name = 'John;Smith';";
     const result = splitSqlStatements(sql);
     expect(result).toHaveLength(1);
-    expect(result[0]).toContain("John;Smith");
+    expect(result[0]).toContain('John;Smith');
   });
 
   it('handles both single and double quoted strings', () => {
@@ -225,6 +149,6 @@ WHERE id = 1;`;
     const sql = "INSERT INTO users (name) VALUES ('a;b'); SELECT * FROM users;";
     const result = splitSqlStatements(sql);
     expect(result).toHaveLength(2);
-    expect(result[0]).toContain("a;b");
+    expect(result[0]).toContain('a;b');
   });
 });

@@ -28,6 +28,7 @@ export interface MenuActions {
   onNewQuery?: () => void;
   onExecuteQuery?: () => void;
   onSettings?: () => void;
+  onGlobalSearch?: () => void;
   onNewTab?: () => void;
   onCloseTab?: () => void;
   onNextTab?: () => void;
@@ -169,6 +170,12 @@ export function useMenuShortcuts(actions: MenuActions) {
   useHotkeys(getShortcutKeys('settings', isMac), () => actions.onSettings?.(), defaultOptions, [
     actions.onSettings,
   ]);
+  useHotkeys(
+    getShortcutKeys('global-search', isMac),
+    () => actions.onGlobalSearch?.(),
+    defaultOptions,
+    [actions.onGlobalSearch]
+  );
 
   // 窗口操作
   useHotkeys(getShortcutKeys('new-tab', isMac), () => actions.onNewTab?.(), defaultOptions, [

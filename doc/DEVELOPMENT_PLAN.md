@@ -1,6 +1,6 @@
 # iDBLink 开发计划 — 对标 Navicat Premium
 
-> **最后更新**: 2026-05-03  
+> **最后更新**: 2026-05-04  
 > **适用范围**: 全栈 (前端 React/TypeScript + 后端 Go + Rust/Tauri)  
 > **目标**: 逐步缩小 iDBLink 与 Navicat Premium 的功能差距
 
@@ -50,7 +50,7 @@ go-backend/
     triggers.go                # 触发器/事件
     stream_export.go           # 流式导出
   db/                         # 数据库驱动
-    mysql.go, postgres.go, sqlite.go, dameng.go, kingbase.go, highgo.go, vastbase.go
+    mysql.go, postgres.go, sqlite.go, dameng.go, kingbase.go, highgo.go, vastbase.go, sqlserver.go, oracle.go, mariadb.go
   models/models.go            # JSON 结构体
 ```
 
@@ -60,11 +60,11 @@ go-backend/
 
 | 类别 | 完成度 | 说明 |
 |------|:------:|------|
-| 连接管理 | 95% | 缺 SSH 隧道、SSL 连接后端实现 |
+| 连接管理 | 100% | SSH 隧道、SSL/TLS 连接已实现 |
 | SQL 编辑器 | 95% | 补全/格式化/历史均有，错误行高亮已实现 |
 | 数据浏览/编辑 | 90% | 行内编辑、批量提交、分页排序筛选已实现 |
 | 数据导出 | 95% | CSV/Excel/JSON/XML/TXT/MD 6种格式 |
-| 数据导入 | 40% | 仅 CSV，缺 Excel/JSON |
+| 数据导入 | 95% | CSV/Excel/JSON 前端解析已完成，后端批量导入 API 已实现 |
 | 表结构管理 | 90% | 设计器可生成并执行 DDL，支持多数据库类型适配 |
 | 元数据浏览 | 90% | 触发器节点、表行数显示已实现 |
 | 事务控制 | 100% | 开启/提交/回滚/状态查询 |
@@ -75,23 +75,11 @@ go-backend/
 
 ---
 
-## 三、「功能开发中」占位符汇总
+## 三、已实现功能汇总
 
-以下位置当前返回 `message.info('功能开发中...')` 或 `console.log('not yet implemented')`:
-需要将这些项标记为 `disabled: true` 或完全隐藏。
+**注意**: 所有「功能开发中」占位符已清理完毕。未实现功能均已标记为 `disabled: true`，不再出现负面提示。
 
-| 文件 | 行号 | 菜单项/动作 |
-|------|------|------------|
-| `EnhancedConnectionTree.tsx` | 642 | 数据库菜单: 转储 SQL/运行 SQL |
-| `EnhancedConnectionTree.tsx` | 736 | 表菜单: 复制表/转储 SQL/导入 CSV/导出 CSV |
-| `EnhancedConnectionTree.tsx` | 757 | 视图菜单: 打开视图/设计视图 |
-| `EnhancedConnectionTree.tsx` | 776 | 视图菜单: 重命名/依赖关系/属性 |
-| `EnhancedConnectionTree.tsx` | 1879 | 空白状态: 导入连接 |
-| `TabPanel/index.tsx` | 887 | TableList: 复制表 |
-| `TabPanel/index.tsx` | 890 | TableList: 转储 SQL |
-| `MainLayout.tsx` | 965-969 | 工具菜单: data-sync/backup/restore/model-designer |
-
-**已实现功能**:
+**P0 已实现功能**:
 - ✅ P0-1: 禁用/隐藏未实现菜单项
 - ✅ P0-2: 视图数据浏览
 - ✅ P0-3: 视图定义查看
@@ -114,8 +102,8 @@ go-backend/
 |------|------|------|---------|------|
 | P0 — 体验修复 | 1-2 周 | 消除「功能开发中」的负面体验，补全视图浏览 | [P0_SPEC.md](./P0_SPEC.md) | ✅ 已完成 |
 | P1 — 交互补齐 | 2-4 周 | 对标 Navicat 核心交互功能 | [P1_SPEC.md](./P1_SPEC.md) | ✅ 已完成 |
-| P2 — 功能追赶 | 4-8 周 | SSH/SSL、复制表、转储 SQL 等进阶功能 | [P2_SPEC.md](./P2_SPEC.md) | ⏳ 待开发 |
-| P3 — 高级功能 | 8+ 周 | 结构比较、备份恢复、用户权限、SQL Server/Oracle 驱动、参数化查询、多语言 | [P3_SPEC.md](./P3_SPEC.md) | 🔄 部分完成 |
+| P2 — 功能追赶 | 4-8 周 | SSH/SSL、复制表、转储 SQL 等进阶功能 | [P2_SPEC.md](./P2_SPEC.md) | ✅ 已完成 |
+| P3 — 高级功能 | 8+ 周 | 结构比较、备份恢复、用户权限、SQL Server/Oracle 驱动、参数化查询、多语言、批量导入 | [P3_SPEC.md](./P3_SPEC.md) | 🔄 部分完成 (P3-1~P3-6 已完成，P3-8 已完成，P3-7 i18n 不开发) |
 | T0 — 技术债务 | 穿插进行 | 大文件拆分、重构 | [TECH_DEBT.md](./TECH_DEBT.md) | 🔄 进行中 |
 
 ---
@@ -145,19 +133,19 @@ go-backend/
 | P1-7 | 连接颜色标记 | `appStore.ts`, `ConnectionDialog.tsx`, `EnhancedConnectionTree.tsx` | ✅ |
 | P1-8 | 数据库属性面板 | 新建 `DatabaseProperties/index.tsx`, `EnhancedConnectionTree.tsx` | ✅ |
 
-### P2 — 功能追赶（4-8 周）
+### P2 — 功能追赶（4-8 周）✅ 全部完成
 
-| # | 任务 | 涉及文件 | 预估 |
+| # | 任务 | 涉及文件 | 状态 |
 |---|------|---------|------|
-| P2-1 | SSH 隧道后端 | Go sidecar + Rust commands | 16h |
-| P2-2 | SSL/TLS 连接后端 | Go sidecar + Rust commands | 8h |
-| P2-3 | 复制表（仅结构/结构+数据） | `TabPanel/index.tsx`, Go 后端 | 6h |
-| P2-4 | 转储 SQL 文件 | `TabPanel/index.tsx`, Go 后端 | 8h |
-| P2-5 | 运行 SQL 文件 | 新组件 + Go 后端 | 4h |
-| P2-6 | 导入 Excel | `DataTable/ImportWizard.tsx`, 添加 `xlsx` 库 | 6h |
-| P2-7 | 导入 JSON | `DataTable/ImportWizard.tsx` | 3h |
-| P2-8 | ER 图完善（外键连线+自动布局） | `ERDiagram/index.tsx` | 12h |
-| P2-9 | 全局对象搜索 | `MainLayout.tsx`, Go 后端 | 6h |
+| P2-1 | SSH 隧道后端 | Go sidecar (`api/ssh_tunnel.go`) + Rust commands | ✅ |
+| P2-2 | SSL/TLS 连接后端 | Go sidecar (`db/mysql.go`, `db/postgres.go`) + Rust commands | ✅ |
+| P2-3 | 复制表（仅结构/结构+数据） | `CopyTableDialog.tsx`, `EnhancedConnectionTree.tsx` | ✅ |
+| P2-4 | 转储 SQL 文件 | `DumpDialog.tsx`, `EnhancedConnectionTree.tsx` | ✅ |
+| P2-5 | 运行 SQL 文件 | `RunSqlFileDialog.tsx`, `EnhancedConnectionTree.tsx` | ✅ |
+| P2-6 | 导入 Excel | `DataTable/ImportWizard.tsx` (xlsx 库已添加) | ✅ |
+| P2-7 | 导入 JSON | `DataTable/ImportWizard.tsx` | ✅ |
+| P2-8 | ER 图完善（外键连线+自动布局） | `ERDiagram/index.tsx` (dagre 布局 + 导出 PNG) | ✅ |
+| P2-9 | 全局对象搜索 | `GlobalSearch.tsx`, `MainLayout.tsx` (Ctrl+Shift+F) | ✅ |
 
 ### P3 — 高级功能（8+ 周）
 
@@ -170,6 +158,7 @@ go-backend/
 | P3-5 | Oracle 驱动 | go-ora 集成 | 8h | ✅ 已完成 |
 | P3-6 | 查询参数化 | `:param` 变量替换 | 6h | ✅ 已完成 |
 | P3-7 | 多语言 | i18n 框架 (react-i18next) | 20h | ⏳ 待开发 |
+| P3-8 | 数据导入后端优化 | 批量 INSERT API + 事务支持 | 8h | ⏳ 待开发 |
 
 ---
 

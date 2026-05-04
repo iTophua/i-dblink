@@ -1,17 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Modal, Input, List, Tag, Empty } from 'antd';
-import { SearchOutlined, TableOutlined, EyeOutlined, FunctionOutlined } from '@ant-design/icons';
-import { useAppStore } from '../stores/appStore';
+import { SearchOutlined, TableOutlined, EyeOutlined } from '@ant-design/icons';
+import type { TableInfo } from '../types/api';
 
 interface GlobalSearchProps {
   open: boolean;
   onClose: () => void;
   onSelectTable: (connectionId: string, database: string, tableName: string) => void;
+  connectionDatabases?: Record<string, { database: string; tables: TableInfo[] }[]>;
 }
 
-export function GlobalSearch({ open, onClose, onSelectTable }: GlobalSearchProps) {
+export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases = {} }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
-  const { connectionDatabases } = useAppStore();
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
@@ -26,7 +26,6 @@ export function GlobalSearch({ open, onClose, onSelectTable }: GlobalSearchProps
 
     for (const [connId, dbs] of Object.entries(connectionDatabases)) {
       for (const db of dbs) {
-        if (!db.loaded) continue;
         for (const table of db.tables) {
           if (table.table_name.toLowerCase().includes(q)) {
             items.push({
@@ -95,9 +94,9 @@ export function GlobalSearch({ open, onClose, onSelectTable }: GlobalSearchProps
                 title={item.name}
                 description={
                   <span>
-                    <Tag size="small">{item.database}</Tag>
+                    <Tag style={{ fontSize: 11, padding: '0 4px' }}>{item.database}</Tag>
                     {' '}
-                    <Tag size="small" color={item.type === 'view' ? 'blue' : 'green'}>
+                    <Tag style={{ fontSize: 11, padding: '0 4px' }} color={item.type === 'view' ? 'blue' : 'green'}>
                       {item.type === 'view' ? '视图' : '表'}
                     </Tag>
                   </span>

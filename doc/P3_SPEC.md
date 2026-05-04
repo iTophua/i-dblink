@@ -120,10 +120,10 @@ func checkBackupTools(dbType string) (available bool, path string) {
 
 ### 验收标准
 
-- [ ] MySQL 数据库可以备份为 .sql 文件
-- [ ] PostgreSQL 数据库可以备份为 .sql 文件
-- [ ] 备份文件可以恢复
-- [ ] 未安装备份工具时给出友好错误提示
+- [x] MySQL 数据库可以备份为 .sql 文件
+- [x] PostgreSQL 数据库可以备份为 .sql 文件
+- [x] 备份文件可以恢复
+- [x] 未安装备份工具时给出友好错误提示
 
 ---
 
@@ -166,11 +166,11 @@ GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO username;
 
 ### 验收标准
 
-- [ ] 连接树右键数据库 → "用户管理" 打开用户管理面板
-- [ ] 可创建新用户
-- [ ] 可授予/撤销权限
-- [ ] 可删除用户
-- [ ] 支持 MySQL 和 PostgreSQL
+- [x] 连接树右键数据库 → "用户管理" 打开用户管理面板
+- [x] 可创建新用户
+- [x] 可授予/撤销权限
+- [x] 可删除用户
+- [x] 支持 MySQL 和 PostgreSQL
 
 ---
 
@@ -258,12 +258,12 @@ const DEFAULT_PORTS: Record<string, number> = {
 
 ### 验收标准
 
-- [ ] 可以创建 SQL Server 连接
-- [ ] 测试连接成功
-- [ ] 可以浏览数据库和表
-- [ ] 可以执行 SQL 查询
-- [ ] 元数据查询正确（列、索引、外键）
-- [ ] 事务控制正确
+- [x] 可以创建 SQL Server 连接
+- [x] 测试连接成功
+- [x] 可以浏览数据库和表
+- [x] 可以执行 SQL 查询
+- [x] 元数据查询正确（列、索引、外键）
+- [x] 事务控制正确
 
 ---
 

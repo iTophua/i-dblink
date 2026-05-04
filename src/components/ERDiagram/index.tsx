@@ -10,10 +10,12 @@ import {
   Edge,
   Position,
   Handle,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Spin, Card, Button, Space, Select, message } from 'antd';
-import { ReloadOutlined, KeyOutlined, LinkOutlined } from '@ant-design/icons';
+import { Spin, Card, Button, Space, Select, message, Tooltip } from 'antd';
+import { ReloadOutlined, KeyOutlined, LinkOutlined, DownloadOutlined, LayoutOutlined } from '@ant-design/icons';
+import dagre from 'dagre';
 import { api } from '../../api';
 import type { TableInfo, ForeignKeyInfo, ColumnInfo } from '../../types/api';
 
@@ -121,14 +123,63 @@ const TableNode = memo(({ data }: { data: TableNodeData }) => {
 
 const nodeTypes = { tableNode: TableNode };
 
+function getLayoutedElements(nodes: Node<TableNodeData>[], edges: Edge[], direction = 'LR') {
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: direction, nodesep: 80, ranksep: 120 });
+
+  nodes.forEach((node) => {
+    const height = 32 + (node.data?.columns?.length || 0) * 22 + 8;
+    g.setNode(node.id, { width: 220, height });
+  });
+
+  edges.forEach((edge) => {
+    g.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(g);
+
+  const layoutedNodes = nodes.map((node) => {
+    const pos = g.node(node.id);
+    return { ...node, position: { x: pos.x - pos.width / 2, y: pos.y - pos.height / 2 } };
+  });
+
+  return { nodes: layoutedNodes, edges };
+}
+
+function ExportButton() {
+  const handleExport = async () => {
+    try {
+      const element = document.querySelector('.react-flow__viewport') as HTMLElement;
+      if (!element) return;
+      const { toPng } = await import('html-to-image');
+      const dataUrl = await toPng(element, { backgroundColor: '#ffffff' });
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = 'er-diagram.png';
+      a.click();
+      message.success('ER 图已导出');
+    } catch (err: any) {
+      message.error('导出失败：' + (err.message || err));
+    }
+  };
+
+  return (
+    <Tooltip title="导出为 PNG">
+      <Button icon={<DownloadOutlined />} onClick={handleExport} size="small" />
+    </Tooltip>
+  );
+}
+
 export function ERDiagram({ connectionId, database }: ERDiagramProps) {
   const [loading, setLoading] = useState(false);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [foreignKeys, setForeignKeys] = useState<Map<string, ForeignKeyInfo[]>>(new Map());
   const [tableColumns, setTableColumns] = useState<Map<string, ColumnInfo[]>>(new Map());
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<TableNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [useAutoLayout, setUseAutoLayout] = useState(true);
 
   const fetchSchema = useCallback(async () => {
     if (!connectionId) return;
@@ -179,33 +230,34 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
 
     const positions = new Map<string, { x: number; y: number }>();
 
-    // 按列数计算每个节点的高度，进行简单网格布局
-    const cols = Math.ceil(Math.sqrt(tables.length));
-    let currentX = 0;
-    let currentY = 0;
-    let maxRowHeight = 0;
-    let colIndex = 0;
+    if (!useAutoLayout) {
+      // 按列数计算每个节点的高度，进行简单网格布局
+      const cols = Math.ceil(Math.sqrt(tables.length));
+      let currentX = 0;
+      let currentY = 0;
+      let maxRowHeight = 0;
+      let colIndex = 0;
 
-    tables.forEach((table) => {
-      const columns = tableColumns.get(table.table_name) || [];
-      const nodeHeight = headerHeight + columns.length * rowHeight + 8;
+      tables.forEach((table) => {
+        const columns = tableColumns.get(table.table_name) || [];
+        const nodeHeight = headerHeight + columns.length * rowHeight + 8;
 
-      positions.set(table.table_name, { x: currentX, y: currentY });
+        positions.set(table.table_name, { x: currentX, y: currentY });
 
-      currentX += nodeWidth + horizontalSpacing;
-      maxRowHeight = Math.max(maxRowHeight, nodeHeight);
-      colIndex++;
+        currentX += nodeWidth + horizontalSpacing;
+        maxRowHeight = Math.max(maxRowHeight, nodeHeight);
+        colIndex++;
 
-      if (colIndex >= cols) {
-        colIndex = 0;
-        currentX = 0;
-        currentY += maxRowHeight + verticalSpacing;
-        maxRowHeight = 0;
-      }
-    });
+        if (colIndex >= cols) {
+          colIndex = 0;
+          currentX = 0;
+          currentY += maxRowHeight + verticalSpacing;
+          maxRowHeight = 0;
+        }
+      });
+    }
 
     const newNodes: Node<TableNodeData>[] = tables.map((table) => {
-      const pos = positions.get(table.table_name) || { x: 0, y: 0 };
       const fks = foreignKeys.get(table.table_name) || [];
       const cols = tableColumns.get(table.table_name) || [];
       const isFocus = selectedTable && table.table_name === selectedTable;
@@ -218,7 +270,7 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
       return {
         id: table.table_name,
         type: 'tableNode',
-        position: pos,
+        position: positions.get(table.table_name) || { x: 0, y: 0 },
         data: {
           label: table.table_name,
           columns: cols,
@@ -263,15 +315,21 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
       }
     });
 
-    setNodes(newNodes);
-    setEdges(newEdges);
-  }, [tables, foreignKeys, tableColumns, selectedTable, setNodes, setEdges]);
+    if (useAutoLayout) {
+      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(newNodes, newEdges);
+      setNodes(layoutedNodes);
+      setEdges(layoutedEdges);
+    } else {
+      setNodes(newNodes);
+      setEdges(newEdges);
+    }
+  }, [tables, foreignKeys, tableColumns, selectedTable, useAutoLayout, setNodes, setEdges]);
 
   useEffect(() => {
     if (tables.length > 0) {
       buildGraph();
     }
-  }, [tables, foreignKeys, tableColumns, selectedTable, buildGraph]);
+  }, [tables, foreignKeys, tableColumns, selectedTable, useAutoLayout, buildGraph]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -309,6 +367,17 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
             显示全部
           </Button>
         )}
+
+        <Tooltip title={useAutoLayout ? '切换为网格布局' : '切换为自动布局'}>
+          <Button
+            icon={<LayoutOutlined />}
+            size="small"
+            type={useAutoLayout ? 'primary' : 'default'}
+            onClick={() => setUseAutoLayout(!useAutoLayout)}
+          />
+        </Tooltip>
+
+        <ExportButton />
       </div>
 
       <div

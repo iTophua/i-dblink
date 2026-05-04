@@ -104,6 +104,9 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 
 	// 结构比较
 	mux.HandleFunc("POST /compare-schema", recoverMiddleware(h.CompareSchema))
+
+	// 批量导入
+	mux.HandleFunc("POST /batch-import", recoverMiddleware(h.BatchImport))
 }
 
 // Handler HTTP 处理器

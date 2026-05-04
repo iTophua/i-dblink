@@ -46,6 +46,13 @@ import { useAppStore } from '../stores/appStore';
 import type { ColumnInfo } from '../types/api';
 import { api } from '../api';
 import {
+  type FilterCondition,
+  type RowData,
+  buildWhereClause,
+  buildQuery,
+  buildCountQuery,
+} from './DataTable/utils';
+import {
   exportToExcel,
   exportToCSV as exportToCSVUtil,
   exportToJSON as exportToJSONUtil,
@@ -54,80 +61,11 @@ import {
   exportToMarkdown,
 } from '../utils/exportUtils';
 import { ImportWizard } from './DataTable/ImportWizard';
-
-// SQL 标识符转义函数 - 根据数据库类型选择合适的引号
-const escapeIdentifier = (name: string, dbType?: string): string => {
-  const { open, close } = (() => {
-    switch (dbType) {
-      case 'postgresql':
-      case 'kingbase':
-      case 'highgo':
-      case 'vastbase':
-      case 'oracle':
-      case 'dameng':
-        return { open: '"', close: '"' };
-      case 'sqlserver':
-        return { open: '[', close: ']' };
-      default:
-        return { open: '`', close: '`' };
-    }
-  })();
-
-  const escapeQuote = (n: string): string => {
-    switch (dbType) {
-      case 'postgresql':
-      case 'kingbase':
-      case 'highgo':
-      case 'vastbase':
-      case 'oracle':
-      case 'dameng':
-        return n.replace(/"/g, '""');
-      case 'sqlserver':
-        return n.replace(/]/g, ']]');
-      default:
-        return n.replace(/`/g, '``');
-    }
-  };
-
-  return `${open}${escapeQuote(name)}${close}`;
-};
-
-interface FilterCondition {
-  id: string;
-  field: string;
-  operator: string;
-  value: string;
-  logic: 'AND' | 'OR';
-  isGroupStart?: boolean;
-  isGroupEnd?: boolean;
-  level?: number;
-}
+import { escapeSqlIdentifier, escapeSqlValue } from '../utils/sqlUtils';
 
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import './DataTable.css';
-
-// SQL 值转义函数 - 防止 SQL 注入
-const escapeSqlValue = (value: any): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'NULL';
-  }
-  const str = String(value);
-  // 转义反斜杠、单引号、双引号、NULL 字节
-  const escaped = str
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "''")
-    .replace(/"/g, '""')
-    .replace(/\0/g, '\\0');
-  return `'${escaped}'`;
-};
-
-interface RowData {
-  [key: string]: any;
-  __row_id__?: string;
-  __status__?: 'new' | 'modified' | 'deleted';
-  __original_data__?: Record<string, any>; // 保存原始数据用于对比
-}
 
 function downloadBlob(content: string, filename: string, type: string) {
   const blob = new Blob([content], { type });
@@ -329,169 +267,7 @@ export const DataTable = memo(function DataTable({
   const { getColumns, executeQuery } = useDatabase();
   const loadingRef = useRef(false);
 
-  const buildQuery = useCallback(
-    (
-      page: number,
-      size: number,
-      sort?: { colId: string; sort: 'asc' | 'desc' }[],
-      overrideWhere?: string,
-      overrideOrderBy?: string
-    ) => {
-      const offset = (page - 1) * size;
-      const tableRef = database
-        ? `${escapeIdentifier(database, dbType)}.${escapeIdentifier(tableName, dbType)}`
-        : `${escapeIdentifier(tableName, dbType)}`;
-      let query = `SELECT * FROM ${tableRef}`;
 
-      const whereToUse = overrideWhere !== undefined ? overrideWhere : whereClause;
-      const orderByToUse = overrideOrderBy !== undefined ? overrideOrderBy : orderByClause;
-
-      if (whereToUse) {
-        query += ` WHERE ${whereToUse}`;
-      }
-
-      if (orderByToUse) {
-        query += ` ORDER BY ${orderByToUse}`;
-      } else if (sort && sort.length > 0) {
-        const orderClauses = sort
-          .map((s) => `${escapeIdentifier(s.colId, dbType)} ${s.sort.toUpperCase()}`)
-          .join(', ');
-        query += ` ORDER BY ${orderClauses}`;
-      }
-
-      query += ` LIMIT ${size} OFFSET ${offset}`;
-      return query;
-    },
-    [tableName, database, dbType, whereClause, orderByClause]
-  );
-
-  const buildWhereClause = useCallback((conditions: FilterCondition[]): string => {
-    const validConditions = conditions.filter((c) => c.field && c.operator);
-
-    if (validConditions.length === 0) return '';
-
-    let result = '';
-    let groupStack: number[] = [];
-
-    for (let i = 0; i < conditions.length; i++) {
-      const cond = conditions[i];
-
-      if (cond.isGroupStart) {
-        groupStack.push(i);
-        result += '(';
-        continue;
-      }
-
-      if (cond.isGroupEnd) {
-        groupStack.pop();
-        const slice = conditions
-          .slice(lastValidIndex(i, conditions), i)
-          .filter((c) => c.field && c.operator);
-        if (slice.length > 0) {
-          const subClauses = slice
-            .map((c, idx) => {
-              const clause = buildSingleCondition(c, idx);
-              if (idx === 0) return clause;
-              return `${c.logic} ${clause}`;
-            })
-            .join(' ');
-          result += ` ${subClauses})`;
-        }
-        continue;
-      }
-
-      if (!cond.field || !cond.operator) continue;
-
-      const prevCond = i > 0 ? conditions[i - 1] : null;
-      const needLogic =
-        prevCond &&
-        !prevCond.isGroupStart &&
-        !prevCond.isGroupEnd &&
-        prevCond.field &&
-        prevCond.operator;
-
-      if (needLogic) {
-        result += ` ${cond.logic} ${buildSingleCondition(cond, 0)}`;
-      } else {
-        result += buildSingleCondition(cond, 0);
-      }
-    }
-
-    return result.trim().replace(/\s+/g, ' ');
-
-    function lastValidIndex(endIdx: number, conds: FilterCondition[]): number {
-      for (let j = endIdx - 1; j >= 0; j--) {
-        if (conds[j].field && conds[j].operator) return j + 1;
-        if (conds[j].isGroupStart) return j + 1;
-      }
-      return 0;
-    }
-  }, []);
-
-  const buildSingleCondition = (cond: FilterCondition, index: number): string => {
-    const field = escapeIdentifier(cond.field, dbType);
-    const escapedValue = cond.value
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "''")
-      .replace(/%/g, '\\%')
-      .replace(/_/g, '\\_');
-    let clause = '';
-
-    switch (cond.operator) {
-      case 'equals':
-        clause = `${field} = '${escapedValue}'`;
-        break;
-      case 'notEquals':
-        clause = `${field} != '${escapedValue}'`;
-        break;
-      case 'contains':
-        clause = `${field} LIKE '%${escapedValue}%'`;
-        break;
-      case 'notContains':
-        clause = `${field} NOT LIKE '%${escapedValue}%'`;
-        break;
-      case 'startsWith':
-        clause = `${field} LIKE '${escapedValue}%'`;
-        break;
-      case 'endsWith':
-        clause = `${field} LIKE '%${escapedValue}'`;
-        break;
-      case 'isNull':
-        clause = `${field} IS NULL`;
-        break;
-      case 'isNotNull':
-        clause = `${field} IS NOT NULL`;
-        break;
-      case 'greaterThan':
-        clause = `${field} > '${escapedValue}'`;
-        break;
-      case 'lessThan':
-        clause = `${field} < '${escapedValue}'`;
-        break;
-      case 'greaterOrEqual':
-        clause = `${field} >= '${escapedValue}'`;
-        break;
-      case 'lessOrEqual':
-        clause = `${field} <= '${escapedValue}'`;
-        break;
-      case 'in':
-        clause = `${field} IN (${escapedValue
-          .split(',')
-          .map((v) => `'${v.trim()}'`)
-          .join(', ')})`;
-        break;
-      case 'notIn':
-        clause = `${field} NOT IN (${escapedValue
-          .split(',')
-          .map((v) => `'${v.trim()}'`)
-          .join(', ')})`;
-        break;
-      default:
-        clause = `${field} LIKE '%${escapedValue}%'`;
-    }
-
-    return clause;
-  };
 
   const loadData = useCallback(
     async (overrideWhere?: string, overrideOrderBy?: string) => {
@@ -501,7 +277,7 @@ export const DataTable = memo(function DataTable({
         loadingRef.current = true;
         setLoading(true);
 
-        const query = buildQuery(currentPage, pageSize, sortModel, overrideWhere, overrideOrderBy);
+        const query = buildQuery(currentPage, pageSize, tableName, database, dbType, sortModel, whereClause, orderByClause, overrideWhere, overrideOrderBy);
         setCurrentSql(query);
 
         const [colResult, dataResult] = await Promise.all([
@@ -575,6 +351,23 @@ export const DataTable = memo(function DataTable({
 
   // 性能优化：计算列定义的 useMemo
   const columnDefs = useMemo(() => {
+    const selectionColumn: ColDef = {
+      headerName: '',
+      width: 40,
+      minWidth: 40,
+      maxWidth: 40,
+      sortable: false,
+      filter: false,
+      resizable: false,
+      suppressSizeToFit: true,
+      checkboxSelection: true,
+      cellStyle: {
+        display: 'flex',
+        justifyContent: 'center',
+        paddingLeft: 8,
+      },
+    };
+
     const statusColumn: ColDef = {
       field: '__status__',
       headerName: '',
@@ -665,11 +458,10 @@ export const DataTable = memo(function DataTable({
           }
           return params.value;
         },
-        checkboxSelection: col.column_key === 'PRI',
       } as ColDef;
     });
 
-    return [statusColumn, ...dataColumns];
+    return [selectionColumn, statusColumn, ...dataColumns];
   }, [columns, colWidths, hiddenColumns]);
 
   useEffect(() => {
@@ -689,16 +481,9 @@ export const DataTable = memo(function DataTable({
   }, [columnDefs, columns]);
 
   const loadCount = useCallback(
-    async (overrideWhere?: string, overrideOrderBy?: string) => {
+    async (overrideWhere?: string) => {
       try {
-        const tableRef = database
-          ? `${escapeIdentifier(database, dbType)}.${escapeIdentifier(tableName, dbType)}`
-          : `${escapeIdentifier(tableName, dbType)}`;
-        const whereToUse = overrideWhere !== undefined ? overrideWhere : whereClause;
-        let query = `SELECT COUNT(*) AS cnt FROM ${tableRef}`;
-        if (whereToUse) {
-          query += ` WHERE ${whereToUse}`;
-        }
+        const query = buildCountQuery(tableName, database, dbType, whereClause, overrideWhere);
         const result = await executeQuery(connectionId, query, database);
         if (!result.error && result.rows.length > 0) {
           setTotalCount(Number(result.rows[0][0]));
@@ -902,7 +687,7 @@ export const DataTable = memo(function DataTable({
         }
 
         const primaryKeyValue = row[primaryKey.column_name];
-        const deleteSQL = `DELETE FROM ${escapeIdentifier(tableName, dbType)} WHERE ${escapeIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
+        const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
         const result = await executeQuery(connectionId, deleteSQL);
 
         if (result.error) {
@@ -926,7 +711,7 @@ export const DataTable = memo(function DataTable({
 
           if (columns_list.length === 0) continue;
 
-          const insertSQL = `INSERT INTO ${escapeIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
+          const insertSQL = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeSqlIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
           const result = await executeQuery(connectionId, insertSQL);
 
           if (result.error) {
@@ -963,7 +748,7 @@ export const DataTable = memo(function DataTable({
             if (newValue !== oldValue) {
               const valueStr =
                 newValue === null || newValue === '' ? 'NULL' : escapeSqlValue(newValue);
-              updates.push(`${escapeIdentifier(colName, dbType)} = ${valueStr}`);
+              updates.push(`${escapeSqlIdentifier(colName, dbType)} = ${valueStr}`);
             }
           }
 
@@ -974,11 +759,11 @@ export const DataTable = memo(function DataTable({
             .map((u) => {
               const eqIdx = u.indexOf(' = ');
               return eqIdx > 0
-                ? `${escapeIdentifier(u.substring(0, eqIdx), dbType)} = ${u.substring(eqIdx)}`
+                ? `${escapeSqlIdentifier(u.substring(0, eqIdx), dbType)} = ${u.substring(eqIdx)}`
                 : u;
             })
             .join(', ');
-          const updateSQL = `UPDATE ${escapeIdentifier(tableName, dbType)} SET ${setClause} WHERE ${escapeIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
+          const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setClause} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
           const result = await executeQuery(connectionId, updateSQL);
 
           if (result.error) {
@@ -1117,7 +902,7 @@ export const DataTable = memo(function DataTable({
         values[col] === null || values[col] === '' ? 'NULL' : escapeSqlValue(values[col])
       );
 
-      const insertSQL = `INSERT INTO ${escapeIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
+      const insertSQL = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeSqlIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
 
       const result = await executeQuery(connectionId, insertSQL);
 
@@ -1149,7 +934,7 @@ export const DataTable = memo(function DataTable({
         .filter(([key, value]) => key !== '__row_id__' && value !== editingRow?.[key])
         .map(
           ([key, value]) =>
-            `${escapeIdentifier(key, dbType)} = ${value === null || value === '' ? 'NULL' : escapeSqlValue(value)}`
+            `${escapeSqlIdentifier(key, dbType)} = ${value === null || value === '' ? 'NULL' : escapeSqlValue(value)}`
         )
         .join(', ');
 
@@ -1160,7 +945,7 @@ export const DataTable = memo(function DataTable({
       }
 
       const primaryKeyValue = editingRow?.[primaryKey.column_name];
-      const updateSQL = `UPDATE ${escapeIdentifier(tableName, dbType)} SET ${updates} WHERE ${escapeIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
+      const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${updates} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
 
       const result = await executeQuery(connectionId, updateSQL);
 
@@ -1275,7 +1060,7 @@ export const DataTable = memo(function DataTable({
   }, []);
 
   const applyFilter = useCallback(() => {
-    const where = buildWhereClause(filterConditions);
+    const where = buildWhereClause(filterConditions, dbType);
     setWhereClause(where);
     setCurrentPage(1);
     loadData(where, orderByClause);
@@ -1676,7 +1461,7 @@ export const DataTable = memo(function DataTable({
             <Button
               size="small"
               onClick={() => {
-                const sql = buildWhereClause(filterConditions);
+                const sql = buildWhereClause(filterConditions, dbType);
                 Modal.info({
                   title: 'SQL 预览',
                   content: sql ? (
@@ -2418,9 +2203,7 @@ export const DataTable = memo(function DataTable({
             current={currentPage}
             pageSize={pageSize}
             total={totalCount}
-            showSizeChanger={true}
-            pageSizeOptions={['10', '50', '100', '500', '1000', 'All']}
-            onChange={handlePageChange}
+            onChange={(page) => handlePageChange(page)}
             simple
           />
         </Space>
@@ -2558,36 +2341,29 @@ export const DataTable = memo(function DataTable({
             return newRow;
           });
 
-          // 这里应该调用后端API执行导入
-          // 暂时通过执行SQL语句来实现
           const pkCol = columns.find((c) => c.column_key === 'PRI');
-          for (const row of mappedData) {
-            const colNames = Object.keys(row);
-            const values = Object.values(row);
-            if (mode === 'append') {
-              const sql = `INSERT INTO \`${tableName}\` (${colNames.map((c) => `\`${c}\``).join(', ')}) VALUES (${values.map((v) => (typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` : v)).join(', ')})`;
-              await api.executeQuery(connectionId, sql, database);
-            } else if (mode === 'replace') {
-              // TRUNCATE 已在导入前执行
-              const sql = `INSERT INTO \`${tableName}\` (${colNames.map((c) => `\`${c}\``).join(', ')}) VALUES (${values.map((v) => (typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` : v)).join(', ')})`;
-              await api.executeQuery(connectionId, sql, database);
-            } else if (mode === 'update' && pkCol) {
-              const pkValue = row[pkCol.column_name];
-              if (pkValue !== undefined) {
-                const setClause = colNames
-                  .filter((c) => c !== pkCol.column_name)
-                  .map(
-                    (c) =>
-                      `\`${c}\` = ${typeof row[c] === 'string' ? `'${row[c].replace(/'/g, "''")}'` : row[c]}`
-                  )
-                  .join(', ');
-                const sql = `UPDATE \`${tableName}\` SET ${setClause} WHERE \`${pkCol.column_name}\` = ${typeof pkValue === 'string' ? `'${pkValue.replace(/'/g, "''")}'` : pkValue}`;
-                await api.executeQuery(connectionId, sql, database);
-              }
+          
+          try {
+            const result = await api.batchImport({
+              connectionId,
+              database,
+              tableName: tableName || '',
+              mode,
+              primaryKey: pkCol?.column_name,
+              rows: mappedData,
+            });
+            
+            if (result.failed_count > 0) {
+              message.warning(`导入完成: 成功 ${result.success_count} 条, 失败 ${result.failed_count} 条`);
+            } else {
+              message.success(`成功导入 ${result.success_count} 条数据`);
             }
+            
+            // 刷新数据
+            loadData();
+          } catch (err: any) {
+            message.error(`导入失败: ${err.message || err}`);
           }
-          // 刷新数据
-          loadData();
         }}
       />
 
@@ -2677,9 +2453,9 @@ export const DataTable = memo(function DataTable({
                 }
                 const row = cellContextMenu.rowNode.data;
                 const values = columns.map((_, i) => row[String(i)] ?? null);
-                const colStr = columns.map((c) => escapeIdentifier(c.column_name, dbType)).join(', ');
+                const colStr = columns.map((c) => escapeSqlIdentifier(c.column_name, dbType)).join(', ');
                 const valStr = values.map(escapeSqlValue).join(', ');
-                const sql = `INSERT INTO ${escapeIdentifier(tableName, dbType)} (${colStr}) VALUES (${valStr});`;
+                const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStr}) VALUES (${valStr});`;
                 navigator.clipboard.writeText(sql);
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
                 message.success('已复制 INSERT 语句');
@@ -2704,10 +2480,10 @@ export const DataTable = memo(function DataTable({
                 }
                 const values = columns.map((_, i) => row[String(i)] ?? null);
                 const setters = columns
-                  .map((c, i) => `${escapeIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i])}`)
+                  .map((c, i) => `${escapeSqlIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i])}`)
                   .filter((_, i) => i !== pkIdx)
                   .join(', ');
-                const sql = `UPDATE ${escapeIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(values[pkIdx])};`;
+                const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(values[pkIdx])};`;
                 navigator.clipboard.writeText(sql);
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
                 message.success('已复制 UPDATE 语句');

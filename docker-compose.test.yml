@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: idblink-test-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: testpassword
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+    ports:
+      - "13306:3306"
+    volumes:
+      - ./go-backend/testdata/mysql-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./go-backend/testdata/schema.sql:/docker-entrypoint-initdb.d/02-schema.sql
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ptestpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  postgres:
+    image: postgres:16
+    container_name: idblink-test-postgres
+    environment:
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: testdb
+      POSTGRES_USER: testuser
+    ports:
+      - "15432:5432"
+    volumes:
+      - ./go-backend/testdata/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./go-backend/testdata/schema.sql:/docker-entrypoint-initdb.d/02-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser -d testdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # SQLite doesn't need a container, but we create a volume for test databases
+  # Tests will use :memory: or file-based SQLite
+
+networks:
+  default:
+    name: idblink-test-network

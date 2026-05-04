@@ -51,6 +51,7 @@ export const MENU_SHORTCUTS: ShortcutMapping[] = [
 
   // 工具操作
   { id: 'settings', keys: 'mod+,', description: '设置', category: 'tools' },
+  { id: 'global-search', keys: 'mod+shift+f', description: '全局搜索', category: 'tools' },
 
   // 窗口操作
   { id: 'new-tab', keys: 'mod+t', description: '新建标签页', category: 'window' },

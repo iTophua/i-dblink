@@ -229,3 +229,21 @@ type TableMaintenanceRequest struct {
 	TableName    string `json:"table_name"`
 	Operation    string `json:"operation"` // optimize / analyze / repair
 }
+
+// BatchImportRequest 批量导入请求
+type BatchImportRequest struct {
+	ConnectionID string                   `json:"connection_id"`
+	Database     string                   `json:"database,omitempty"`
+	TableName    string                   `json:"table_name"`
+	Mode         string                   `json:"mode"` // append / replace / update
+	PrimaryKey   string                   `json:"primary_key,omitempty"`
+	Rows         []map[string]interface{} `json:"rows"`
+}
+
+// BatchImportResponse 批量导入响应
+type BatchImportResponse struct {
+	SuccessCount int    `json:"success_count"`
+	FailedCount  int    `json:"failed_count"`
+	TotalCount   int    `json:"total_count"`
+	LastError    string `json:"last_error,omitempty"`
+}

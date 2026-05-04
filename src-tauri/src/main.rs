@@ -424,6 +424,7 @@ fn main() {
             commands::grant_privilege,
             commands::revoke_privilege,
             commands::compare_schema,
+            commands::batch_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

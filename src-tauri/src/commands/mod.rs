@@ -1920,3 +1920,34 @@ pub async fn compare_schema(
     let resp: serde_json::Value = sm.post("/compare-schema", &req).await?;
     Ok(resp)
 }
+
+#[tauri::command]
+pub async fn batch_import(
+    connection_id: String,
+    database: Option<String>,
+    table_name: String,
+    mode: String,
+    primary_key: Option<String>,
+    rows: Vec<serde_json::Value>,
+    sidecar: State<'_, SidecarState>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+) -> Result<serde_json::Value, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+        "table_name": table_name,
+        "mode": mode,
+        "primary_key": primary_key,
+        "rows": rows,
+    });
+    let resp: serde_json::Value = sm.post("/batch-import", &req).await?;
+    Ok(resp)
+}

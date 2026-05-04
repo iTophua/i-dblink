@@ -3,6 +3,7 @@ import { Modal, Tabs, Button, Space, Select, Input, message, Progress } from 'an
 import { UploadOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import { api } from '../../api';
 import { useAppStore } from '../../stores/appStore';
+import { escapeSqlIdentifier } from '../../utils/sqlUtils';
 
 const { TextArea } = Input;
 
@@ -54,22 +55,7 @@ export function ImportExportModal({
 
   const [importSql, setImportSql] = useState('');
 
-  // 根据数据库类型转义标识符
-  const escapeId = (name: string): string => {
-    switch (dbType) {
-      case 'postgresql':
-      case 'kingbase':
-      case 'highgo':
-      case 'vastbase':
-      case 'oracle':
-      case 'dameng':
-        return `"${name.replace(/"/g, '""')}"`;
-      case 'sqlserver':
-        return `[${name.replace(/]/g, ']]')}]`;
-      default:
-        return `\`${name.replace(/`/g, '``')}\``;
-    }
-  };
+  const escapeId = (name: string): string => escapeSqlIdentifier(name, dbType);
 
   // 导出数据
   const handleExport = useCallback(async () => {

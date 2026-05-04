@@ -8,6 +8,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: [path.resolve(__dirname, 'src/__tests__/setupTests.ts')],
     globals: true,
+    include: ['src/__tests__/**/*.test.{ts,tsx}'],
+    exclude: ['e2e/**', 'src-tauri/**', 'go-backend/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json'],

@@ -2144,6 +2144,7 @@ export function EnhancedConnectionTree({
         sourceTable={copyTarget?.tableName || ''}
         sourceDatabase={copyTarget?.database}
         connectionId={copyTarget?.connId || ''}
+        dbType={connections.find((c) => c.id === copyTarget?.connId)?.db_type}
         databases={
           copyTarget
             ? connectionDatabases[copyTarget.connId]?.map((d) => d.database) || []

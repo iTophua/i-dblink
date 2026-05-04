@@ -398,4 +398,20 @@ export const api = {
   }): Promise<any> {
     return await invoke('compare_schema', params);
   },
+
+  async batchImport(params: {
+    connectionId: string;
+    database?: string;
+    tableName: string;
+    mode: 'append' | 'replace' | 'update';
+    primaryKey?: string;
+    rows: Record<string, any>[];
+  }): Promise<{
+    success_count: number;
+    failed_count: number;
+    total_count: number;
+    last_error?: string;
+  }> {
+    return await invoke('batch_import', params);
+  },
 };
