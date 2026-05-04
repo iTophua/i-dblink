@@ -4,6 +4,7 @@ import { CodeOutlined, ColumnWidthOutlined } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import type { ColumnsType } from 'antd/es/table';
 import type { ColumnInfo } from '../../types/api';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 
 const { Text } = Typography;
@@ -15,6 +16,7 @@ interface ViewDefinitionProps {
 }
 
 export function ViewDefinition({ connectionId, viewName, database }: ViewDefinitionProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('ddl');
   const [ddl, setDdl] = useState<string>('');
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
@@ -42,28 +44,28 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
 
   const columnDefs: ColumnsType<ColumnInfo> = [
     {
-      title: 'Name',
+      title: t('common.name'),
       dataIndex: 'column_name',
       width: 200,
     },
     {
-      title: 'Type',
+      title: t('common.type'),
       dataIndex: 'data_type',
       width: 200,
     },
     {
-      title: 'Nullable',
+      title: t('common.nullable'),
       dataIndex: 'is_nullable',
       width: 100,
-      render: (val: string) => (val === 'YES' ? 'Yes' : 'No'),
+      render: (val: string) => (val === 'YES' ? t('common.yes') : t('common.no')),
     },
     {
-      title: 'Default',
+      title: t('common.default'),
       dataIndex: 'column_default',
       render: (val: string | null) => val || 'NULL',
     },
     {
-      title: 'Comment',
+      title: t('common.comment'),
       dataIndex: 'comment',
       render: (val: string | null) => val || '-',
     },
@@ -86,7 +88,7 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
             zIndex: 10,
           }}
         >
-          <Spin tip="加载视图定义..." />
+          <Spin tip={t('common.loadingViewDefinition')} />
         </div>
       )}
       <div
@@ -97,7 +99,7 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
         }}
       >
         <Text strong style={{ fontSize: 14 }}>
-          视图定义: {viewName}
+          {t('common.viewDefinition')}: {viewName}
         </Text>
       </div>
       <div style={{ flex: 1, overflow: 'hidden', padding: '12px 16px' }}>
@@ -109,7 +111,7 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
               key: 'ddl',
               label: (
                 <span>
-                  <CodeOutlined /> DDL
+                  <CodeOutlined /> {t('common.ddl')}
                 </span>
               ),
               children: (
@@ -136,7 +138,7 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
               key: 'columns',
               label: (
                 <span>
-                  <ColumnWidthOutlined /> Columns
+                  <ColumnWidthOutlined /> {t('common.columns')}
                 </span>
               ),
               children: (

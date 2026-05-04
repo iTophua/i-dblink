@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Tabs, Table, Spin, Empty, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { KeyOutlined, LinkOutlined, InfoCircleOutlined, CodeOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../hooks/useApi';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../types/api';
 
@@ -26,6 +27,7 @@ interface TableStructureProps {
 }
 
 export function TableStructure({ connectionId, tableName, database }: TableStructureProps) {
+  const { t } = useTranslation();
   const { getColumns, getIndexes, getForeignKeys, getTableInfo, getCreateTableSQL } = useDatabase();
   const [loading, setLoading] = useState(false);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
@@ -73,7 +75,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
 
   const columnDefs: ColumnsType<ColumnInfo> = [
     {
-      title: '列名',
+      title: t('common.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       minWidth: 150,
@@ -87,28 +89,28 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       ),
     },
     {
-      title: '类型',
+      title: t('common.type'),
       dataIndex: 'data_type',
       key: 'data_type',
       width: 140,
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
     {
-      title: '可空',
+      title: t('common.nullable'),
       dataIndex: 'is_nullable',
       key: 'is_nullable',
       width: 60,
-      render: (val: string) => (val === 'YES' ? '是' : '否'),
+      render: (val: string) => (val === 'YES' ? t('common.yes') : t('common.no')),
     },
     {
-      title: '默认值',
+      title: t('common.defaultValue'),
       dataIndex: 'column_default',
       key: 'column_default',
       width: 120,
       ellipsis: true,
     },
     {
-      title: '键',
+      title: t('common.key'),
       dataIndex: 'column_key',
       key: 'column_key',
       width: 60,
@@ -120,7 +122,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       },
     },
     {
-      title: '注释',
+      title: t('common.comment'),
       dataIndex: 'comment',
       key: 'comment',
       ellipsis: true,
@@ -129,7 +131,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
 
   const indexDefs: ColumnsType<IndexInfo> = [
     {
-      title: '索引名',
+      title: t('common.indexName'),
       dataIndex: 'index_name',
       key: 'index_name',
       width: 180,
@@ -141,27 +143,27 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       ),
     },
     {
-      title: '列名',
+      title: t('common.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 140,
     },
     {
-      title: '唯一',
+      title: t('common.unique'),
       dataIndex: 'is_unique',
       key: 'is_unique',
       width: 60,
-      render: (val: boolean) => (val ? '是' : '否'),
+      render: (val: boolean) => (val ? t('common.yes') : t('common.no')),
     },
     {
-      title: '主键',
+      title: t('common.primaryKey'),
       dataIndex: 'is_primary',
       key: 'is_primary',
       width: 60,
-      render: (val: boolean) => (val ? <Tag color="gold">是</Tag> : '否'),
+      render: (val: boolean) => (val ? <Tag color="gold">{t('common.yes')}</Tag> : t('common.no')),
     },
     {
-      title: '顺序',
+      title: t('common.sequence'),
       dataIndex: 'seq_in_index',
       key: 'seq_in_index',
       width: 60,
@@ -170,13 +172,13 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
 
   const fkDefs: ColumnsType<ForeignKeyInfo> = [
     {
-      title: '约束名',
+      title: t('common.constraintName'),
       dataIndex: 'constraint_name',
       key: 'constraint_name',
       width: 180,
     },
     {
-      title: '本表列',
+      title: t('common.thisTableColumn'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 120,
@@ -189,14 +191,14 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       render: () => <LinkOutlined style={{ color: '#999' }} />,
     },
     {
-      title: '引用表',
+      title: t('common.referencedTable'),
       dataIndex: 'referenced_table',
       key: 'referenced_table',
       width: 140,
       render: (text: string) => <Tag color="green">{text}</Tag>,
     },
     {
-      title: '引用列',
+      title: t('common.referencedColumn'),
       dataIndex: 'referenced_column',
       key: 'referenced_column',
       width: 120,
@@ -230,7 +232,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
             label: (
               <span>
                 <InfoCircleOutlined style={{ marginRight: 4 }} />
-                信息
+                {t('common.info')}
               </span>
             ),
             children: tableInfo ? (
@@ -238,21 +240,21 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 <table style={{ width: '100%', fontSize: 11, lineHeight: '18px' }}>
                   <tbody>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500, width: 100 }}>表名</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500, width: 100 }}>{t('common.tableName')}</td>
                       <td>{tableInfo.table_name}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>引擎</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.engine')}</td>
                       <td>
                         <Tag color="blue">{tableInfo.engine || '-'}</Tag>
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>行数</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.rowCount')}</td>
                       <td>{tableInfo.row_count?.toLocaleString() || '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>数据大小</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.dataSize')}</td>
                       <td>
                         {tableInfo.data_length
                           ? `${(tableInfo.data_length / 1024).toFixed(2)} KB`
@@ -260,7 +262,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>索引大小</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.indexSize')}</td>
                       <td>
                         {tableInfo.index_length
                           ? `${(tableInfo.index_length / 1024).toFixed(2)} KB`
@@ -268,33 +270,33 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>排序规则</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.collation')}</td>
                       <td>
                         <Tag color="green">{tableInfo.collation || '-'}</Tag>
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>创建时间</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.createTime')}</td>
                       <td>{tableInfo.create_time || '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>更新时间</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.updateTime')}</td>
                       <td>{tableInfo.update_time || '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>注释</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.comment')}</td>
                       <td>{tableInfo.comment || '-'}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             ) : (
-              <Empty description="暂无表信息" />
+              <Empty description={t('common.noTableInfo')} />
             ),
           },
           {
             key: 'columns',
-            label: `列 (${columns.length})`,
+            label: `${t('common.columns')} (${columns.length})`,
             children:
               columns.length > 0 ? (
                 <Table
@@ -307,12 +309,12 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                   className="table-compact"
                 />
               ) : (
-                <Empty description="暂无列信息" />
+                <Empty description={t('common.noColumnInfo')} />
               ),
           },
           {
             key: 'indexes',
-            label: `索引 (${indexes.length})`,
+            label: `${t('common.indexes')} (${indexes.length})`,
             children:
               indexes.length > 0 ? (
                 <Table
@@ -325,12 +327,12 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                   className="table-compact"
                 />
               ) : (
-                <Empty description="暂无索引" />
+                <Empty description={t('common.noIndexes')} />
               ),
           },
           {
             key: 'foreign_keys',
-            label: `外键 (${foreignKeys.length})`,
+            label: `${t('common.foreignKeys')} (${foreignKeys.length})`,
             children:
               foreignKeys.length > 0 ? (
                 <Table
@@ -343,7 +345,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                   className="table-compact"
                 />
               ) : (
-                <Empty description="暂无外键" />
+                <Empty description={t('common.noForeignKeys')} />
               ),
           },
           {
@@ -351,7 +353,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
             label: (
               <span>
                 <CodeOutlined style={{ marginRight: 4 }} />
-                SQL 预览
+                {t('common.sqlPreview')}
               </span>
             ),
             children: createTableSQL ? (
@@ -371,7 +373,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 </pre>
               </div>
             ) : (
-              <Empty description="暂无 SQL" />
+              <Empty description={t('common.noSql')} />
             ),
           },
         ]}

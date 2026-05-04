@@ -14,6 +14,7 @@ import {
   Tooltip,
   Spin,
 } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { GlobalInput } from '../GlobalInput';
 import {
   PlusOutlined,
@@ -521,6 +522,7 @@ export function TableDesigner({
   onSave,
   onCancel,
 }: TableDesignerProps) {
+  const { t } = useTranslation();
   const isEditMode = !!propTableName;
   const [activeTab, setActiveTab] = useState('columns');
   const [tableName, setTableName] = useState(propTableName || '');
@@ -610,7 +612,7 @@ export function TableDesigner({
         lastLoadedRef.current = cacheKey;
       } catch (err) {
         console.error('Failed to load table structure:', err);
-        message.error('加载表结构失败');
+        message.error(t('common.failedToLoadTableStructure'));
       } finally {
         setLoading(false);
       }
@@ -736,15 +738,15 @@ export function TableDesigner({
   // ── Save ───────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!tableName) {
-      message.error('Please enter a table name');
+      message.error(t('common.pleaseEnterTableName'));
       return;
     }
     if (columns.length === 0) {
-      message.error('At least one column is required');
+      message.error(t('common.atLeastOneColumnRequired'));
       return;
     }
     if (!sqlPreview || sqlPreview.startsWith('--')) {
-      message.info('没有需要执行的 SQL');
+      message.info(t('common.noSqlToExecute'));
       return;
     }
 
@@ -760,10 +762,10 @@ export function TableDesigner({
         await api.executeDDL(connectionId, stmt, database);
       }
 
-      message.success(isEditMode ? '表结构修改成功' : '建表成功');
+      message.success(isEditMode ? t('common.tableStructureUpdated') : t('common.tableCreated'));
       onSave?.(sqlPreview);
     } catch (err: any) {
-      message.error(`执行失败：${err.message || err}`);
+      message.error(`${t('common.executionFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
     }

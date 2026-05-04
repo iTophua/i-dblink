@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css';
 import { Spin, Card, Button, Space, Select, message, Tooltip } from 'antd';
 import { ReloadOutlined, KeyOutlined, LinkOutlined, DownloadOutlined, LayoutOutlined } from '@ant-design/icons';
 import dagre from 'dagre';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 import type { TableInfo, ForeignKeyInfo, ColumnInfo } from '../../types/api';
 
@@ -148,6 +149,7 @@ function getLayoutedElements(nodes: Node<TableNodeData>[], edges: Edge[], direct
 }
 
 function ExportButton() {
+  const { t } = useTranslation();
   const handleExport = async () => {
     try {
       const element = document.querySelector('.react-flow__viewport') as HTMLElement;
@@ -158,20 +160,21 @@ function ExportButton() {
       a.href = dataUrl;
       a.download = 'er-diagram.png';
       a.click();
-      message.success('ER 图已导出');
+      message.success(t('common.erDiagramExported'));
     } catch (err: any) {
-      message.error('导出失败：' + (err.message || err));
+      message.error(`${t('common.exportFailed')}: ${err.message || err}`);
     }
   };
 
   return (
-    <Tooltip title="导出为 PNG">
+    <Tooltip title={t('common.exportAsPng')}>
       <Button icon={<DownloadOutlined />} onClick={handleExport} size="small" />
     </Tooltip>
   );
 }
 
 export function ERDiagram({ connectionId, database }: ERDiagramProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [foreignKeys, setForeignKeys] = useState<Map<string, ForeignKeyInfo[]>>(new Map());
@@ -207,9 +210,9 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
       }
       setForeignKeys(fkMap);
       setTableColumns(colMap);
-      message.success(`已加载 ${allTables.length} 个表`);
+      message.success(`${t('common.loaded')} ${allTables.length} ${t('common.tables')}`);
     } catch (error: any) {
-      message.error(`加载失败：${error.message || error}`);
+      message.error(`${t('common.loadFailed')}: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -349,11 +352,11 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
         }}
       >
         <Button icon={<ReloadOutlined />} onClick={fetchSchema} loading={loading} size="small">
-          刷新
+          {t('common.refresh')}
         </Button>
 
         <Select
-          placeholder="筛选表"
+          placeholder={t('common.filterTable')}
           allowClear
           style={{ width: 150 }}
           size="small"
@@ -364,11 +367,11 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
 
         {selectedTable && (
           <Button size="small" onClick={() => setSelectedTable(null)}>
-            显示全部
+            {t('common.showAll')}
           </Button>
         )}
 
-        <Tooltip title={useAutoLayout ? '切换为网格布局' : '切换为自动布局'}>
+        <Tooltip title={useAutoLayout ? t('common.switchToGridLayout') : t('common.switchToAutoLayout')}>
           <Button
             icon={<LayoutOutlined />}
             size="small"
@@ -394,8 +397,8 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
           color: 'var(--text-secondary)',
         }}
       >
-        <div>表: {tables.length}</div>
-        <div>关系: {edges.length}</div>
+        <div>{t('common.tables')}: {tables.length}</div>
+        <div>{t('common.relations')}: {edges.length}</div>
       </div>
 
       {loading && tables.length === 0 ? (
@@ -407,7 +410,7 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
             height: '100%',
           }}
         >
-          <Spin size="large" tip="加载表结构..." />
+          <Spin size="large" tip={t('common.loadingTableStructure')} />
         </div>
       ) : (
         <ReactFlow
@@ -441,9 +444,9 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
         >
           <Card>
             <Space direction="vertical" align="center">
-              <div style={{ color: 'var(--text-secondary)' }}>暂无表数据</div>
+              <div style={{ color: 'var(--text-secondary)' }}>{t('common.noTableData')}</div>
               <Button icon={<ReloadOutlined />} onClick={fetchSchema}>
-                刷新
+                {t('common.refresh')}
               </Button>
             </Space>
           </Card>

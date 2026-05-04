@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Form, Input, Radio, message, Select } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 
 interface CopyTableDialogProps {
@@ -46,6 +47,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
   onCancel,
   onSuccess,
 }) => {
+  const { t } = useTranslation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -100,10 +102,10 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
         }
       }
 
-      message.success('表 "' + sourceTable + '" 已成功复制为 "' + targetTable + '"');
+      message.success(`${t('common.tableCopied')}: "${sourceTable}" → "${targetTable}"`);
       onSuccess();
     } catch (err: any) {
-      message.error('复制失败：' + (err.message || err));
+      message.error(`${t('common.copyFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -116,13 +118,13 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
 
   return (
     <Modal
-      title="复制表"
+      title={t('common.copyTable')}
       open={open}
       onOk={handleOk}
       onCancel={handleCancel}
       confirmLoading={loading}
-      okText="复制"
-      cancelText="取消"
+      okText={t('common.copy')}
+      cancelText={t('common.cancel')}
       destroyOnClose
     >
       <Form
@@ -134,13 +136,13 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
           copyType: 'structure',
         }}
       >
-        <Form.Item label="源表">
+        <Form.Item label={t('common.sourceTable')}>
           <Input value={sourceTable} disabled />
         </Form.Item>
 
         {databases.length > 0 && (
-          <Form.Item name="targetDatabase" label="目标数据库">
-            <Select placeholder="选择目标数据库">
+          <Form.Item name="targetDatabase" label={t('common.targetDatabase')}>
+            <Select placeholder={t('common.selectTargetDatabase')}>
               {databases.map((db) => (
                 <Select.Option key={db} value={db}>
                   {db}
@@ -152,16 +154,16 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
 
         <Form.Item
           name="targetTable"
-          label="目标表名"
-          rules={[{ required: true, message: '请输入目标表名' }]}
+          label={t('common.targetTableName')}
+          rules={[{ required: true, message: t('common.pleaseEnterTargetTableName') }]}
         >
-          <Input placeholder="请输入目标表名" />
+          <Input placeholder={t('common.pleaseEnterTargetTableName')} />
         </Form.Item>
 
-        <Form.Item name="copyType" label="复制类型">
+        <Form.Item name="copyType" label={t('common.copyType')}>
           <Radio.Group>
-            <Radio value="structure">仅结构</Radio>
-            <Radio value="structure_data">结构和数据</Radio>
+            <Radio value="structure">{t('common.structureOnly')}</Radio>
+            <Radio value="structure_data">{t('common.structureAndData')}</Radio>
           </Radio.Group>
         </Form.Item>
       </Form>

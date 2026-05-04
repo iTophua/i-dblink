@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Modal,
   Form,
@@ -29,6 +30,7 @@ import { GlobalInput, GlobalInputPassword } from './GlobalInput';
 import { DatabaseIcon } from './DatabaseIcon';
 import { DB_TYPE_COLORS } from '../styles/theme';
 import type { FormInstance } from 'antd';
+import i18n from '../i18n';
 
 interface FileInputConfig {
   form: FormInstance;
@@ -47,7 +49,7 @@ const createFileInput = (config: FileInputConfig) => {
     if (file) {
       const path = (file as any).path || file.name;
       form.setFieldValue(fieldName, path);
-      message.success(`已选择: ${file.name}`);
+      message.success(`${i18n.t('common.fileSelected')}: ${file.name}`);
     }
   };
   document.body.appendChild(input);
@@ -142,6 +144,7 @@ const DB_CATEGORIES = [
 ];
 
 export function ConnectionDialog({ open, editingData, onCancel, onSave }: ConnectionDialogProps) {
+  const { t } = useTranslation();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -238,12 +241,12 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       if (testCancelledRef.current) return;
 
       if (result) {
-        message.success('连接测试成功');
+        message.success(t('common.connectionTestSuccess'));
       }
     } catch (error: any) {
       if (testCancelledRef.current) return;
       if (error.errorFields) return;
-      message.error(`连接测试失败：${error}`);
+      message.error(`${t('common.connectionTestFailed')}: ${error}`);
     } finally {
       setTesting(false);
     }
@@ -288,7 +291,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       });
     } catch (error: any) {
       if (error.errorFields) return;
-      message.error(`操作失败：${error}`);
+      message.error(`${t('common.operationFailed')}: ${error}`);
     } finally {
       setSaving(false);
     }
@@ -303,11 +306,20 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   const currentDbColor =
     DB_TYPE_COLORS[dbType as keyof typeof DB_TYPE_COLORS] || DB_TYPE_COLORS.default;
 
+  const getDbCategoryLabel = (name: string) => {
+    const map: Record<string, string> = {
+      '常用数据库': 'common.dbCategoryCommon',
+      '企业数据库': 'common.dbCategoryEnterprise',
+      '国产数据库': 'common.dbCategoryDomestic',
+    };
+    return t(map[name] || name);
+  };
+
   const tabs = [
-    { key: 'general', label: '常规', icon: <DatabaseOutlined /> },
+    { key: 'general', label: t('common.tabGeneral'), icon: <DatabaseOutlined /> },
     { key: 'ssl', label: 'SSL', icon: <SafetyCertificateOutlined /> },
     { key: 'ssh', label: 'SSH', icon: <KeyOutlined /> },
-    { key: 'advanced', label: '高级', icon: <SettingOutlined /> },
+    { key: 'advanced', label: t('common.tabAdvanced'), icon: <SettingOutlined /> },
   ];
 
   return (
@@ -345,7 +357,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
               letterSpacing: 0.5,
             }}
           >
-            选择数据库
+            {t('common.selectDatabase')}
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '0 8px 12px' }}>
             {DB_CATEGORIES.map((category) => (
@@ -358,7 +370,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     fontWeight: 500,
                   }}
                 >
-                  {category.name}
+                  {getDbCategoryLabel(category.name)}
                 </div>
                 {category.dbs.map((dbValue) => {
                   const dbInfo = DB_TYPE_OPTIONS.find((opt) => opt.value === dbValue);
@@ -433,7 +445,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
             <DatabaseIcon type={dbType} size={28} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>
-                {editingData ? '编辑连接' : '新建连接'}
+                {editingData ? t('common.editConnection') : t('common.createNewConnection')}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
                 {currentDbInfo?.desc}
@@ -443,10 +455,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
               {testing ? (
                 <Space>
                   <AntButton loading size="small">
-                    测试中...
+                    {t('common.testing')}
                   </AntButton>
                   <AntButton onClick={handleCancelTest} size="small">
-                    取消
+                    {t('common.cancel')}
                   </AntButton>
                 </Space>
               ) : (
@@ -455,14 +467,14 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   onClick={handleTestConnection}
                   size="small"
                 >
-                  测试连接
+                  {t('common.testConnection')}
                 </AntButton>
               )}
               <AntButton onClick={handleCancel} size="small">
-                取消
+                {t('common.cancel')}
               </AntButton>
               <AntButton type="primary" onClick={handleOk} loading={saving} size="small">
-                {editingData ? '保存' : '创建'}
+                {editingData ? t('common.save') : t('common.create')}
               </AntButton>
             </div>
           </div>
@@ -533,22 +545,22 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                 <>
                   <Form.Item
                     name="name"
-                    label="连接名称"
-                    rules={[{ required: true, message: '请输入连接名称' }]}
+                    label={t('common.connectionName')}
+                    rules={[{ required: true, message: t('common.pleaseEnterConnectionName') }]}
                     style={{ marginBottom: 16 }}
                   >
-                    <GlobalInput placeholder="例如：生产环境 MySQL" />
+                    <GlobalInput placeholder={t('common.exampleProdMysql')} />
                   </Form.Item>
 
                   {dbType === 'sqlite' ? (
                     <Form.Item
                       name="host"
-                      label="数据库文件路径"
-                      rules={[{ required: true, message: '请输入数据库文件路径' }]}
+                      label={t('common.databaseFilePath')}
+                      rules={[{ required: true, message: t('common.pleaseEnterDatabaseFilePath') }]}
                       style={{ marginBottom: 16 }}
                     >
                       <Space.Compact style={{ width: '100%' }}>
-                        <GlobalInput placeholder="例如：/path/to/database.db" />
+                        <GlobalInput placeholder={t('common.exampleDatabasePath')} />
                         <AntButton
                           icon={<FolderOutlined />}
                           onClick={() =>
@@ -559,7 +571,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                             })
                           }
                         >
-                          浏览
+                          {t('common.browse')}
                         </AntButton>
                       </Space.Compact>
                     </Form.Item>
@@ -569,18 +581,18 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                         <Col span={18}>
                           <Form.Item
                             name="host"
-                            label="主机地址"
-                            rules={[{ required: true, message: '请输入主机地址' }]}
+                            label={t('common.hostAddress')}
+                            rules={[{ required: true, message: t('common.pleaseEnterHostAddress') }]}
                             style={{ marginBottom: 16 }}
                           >
-                            <GlobalInput placeholder="例如：localhost" />
+                            <GlobalInput placeholder={t('common.exampleLocalhost')} />
                           </Form.Item>
                         </Col>
                         <Col span={6}>
                           <Form.Item
                             name="port"
-                            label="端口"
-                            rules={[{ required: true, message: '请输入端口' }]}
+                            label={t('common.port')}
+                            rules={[{ required: true, message: t('common.pleaseEnterPort') }]}
                             style={{ marginBottom: 16 }}
                           >
                             <InputNumber min={1} max={65535} style={{ width: '100%' }} />
@@ -594,39 +606,39 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     <Col span={12}>
                       <Form.Item
                         name="username"
-                        label="用户名"
-                        rules={[{ required: dbType !== 'sqlite', message: '请输入用户名' }]}
+                        label={t('common.username')}
+                        rules={[{ required: dbType !== 'sqlite', message: t('common.pleaseEnterUsername') }]}
                         style={{ marginBottom: 16 }}
                       >
-                        <GlobalInput placeholder="例如：root" />
+                        <GlobalInput placeholder={t('common.exampleRoot')} />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
                       <Form.Item
                         name="password"
-                        label="密码"
+                        label={t('common.password')}
                         rules={[
-                          { required: !editingData && dbType !== 'sqlite', message: '请输入密码' },
+                          { required: !editingData && dbType !== 'sqlite', message: t('common.pleaseEnterPassword') },
                         ]}
                         style={{ marginBottom: 16 }}
                       >
                         <GlobalInputPassword
-                          placeholder={editingData ? '留空则保持密码不变' : '请输入密码'}
+                          placeholder={editingData ? t('common.leaveBlankKeepPassword') : t('common.pleaseEnterPassword')}
                           autoComplete="new-password"
                         />
                       </Form.Item>
                     </Col>
                   </Row>
 
-                  <Form.Item name="database" label="数据库名" style={{ marginBottom: 16 }}>
-                    <GlobalInput placeholder="例如：mydb（可选）" />
+                  <Form.Item name="database" label={t('common.databaseName')} style={{ marginBottom: 16 }}>
+                    <GlobalInput placeholder={t('common.exampleMydbOptional')} />
                   </Form.Item>
 
                   <Form.Item
                     name="color"
-                    label="标记颜色"
+                    label={t('common.markColor')}
                     style={{ marginBottom: 16 }}
-                    extra="可选：为连接添加颜色标记以便区分"
+                    extra={t('common.markColorExtra')}
                   >
                     <ColorPicker showText />
                   </Form.Item>
@@ -637,16 +649,16 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                 <>
                   <Form.Item
                     name="use_ssl"
-                    label="启用 SSL/TLS 加密"
+                    label={t('common.enableSslTlsEncryption')}
                     valuePropName="checked"
                     style={{ marginBottom: 16 }}
                   >
                     <Switch size="small" />
                   </Form.Item>
 
-                  <Form.Item name="ssl_ca_cert" label="CA 证书" style={{ marginBottom: 16 }}>
+                  <Form.Item name="ssl_ca_cert" label={t('common.caCertificate')} style={{ marginBottom: 16 }}>
                     <Space.Compact style={{ width: '100%' }}>
-                      <GlobalInput placeholder="选择 CA 证书文件" readOnly />
+                      <GlobalInput placeholder={t('common.selectCaCertificateFile')} readOnly />
                       <AntButton
                         icon={<UploadOutlined />}
                         size="small"
@@ -665,11 +677,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     <Col span={12}>
                       <Form.Item
                         name="ssl_client_cert"
-                        label="客户端证书"
+                        label={t('common.clientCertificate')}
                         style={{ marginBottom: 16 }}
                       >
                         <Space.Compact style={{ width: '100%' }}>
-                          <GlobalInput placeholder="选择证书" readOnly />
+                          <GlobalInput placeholder={t('common.selectCertificate')} readOnly />
                           <AntButton
                             icon={<UploadOutlined />}
                             size="small"
@@ -687,11 +699,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     <Col span={12}>
                       <Form.Item
                         name="ssl_client_key"
-                        label="客户端私钥"
+                        label={t('common.clientPrivateKey')}
                         style={{ marginBottom: 16 }}
                       >
                         <Space.Compact style={{ width: '100%' }}>
-                          <GlobalInput placeholder="选择私钥" readOnly />
+                          <GlobalInput placeholder={t('common.selectPrivateKey')} readOnly />
                           <AntButton
                             icon={<UploadOutlined />}
                             size="small"
@@ -709,7 +721,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   </Row>
 
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                    SSL 配置用于加密客户端与服务器之间的数据传输
+                    {t('common.sslConfigDescription')}
                   </div>
                 </>
               )}
@@ -718,7 +730,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                 <>
                   <Form.Item
                     name="use_ssh"
-                    label="启用 SSH 隧道"
+                    label={t('common.enableSshTunnel')}
                     valuePropName="checked"
                     style={{ marginBottom: 16 }}
                   >
@@ -727,14 +739,14 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                   <Row gutter={16}>
                     <Col span={18}>
-                      <Form.Item name="ssh_host" label="SSH 主机" style={{ marginBottom: 16 }}>
-                        <GlobalInput placeholder="例如：192.168.1.100" />
+                      <Form.Item name="ssh_host" label={t('common.sshHost')} style={{ marginBottom: 16 }}>
+                        <GlobalInput placeholder={t('common.example1921681100')} />
                       </Form.Item>
                     </Col>
                     <Col span={6}>
                       <Form.Item
                         name="ssh_port"
-                        label="端口"
+                        label={t('common.port')}
                         initialValue={22}
                         style={{ marginBottom: 16 }}
                       >
@@ -745,20 +757,20 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                   <Row gutter={16}>
                     <Col span={12}>
-                      <Form.Item name="ssh_username" label="用户名" style={{ marginBottom: 16 }}>
-                        <GlobalInput placeholder="例如：root" />
+                      <Form.Item name="ssh_username" label={t('common.username')} style={{ marginBottom: 16 }}>
+                        <GlobalInput placeholder={t('common.exampleRoot')} />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item name="ssh_password" label="密码" style={{ marginBottom: 16 }}>
-                        <GlobalInputPassword placeholder="SSH 密码" autoComplete="new-password" />
+                      <Form.Item name="ssh_password" label={t('common.password')} style={{ marginBottom: 16 }}>
+                        <GlobalInputPassword placeholder={t('common.sshPassword')} autoComplete="new-password" />
                       </Form.Item>
                     </Col>
                   </Row>
 
-                  <Form.Item name="ssh_key_path" label="私钥文件" style={{ marginBottom: 16 }}>
+                  <Form.Item name="ssh_key_path" label={t('common.privateKeyFile')} style={{ marginBottom: 16 }}>
                     <Space.Compact style={{ width: '100%' }}>
-                      <GlobalInput placeholder="选择私钥文件路径" readOnly />
+                      <GlobalInput placeholder={t('common.selectPrivateKeyFilePath')} readOnly />
                       <AntButton
                         icon={<UploadOutlined />}
                         size="small"
@@ -774,7 +786,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   </Form.Item>
 
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                    SSH 隧道用于通过安全的 SSH 连接访问数据库
+                    {t('common.sshTunnelDescription')}
                   </div>
                 </>
               )}
@@ -785,7 +797,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     <Col span={12}>
                       <Form.Item
                         name="connect_timeout"
-                        label="连接超时（秒）"
+                        label={t('common.connectionTimeoutSeconds')}
                         initialValue={30}
                         style={{ marginBottom: 16 }}
                       >
@@ -795,7 +807,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     <Col span={12}>
                       <Form.Item
                         name="query_timeout"
-                        label="查询超时（秒）"
+                        label={t('common.queryTimeoutSeconds')}
                         initialValue={300}
                         style={{ marginBottom: 16 }}
                       >
@@ -806,7 +818,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                   <Form.Item
                     name="charset"
-                    label="字符集"
+                    label={t('common.charset')}
                     initialValue="utf8mb4"
                     style={{ marginBottom: 16 }}
                   >
@@ -819,7 +831,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   </Form.Item>
 
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                    高级配置用于优化连接性能和字符编码
+                    {t('common.advancedConfigDescription')}
                   </div>
                 </>
               )}

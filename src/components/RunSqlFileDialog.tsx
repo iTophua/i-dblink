@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Modal, Button, Progress, message } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 
 interface RunSqlFileDialogProps {
@@ -90,6 +91,7 @@ export function RunSqlFileDialog({
   onCancel,
   onSuccess,
 }: RunSqlFileDialogProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [totalStatements, setTotalStatements] = useState(0);
@@ -124,15 +126,15 @@ export function RunSqlFileDialog({
       }
 
       if (failed > 0) {
-        message.warning(`执行完毕: 成功 ${success}, 失败 ${failed}`);
+        message.warning(`${t('common.executionComplete')}: ${t('common.success')}: ${success}, ${t('common.failed')}: ${failed}`);
         console.error('SQL 执行错误:', errors.slice(0, 10));
       } else {
-        message.success(`执行完毕: 成功 ${success} 条语句`);
+        message.success(`${t('common.executionComplete')}: ${t('common.success')}: ${success} ${t('common.statements')}`);
       }
 
       onSuccess();
     } catch (err: any) {
-      message.error(`执行失败：${err.message || err}`);
+      message.error(`${t('common.executionFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
       setProgress(0);
@@ -144,12 +146,12 @@ export function RunSqlFileDialog({
 
   return (
     <Modal
-      title="运行 SQL 文件"
+      title={t('common.runSqlFile')}
       open={open}
       onCancel={onCancel}
       footer={[
         <Button key="cancel" onClick={onCancel} disabled={loading}>
-          取消
+          {t('common.cancel')}
         </Button>,
         <Button
           key="select"
@@ -157,7 +159,7 @@ export function RunSqlFileDialog({
           loading={loading}
           onClick={() => fileInputRef.current?.click()}
         >
-          选择 SQL 文件
+          {t('common.selectSqlFile')}
         </Button>,
       ]}
     >
@@ -173,14 +175,14 @@ export function RunSqlFileDialog({
         <div style={{ marginTop: 16 }}>
           <Progress percent={progress} />
           <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-            正在执行 {totalStatements} 条 SQL 语句...
+            {t('common.executingStatements', { count: totalStatements })}
           </p>
         </div>
       )}
 
       {!loading && (
         <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px 0' }}>
-          点击"选择 SQL 文件"按钮，选择要执行的 .sql 文件
+          {t('common.clickToSelectSqlFile')}
         </p>
       )}
     </Modal>

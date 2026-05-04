@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ThemePreset } from '../styles/theme';
+import i18n from '../i18n';
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -81,9 +82,13 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       settings: defaultSettings,
       updateSettings: (updates) =>
-        set((state) => ({
-          settings: { ...state.settings, ...updates },
-        })),
+        set((state) => {
+          const newSettings = { ...state.settings, ...updates };
+          if ('language' in updates && updates.language !== state.settings.language) {
+            i18n.changeLanguage(updates.language);
+          }
+          return { settings: newSettings };
+        }),
       resetSettings: () => set({ settings: defaultSettings }),
     }),
     {

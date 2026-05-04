@@ -1,6 +1,7 @@
 import { MainLayout } from './components/MainLayout';
 import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
+import enUS from 'antd/locale/en_US';
 import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -15,7 +16,6 @@ function App() {
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    // Zustand persist 的 migrate 已处理版本升级，无需手动读取 localStorage
     setIsHydrated(true);
   }, []);
 
@@ -226,8 +226,10 @@ function App() {
     },
   };
 
+  const antdLocale = persistedSettings.language === 'en-US' ? enUS : zhCN;
+
   return (
-    <ConfigProvider locale={zhCN} theme={antdThemeConfig}>
+    <ConfigProvider locale={antdLocale} theme={antdThemeConfig}>
       <AntdApp>
         <MainLayout />
       </AntdApp>

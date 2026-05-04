@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal, Form, Input } from 'antd';
+import { useTranslation } from 'react-i18next';
 
 interface ParamDialogProps {
   open: boolean;
@@ -9,6 +10,7 @@ interface ParamDialogProps {
 }
 
 export function ParamDialog({ open, params, onCancel, onExecute }: ParamDialogProps) {
+  const { t } = useTranslation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -24,14 +26,14 @@ export function ParamDialog({ open, params, onCancel, onExecute }: ParamDialogPr
 
   return (
     <Modal
-      title="输入参数值"
+      title={t('common.enterParameterValues')}
       open={open}
       onOk={handleOk}
       onCancel={onCancel}
       confirmLoading={loading}
       width={450}
-      okText="执行"
-      cancelText="取消"
+      okText={t('common.execute')}
+      cancelText={t('common.cancel')}
     >
       <Form form={form} layout="vertical">
         {params.map((param) => (
@@ -39,9 +41,9 @@ export function ParamDialog({ open, params, onCancel, onExecute }: ParamDialogPr
             key={param}
             name={param}
             label={`:${param}`}
-            rules={[{ required: true, message: `请输入参数 ${param} 的值` }]}
+            rules={[{ required: true, message: t('common.pleaseEnterParameterValue', { param }) }]}
           >
-            <Input placeholder={`输入 ${param} 的值`} />
+            <Input placeholder={t('common.enterParameterValue', { param })} />
           </Form.Item>
         ))}
       </Form>

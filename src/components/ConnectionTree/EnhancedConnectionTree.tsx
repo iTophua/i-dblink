@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import { Tree, Spin, Dropdown, Badge, Modal, App, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
+import { useTranslation } from 'react-i18next';
 import {
   DatabaseOutlined,
   TableOutlined,
@@ -413,6 +414,7 @@ export function EnhancedConnectionTree({
   onDeleteGroup,
   onCreateConnection,
 }: ConnectionTreeProps) {
+  const { t } = useTranslation();
   const { message } = App.useApp();
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

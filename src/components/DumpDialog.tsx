@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal, Form, Checkbox, Radio, message } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 
 interface DumpDialogProps {
@@ -31,6 +32,7 @@ export function DumpDialog({
   onCancel,
   onSuccess,
 }: DumpDialogProps) {
+  const { t } = useTranslation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -71,10 +73,10 @@ export function DumpDialog({
 
       downloadFile(sqlContent, `${tableName}.sql`);
 
-      message.success('SQL 文件导出成功');
+      message.success(t('common.sqlFileExportedSuccessfully'));
       onSuccess();
     } catch (err: any) {
-      message.error(`导出失败：${err.message || err}`);
+      message.error(`${t('common.exportFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -82,7 +84,7 @@ export function DumpDialog({
 
   return (
     <Modal
-      title="转储 SQL 文件"
+      title={t('common.dumpSqlFile')}
       open={open}
       onOk={handleOk}
       onCancel={onCancel}
@@ -99,14 +101,14 @@ export function DumpDialog({
           includeData: true,
         }}
       >
-        <Form.Item name="dumpType" label="转储内容">
+        <Form.Item name="dumpType" label={t('common.dumpContent')}>
           <Radio.Group>
-            <Radio value="structure_only">仅结构</Radio>
-            <Radio value="structure_and_data">结构和数据</Radio>
+            <Radio value="structure_only">{t('common.structureOnly')}</Radio>
+            <Radio value="structure_and_data">{t('common.structureAndData')}</Radio>
           </Radio.Group>
         </Form.Item>
 
-        <Form.Item label="包含">
+        <Form.Item label={t('common.include')}>
           <Form.Item name="includeDrop" valuePropName="checked" noStyle>
             <Checkbox>DROP TABLE IF EXISTS</Checkbox>
           </Form.Item>
@@ -116,7 +118,7 @@ export function DumpDialog({
           </Form.Item>
           <br />
           <Form.Item name="includeData" valuePropName="checked" noStyle>
-            <Checkbox>INSERT 数据</Checkbox>
+            <Checkbox>{t('common.insertData')}</Checkbox>
           </Form.Item>
         </Form.Item>
       </Form>

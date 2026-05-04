@@ -17,6 +17,7 @@ import {
   Select,
   Modal,
 } from 'antd';
+import { useTranslation } from 'react-i18next';
 import {
   PlayCircleOutlined,
   SaveOutlined,
@@ -104,6 +105,7 @@ export function SQLEditor({
   dbType: propDbType,
   onQueryStatusChange,
 }: SQLEditorProps) {
+  const { t } = useTranslation();
   const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
   const dbType =
@@ -605,17 +607,17 @@ export function SQLEditor({
     let sqlToExecute = selectedSql || sql;
 
     if (!sqlToExecute.trim()) {
-      message.warning('请输入 SQL 语句');
+      message.warning(t('common.pleaseEnterSqlStatement'));
       return;
     }
 
     if (!connectionId) {
-      message.warning('请先选择一个数据库连接');
+      message.warning(t('common.pleaseSelectADatabaseConnection'));
       return;
     }
 
     if (!database) {
-      message.warning('请先选择一个数据库');
+      message.warning(t('common.pleaseSelectADatabase'));
       return;
     }
 
@@ -646,11 +648,10 @@ export function SQLEditor({
     ) {
       const needConfirm = await new Promise<boolean>((resolve) => {
         Modal.confirm({
-          title: '大查询警告',
-          content:
-            '您执行的查询似乎没有 LIMIT 限制，这可能会返回大量数据并导致内存溢出或性能问题。\n\n是否继续执行？',
-          okText: '继续执行',
-          cancelText: '取消',
+          title: t('common.largeQueryWarning'),
+          content: t('common.queryWithoutLimitWarning'),
+          okText: t('common.continueExecution'),
+          cancelText: t('common.cancel'),
           onOk: () => resolve(true),
           onCancel: () => resolve(false),
         });
@@ -740,17 +741,17 @@ export function SQLEditor({
         }
 
         if (hasTruncated) {
-          message.warning(`部分查询结果超过 ${maxRows} 行，已截断显示。建议添加 LIMIT 限制。`);
+          message.warning(`${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`);
         }
 
         setResults(multiResults);
         setMessages(msgs);
 
         if (totalErrors === 0) {
-          message.success(`全部执行成功：${totalSuccess} 条语句`);
+          message.success(`${t('common.allExecutedSuccessfully')}: ${totalSuccess} ${t('common.statements')}`);
           setActiveTab('result');
         } else {
-          message.error(`部分执行失败：${totalSuccess} 成功，${totalErrors} 失败`);
+          message.error(`${t('common.partialExecutionFailed')}: ${totalSuccess} ${t('common.success')}, ${totalErrors} ${t('common.failed')}`);
           setActiveTab('messages');
         }
       } else {
@@ -760,9 +761,9 @@ export function SQLEditor({
         const executionTime = Date.now() - startTime;
 
         if (queryResult.error) {
-          setMessages([`✗ 错误：${queryResult.error}`]);
+          setMessages([`✗ ${t('common.error')}: ${queryResult.error}`]);
           setActiveTab('messages');
-          message.error(`SQL 执行失败：${queryResult.error}`);
+          message.error(`${t('common.sqlExecutionFailed')}: ${queryResult.error}`);
           highlightError(queryResult.error);
           setResult({ ...queryResult, executionTime });
           window.__sqlHistoryApi?.addHistory({
@@ -782,16 +783,16 @@ export function SQLEditor({
           clearErrorMarkers();
 
           if (rowCount > 0) {
-            let msg = `✓ 查询成功，返回 ${rowCount} 条记录，耗时 ${executionTime}ms`;
+            let msg = `✓ ${t('common.querySuccess')}, ${rowCount} ${t('common.records')}, ${t('common.executionTime')} ${executionTime}ms`;
             if (truncated) {
-              msg += `（结果集已截断，仅显示前 ${maxRows} 行）`;
-              message.warning(`查询结果超过 ${maxRows} 行，已截断显示。建议添加 LIMIT 限制。`);
+              msg += `（${t('common.resultSetTruncated')}, ${t('common.onlyShowingFirst')}${maxRows} ${t('common.rows')}）`;
+              message.warning(`${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`);
             }
             setMessages([msg]);
           } else if (affectedRows > 0) {
-            setMessages([`✓ 执行成功，影响 ${affectedRows} 行，耗时 ${executionTime}ms`]);
+            setMessages([`${t('common.executionSuccess')}, ${affectedRows} ${t('common.rowsAffected')}, ${t('common.executionTime')} ${executionTime}ms`]);
           } else {
-            setMessages([`✓ 执行成功，耗时 ${executionTime}ms`]);
+            setMessages([`${t('common.executionSuccess')}, ${t('common.executionTime')} ${executionTime}ms`]);
           }
 
           setActiveTab('result');
@@ -808,9 +809,9 @@ export function SQLEditor({
       setQueryHistory((prev) => [sqlToExecute, ...prev.slice(0, 49)]);
     } catch (error: any) {
       console.error('SQL execution error:', error);
-      setMessages([`✗ 错误：${error.message || error}`]);
+      setMessages([`✗ ${t('common.error')}: ${error.message || error}`]);
       setActiveTab('messages');
-      message.error(`SQL 执行失败：${error.message || error}`);
+      message.error(`${t('common.sqlExecutionFailed')}: ${error.message || error}`);
       highlightError(error.message || error);
     } finally {
       setLoading(false);
@@ -828,22 +829,22 @@ export function SQLEditor({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       setLoading(false);
-      setMessages((prev) => [...prev, '⚠ 查询已停止']);
-      message.warning('查询已停止');
+      setMessages((prev) => [...prev, '⚠ ' + t('common.queryStopped')]);
+      message.warning(t('common.queryStopped'));
       onQueryStatusChange?.(false);
     } else {
-      message.info('没有正在执行的查询');
+      message.info(t('common.noQueryExecuting'));
     }
   }, [onQueryStatusChange]);
 
   const showExplainPlan = useCallback(async () => {
     if (!sql.trim()) {
-      message.warning('请输入 SQL 语句');
+      message.warning(t('common.pleaseEnterSqlStatement'));
       return;
     }
 
     if (!connectionId) {
-      message.warning('请先选择一个数据库连接');
+      message.warning(t('common.pleaseSelectADatabaseConnection'));
       return;
     }
 
@@ -859,15 +860,15 @@ export function SQLEditor({
       const result = await executeQueryApi(connectionId, explainSQL, database);
 
       if (result.error) {
-        message.error(`生成执行计划失败：${result.error}`);
+        message.error(`${t('common.failedToGenerateExplainPlan')}: ${result.error}`);
       } else {
         setExplainPlan(result.rows as unknown[]);
         setActiveTab('explain');
-        message.success('执行计划已生成');
+        message.success(t('common.explainPlanGenerated'));
       }
     } catch (error: any) {
       console.error('Explain plan error:', error);
-      message.error(`生成执行计划失败：${error.message || error}`);
+      message.error(`${t('common.failedToGenerateExplainPlan')}: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -892,23 +893,23 @@ export function SQLEditor({
         linesBetweenQueries: 2,
       });
       setSql(formatted);
-      message.success('SQL 已格式化');
+      message.success(t('common.sqlFormatted'));
     } catch (e: any) {
-      message.error(`格式化失败：${e.message || e}`);
+      message.error(`${t('common.formattingFailed')}: ${e.message || e}`);
     }
   }, [sql, dbType]);
 
   const handleBeginTransaction = useCallback(async () => {
     if (!connectionId) {
-      message.warning('请先选择一个数据库连接');
+      message.warning(t('common.pleaseSelectADatabaseConnection'));
       return;
     }
     try {
       await api.beginTransaction(connectionId);
       setTransactionActive(true);
-      message.success('事务已开启');
+      message.success(t('common.transactionStarted'));
     } catch (err: any) {
-      message.error(`开启事务失败：${err.message || err}`);
+      message.error(`${t('common.failedToBeginTransaction')}: ${err.message || err}`);
     }
   }, [connectionId]);
 
@@ -917,9 +918,9 @@ export function SQLEditor({
     try {
       await api.commitTransaction(connectionId);
       setTransactionActive(false);
-      message.success('事务已提交');
+      message.success(t('common.transactionCommitted'));
     } catch (err: any) {
-      message.error(`提交事务失败：${err.message || err}`);
+      message.error(`${t('common.failedToCommitTransaction')}: ${err.message || err}`);
     }
   }, [connectionId]);
 
@@ -928,9 +929,9 @@ export function SQLEditor({
     try {
       await api.rollbackTransaction(connectionId);
       setTransactionActive(false);
-      message.success('事务已回滚');
+      message.success(t('common.transactionRolledBack'));
     } catch (err: any) {
-      message.error(`回滚事务失败：${err.message || err}`);
+      message.error(`${t('common.failedToRollbackTransaction')}: ${err.message || err}`);
     }
   }, [connectionId]);
 
@@ -940,7 +941,7 @@ export function SQLEditor({
     setMessages([]);
     setExplainPlan([]);
     setActiveTab('result');
-    message.success('编辑器已清空');
+    message.success(t('common.editorCleared'));
   }, []);
 
   const saveSQL = useCallback(() => {
@@ -951,18 +952,18 @@ export function SQLEditor({
     a.download = 'query.sql';
     a.click();
     URL.revokeObjectURL(url);
-    message.success('SQL 已保存');
+    message.success(t('common.sqlSaved'));
   }, [sql]);
 
   const copySQL = useCallback(() => {
     navigator.clipboard.writeText(sql);
-    message.success('SQL 已复制到剪贴板');
+    message.success(t('common.sqlCopiedToClipboard'));
   }, [sql]);
 
   const exportResult = useCallback(() => {
     const targetResult = result || (results.length > 0 ? results[0] : null);
     if (!targetResult || targetResult.rows.length === 0) {
-      message.warning('没有可导出的数据');
+      message.warning(t('common.noDataToExport'));
       return;
     }
 
@@ -987,7 +988,7 @@ export function SQLEditor({
     a.download = 'query_result.csv';
     a.click();
     URL.revokeObjectURL(url);
-    message.success('结果已导出为 CSV');
+    message.success(t('common.resultsExportedAsCsv'));
   }, [result, results]);
 
   // 渲染单个结果集的表格（AG Grid）

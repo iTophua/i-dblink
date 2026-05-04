@@ -1,5 +1,6 @@
 import React from 'react';
 import { Skeleton, Card, Space, Typography, Empty, Button } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import {
   DatabaseOutlined,
@@ -39,6 +40,7 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
   secondaryAction,
   tips,
 }) => {
+  const { t } = useTranslation();
   const tc = useThemeColors();
 
   return (
@@ -146,7 +148,7 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
               marginBottom: 12,
             }}
           >
-            💡 提示
+            {t('common.tips')}
           </Text>
           <ul
             style={{

@@ -10,6 +10,7 @@ import {
   HomeOutlined,
   StarOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { ConnectionGroup } from '../../stores/appStore';
 import { GlobalInput } from '../GlobalInput';
 
@@ -56,6 +57,7 @@ export function GroupDialog({
   onCancel,
   onSave,
 }: GroupDialogProps) {
+  const { t } = useTranslation();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
 
@@ -92,7 +94,7 @@ export function GroupDialog({
       });
     } catch (error: any) {
       if (error.errorFields) return;
-      message.error(`操作失败：${error}`);
+      message.error(`${t('common.operationFailed')}: ${error}`);
     } finally {
       setSaving(false);
     }

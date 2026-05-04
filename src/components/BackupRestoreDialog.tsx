@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Modal, Form, Checkbox, message, Space, Button as AntButton } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { FolderOutlined, DatabaseOutlined, UploadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { GlobalInput } from './GlobalInput';
@@ -57,6 +58,7 @@ export function BackupRestoreDialog({
   onCancel,
   onSuccess,
 }: BackupRestoreDialogProps) {
+  const { t } = useTranslation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [toolChecked, setToolChecked] = useState(false);
@@ -68,10 +70,10 @@ export function BackupRestoreDialog({
       setToolChecked(true);
       setToolAvailable(result.available);
       if (!result.available) {
-        message.warning(`未找到 ${dbType} 的备份工具，请先安装`);
+        message.warning(`${t('common.backupToolNotFound')}: ${dbType}`);
       }
     } catch {
-      message.warning(`未找到 ${dbType} 的备份工具，请先安装`);
+      message.warning(`${t('common.backupToolNotFound')}: ${dbType}`);
     }
   }, [dbType]);
 
@@ -89,19 +91,19 @@ export function BackupRestoreDialog({
           includeData: values.includeData,
           filePath: values.filePath,
         });
-        message.success('备份成功');
+        message.success(t('common.backupSuccess'));
       } else {
         await api.restore({
           connectionId,
           database: values.database || database || '',
           filePath: values.filePath,
         });
-        message.success('恢复成功');
+        message.success(t('common.restoreSuccess'));
       }
       onSuccess();
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      message.error(`${mode === 'backup' ? '备份' : '恢复'}失败：${errorMsg}`);
+      message.error(`${t('common.failedToBackupOrRestore', { mode: mode === 'backup' ? t('common.backup') : t('common.restore') })}: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
@@ -112,14 +114,14 @@ export function BackupRestoreDialog({
   if (!isSupported) {
     return (
       <Modal
-        title={mode === 'backup' ? '备份数据库' : '恢复数据库'}
+        title={mode === 'backup' ? t('common.backupDatabase') : t('common.restoreDatabase')}
         open={open}
         onCancel={onCancel}
         footer={null}
         width={500}
       >
         <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          当前数据库类型暂不支持{mode === 'backup' ? '备份' : '恢复'}功能
+          {t('common.currentDbTypeNotSupported', { mode: mode === 'backup' ? t('common.backup') : t('common.restore') })}
         </div>
       </Modal>
     );
@@ -127,13 +129,13 @@ export function BackupRestoreDialog({
 
   return (
     <Modal
-      title={mode === 'backup' ? '备份数据库' : '恢复数据库'}
+      title={mode === 'backup' ? t('common.backupDatabase') : t('common.restoreDatabase')}
       open={open}
       onOk={handleOk}
       onCancel={onCancel}
       confirmLoading={loading}
       width={500}
-      okText={mode === 'backup' ? '开始备份' : '开始恢复'}
+      okText={mode === 'backup' ? t('common.startBackup') : t('common.startRestore')}
     >
       <Form
         form={form}
@@ -148,14 +150,14 @@ export function BackupRestoreDialog({
         {!toolChecked && (
           <div style={{ marginBottom: 16, textAlign: 'center' }}>
             <AntButton onClick={checkTool} icon={<DatabaseOutlined />}>
-              检测备份工具
+              {t('common.checkBackupTool')}
             </AntButton>
           </div>
         )}
 
         {toolChecked && !toolAvailable && (
           <div style={{ marginBottom: 16, color: '#ff4d4f', textAlign: 'center' }}>
-            未找到备份工具，请先安装对应数据库的客户端工具
+            {t('common.backupToolNotFoundPleaseInstall')}
           </div>
         )}
 
@@ -163,21 +165,21 @@ export function BackupRestoreDialog({
           <>
             <Form.Item
               name="database"
-              label="数据库"
-              rules={[{ required: true, message: '请输入数据库名' }]}
+              label={t('common.database')}
+              rules={[{ required: true, message: t('common.pleaseEnterDatabaseName') }]}
             >
-              <GlobalInput placeholder="数据库名" />
+              <GlobalInput placeholder={t('common.databaseName')} />
             </Form.Item>
 
             {mode === 'backup' && (
               <>
-                <Form.Item label="备份内容">
+                <Form.Item label={t('common.backupContent')}>
                   <Space direction="vertical">
                     <Form.Item name="includeStructure" valuePropName="checked" noStyle>
-                      <Checkbox>包含结构</Checkbox>
+                      <Checkbox>{t('common.includeStructure')}</Checkbox>
                     </Form.Item>
                     <Form.Item name="includeData" valuePropName="checked" noStyle>
-                      <Checkbox>包含数据</Checkbox>
+                      <Checkbox>{t('common.includeData')}</Checkbox>
                     </Form.Item>
                   </Space>
                 </Form.Item>
@@ -186,8 +188,8 @@ export function BackupRestoreDialog({
 
             <Form.Item
               name="filePath"
-              label={mode === 'backup' ? '保存路径' : '备份文件'}
-              rules={[{ required: true, message: mode === 'backup' ? '请选择保存路径' : '请选择备份文件' }]}
+              label={mode === 'backup' ? t('common.savePath') : t('common.backupFile')}
+              rules={[{ required: true, message: mode === 'backup' ? t('common.pleaseSelectSavePath') : t('common.pleaseSelectBackupFile') }]}
             >
               <Space.Compact style={{ width: '100%' }}>
                 <GlobalInput
@@ -209,7 +211,7 @@ export function BackupRestoreDialog({
                     }
                   }}
                 >
-                  {mode === 'backup' ? '选择路径' : '选择文件'}
+                  {mode === 'backup' ? t('common.selectPath') : t('common.selectFile')}
                 </AntButton>
               </Space.Compact>
             </Form.Item>

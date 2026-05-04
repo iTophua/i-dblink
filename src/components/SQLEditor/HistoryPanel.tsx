@@ -6,6 +6,7 @@ import {
   ReloadOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { GlobalInput } from '../GlobalInput';
 
@@ -30,6 +31,7 @@ export function HistoryPanel({
   maxHistory = 50,
   storageKey = 'sql-history',
 }: HistoryPanelProps) {
+  const { t } = useTranslation();
   const [searchText, setSearchText] = useState('');
   const tc = useThemeColors();
 
@@ -118,7 +120,7 @@ export function HistoryPanel({
       >
         <Space size="small">
           <GlobalInput
-            placeholder="搜索 SQL..."
+            placeholder={t('common.searchSql')}
             prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
@@ -129,13 +131,13 @@ export function HistoryPanel({
         </Space>
 
         <Space size="small">
-          <Tag color="blue">{history.length} 条</Tag>
+          <Tag color="blue">            {history.length} {t('common.items')}</Tag>
           <Popconfirm
-            title="确认清空"
-            description="确定要清空所有历史记录吗？"
+            title={t('common.confirmClear')}
+            description={t('common.confirmClearHistory')}
             onConfirm={clearHistory}
-            okText="清空"
-            cancelText="取消"
+            okText={t('common.clear')}
+            cancelText={t('common.cancel')}
           >
             <Button icon={<ClearOutlined />} size="small" danger>
               清空
@@ -148,7 +150,7 @@ export function HistoryPanel({
       <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {filteredHistory.length === 0 ? (
           <Empty
-            description={searchText ? '未找到匹配的 SQL' : '暂无历史记录'}
+            description={searchText ? t('common.noMatchingSql') : t('common.noHistory')}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             style={{ marginTop: 40 }}
           />
@@ -186,7 +188,7 @@ export function HistoryPanel({
                         {item.sql.length > 60 ? item.sql.substring(0, 60) + '...' : item.sql}
                       </Text>
                       <Tag color={item.success ? 'success' : 'error'} style={{ fontSize: 10 }}>
-                        {item.success ? '成功' : '失败'}
+                        {item.success ? t('common.success') : t('common.failed')}
                       </Tag>
                     </div>
                   }

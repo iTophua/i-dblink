@@ -20,6 +20,7 @@ import {
   Checkbox,
   Divider,
 } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { GlobalInput } from './GlobalInput';
 import { SqlInput } from './SqlInput';
 import { ColumnFilterHeader } from './DataTable/ColumnFilterHeader';
@@ -119,6 +120,7 @@ export const DataTable = memo(function DataTable({
   pageSize: propPageSize,
   onDirtyChange,
 }: DataTableProps) {
+  const { t } = useTranslation();
   const dbType = useAppStore(
     (state) => state.connections.find((c) => c.id === connectionId)?.db_type
   );
@@ -200,7 +202,7 @@ export const DataTable = memo(function DataTable({
   // 撤销最后一次单元格编辑
   const undoLastCellEdit = useCallback(() => {
     if (pendingChanges.updates.length === 0) {
-      message.info('没有可撤销的单元格编辑');
+      message.info(t('common.noCellEditsToUndo'));
       return;
     }
 
@@ -221,7 +223,7 @@ export const DataTable = memo(function DataTable({
       });
     }
 
-    message.success('已撤销单元格编辑');
+    message.success(t('common.cellEditUndone'));
   }, [pendingChanges.updates, rowData]);
 
   // Delete 键标记删除选中行，Ctrl+Z 撤销单元格编辑
@@ -247,7 +249,7 @@ export const DataTable = memo(function DataTable({
       const selectedToDelete = api.getSelectedRows();
       if (selectedToDelete.length === 0) return;
       if (!primaryKey && selectedToDelete.some((row) => row.__status__ !== 'new')) {
-        message.warning('该表没有主键，无法删除已有行');
+        message.warning(t('common.tableHasNoPrimaryKeyCannotDeleteExistingRows'));
         return;
       }
       e.preventDefault();
@@ -286,7 +288,7 @@ export const DataTable = memo(function DataTable({
         ]);
 
         if (dataResult.error) {
-          message.error(`加载数据失败：${dataResult.error}`);
+          message.error(`${t('common.failedToLoadData')}: ${dataResult.error}`);
           setColumns([]);
           setRowData([]);
         } else {
@@ -314,7 +316,7 @@ export const DataTable = memo(function DataTable({
         }
       } catch (error: any) {
         console.error('Failed to load table data:', error);
-        message.error(`加载数据失败：${error.message || error}`);
+        message.error(`${t('common.failedToLoadData')}: ${error.message || error}`);
         setColumns([]);
         setRowData([]);
         setHasEverLoaded(true);
@@ -600,19 +602,19 @@ export const DataTable = memo(function DataTable({
       switch (action) {
         case 'copy-row':
           navigator.clipboard.writeText(JSON.stringify(row, null, 2));
-          message.success('已复制行数据到剪贴板');
+          message.success(t('common.rowDataCopiedToClipboard'));
           break;
         case 'delete-row':
           if (!primaryKey) {
-            message.warning('该表没有主键，无法删除单行');
+            message.warning(t('common.tableHasNoPrimaryKeyCannotDeleteSingleRow'));
             return;
           }
           Modal.confirm({
-            title: '确认删除',
-            content: `确定要删除选中的行吗？此操作不可撤销。`,
-            okText: '删除',
+            title: t('common.confirmDelete'),
+            content: t('common.confirmDeleteSelectedRow'),
+            okText: t('common.delete'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: () => {
               setPendingChanges((prev) => ({
                 ...prev,
@@ -629,28 +631,28 @@ export const DataTable = memo(function DataTable({
         case 'copy-select':
           const selectedRows = gridApiRef.current?.getSelectedRows() || [];
           if (selectedRows.length === 0) {
-            message.warning('没有选中的行');
+            message.warning(t('common.noRowsSelected'));
             return;
           }
           navigator.clipboard.writeText(JSON.stringify(selectedRows, null, 2));
-          message.success(`已复制 ${selectedRows.length} 行到剪贴板`);
+          message.success(`${t('common.copied')} ${selectedRows.length} ${t('common.rowsToClipboard')}`);
           break;
         case 'delete-select':
           if (!primaryKey) {
-            message.warning('该表没有主键，无法批量删除');
+            message.warning(t('common.tableHasNoPrimaryKeyCannotBatchDelete'));
             return;
           }
           const selectedToDelete = gridApiRef.current?.getSelectedRows() || [];
           if (selectedToDelete.length === 0) {
-            message.warning('没有选中的行');
+            message.warning(t('common.noRowsSelected'));
             return;
           }
           Modal.confirm({
-            title: '确认删除',
-            content: `确定要删除选中的 ${selectedToDelete.length} 行吗？此操作不可撤销。`,
-            okText: '删除',
+            title: t('common.confirmDelete'),
+            content: t('common.confirmDeleteSelectedRows', { count: selectedToDelete.length }),
+            okText: t('common.delete'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: () => {
               setPendingChanges((prev) => ({
                 ...prev,
@@ -667,7 +669,7 @@ export const DataTable = memo(function DataTable({
 
   const handleCommit = useCallback(async () => {
     if (!hasUnsavedChanges) {
-      message.info('没有未保存的更改');
+      message.info(t('common.noUnsavedChanges'));
       return;
     }
 
@@ -681,7 +683,7 @@ export const DataTable = memo(function DataTable({
       for (const row of pendingChanges.deletes) {
         const primaryKey = columns.find((col) => col.column_key === 'PRI');
         if (!primaryKey) {
-          errorMessage = '该表没有主键，无法删除';
+          errorMessage = t('common.tableHasNoPrimaryKeyCannotDelete');
           errorCount++;
           break;
         }
@@ -778,17 +780,17 @@ export const DataTable = memo(function DataTable({
 
       // 显示结果
       if (errorCount === 0) {
-        message.success(`成功提交 ${successCount} 个更改`);
+        message.success(`${t('common.submittedSuccessfully')} ${successCount} ${t('common.changes')}`);
         setPendingChanges({ inserts: [], updates: [], deletes: [] });
         setHasUnsavedChanges(false);
         loadData();
         loadCount(whereClause);
       } else {
-        message.error(`提交失败：${errorMessage}`);
+        message.error(`${t('common.submitFailed')}: ${errorMessage}`);
       }
     } catch (error: any) {
       console.error('Commit error:', error);
-      message.error(`提交失败：${error.message || error}`);
+      message.error(`${t('common.submitFailed')}: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -806,8 +808,8 @@ export const DataTable = memo(function DataTable({
 
   const handleUndo = useCallback(async () => {
     Modal.confirm({
-      title: '撤销修改',
-      content: '确定要放弃所有未保存的修改吗？',
+      title: t('common.undoModifications'),
+      content: t('common.confirmDiscardAllChanges'),
       onOk: () => {
         loadData();
         setHasUnsavedChanges(false);
@@ -822,11 +824,11 @@ export const DataTable = memo(function DataTable({
 
   const handleEditRow = useCallback(() => {
     if (selectedRows.length === 0) {
-      message.warning('请选择要编辑的行');
+      message.warning(t('common.pleaseSelectRowsToEdit'));
       return;
     }
     if (selectedRows.length > 1) {
-      message.warning('一次只能编辑一行');
+      message.warning(t('common.onlyOneRowAtATime'));
       return;
     }
 
@@ -837,13 +839,13 @@ export const DataTable = memo(function DataTable({
 
   const handleDeleteRows = useCallback(async () => {
     if (selectedRows.length === 0) {
-      message.warning('请选择要删除的行');
+      message.warning(t('common.pleaseSelectRowsToDelete'));
       return;
     }
 
     const primaryKey = columns.find((col) => col.column_key === 'PRI');
     if (!primaryKey && selectedRows.some((row) => row.__status__ !== 'new')) {
-      message.warning('该表没有主键，无法删除');
+      message.warning(t('common.tableHasNoPrimaryKeyCannotDelete'));
       return;
     }
 
@@ -884,10 +886,10 @@ export const DataTable = memo(function DataTable({
       }));
 
       setHasUnsavedChanges(true);
-      message.success(`已标记删除 ${selectedRows.length} 行，点击"提交"按钮保存更改`);
+      message.success(`${t('common.markedForDeletion')} ${selectedRows.length} ${t('common.rows')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveChanges')}`);
     } catch (error: any) {
       console.error('Delete error:', error);
-      message.error(`删除失败：${error.message || error}`);
+      message.error(`${t('common.deleteFailed')}: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -907,16 +909,16 @@ export const DataTable = memo(function DataTable({
       const result = await executeQuery(connectionId, insertSQL);
 
       if (result.error) {
-        message.error(`插入失败：${result.error}`);
+        message.error(`${t('common.insertFailed')}: ${result.error}`);
       } else {
-        message.success('插入成功');
+        message.success(t('common.insertSuccess'));
         setAddModalOpen(false);
         loadData();
         loadCount(whereClause);
       }
     } catch (error: any) {
       console.error('Insert error:', error);
-      message.error(`插入失败：${error.message || error}`);
+      message.error(`${t('common.insertFailed')}: ${error.message || error}`);
     }
   }, [addForm, tableName, connectionId, executeQuery, loadData, loadCount, dbType]);
 
@@ -926,7 +928,7 @@ export const DataTable = memo(function DataTable({
 
       const primaryKey = columns.find((col) => col.column_key === 'PRI');
       if (!primaryKey) {
-        message.warning('该表没有主键，无法更新');
+        message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate'));
         return;
       }
 
@@ -939,7 +941,7 @@ export const DataTable = memo(function DataTable({
         .join(', ');
 
       if (!updates) {
-        message.info('没有修改任何数据');
+        message.info(t('common.noDataModified'));
         setEditModalOpen(false);
         return;
       }
@@ -950,21 +952,21 @@ export const DataTable = memo(function DataTable({
       const result = await executeQuery(connectionId, updateSQL);
 
       if (result.error) {
-        message.error(`更新失败：${result.error}`);
+        message.error(`${t('common.updateFailed')}: ${result.error}`);
       } else {
-        message.success('更新成功');
+        message.success(t('common.updateSuccess'));
         setEditModalOpen(false);
         loadData();
       }
     } catch (error: any) {
       console.error('Update error:', error);
-      message.error(`更新失败：${error.message || error}`);
+      message.error(`${t('common.updateFailed')}: ${error.message || error}`);
     }
   }, [editForm, columns, editingRow, tableName, connectionId, executeQuery, loadData, dbType]);
 
   const exportToCSV = useCallback(() => {
     if (rowData.length === 0) {
-      message.warning('没有可导出的数据');
+      message.warning(t('common.noDataToExport'));
       return;
     }
 
@@ -998,18 +1000,18 @@ export const DataTable = memo(function DataTable({
     link.click();
     URL.revokeObjectURL(link.href);
 
-    message.success('导出成功');
+    message.success(t('common.exportSuccess'));
   }, [rowData, columns, tableName]);
 
   const copySql = useCallback(() => {
     navigator.clipboard.writeText(currentSql);
-    message.success('SQL 已复制');
+    message.success(t('common.sqlCopied'));
   }, [currentSql]);
 
   const handleAutoSizeColumns = useCallback(() => {
     if (gridApiRef.current) {
       gridApiRef.current.sizeColumnsToFit();
-      message.success('列宽已自动调整');
+      message.success(t('common.columnWidthsAutoAdjusted'));
     }
   }, []);
 
@@ -1112,7 +1114,7 @@ export const DataTable = memo(function DataTable({
 
         e.clipboardData?.setData('text/plain', text);
         e.preventDefault();
-        message.success('已复制选中行');
+        message.success(t('common.selectedRowsCopied'));
       }
     };
 
@@ -1172,9 +1174,9 @@ export const DataTable = memo(function DataTable({
             updates: [...filteredUpdates, ...updatedRows],
           };
         });
-        message.success('粘贴成功');
+        message.success(t('common.pasteSuccess'));
       } catch (error: any) {
-        message.error(`粘贴失败：${error.message}`);
+        message.error(`${t('common.pasteFailed')}: ${error.message}`);
       }
     };
 
@@ -1418,7 +1420,7 @@ export const DataTable = memo(function DataTable({
               setCurrentPage(1);
               loadData(whereClause, orderByClause);
               loadCount(whereClause);
-              message.info(whereClause ? `WHERE: ${whereClause}` : '已清除筛选');
+              message.info(whereClause ? `WHERE: ${whereClause}` : t('common.filterCleared'));
             }}
             style={{ flex: 1, height: 20 }}
           />
@@ -1437,7 +1439,7 @@ export const DataTable = memo(function DataTable({
               setCurrentPage(1);
               loadData(whereClause, orderByClause);
               loadCount(whereClause);
-              message.info(orderByClause ? `ORDER BY: ${orderByClause}` : '已清除排序');
+              message.info(orderByClause ? `ORDER BY: ${orderByClause}` : t('common.sortCleared'));
             }}
             style={{ flex: 1, height: 20 }}
           />
@@ -1455,7 +1457,7 @@ export const DataTable = memo(function DataTable({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
-              筛选条件
+              {t('common.filterConditions')}
             </span>
             <div style={{ flex: 1 }} />
             <Button
@@ -1463,17 +1465,17 @@ export const DataTable = memo(function DataTable({
               onClick={() => {
                 const sql = buildWhereClause(filterConditions, dbType);
                 Modal.info({
-                  title: 'SQL 预览',
+                  title: t('common.sqlPreview'),
                   content: sql ? (
                     <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>WHERE {sql}</pre>
                   ) : (
-                    '暂无筛选条件'
+                    t('common.noFilterConditions')
                   ),
                 });
               }}
               style={{ fontSize: 11, height: 20 }}
             >
-              预览 SQL
+              {t('common.previewSql')}
             </Button>
           </div>
           <div
@@ -1980,15 +1982,15 @@ export const DataTable = memo(function DataTable({
                         filename: `${tableName}_${Date.now()}.xlsx`,
                         sheetName: tableName,
                       });
-                      message.success('已导出 Excel');
+                      message.success(t('common.exportedExcel'));
                     } catch (e: any) {
-                      message.error(`导出失败：${e.message}`);
+                      message.error(`${t('common.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
                 {
                   key: 'csv',
-                  label: '导出 CSV',
+                  label: t('common.exportCsv'),
                   icon: <FileTextOutlined />,
                   onClick: () => {
                     try {
@@ -2007,15 +2009,15 @@ export const DataTable = memo(function DataTable({
                       exportToCSVUtil(cleanData, exportCols, {
                         filename: `${tableName}_${Date.now()}.csv`,
                       });
-                      message.success('已导出 CSV');
+                      message.success(t('common.exportedCsv'));
                     } catch (e: any) {
-                      message.error(`导出失败：${e.message}`);
+                      message.error(`${t('common.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
                 {
                   key: 'json',
-                  label: '导出 JSON',
+                  label: t('common.exportJson'),
                   icon: <FileTextOutlined />,
                   onClick: () => {
                     try {
@@ -2030,16 +2032,16 @@ export const DataTable = memo(function DataTable({
                       exportToJSONUtil(cleanData, {
                         filename: `${tableName}_${Date.now()}.json`,
                       });
-                      message.success('已导出 JSON');
+                      message.success(t('common.exportedJson'));
                     } catch (e: any) {
-                      message.error(`导出失败：${e.message}`);
+                      message.error(`${t('common.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
                 { type: 'divider' as const },
                 {
                   key: 'txt',
-                  label: '导出 TXT',
+                  label: t('common.exportTxt'),
                   icon: <FileTextOutlined />,
                   onClick: () => {
                     try {
@@ -2058,15 +2060,15 @@ export const DataTable = memo(function DataTable({
                       exportToTXT(cleanData, exportCols, {
                         filename: `${tableName}_${Date.now()}.txt`,
                       });
-                      message.success('已导出 TXT');
+                      message.success(t('common.exportedTxt'));
                     } catch (e: any) {
-                      message.error(`导出失败：${e.message}`);
+                      message.error(`${t('common.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
                 {
                   key: 'xml',
-                  label: '导出 XML',
+                  label: t('common.exportXml'),
                   icon: <FileTextOutlined />,
                   onClick: () => {
                     try {
@@ -2085,15 +2087,15 @@ export const DataTable = memo(function DataTable({
                       exportToXML(cleanData, exportCols, {
                         filename: `${tableName}_${Date.now()}.xml`,
                       });
-                      message.success('已导出 XML');
+                      message.success(t('common.exportedXml'));
                     } catch (e: any) {
-                      message.error(`导出失败：${e.message}`);
+                      message.error(`${t('common.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
                 {
                   key: 'markdown',
-                  label: '导出 Markdown',
+                  label: t('common.exportMarkdown'),
                   icon: <FileTextOutlined />,
                   onClick: () => {
                     try {
@@ -2112,9 +2114,9 @@ export const DataTable = memo(function DataTable({
                       exportToMarkdown(cleanData, exportCols, {
                         filename: `${tableName}_${Date.now()}.md`,
                       });
-                      message.success('已导出 Markdown');
+                      message.success(t('common.exportedMarkdown'));
                     } catch (e: any) {
-                      message.error(`导出失败：${e.message}`);
+                      message.error(`${t('common.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
@@ -2126,7 +2128,7 @@ export const DataTable = memo(function DataTable({
               size="small"
               style={{ height: 20, padding: '0 4px', fontSize: 11 }}
             >
-              导出
+              {t('common.export')}
             </Button>
           </Dropdown>
         </Space>
@@ -2160,7 +2162,7 @@ export const DataTable = memo(function DataTable({
           >
             {currentSql}
           </code>
-          <Tooltip title="复制 SQL">
+          <Tooltip title={t('common.copySql')}>
             <Button
               icon={<CopyOutlined />}
               type="text"
@@ -2354,15 +2356,15 @@ export const DataTable = memo(function DataTable({
             });
             
             if (result.failed_count > 0) {
-              message.warning(`导入完成: 成功 ${result.success_count} 条, 失败 ${result.failed_count} 条`);
+              message.warning(`${t('common.importCompleted')}: ${t('common.success')} ${result.success_count} ${t('common.rows')}, ${t('common.failed')} ${result.failed_count} ${t('common.rows')}`);
             } else {
-              message.success(`成功导入 ${result.success_count} 条数据`);
+              message.success(`${t('common.importedSuccessfully')} ${result.success_count} ${t('common.dataRows')}`);
             }
             
             // 刷新数据
             loadData();
           } catch (err: any) {
-            message.error(`导入失败: ${err.message || err}`);
+            message.error(`${t('common.importFailed')}: ${err.message || err}`);
           }
         }}
       />
@@ -2376,20 +2378,20 @@ export const DataTable = memo(function DataTable({
           items: [
             {
               key: 'copy-row',
-              label: '复制行',
+              label: t('common.copyRow'),
               icon: <CopyOutlined />,
               onClick: () => handleContextMenuAction('copy-row'),
             },
             {
               key: 'edit-row',
-              label: '编辑行',
+              label: t('common.editRow'),
               icon: <EditOutlined />,
               onClick: () => handleContextMenuAction('edit-row'),
             },
             { type: 'divider' },
             {
               key: 'delete-row',
-              label: '删除行',
+              label: t('common.deleteRow'),
               icon: <DeleteOutlined />,
               danger: true,
               onClick: () => handleContextMenuAction('delete-row'),
@@ -2397,13 +2399,13 @@ export const DataTable = memo(function DataTable({
             { type: 'divider' },
             {
               key: 'copy-select',
-              label: '复制选中行',
+              label: t('common.copySelectedRows'),
               icon: <CopyOutlined />,
               onClick: () => handleContextMenuAction('copy-select'),
             },
             {
               key: 'delete-select',
-              label: '删除选中行',
+              label: t('common.deleteSelectedRows'),
               icon: <DeleteOutlined />,
               danger: true,
               onClick: () => handleContextMenuAction('delete-select'),
@@ -2434,20 +2436,20 @@ export const DataTable = memo(function DataTable({
           items: [
             {
               key: 'copy-cell-value',
-              label: '复制单元格值',
+              label: t('common.copyCellValue'),
               icon: <CopyOutlined />,
               onClick: () => {
                 navigator.clipboard.writeText(String(cellContextMenu.value ?? 'NULL'));
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
-                message.success('已复制单元格值');
+                message.success(t('common.cellValueCopied'));
               },
             },
             {
               key: 'copy-insert',
-              label: '复制为 INSERT',
+              label: t('common.copyAsInsert'),
               onClick: () => {
                 if (!tableName || !columns.length) {
-                  message.warning('无法确定表结构');
+                  message.warning(t('common.cannotDetermineTableStructure'));
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
@@ -2458,23 +2460,23 @@ export const DataTable = memo(function DataTable({
                 const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStr}) VALUES (${valStr});`;
                 navigator.clipboard.writeText(sql);
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
-                message.success('已复制 INSERT 语句');
+                message.success(t('common.insertStatementCopied'));
               },
             },
             {
               key: 'copy-update',
-              label: '复制为 UPDATE',
+              label: t('common.copyAsUpdate'),
               disabled: !primaryKey,
               onClick: () => {
                 if (!tableName || !primaryKey || !columns.length) {
-                  message.warning('无法生成 UPDATE 语句');
+                  message.warning(t('common.cannotGenerateUpdateStatement'));
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
                 const row = cellContextMenu.rowNode.data;
                 const pkIdx = columns.findIndex((c) => c.column_name === primaryKey.column_name);
                 if (pkIdx < 0) {
-                  message.warning('未找到主键列');
+                  message.warning(t('common.primaryKeyColumnNotFound'));
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
@@ -2486,17 +2488,17 @@ export const DataTable = memo(function DataTable({
                 const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(values[pkIdx])};`;
                 navigator.clipboard.writeText(sql);
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
-                message.success('已复制 UPDATE 语句');
+                message.success(t('common.updateStatementCopied'));
               },
             },
             { type: 'divider' },
             {
               key: 'set-null',
-              label: '设为 NULL',
+              label: t('common.setNull'),
               disabled: !primaryKey,
               onClick: () => {
                 if (!primaryKey) {
-                  message.warning('需要主键才能修改数据');
+                  message.warning(t('common.primaryKeyRequiredToModifyData'));
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
@@ -2523,13 +2525,13 @@ export const DataTable = memo(function DataTable({
                   };
                 });
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
-                message.success(`已将 ${colId} 设为 NULL`);
+                message.success(`${t('common.set')} ${colId} ${t('common.toNull')}`);
               },
             },
             { type: 'divider' },
             {
               key: 'filter-column',
-              label: `按此列筛选 (${cellContextMenu.colId})`,
+              label: `${t('common.filterByThisColumn')} (${cellContextMenu.colId})`,
               onClick: () => {
                 const colName = cellContextMenu.colId;
                 const filterValue = String(cellContextMenu.value ?? '');
@@ -2537,12 +2539,12 @@ export const DataTable = memo(function DataTable({
                 setWhereClause(newFilter);
                 setCurrentPage(1);
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
-                message.success(`已添加筛选条件: ${colName} = ${filterValue}`);
+                message.success(`${t('common.filterConditionAdded')}: ${colName} = ${filterValue}`);
               },
             },
             {
               key: 'sort-asc',
-              label: `按此列升序 (${cellContextMenu.colId} ↑)`,
+              label: `${t('common.sortAscending')} (${cellContextMenu.colId} ↑)`,
               onClick: () => {
                 const colName = cellContextMenu.colId;
                 setSortModel([{ colId: colName, sort: 'asc' }]);
@@ -2552,7 +2554,7 @@ export const DataTable = memo(function DataTable({
             },
             {
               key: 'sort-desc',
-              label: `按此列降序 (${cellContextMenu.colId} ↓)`,
+              label: `${t('common.sortDescending')} (${cellContextMenu.colId} ↓)`,
               onClick: () => {
                 const colName = cellContextMenu.colId;
                 setSortModel([{ colId: colName, sort: 'desc' }]);

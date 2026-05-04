@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import App from './App';
 import './style.css';
 import './styles/theme-enhancements.css';
+import './i18n';
 import { ModuleRegistry, AllCommunityModule, provideGlobalGridOptions } from 'ag-grid-community';
 
 provideGlobalGridOptions({ theme: 'legacy' });

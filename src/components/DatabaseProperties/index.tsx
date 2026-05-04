@@ -9,6 +9,7 @@ import {
   ClockCircleOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 import type { TableInfo } from '../../types/api';
 
@@ -27,6 +28,7 @@ interface StatItem {
 }
 
 export function DatabaseProperties({ connectionId, databaseName }: DatabasePropertiesProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<StatItem[]>([]);
   const [tableStats, setTableStats] = useState<{ tables: TableInfo[]; views: TableInfo[] }>({
@@ -64,61 +66,61 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
         const items: StatItem[] = [
           {
             key: 'name',
-            label: '数据库名称',
+            label: t('common.databaseName'),
             value: databaseName,
             icon: <DatabaseOutlined />,
           },
           {
             key: 'tables',
-            label: '表数量',
+            label: t('common.tableCount'),
             value: tables.length,
             icon: <TableOutlined />,
           },
           {
             key: 'views',
-            label: '视图数量',
+            label: t('common.viewCount'),
             value: views.length,
             icon: <EyeOutlined />,
           },
           {
             key: 'rows',
-            label: '总行数',
+            label: t('common.totalRows'),
             value: totalRows.toLocaleString(),
             icon: <BarChartOutlined />,
           },
           {
             key: 'dataSize',
-            label: '数据大小',
+            label: t('common.dataSize'),
             value: formatBytes(totalDataSize),
             icon: <SettingOutlined />,
           },
           {
             key: 'indexSize',
-            label: '索引大小',
+            label: t('common.indexSize'),
             value: formatBytes(totalIndexSize),
             icon: <SettingOutlined />,
           },
           {
             key: 'engine',
-            label: '存储引擎',
+            label: t('common.storageEngine'),
             value: engine,
             icon: <SettingOutlined />,
           },
           {
             key: 'charset',
-            label: '字符集',
+            label: t('common.charset'),
             value: server?.character_set || '-',
             icon: <Text style={{ fontSize: 12 }}>{server?.character_set || '-'}</Text>,
           },
           {
             key: 'collation',
-            label: '排序规则',
+            label: t('common.collation'),
             value: server?.collation || '-',
             icon: <Text style={{ fontSize: 12 }}>{server?.collation || '-'}</Text>,
           },
           {
             key: 'version',
-            label: '服务器版本',
+            label: t('common.serverVersion'),
             value: server?.version || '-',
             icon: <ClockCircleOutlined />,
           },
@@ -137,36 +139,36 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
 
   const sizeColumns: ColumnsType<TableInfo> = [
     {
-      title: '表名',
+      title: t('common.tableName'),
       dataIndex: 'table_name',
       width: 200,
     },
     {
-      title: '行数',
+      title: t('common.rowCount'),
       dataIndex: 'row_count',
       width: 120,
       render: (val: number) => (val ? val.toLocaleString() : '-'),
     },
     {
-      title: '数据大小',
+      title: t('common.dataSize'),
       dataIndex: 'data_size',
       width: 120,
       render: (val: string) => (val ? formatBytes(parseFloat(val)) : '-'),
     },
     {
-      title: '索引大小',
+      title: t('common.indexSize'),
       dataIndex: 'index_size',
       width: 120,
       render: (val: string) => (val ? formatBytes(parseFloat(val)) : '-'),
     },
     {
-      title: '引擎',
+      title: t('common.engine'),
       dataIndex: 'engine',
       width: 100,
       render: (val: string) => (val ? <Tag color="blue">{val}</Tag> : '-'),
     },
     {
-      title: '注释',
+      title: t('common.comment'),
       dataIndex: 'comment',
       ellipsis: true,
       render: (val: string) => val || '-',
@@ -183,7 +185,7 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
           height: '100%',
         }}
       >
-        <Spin tip="加载数据库属性..." size="large" />
+        <Spin tip={t('common.loadingDatabaseProperties')} size="large" />
       </div>
     );
   }
@@ -192,10 +194,10 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
     <div style={{ padding: 24, overflow: 'auto', height: '100%' }}>
       <Title level={4} style={{ marginBottom: 24 }}>
         <DatabaseOutlined style={{ marginRight: 8 }} />
-        数据库属性: {databaseName}
+        {t('common.databaseProperties')}: {databaseName}
       </Title>
 
-      <Card title="基本信息" style={{ marginBottom: 16 }}>
+      <Card title={t('common.basicInfo')} style={{ marginBottom: 16 }}>
         <Descriptions bordered column={2} size="small">
           {stats.map((item) => (
             <Descriptions.Item
@@ -213,7 +215,7 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
         </Descriptions>
       </Card>
 
-      <Card title="表统计" style={{ marginBottom: 16 }}>
+      <Card title={t('common.tableStatistics')} style={{ marginBottom: 16 }}>
         <Table
           rowKey="table_name"
           columns={sizeColumns}
@@ -225,17 +227,17 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
       </Card>
 
       {tableStats.views.length > 0 && (
-        <Card title={`视图统计 (${tableStats.views.length})`}>
+        <Card title={`${t('common.viewStatistics')} (${tableStats.views.length})`}>
           <Table
             rowKey="table_name"
             columns={[
               {
-                title: '视图名',
+                title: t('common.viewName'),
                 dataIndex: 'table_name',
                 width: 200,
               },
               {
-                title: '注释',
+                title: t('common.comment'),
                 dataIndex: 'comment',
                 ellipsis: true,
                 render: (val: string) => val || '-',

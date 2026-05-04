@@ -7,6 +7,7 @@ import {
   DeleteOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useAppStore, Connection } from '../stores/appStore';
 import type { DatabaseType, ConnectionStatus } from '../types/api';
 import { invoke } from '@tauri-apps/api/core';
@@ -34,6 +35,7 @@ interface BackendGroup {
 }
 
 export function Welcome() {
+  const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingData, setEditingData] = useState<ConnectionFormData | undefined>();
 
@@ -157,21 +159,21 @@ export function Welcome() {
     <div style={{ padding: '24px', maxWidth: '1000px', margin: '0 auto' }}>
       <Title level={3} style={{ marginBottom: '1rem' }}>
         <DatabaseOutlined style={{ marginRight: '0.5rem', color: 'var(--color-primary)' }} />
-        iDBLink - 数据库管理工具
+        iDBLink - {t('common.dbTool')}
       </Title>
 
       <Card
-        title="连接列表"
+        title={t('common.connectionList')}
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={handleNewConnection}>
-            新建连接
+            {t('common.newConnection')}
           </Button>
         }
       >
         {connections.length === 0 ? (
-          <Empty description="暂无连接" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+          <Empty description={t('common.noConnection')} image={Empty.PRESENTED_IMAGE_SIMPLE}>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleNewConnection}>
-              创建第一个连接
+              {t('common.createFirstConnection')}
             </Button>
           </Empty>
         ) : (
@@ -219,14 +221,14 @@ export function Welcome() {
 
       <Divider />
 
-      <Card title="功能特性" size="small">
+      <Card title={t('common.features')} size="small">
         <ul style={{ paddingLeft: '1.25rem', margin: 0 }}>
-          <li>支持 MySQL, PostgreSQL, SQLite, SQL Server, Oracle, MariaDB, 达梦数据库</li>
-          <li>自定义连接分组管理（已支持持久化存储）</li>
-          <li>可视化数据浏览和编辑</li>
-          <li>SQL 查询编辑器（Monaco Editor）</li>
-          <li>ER 图与模型设计</li>
-          <li>数据导入导出</li>
+          <li>{t('common.featureDatabases')}</li>
+          <li>{t('common.featureGroups')}</li>
+          <li>{t('common.featureVisualBrowse')}</li>
+          <li>{t('common.featureSqlEditor')}</li>
+          <li>{t('common.featureErDiagram')}</li>
+          <li>{t('common.featureImportExport')}</li>
         </ul>
       </Card>
 

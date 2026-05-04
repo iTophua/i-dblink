@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Space, Typography, Divider, Tag } from 'antd';
 import { CheckCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { Connection } from '../../stores/appStore';
 import { api } from '../../api';
 
@@ -27,6 +28,7 @@ export function StatusBar({
   executionTime,
   isQuerying,
 }: StatusBarProps) {
+  const { t } = useTranslation();
   const { Footer } = Layout;
   const { Text } = Typography;
 
@@ -93,21 +95,21 @@ export function StatusBar({
           {isConnected ? (
             <span>
               <CheckCircleOutlined style={{ color: 'var(--color-success)', marginRight: 4 }} />
-              已连接：{selectedConnection?.name || '未知'}
+              {t('common.connected')}: {selectedConnection?.name || t('common.unknown')}
             </span>
           ) : selectedConnection ? (
-            <span style={{ color: 'var(--text-tertiary)' }}>未连接：{selectedConnection.name}</span>
+            <span style={{ color: 'var(--text-tertiary)' }}>{t('common.notConnected')}: {selectedConnection.name}</span>
           ) : (
-            '未连接'
+            t('common.notConnected')
           )}
         </Text>
         {selectedDatabase && (
-          <Text>库：{selectedDatabase}</Text>
+          <Text>{t('common.database')}: {selectedDatabase}</Text>
         )}
-        {selectedTable && <Text>表：{selectedTable}</Text>}
+        {selectedTable && <Text>{t('common.table')}: {selectedTable}</Text>}
         {isQuerying && (
           <Tag color="processing" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
-            查询中...
+            {t('common.querying')}
           </Tag>
         )}
         {isConnected && dbTypeLabel && (
@@ -123,15 +125,15 @@ export function StatusBar({
         )}
         {transactionActive && (
           <Tag color="orange" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
-            事务中 {txDuration > 0 ? `${txDuration}s` : ''}
+            {t('common.inTransaction')} {txDuration > 0 ? `${txDuration}s` : ''}
           </Tag>
         )}
         {resultRows !== undefined && resultRows > 0 && (
-          <Text style={{ fontSize: 11 }}>行数：{resultRows.toLocaleString()}</Text>
+          <Text style={{ fontSize: 11 }}>{t('common.rows')}: {resultRows.toLocaleString()}</Text>
         )}
         {executionTime !== undefined && executionTime > 0 && (
           <Text style={{ fontSize: 11 }}>
-            耗时：
+            {t('common.executionTime')}:
             {executionTime < 1000 ? `${executionTime}ms` : `${(executionTime / 1000).toFixed(2)}s`}
           </Text>
         )}

@@ -13,6 +13,7 @@ import {
   DownloadOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../hooks/useApi';
 import type { QueryResult, DatabaseType, ColumnInfo } from '../../types/api';
 import { exportToExcel } from '../../utils/exportUtils';
@@ -262,6 +263,7 @@ export function ResultGrid({
   originalSql,
   dbType,
 }: ResultGridProps) {
+  const { t } = useTranslation();
   const { message } = App.useApp();
   const { getColumns, executeQuery } = useDatabase();
 
@@ -502,7 +504,7 @@ export function ResultGrid({
 
       // 执行 UPDATE
       if (errorMsg) {
-        message.error(`提交失败：${errorMsg}`);
+        message.error(`${t('common.submitFailed')}: ${errorMsg}`);
         return;
       }
       for (const [rowId, row] of modifiedRows) {
@@ -548,15 +550,15 @@ export function ResultGrid({
       }
 
       if (errorMsg) {
-        message.error(`提交失败：${errorMsg}`);
+        message.error(`${t('common.submitFailed')}: ${errorMsg}`);
       } else {
-        message.success(`成功提交 ${successCount} 个更改`);
+        message.success(`${t('common.submittedSuccessfully')} ${successCount} ${t('common.changes')}`);
         setModifiedRows(new Map());
         setDeletedRowIndices(new Set());
         setNewRows([]);
       }
     } catch (err: any) {
-      message.error(`提交失败：${err.message || err}`);
+      message.error(`${t('common.submitFailed')}: ${err.message || err}`);
     }
   }, [
     connectionId,
@@ -575,13 +577,13 @@ export function ResultGrid({
   // 撤销更改
   const handleUndo = useCallback(() => {
     Modal.confirm({
-      title: '撤销修改',
-      content: '确定要放弃所有未保存的修改吗？',
+      title: t('common.undoModifications'),
+      content: t('common.confirmDiscardAllChanges'),
       onOk: () => {
         setModifiedRows(new Map());
         setDeletedRowIndices(new Set());
         setNewRows([]);
-        message.info('已撤销所有修改');
+        message.info(t('common.allChangesRevoked'));
       },
     });
   }, [message]);
@@ -589,26 +591,26 @@ export function ResultGrid({
   // 删除选中行
   const handleDeleteSelected = useCallback(() => {
     if (!isEditable) {
-      message.warning('当前结果集不支持编辑');
+      message.warning(t('common.currentResultSetNotEditable'));
       return;
     }
     if (selectedRowIndices.size === 0) {
-      message.warning('请先选中要删除的行');
+      message.warning(t('common.pleaseSelectRowsToDelete'));
       return;
     }
     Modal.confirm({
-      title: '确认删除',
-      content: `确定要标记删除选中的 ${selectedRowIndices.size} 行吗？提交后才会真正删除。`,
-      okText: '标记删除',
+      title: t('common.confirmDelete'),
+      content: t('common.confirmMarkRowsForDeletion', { count: selectedRowIndices.size }),
+      okText: t('common.markForDeletion'),
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: t('common.cancel'),
       onOk: () => {
         setDeletedRowIndices((prev) => {
           const next = new Set(prev);
           selectedRowIndices.forEach((i) => next.add(i));
           return next;
         });
-        message.success(`已标记删除 ${selectedRowIndices.size} 行`);
+        message.success(`${t('common.markedForDeletion')} ${selectedRowIndices.size} ${t('common.rows')}`);
       },
     });
   }, [isEditable, selectedRowIndices, message]);
@@ -633,34 +635,34 @@ export function ResultGrid({
   // 复制为 SQL
   const copyAsInsert = useCallback(() => {
     if (!tableName) {
-      message.warning('无法确定表名');
+      message.warning(t('common.cannotDetermineTableName'));
       return;
     }
     const indices = Array.from(selectedRowIndices);
     if (indices.length === 0) {
-      message.warning('请先选中行');
+      message.warning(t('common.pleaseSelectRows'));
       return;
     }
     const rows = indices.map((i) => queryResult.rows[i]);
     const sql = generateInsertSql(tableName, queryResult.columns, rows, dbType);
     navigator.clipboard.writeText(sql);
-    message.success(`已复制 ${indices.length} 行的 INSERT 语句`);
+    message.success(`${t('common.copied')} ${indices.length} ${t('common.rows')} INSERT ${t('common.statements')}`);
     closeContextMenu();
   }, [tableName, selectedRowIndices, queryResult, dbType, message, closeContextMenu]);
 
   const copyAsUpdate = useCallback(() => {
     if (!tableName || !primaryKeyCol) {
-      message.warning('当前结果集不支持生成 UPDATE');
+      message.warning(t('common.currentResultSetCannotGenerateUpdate'));
       return;
     }
     const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
     if (pkIdx < 0) {
-      message.warning('未找到主键列');
+      message.warning(t('common.primaryKeyColumnNotFound'));
       return;
     }
     const indices = Array.from(selectedRowIndices);
     if (indices.length === 0) {
-      message.warning('请先选中行');
+      message.warning(t('common.pleaseSelectRows'));
       return;
     }
     const sqls = indices.map((i) =>
@@ -674,40 +676,40 @@ export function ResultGrid({
       )
     );
     navigator.clipboard.writeText(sqls.join('\n'));
-    message.success(`已复制 ${indices.length} 行的 UPDATE 语句`);
+    message.success(`${t('common.copied')} ${indices.length} ${t('common.rows')} UPDATE ${t('common.statements')}`);
     closeContextMenu();
   }, [tableName, primaryKeyCol, queryResult, dbType, message, closeContextMenu]);
 
   const copyAsDelete = useCallback(() => {
     if (!tableName || !primaryKeyCol) {
-      message.warning('当前结果集不支持生成 DELETE');
+      message.warning(t('common.currentResultSetCannotGenerateDelete'));
       return;
     }
     const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
     if (pkIdx < 0) {
-      message.warning('未找到主键列');
+      message.warning(t('common.primaryKeyColumnNotFound'));
       return;
     }
     const indices = Array.from(selectedRowIndices);
     if (indices.length === 0) {
-      message.warning('请先选中行');
+      message.warning(t('common.pleaseSelectRows'));
       return;
     }
     const pkValues = indices.map((i) => queryResult.rows[i][pkIdx]);
     const sql = generateDeleteSql(tableName, primaryKeyCol.column_name, pkValues, dbType);
     navigator.clipboard.writeText(sql);
-    message.success(`已复制 ${indices.length} 行的 DELETE 语句`);
+    message.success(`${t('common.copied')} ${indices.length} ${t('common.rows')} DELETE ${t('common.statements')}`);
     closeContextMenu();
   }, [tableName, primaryKeyCol, queryResult, dbType, message, closeContextMenu]);
 
   // 显示操作 SQL 弹窗
   const showOperationSql = useCallback(() => {
     if (!operationSql) {
-      message.info('暂无操作 SQL');
+      message.info(t('common.noOperationSql'));
       return;
     }
     Modal.info({
-      title: '操作 SQL 预览',
+      title: t('common.operationSqlPreview'),
       width: 800,
       content: (
         <pre
@@ -736,7 +738,7 @@ export function ResultGrid({
         <Empty
           description={
             <div style={{ color: 'var(--color-error)' }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>查询执行失败</div>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('common.queryExecutionFailed')}</div>
               <div style={{ fontSize: 12, opacity: 0.85, maxWidth: 400, wordBreak: 'break-all' }}>
                 {queryResult.error}
               </div>
@@ -756,10 +758,10 @@ export function ResultGrid({
         <Empty
           description={
             <div>
-              <div style={{ fontWeight: 500, marginBottom: 4 }}>查询成功</div>
+              <div style={{ fontWeight: 500, marginBottom: 4 }}>{t('common.querySuccess')}</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {executionTime !== undefined ? `执行耗时 ${executionTime}ms · ` : ''}
-                未返回任何数据
+                {executionTime !== undefined ? `${t('common.executionTime')} ${executionTime}ms · ` : ''}
+                {t('common.noDataReturned')}
               </div>
             </div>
           }
@@ -854,68 +856,68 @@ export function ResultGrid({
                       filename: `result_${Date.now()}.xlsx`,
                       sheetName: 'Query Result',
                     });
-                    message.success('已导出 Excel');
+                    message.success(t('common.exportedExcel'));
                   } catch (e: any) {
-                    message.error(`导出失败：${e.message}`);
+                    message.error(`${t('common.exportFailed')}: ${e.message}`);
                   }
                 },
               },
               {
                 key: 'csv',
-                label: '导出 CSV',
+                label: t('common.exportCsv'),
                 icon: <FileTextOutlined />,
                 onClick: () => {
                   const csv = exportToCsv(queryResult.columns, queryResult.rows);
                   downloadBlob(csv, `result_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
-                  message.success('已导出 CSV');
+                  message.success(t('common.exportedCsv'));
                 },
               },
               {
                 key: 'json',
-                label: '导出 JSON',
+                label: t('common.exportJson'),
                 icon: <FileTextOutlined />,
                 onClick: () => {
                   const json = exportToJson(queryResult.columns, queryResult.rows);
                   downloadBlob(json, `result_${Date.now()}.json`, 'application/json');
-                  message.success('已导出 JSON');
+                  message.success(t('common.exportedJson'));
                 },
               },
               { type: 'divider' as const },
               {
                 key: 'txt',
-                label: '导出 TXT',
+                label: t('common.exportTxt'),
                 icon: <FileTextOutlined />,
                 onClick: () => {
                   const txt = exportToTxt(queryResult.columns, queryResult.rows);
                   downloadBlob(txt, `result_${Date.now()}.txt`, 'text/plain;charset=utf-8;');
-                  message.success('已导出 TXT');
+                  message.success(t('common.exportedTxt'));
                 },
               },
               {
                 key: 'xml',
-                label: '导出 XML',
+                label: t('common.exportXml'),
                 icon: <FileTextOutlined />,
                 onClick: () => {
                   const xml = exportToXml(queryResult.columns, queryResult.rows);
                   downloadBlob(xml, `result_${Date.now()}.xml`, 'application/xml;charset=utf-8;');
-                  message.success('已导出 XML');
+                  message.success(t('common.exportedXml'));
                 },
               },
               {
                 key: 'markdown',
-                label: '导出 Markdown',
+                label: t('common.exportMarkdown'),
                 icon: <FileTextOutlined />,
                 onClick: () => {
                   const md = exportToMd(queryResult.columns, queryResult.rows);
                   downloadBlob(md, `result_${Date.now()}.md`, 'text/markdown;charset=utf-8;');
-                  message.success('已导出 Markdown');
+                  message.success(t('common.exportedMarkdown'));
                 },
               },
             ],
           }}
         >
           <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 11, height: 22 }}>
-            导出
+            {t('common.export')}
           </Button>
         </Dropdown>
         {isEditable && hasChanges && (
@@ -927,7 +929,7 @@ export function ResultGrid({
               onClick={handleCommit}
               style={{ fontSize: 11, height: 22 }}
             >
-              提交
+              {t('common.submit')}
             </Button>
             <Button
               size="small"
@@ -935,7 +937,7 @@ export function ResultGrid({
               onClick={handleUndo}
               style={{ fontSize: 11, height: 22 }}
             >
-              撤销
+              {t('common.undo')}
             </Button>
             <Button
               size="small"
@@ -954,7 +956,7 @@ export function ResultGrid({
             onClick={() => setAddModalOpen(true)}
             style={{ fontSize: 11, height: 22 }}
           >
-            新增行
+            {t('common.addNewRow')}
           </Button>
         )}
         {isEditable && (
@@ -1212,13 +1214,13 @@ export function ResultGrid({
             setNewRows((prev) => [...prev, newRow]);
             setAddModalOpen(false);
             addForm.resetFields();
-            message.success('已添加新行，请点击"提交"保存到数据库');
+            message.success(`${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`);
           } catch (err) {
             // 表单验证失败，不做处理
           }
         }}
-        okText="添加"
-        cancelText="取消"
+        okText={t('common.add')}
+        cancelText={t('common.cancel')}
         destroyOnClose
       >
         <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
@@ -1238,7 +1240,7 @@ export function ResultGrid({
               }
               name={col.column_name}
               rules={[
-                { required: col.is_nullable !== 'YES', message: `请输入 ${col.column_name}` },
+                { required: col.is_nullable !== 'YES', message: t('common.pleaseEnterColumnValue', { column: col.column_name }) },
               ]}
             >
               <Input placeholder={col.comment || col.data_type} />

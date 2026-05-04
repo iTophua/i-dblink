@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Tag, Spin, Empty, Button, Space, Tooltip, Modal, App } from 'antd';
 import { GlobalInput } from './GlobalInput';
+import { useTranslation } from 'react-i18next';
 import {
   TableOutlined,
   EyeOutlined,
@@ -307,14 +308,15 @@ function formatSortValue(table: TableData, key: SortKey): string | number {
 
 // List header component
 function ListHeader({ sort, onSort }: { sort: SortState; onSort: (key: SortKey) => void }) {
+  const { t } = useTranslation();
   const cols: { key: SortKey; label: string; align?: 'left' | 'right' | 'center' }[] = [
-    { key: 'table_name', label: '表名' },
-    { key: 'comment', label: '注释' },
-    { key: 'row_count', label: '行数', align: 'right' },
-    { key: 'data_size', label: '数据大小', align: 'right' },
-    { key: 'engine', label: '引擎', align: 'center' },
-    { key: 'create_time', label: '创建时间' },
-    { key: 'update_time', label: '更新时间' },
+    { key: 'table_name', label: t('common.tableName') },
+    { key: 'comment', label: t('common.comment') },
+    { key: 'row_count', label: t('common.rowCount'), align: 'right' },
+    { key: 'data_size', label: t('common.dataSize'), align: 'right' },
+    { key: 'engine', label: t('common.engine'), align: 'center' },
+    { key: 'create_time', label: t('common.createTime') },
+    { key: 'update_time', label: t('common.updateTime') },
   ];
   return (
     <div
@@ -381,6 +383,7 @@ function TableListComponent({
   onImport,
   onExport,
 }: TableListProps) {
+  const { t } = useTranslation();
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -451,7 +454,7 @@ function TableListComponent({
       await getTables(connectionId, database, true, undefined);
     } catch (error: any) {
       console.error('Failed to refresh tables:', error);
-      message.error(`刷新表列表失败：${error}`);
+      message.error(`${t('common.failedToRefreshTableList')}: ${error}`);
     } finally {
       setLocalLoading(false);
     }
@@ -565,47 +568,47 @@ function TableListComponent({
         }}
       >
         <Space size="small">
-          <Tooltip title="打开表" open={!selectedRow ? false : undefined}>
+          <Tooltip title={t('common.openTable')} open={!selectedRow ? false : undefined}>
             <span>
               <Button
                 icon={<FolderOpenOutlined />}
                 size="small"
                 disabled={!selectedRow}
-                title={selectedRow ? '' : '请先选择一个表'}
+                title={selectedRow ? '' : t('common.pleaseSelectATable')}
                 onClick={() => selectedRow && onTableOpen?.(selectedRow, database)}
               />
             </span>
           </Tooltip>
-          <Tooltip title="设计表" open={!selectedRow ? false : undefined}>
+          <Tooltip title={t('common.designTable')} open={!selectedRow ? false : undefined}>
             <span>
               <Button
                 icon={<EditOutlined />}
                 size="small"
                 disabled={!selectedRow}
-                title={selectedRow ? '' : '请先选择一个表'}
+                title={selectedRow ? '' : t('common.pleaseSelectATable')}
                 onClick={() => selectedRow && onTableDesign?.(selectedRow, database)}
               />
             </span>
           </Tooltip>
-          <Tooltip title="新增表">
+          <Tooltip title={t('common.createNewTable')}>
             <span>
               <Button icon={<PlusOutlined />} size="small" onClick={onTableNew} />
             </span>
           </Tooltip>
-          <Tooltip title="清空表" open={!selectedRow ? false : undefined}>
+          <Tooltip title={t('common.truncateTable')} open={!selectedRow ? false : undefined}>
             <span>
               <Button
                 icon={<ClearOutlined />}
                 size="small"
                 disabled={!selectedRow}
-                title={selectedRow ? '' : '请先选择一个表'}
+                title={selectedRow ? '' : t('common.pleaseSelectATable')}
                 danger
                 onClick={() => {
                   if (selectedRow) {
                     Modal.confirm({
-                      title: '确认清空表',
-                      content: `确定要清空表 "${selectedRow}" 吗？此操作不可撤销。`,
-                      okText: '清空',
+                      title: t('common.confirmTruncateTable'),
+                      content: t('common.confirmTruncateTableContent', { tableName: selectedRow }),
+                      okText: t('common.truncate'),
                       okType: 'danger',
                       onOk: () => onTableTruncate?.(selectedRow, database),
                     });
@@ -614,21 +617,22 @@ function TableListComponent({
               />
             </span>
           </Tooltip>
-          <Tooltip title="复制表" open={!selectedRow ? false : undefined}>
+          <Tooltip title={t('common.copyTable')} open={!selectedRow ? false : undefined}>
             <span>
               <Button
                 icon={<CopyOutlined />}
                 size="small"
                 disabled={!selectedRow}
-                title={selectedRow ? '' : '请先选择一个表'}
+                title={selectedRow ? '' : t('common.pleaseSelectATable')}
                 onClick={() => {
                   if (selectedRow) {
                     const newName = `${selectedRow}_copy`;
                     Modal.confirm({
-                      title: '复制表',
+                      title: t('common.copyTable'),
+                      okText: t('common.copy'),
                       content: (
                         <div>
-                          <p>将复制表 "{selectedRow}" 到新表</p>
+                          <p>{t('common.willCopyTable', { tableName: selectedRow })}</p>
                           <input
                             id="copy-table-name"
                             autoFocus
@@ -644,7 +648,6 @@ function TableListComponent({
                           />
                         </div>
                       ),
-                      okText: '复制',
                       onOk: () => {
                         const input = document.getElementById(
                           'copy-table-name'
@@ -657,31 +660,31 @@ function TableListComponent({
               />
             </span>
           </Tooltip>
-          <Tooltip title="转储SQL" open={!selectedRow ? false : undefined}>
+          <Tooltip title={t('common.dumpSql')} open={!selectedRow ? false : undefined}>
             <span>
               <Button
                 icon={<CodeOutlined />}
                 size="small"
                 disabled={!selectedRow}
-                title={selectedRow ? '' : '请先选择一个表'}
+                title={selectedRow ? '' : t('common.pleaseSelectATable')}
                 onClick={() => selectedRow && onTableDump?.(selectedRow, database)}
               />
             </span>
           </Tooltip>
-          <Tooltip title="删除表" open={!selectedRow ? false : undefined}>
+          <Tooltip title={t('common.dropTable')} open={!selectedRow ? false : undefined}>
             <span>
               <Button
                 icon={<DeleteOutlined />}
                 size="small"
                 disabled={!selectedRow}
-                title={selectedRow ? '' : '请先选择一个表'}
+                title={selectedRow ? '' : t('common.pleaseSelectATable')}
                 danger
                 onClick={() => {
                   if (selectedRow) {
                     Modal.confirm({
-                      title: '确认删除',
-                      content: `确定要删除表 "${selectedRow}" 吗？`,
-                      okText: '删除',
+                      title: t('common.confirmDelete'),
+                      content: t('common.confirmDropTable', { tableName: selectedRow }),
+                      okText: t('common.delete'),
                       okType: 'danger',
                       onOk: () => onTableDelete?.(selectedRow, database),
                     });
@@ -691,18 +694,18 @@ function TableListComponent({
             </span>
           </Tooltip>
           <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
-          <Tooltip title="导入向导">
+          <Tooltip title={t('common.importWizard')}>
             <span>
               <Button icon={<ImportOutlined />} size="small" onClick={onImport} />
             </span>
           </Tooltip>
-          <Tooltip title="导出向导">
+          <Tooltip title={t('common.exportWizard')}>
             <span>
               <Button icon={<ExportOutlined />} size="small" onClick={onExport} />
             </span>
           </Tooltip>
           <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
-          <Tooltip title="刷新">
+          <Tooltip title={t('common.refresh')}>
             <span>
               <Button
                 icon={<ReloadOutlined />}
@@ -715,7 +718,7 @@ function TableListComponent({
         </Space>
 
         <GlobalInput
-          placeholder="搜索表名或注释..."
+          placeholder={t('common.searchTableOrComment')}
           prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
           value={searchText}
           onChange={(e) => {
@@ -731,15 +734,15 @@ function TableListComponent({
         <Space size="small">
           {objectType === 'all' ? (
             <>
-              <Tag color="blue">表 {tableCount}</Tag>
-              <Tag color="purple">视图 {viewCount}</Tag>
+              <Tag color="blue">{t('common.tables')} {tableCount}</Tag>
+              <Tag color="purple">{t('common.views')} {viewCount}</Tag>
             </>
           ) : objectType === 'table' ? (
-            <Tag color="blue">表 {tableCount}</Tag>
+            <Tag color="blue">{t('common.tables')} {tableCount}</Tag>
           ) : (
-            <Tag color="purple">视图 {viewCount}</Tag>
+            <Tag color="purple">{t('common.views')} {viewCount}</Tag>
           )}
-          <Tooltip title={viewMode === 'list' ? '切换为网格视图' : '切换为列表视图'}>
+          <Tooltip title={viewMode === 'list' ? t('common.switchToGridView') : t('common.switchToListView')}>
             <span>
               <Button
                 icon={viewMode === 'list' ? <AppstoreOutlined /> : <UnorderedListOutlined />}
@@ -774,7 +777,7 @@ function TableListComponent({
           >
             <Spin size="large" />
             <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
-              加载中...
+              {t('common.loading')}
             </div>
           </div>
         ) : filteredTables.length === 0 ? (
@@ -787,9 +790,9 @@ function TableListComponent({
             }}
           >
             {searchText ? (
-              <Empty description="未找到匹配的表" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty description={searchText ? t('common.noMatchingTables') : t('common.noTables')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
             ) : (
-              <Empty description="暂无表" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty description={t('common.noTables')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}
           </div>
         ) : filteredTables.length === 0 ? (
@@ -802,7 +805,7 @@ function TableListComponent({
             }}
           >
             <Empty
-              description={searchText ? '未找到匹配的表' : '暂无表'}
+              description={searchText ? t('common.noMatchingTables') : t('common.noTables')}
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           </div>

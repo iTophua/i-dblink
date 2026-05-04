@@ -17,6 +17,7 @@ import {
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
 import { ThemePreset, THEME_PRESETS_LIST } from '../styles/theme';
 import { MENU_SHORTCUTS, isMacOS } from '../constants/menuShortcuts';
+import { useTranslation } from 'react-i18next';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -33,10 +34,10 @@ const THEME_PREVIEW_COLORS: Record<ThemePreset, { light: string; dark: string }>
 };
 
 const MENU_ITEMS = [
-  { key: 'general', label: '通用设置' },
-  { key: 'appearance', label: '外观与主题' },
-  { key: 'language', label: '语言设置' },
-  { key: 'shortcuts', label: '快捷键设置' },
+  { key: 'general', labelKey: 'common.general' },
+  { key: 'appearance', labelKey: 'common.appearance' },
+  { key: 'language', labelKey: 'common.language' },
+  { key: 'shortcuts', labelKey: 'common.shortcuts' },
 ];
 
 export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
@@ -44,6 +45,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
   const resetSettings = useSettingsStore((s) => s.resetSettings);
   const [form] = Form.useForm();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (open) {
@@ -95,7 +97,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
     () =>
       MENU_ITEMS.map((item) => ({
         key: item.key,
-        label: item.label,
+        label: t(item.labelKey),
         style: {
           padding: '8px 16px',
           borderRadius: 6,
@@ -103,12 +105,12 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
           width: 'calc(100% - 16px)',
         },
       })),
-    []
+    [t]
   );
 
   return (
     <Modal
-      title="设置"
+      title={t('common.settings')}
       open={open}
       onCancel={onCancel}
       width={900}
@@ -118,13 +120,13 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       styles={{ body: { maxHeight: 'calc(100vh - 200px)', overflow: 'hidden', padding: 0 } }}
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Button onClick={handleReset}>恢复默认</Button>
+          <Button onClick={handleReset}>{t('common.reset')}</Button>
           <div>
             <Button onClick={onCancel} style={{ marginRight: 8 }}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button type="primary" onClick={handleSave}>
-              保存
+              {t('common.save')}
             </Button>
           </div>
         </div>
@@ -166,31 +168,31 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
             {activeTab === 'general' && (
               <div>
                 <Form.Item
-                  label="默认分页大小"
+                  label={t('common.defaultPageSize')}
                   name="pageSize"
-                  rules={[{ required: true, message: '请输入分页大小' }]}
-                  tooltip="每次加载数据的行数"
+                  rules={[{ required: true, message: t('common.defaultPageSize') }]}
+                  tooltip={t('common.loadRows')}
                 >
                   <InputNumber
                     min={10}
                     max={10000}
                     step={100}
                     style={{ width: '100%' }}
-                    addonAfter="行"
+                    addonAfter={t('common.rows')}
                   />
                 </Form.Item>
                 <Form.Item
-                  label="查询结果上限"
+                  label={t('common.maxResultRows')}
                   name="maxResultRows"
-                  rules={[{ required: true, message: '请输入查询结果上限' }]}
-                  tooltip="SQL 查询返回的最大行数，超过此限制将只返回前 N 行并提示"
+                  rules={[{ required: true, message: t('common.maxResultRows') }]}
+                  tooltip={t('common.maxReturnRows')}
                 >
                   <InputNumber
                     min={100}
                     max={100000}
                     step={1000}
                     style={{ width: '100%' }}
-                    addonAfter="行"
+                    addonAfter={t('common.rows')}
                   />
                 </Form.Item>
               </div>
@@ -198,7 +200,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
 
             {activeTab === 'appearance' && (
               <div>
-                <Form.Item label="选择主题" style={{ marginBottom: 12 }}>
+                <Form.Item label={t('common.theme')} style={{ marginBottom: 12 }}>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {THEME_PRESETS_LIST.map((item) => (
                       <Tooltip key={item.value} title={item.description}>
@@ -222,7 +224,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                   </div>
                 </Form.Item>
 
-                <Form.Item label="主题风格" name="themePreset" rules={[{ required: true }]}>
+                <Form.Item label={t('common.themePreset')} name="themePreset" rules={[{ required: true }]}>
                   <Select>
                     {THEME_PRESETS_LIST.map((item) => (
                       <Select.Option key={item.value} value={item.value}>
@@ -246,17 +248,17 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                   </Select>
                 </Form.Item>
 
-                <Form.Item label="显示模式" name="themeMode">
+                <Form.Item label={t('common.themeMode')} name="themeMode">
                   <Select onChange={handleModeChange}>
-                    <Select.Option value="light">浅色</Select.Option>
-                    <Select.Option value="dark">深色</Select.Option>
+                    <Select.Option value="light">{t('common.light')}</Select.Option>
+                    <Select.Option value="dark">{t('common.dark')}</Select.Option>
                   </Select>
                 </Form.Item>
 
                 <Form.Item
                   name="themeSyncSystem"
                   valuePropName="checked"
-                  tooltip="开启后主题将跟随系统设置自动切换"
+                  tooltip={t('common.followSystemTheme')}
                 >
                   <Space>
                     <Switch
@@ -264,7 +266,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                       size="small"
                       onChange={(checked) => form.setFieldsValue({ themeSyncSystem: checked })}
                     />
-                    <span>跟随系统主题</span>
+                    <span>{t('common.followSystem')}</span>
                   </Space>
                 </Form.Item>
               </div>
@@ -272,7 +274,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
 
             {activeTab === 'language' && (
               <div>
-                <Form.Item label="界面语言" name="language">
+                <Form.Item label={t('common.interfaceLanguage')} name="language">
                   <Select style={{ width: 200 }}>
                     <Select.Option value="zh-CN">简体中文</Select.Option>
                     <Select.Option value="en-US">English</Select.Option>
@@ -297,6 +299,7 @@ function ShortcutsSettings() {
   const [conflictKey, setConflictKey] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const isMac = isMacOS();
+  const { t } = useTranslation();
 
   const shortcuts: Record<string, string> = settings.shortcuts || {};
 
@@ -335,7 +338,7 @@ function ShortcutsSettings() {
       if (conflict) {
         const conflictDesc = MENU_SHORTCUTS.find((s) => s.id === conflict)?.description || conflict;
         messageApi.warning(
-          `快捷键与「${conflictDesc}」冲突，请使用其他组合键`,
+          t('common.confirmWith', { desc: conflictDesc }),
           3
         );
         return;
@@ -347,7 +350,7 @@ function ShortcutsSettings() {
         delete newShortcuts[editingKey];
       }
       updateSettings({ shortcuts: newShortcuts });
-      messageApi.success('快捷键已保存');
+      messageApi.success(t('common.shortcutSaved'));
     }
     setEditingKey(null);
     setInputValue('');
@@ -382,7 +385,7 @@ function ShortcutsSettings() {
     const newShortcuts = { ...shortcuts };
     delete newShortcuts[shortcutId];
     updateSettings({ shortcuts: newShortcuts });
-    messageApi.success('已恢复默认快捷键');
+    messageApi.success(t('common.shortcutRestored'));
   };
 
   const getDisplayKeys = (shortcutId: string) => {
@@ -416,20 +419,20 @@ function ShortcutsSettings() {
   }, []);
 
   const categoryNames: Record<string, string> = {
-    file: '文件操作',
-    edit: '编辑操作',
-    view: '查看操作',
-    connection: '连接操作',
-    tools: '工具操作',
-    window: '窗口操作',
-    help: '帮助操作',
+    file: t('common.fileOperations'),
+    edit: t('common.editOperations'),
+    view: t('common.viewOperations'),
+    connection: t('common.connectionOperations'),
+    tools: t('common.toolOperations'),
+    window: t('common.windowOperations'),
+    help: t('common.helpOperations'),
   };
 
   return (
     <div>
       {contextHolder}
       <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12 }}>
-        点击快捷键进行修改。修改后自动生效，无需保存。
+        {t('common.clickToModify')}
       </div>
       {Object.entries(categories).map(([category, catShortcuts]) => (
         <div key={category} style={{ marginBottom: 20 }}>
@@ -468,20 +471,19 @@ function ShortcutsSettings() {
                             : {}),
                         }}
                         autoFocus
-                        placeholder="按下组合键"
+                        placeholder={t('common.pressComboKeys')}
                         status={conflictKey ? 'error' : undefined}
                       />
                       <Button size="small" type="primary" onClick={handleShortcutSave}>
-                        确定
+                        {t('common.confirm')}
                       </Button>
                       <Button size="small" onClick={handleCancel}>
-                        取消
+                        {t('common.cancel')}
                       </Button>
                     </Space>
                     {conflictKey && (
                       <div style={{ color: 'var(--color-error)', fontSize: 11, marginTop: 2 }}>
-                        ⚠ 与「{MENU_SHORTCUTS.find((s) => s.id === conflictKey)?.description || conflictKey}
-                        」冲突
+                        ⚠ {t('common.confirmWithKey', { key: MENU_SHORTCUTS.find((s) => s.id === conflictKey)?.description || conflictKey })}
                       </div>
                     )}
                   </div>
@@ -506,7 +508,7 @@ function ShortcutsSettings() {
                           style={{ fontSize: 11, padding: '0 4px', height: 20 }}
                           onClick={() => handleRestoreDefault(shortcut.id)}
                         >
-                          默认
+                          {t('common.default')}
                         </Button>
                       </Tooltip>
                     )}

@@ -1,6 +1,7 @@
 import React, { type JSX, useCallback, useState } from 'react';
 import { Layout, Button, Dropdown, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   PlusOutlined,
@@ -39,6 +40,7 @@ export function Toolbar(): JSX.Element {
   const tc = useThemeColors();
   const isDarkMode = tc.isDark;
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const { t } = useTranslation();
 
   const handleMenuAction = useCallback((action: string) => {
     window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
@@ -67,76 +69,76 @@ export function Toolbar(): JSX.Element {
   };
 
   const fileMenuItems: MenuProps['items'] = [
-    { key: 'new-connection', icon: <PlusOutlined />, label: '新建连接 (N)' },
-    { key: 'open-connection', icon: <FolderOpenOutlined />, label: '打开连接 (O)' },
+    { key: 'new-connection', icon: <PlusOutlined />, label: `${t('common.newConnectionLabel')} (N)` },
+    { key: 'open-connection', icon: <FolderOpenOutlined />, label: `${t('common.openConnectionLabel')} (O)` },
     { type: 'divider' },
-    { key: 'save', icon: <SaveOutlined />, label: '保存 (S)' },
-    { key: 'save-as', label: '另存为... (A)' },
+    { key: 'save', icon: <SaveOutlined />, label: `${t('common.saveLabel')} (S)` },
+    { key: 'save-as', label: `${t('common.saveAs')} (A)` },
     { type: 'divider' },
-    { key: 'import', icon: <ImportOutlined />, label: '导入 (I)' },
-    { key: 'export', icon: <ExportOutlined />, label: '导出 (E)' },
+    { key: 'import', icon: <ImportOutlined />, label: `${t('common.importLabel')} (I)` },
+    { key: 'export', icon: <ExportOutlined />, label: `${t('common.exportLabel')} (E)` },
     { type: 'divider' },
-    { key: 'exit', label: '退出 (X)' },
+    { key: 'exit', label: `${t('common.exitLabel')} (X)` },
   ];
 
   const editMenuItems: MenuProps['items'] = [
-    { key: 'undo', label: '撤销 (U)', icon: <span style={{ fontFamily: 'monospace' }}>↩</span> },
-    { key: 'redo', label: '重做 (R)', icon: <span style={{ fontFamily: 'monospace' }}>↪</span> },
+    { key: 'undo', label: `${t('common.undoLabel')} (U)`, icon: <span style={{ fontFamily: 'monospace' }}>↩</span> },
+    { key: 'redo', label: `${t('common.redoLabel')} (R)`, icon: <span style={{ fontFamily: 'monospace' }}>↪</span> },
     { type: 'divider' },
-    { key: 'cut', label: '剪切 (T)' },
-    { key: 'copy', label: '复制 (C)' },
-    { key: 'paste', label: '粘贴 (P)' },
-    { key: 'delete', label: '删除 (D)' },
+    { key: 'cut', label: `${t('common.cutLabel')} (T)` },
+    { key: 'copy', label: `${t('common.copyLabel')} (C)` },
+    { key: 'paste', label: `${t('common.pasteLabel')} (P)` },
+    { key: 'delete', label: `${t('common.deleteLabel')} (D)` },
     { type: 'divider' },
-    { key: 'select-all', label: '全选 (A)' },
-    { key: 'find', label: '查找/替换... (F)' },
+    { key: 'select-all', label: `${t('common.selectAllLabel')} (A)` },
+    { key: 'find', label: `${t('common.findReplaceLabel')} (F)` },
   ];
 
   const viewMenuItems: MenuProps['items'] = [
-    { key: 'refresh', icon: <ReloadOutlined />, label: '刷新 (R)' },
+    { key: 'refresh', icon: <ReloadOutlined />, label: `${t('common.refreshLabel')} (R)` },
     { type: 'divider' },
-    { key: 'zoom-in', label: '放大 (I)' },
-    { key: 'zoom-out', label: '缩小 (O)' },
-    { key: 'zoom-reset', label: '实际大小 (Z)' },
+    { key: 'zoom-in', label: `${t('common.zoomInLabel')} (I)` },
+    { key: 'zoom-out', label: `${t('common.zoomOutLabel')} (O)` },
+    { key: 'zoom-reset', label: `${t('common.actualSizeLabel')} (Z)` },
     { type: 'divider' },
-    { key: 'fullscreen', label: '全屏切换 (B)' },
+    { key: 'fullscreen', label: `${t('common.fullscreenLabel')} (B)` },
   ];
 
   const connectionMenuItems: MenuProps['items'] = [
-    { key: 'connect-selected', icon: <LinkOutlined />, label: '连接所选 (C)' },
-    { key: 'disconnect', icon: <DisconnectOutlined />, label: '断开连接 (D)' },
+    { key: 'connect-selected', icon: <LinkOutlined />, label: `${t('common.connectSelected')} (C)` },
+    { key: 'disconnect', icon: <DisconnectOutlined />, label: `${t('common.disconnect')} (D)` },
     { type: 'divider' },
-    { key: 'new-query', icon: <CodeOutlined />, label: '新建查询 (Q)' },
-    { key: 'execute-query', icon: <PlayCircleOutlined />, label: '执行查询 (E)' },
+    { key: 'new-query', icon: <CodeOutlined />, label: `${t('common.newQuery')} (Q)` },
+    { key: 'execute-query', icon: <PlayCircleOutlined />, label: `${t('common.executeQuery')} (E)` },
     { type: 'divider' },
-    { key: 'close-all', label: '关闭所有连接 (L)' },
+    { key: 'close-all', label: `${t('common.closeAllConnections')} (L)` },
   ];
 
   const toolsMenuItems: MenuProps['items'] = [
-    { key: 'options', icon: <SettingOutlined />, label: '选项/设置... (O)' },
+    { key: 'options', icon: <SettingOutlined />, label: `${t('common.options')} (O)` },
     { type: 'divider' },
-    { key: 'data-sync', icon: <SyncOutlined />, label: '数据同步... (S)', disabled: true },
-    { key: 'backup', icon: <DatabaseOutlined />, label: '备份数据库... (B)', disabled: true },
-    { key: 'restore', icon: <DatabaseOutlined />, label: '恢复数据库... (R)', disabled: true },
+    { key: 'data-sync', icon: <SyncOutlined />, label: `${t('common.dataSync')} (S)`, disabled: true },
+    { key: 'backup', icon: <DatabaseOutlined />, label: `${t('common.backupDatabase')} (B)`, disabled: true },
+    { key: 'restore', icon: <DatabaseOutlined />, label: `${t('common.restoreDatabase')} (R)`, disabled: true },
     { type: 'divider' },
-    { key: 'model-designer', label: '模型设计器... (M)', disabled: true },
+    { key: 'model-designer', label: `${t('common.modelDesigner')} (M)`, disabled: true },
   ];
 
   const windowMenuItems: MenuProps['items'] = [
-    { key: 'new-tab', label: '新建标签页 (N)' },
-    { key: 'close-tab', label: '关闭标签页 (C)' },
+    { key: 'new-tab', label: `${t('common.newTab')} (N)` },
+    { key: 'close-tab', label: `${t('common.closeTab')} (C)` },
     { type: 'divider' },
-    { key: 'next-tab', label: '切换到下一个标签页' },
-    { key: 'prev-tab', label: '切换到上一个标签页' },
+    { key: 'next-tab', label: `${t('common.nextTab')}` },
+    { key: 'prev-tab', label: `${t('common.prevTab')}` },
   ];
 
   const helpMenuItems: MenuProps['items'] = [
-    { key: 'documentation', label: '文档 (D)' },
-    { key: 'search', label: '搜索... (S)' },
+    { key: 'documentation', label: `${t('common.documentationLabel')} (D)` },
+    { key: 'search', label: `${t('common.searchLabel')} (S)` },
     { type: 'divider' },
-    { key: 'check-update', label: '检查更新... (U)' },
+    { key: 'check-update', label: `${t('common.checkUpdateLabel')} (U)` },
     { type: 'divider' },
-    { key: 'about', label: '关于 i-dblink (A)' },
+    { key: 'about', label: `${t('common.aboutLabel')} (A)` },
   ];
 
   const buttonStyle: React.CSSProperties = {
@@ -153,7 +155,7 @@ export function Toolbar(): JSX.Element {
         onClick={() => handleMenuAction('new-connection')}
         style={buttonStyle}
       >
-        新建连接
+        {t('common.newConnectionBtn')}
       </Button>
       <Button
         type="text"
@@ -162,7 +164,7 @@ export function Toolbar(): JSX.Element {
         onClick={() => handleMenuAction('refresh')}
         style={buttonStyle}
       >
-        刷新
+        {t('common.refreshBtn')}
       </Button>
       <Button
         type="text"
@@ -171,14 +173,14 @@ export function Toolbar(): JSX.Element {
         onClick={() => handleMenuAction('new-query')}
         style={buttonStyle}
       >
-        新建查询
+        {t('common.newQueryBtn')}
       </Button>
     </>
   );
 
   const renderAppButtons = () => (
     <>
-      <Tooltip title="快捷键 (?)" placement="bottom">
+      <Tooltip title={t('common.shortcutsTitle') + ' (?)'} placement="bottom">
         <Button
           type="text"
           size="small"
@@ -194,7 +196,7 @@ export function Toolbar(): JSX.Element {
         onClick={handleToggleTheme}
         style={buttonStyle}
       >
-        {isDarkMode ? '浅色' : '深色'}
+        {isDarkMode ? t('common.lightModeBtn') : t('common.darkModeBtn')}
       </Button>
       <Button
         type="text"
@@ -203,7 +205,7 @@ export function Toolbar(): JSX.Element {
         onClick={() => handleMenuAction('options')}
         style={buttonStyle}
       >
-        设置
+        {t('common.settingsBtn')}
       </Button>
     </>
   );
@@ -219,7 +221,7 @@ export function Toolbar(): JSX.Element {
                 trigger={['click']}
               >
                 <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">
-                  文件
+                  {t('common.fileMenu')}
                 </Button>
               </Dropdown>
               <Dropdown
@@ -227,7 +229,7 @@ export function Toolbar(): JSX.Element {
                 trigger={['click']}
               >
                 <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">
-                  编辑
+                  {t('common.editMenu')}
                 </Button>
               </Dropdown>
               <Dropdown
@@ -235,7 +237,7 @@ export function Toolbar(): JSX.Element {
                 trigger={['click']}
               >
                 <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">
-                  查看
+                  {t('common.viewMenu')}
                 </Button>
               </Dropdown>
               <Dropdown
@@ -243,7 +245,7 @@ export function Toolbar(): JSX.Element {
                 trigger={['click']}
               >
                 <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">
-                  连接
+                  {t('common.connectionMenu')}
                 </Button>
               </Dropdown>
               <Dropdown
@@ -251,7 +253,7 @@ export function Toolbar(): JSX.Element {
                 trigger={['click']}
               >
                 <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">
-                  工具
+                  {t('common.toolsMenu')}
                 </Button>
               </Dropdown>
               <Dropdown
@@ -259,7 +261,7 @@ export function Toolbar(): JSX.Element {
                 trigger={['click']}
               >
                 <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">
-                  窗口
+                  {t('common.windowMenu')}
                 </Button>
               </Dropdown>
               <Dropdown
@@ -267,7 +269,7 @@ export function Toolbar(): JSX.Element {
                 trigger={['click']}
               >
                 <Button type="text" size="small" style={buttonStyle} className="toolbar-btn">
-                  帮助
+                  {t('common.helpMenu')}
                 </Button>
               </Dropdown>
               <div style={dividerStyle} />

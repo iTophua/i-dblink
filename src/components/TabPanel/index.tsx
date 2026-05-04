@@ -7,6 +7,7 @@ import React, {
   useImperativeHandle,
 } from 'react';
 import { Tabs, Empty, Breadcrumb, Menu, App, Modal, Tooltip } from 'antd';
+import { useTranslation } from 'react-i18next';
 import type { TabsProps } from 'antd';
 import {
   DatabaseOutlined,
@@ -138,6 +139,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   },
   ref
 ) {
+  const { t } = useTranslation();
   const { message } = App.useApp();
   // 已打开的数据浏览 Tab 列表
   const [openedTables, setOpenedTables] = useState<OpenedTable[]>([]);

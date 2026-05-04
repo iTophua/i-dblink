@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Drawer, Form, Input, Button, List, Tag, Space, Typography, App, Modal } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, CodeOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 
 const { Text } = Typography;
@@ -25,6 +26,7 @@ interface SnippetManagerProps {
 }
 
 export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManagerProps) {
+  const { t } = useTranslation();
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
@@ -43,7 +45,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
       const data = await api.getSnippets();
       setSnippets(data);
     } catch (err: any) {
-      message.error(`加载失败：${err.message || err}`);
+      message.error(`${t('common.loadFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -56,12 +58,12 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
         id: editingId,
         ...values,
       });
-      message.success(editingId ? '更新成功' : '保存成功');
+      message.success(editingId ? t('common.updateSuccess') : t('common.saveSuccess'));
       form.resetFields();
       setEditingId(undefined);
       await loadSnippets();
     } catch (err: any) {
-      message.error(`保存失败：${err.message || err}`);
+      message.error(`${t('common.saveFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -80,18 +82,18 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
 
   const handleDelete = (id: string) => {
     Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除此代码片段吗？',
-      okText: '删除',
+      title: t('common.confirmDelete'),
+      content: t('common.confirmDeleteSnippet'),
+      okText: t('common.delete'),
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: t('common.cancel'),
       onOk: async () => {
         try {
           await api.deleteSnippet(id);
-          message.success('删除成功');
+          message.success(t('common.deleteSuccess'));
           await loadSnippets();
         } catch (err: any) {
-          message.error(`删除失败：${err.message || err}`);
+          message.error(`${t('common.deleteFailed')}: ${err.message || err}`);
         }
       },
     });
@@ -110,7 +112,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
 
   return (
     <Drawer
-      title="代码片段"
+      title={t('common.snippets')}
       placement="right"
       width={520}
       open={open}
@@ -124,7 +126,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
             setEditingId(undefined);
           }}
         >
-          新建
+          {t('common.createNew')}
         </Button>
       }
     >
@@ -132,14 +134,14 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
         {/* 编辑表单 */}
         {(editingId || !snippets.some((s) => s.name === form.getFieldValue('name'))) && (
           <Form form={form} layout="vertical" onFinish={handleSubmit}>
-            <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>
-              <Input placeholder="例如：分页查询" />
+            <Form.Item name="name" label={t('common.name')} rules={[{ required: true, message: t('common.pleaseEnterName') }]}>
+              <Input placeholder={t('common.examplePaginationQuery')} />
             </Form.Item>
 
             <Form.Item
               name="sql_text"
-              label="SQL 内容"
-              rules={[{ required: true, message: '请输入 SQL' }]}
+              label={t('common.sqlContent')}
+              rules={[{ required: true, message: t('common.pleaseEnterSql') }]}
             >
               <Input.TextArea
                 rows={6}
@@ -147,22 +149,22 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
               />
             </Form.Item>
 
-            <Form.Item name="db_type" label="数据库类型">
-              <Input placeholder="留空表示通用" />
+            <Form.Item name="db_type" label={t('common.databaseType')}>
+              <Input placeholder={t('common.leaveBlankForGeneral')} />
             </Form.Item>
 
-            <Form.Item name="category" label="分类">
-              <Input placeholder="例如：查询、DDL、DML" />
+            <Form.Item name="category" label={t('common.category')}>
+              <Input placeholder={t('common.exampleQueryDdlDml')} />
             </Form.Item>
 
-            <Form.Item name="tags" label="标签">
-              <Input placeholder="逗号分隔，如：查询，分页" />
+            <Form.Item name="tags" label={t('common.tags')}>
+              <Input placeholder={t('common.commaSeparated')} />
             </Form.Item>
 
             <Form.Item>
               <Space>
                 <Button type="primary" htmlType="submit" loading={loading}>
-                  {editingId ? '更新' : '保存'}
+                  {editingId ? t('common.update') : t('common.save')}
                 </Button>
                 {editingId && (
                   <Button
@@ -171,7 +173,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
                       setEditingId(undefined);
                     }}
                   >
-                    取消
+                    {t('common.cancel')}
                   </Button>
                 )}
               </Space>
@@ -213,9 +215,9 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
                       </Tag>
                     )}
                     {snippet.is_private && (
-                      <Tag color="orange" style={{ fontSize: 10 }}>
-                        私有
-                      </Tag>
+                        <Tag color="orange" style={{ fontSize: 10 }}>
+                          {t('common.private')}
+                        </Tag>
                     )}
                   </Space>
                 }

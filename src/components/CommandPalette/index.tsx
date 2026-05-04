@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Input, List, Empty } from 'antd';
 import { SearchOutlined, MacCommandOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 
 export interface Command {
   id: string;
@@ -18,6 +19,7 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ open, onClose, commands }: CommandPaletteProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<any>(null);
@@ -119,7 +121,7 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
           <Input
             ref={inputRef}
             prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
-            placeholder="输入命令搜索..."
+            placeholder={t('common.searchCommands')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -135,7 +137,7 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
           {filteredCommands.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="没有找到命令"
+              description={t('common.noCommandsFound')}
               style={{ padding: 40 }}
             />
           ) : (
@@ -202,9 +204,9 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
             gap: 16,
           }}
         >
-          <span>↑↓ 导航</span>
-          <span>Enter 执行</span>
-          <span>Esc 关闭</span>
+          <span>{t('common.navigateUpDown')}</span>
+          <span>{t('common.executeEnter')}</span>
+          <span>{t('common.closeEsc')}</span>
         </div>
       </div>
     </div>

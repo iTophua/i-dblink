@@ -18,6 +18,8 @@ import {
   Divider,
   Tag,
 } from 'antd';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { UploadOutlined, FileExcelOutlined, FileTextOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import type { ColumnInfo } from '../../types/api';
@@ -44,6 +46,7 @@ interface ParsedFile {
 }
 
 export function ImportWizard({ open, onClose, tableName, columns, onImport }: ImportWizardProps) {
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [parsedFile, setParsedFile] = useState<ParsedFile | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>('append');
@@ -70,11 +73,11 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
           const text = await file.text();
           parsed = parseJSON(text);
         } else {
-          throw new Error('不支持的文件格式，请上传 CSV、Excel 或 JSON 文件');
+          throw new Error(t('common.unsupportedFileType'));
         }
 
         if (parsed.rows.length === 0) {
-          throw new Error('文件中没有数据');
+          throw new Error(t('common.noDataInFile'));
         }
 
         setParsedFile(parsed);
@@ -89,10 +92,10 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
         setFieldMapping(autoMapping);
         setSelectedRows(new Set(parsed.rows.map((_, i) => i)));
         setCurrentStep(1);
-        message.success(`成功解析 ${parsed.rows.length} 行数据`);
+        message.success(`${t('common.parsedSuccessfully')} ${parsed.rows.length} ${t('common.rows')}`);
       } catch (e: any) {
-        setParseError(e.message || '解析文件失败');
-        message.error(e.message || '解析文件失败');
+        setParseError(e.message || t('common.fileParseFailed'));
+        message.error(e.message || t('common.fileParseFailed'));
       }
       return false; // 阻止 Upload 自动上传
     },
@@ -103,19 +106,19 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     if (!parsedFile) return;
     const rowsToImport = parsedFile.rows.filter((_, i) => selectedRows.has(i));
     if (rowsToImport.length === 0) {
-      message.warning('请选择至少一行数据导入');
+      message.warning(t('common.pleaseSelectAtLeastOneRow'));
       return;
     }
 
     setImporting(true);
     try {
       await onImport(rowsToImport, importMode, fieldMapping);
-      message.success(`成功导入 ${rowsToImport.length} 行数据`);
+      message.success(`${t('common.importedSuccessfully')} ${rowsToImport.length} ${t('common.rows')}`);
       onClose();
       setCurrentStep(0);
       setParsedFile(null);
     } catch (e: any) {
-      message.error(`导入失败：${e.message || e}`);
+      message.error(`${t('common.importFailed')}: ${e.message || e}`);
     } finally {
       setImporting(false);
     }
@@ -130,7 +133,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
           <Select
             size="small"
             style={{ width: '100%' }}
-            placeholder="映射到..."
+            placeholder={t('common.mapTo')}
             value={fieldMapping[h] || undefined}
             onChange={(value) => setFieldMapping((prev) => ({ ...prev, [h]: value }))}
             allowClear
@@ -155,7 +158,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
 
   const steps = [
     {
-      title: '选择文件',
+      title: t('common.selectFile'),
       content: (
         <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
           {parseError && (
@@ -173,21 +176,21 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
             showUploadList={false}
             multiple={false}
           >
-            <p className="ant-upload-drag-icon">
+            <p className="ant-upload-drag_icon">
               <UploadOutlined />
             </p>
-            <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-            <p className="ant-upload-hint">支持 CSV、Excel (.xlsx/.xls)、JSON 格式</p>
+            <p className="ant-upload-text">{t('common.clickOrDragFileHere')}</p>
+            <p className="ant-upload-hint">{t('common.supportsCsvExcelJson')}</p>
           </Upload.Dragger>
         </Space>
       ),
     },
     {
-      title: '字段映射',
+      title: t('common.fieldMapping'),
       content: (
         <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
           <Alert
-            message={`已自动映射 ${mappedCount} / ${parsedFile?.headers.length || 0} 个字段`}
+            message={t('common.autoMappedFields', { count: mappedCount, total: parsedFile?.headers.length || 0 })}
             type={mappedCount > 0 ? 'info' : 'warning'}
             showIcon
           />
@@ -203,37 +206,37 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
             />
             {parsedFile && parsedFile.rows.length > 5 && (
               <div style={{ textAlign: 'center', padding: 8, color: 'var(--text-tertiary)' }}>
-                仅显示前 5 行预览，共 {parsedFile.rows.length} 行
+                {t('common.onlyShowingFirst5Rows', { total: parsedFile.rows.length })}
               </div>
             )}
           </div>
           <Divider />
           <div>
-            <div style={{ fontWeight: 500, marginBottom: 8 }}>导入模式</div>
+            <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('common.importMode')}</div>
             <Radio.Group value={importMode} onChange={(e) => setImportMode(e.target.value)}>
               <Space direction="vertical">
                 <Radio value="append">
-                  追加模式
+                  {t('common.appendMode')}
                   <Tag style={{ marginLeft: 8, fontSize: 11 }}>INSERT</Tag>
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                    将数据作为新行追加到表中
+                    {t('common.appendDataAsNewRows')}
                   </div>
                 </Radio>
                 <Radio value="replace">
-                  替换模式
+                  {t('common.replaceMode')}
                   <Tag style={{ marginLeft: 8, fontSize: 11 }}>TRUNCATE + INSERT</Tag>
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                    清空表后插入新数据
+                    {t('common.clearTableAndInsertNewData')}
                   </div>
                 </Radio>
                 {pkColumn && (
                   <Radio value="update">
-                    更新模式
+                    {t('common.updateMode')}
                     <Tag style={{ marginLeft: 8, fontSize: 11 }}>
                       INSERT ... ON DUPLICATE KEY UPDATE
                     </Tag>
                     <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                      按主键 {pkColumn.column_name} 匹配，存在则更新，不存在则插入
+                      {t('common.matchByPrimaryKey', { pkColumn: pkColumn.column_name })}
                     </div>
                   </Radio>
                 )}
@@ -244,11 +247,11 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       ),
     },
     {
-      title: '确认导入',
+      title: t('common.confirmImport'),
       content: (
         <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
           <Alert
-            message={`准备导入 ${selectedRows.size} / ${parsedFile?.rows.length || 0} 行数据到表 ${tableName}`}
+            message={t('common.preparingToImportRows', { count: selectedRows.size, total: parsedFile?.rows.length || 0, tableName })}
             type="info"
             showIcon
           />
@@ -264,7 +267,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
             />
             {parsedFile && selectedRows.size > 10 && (
               <div style={{ textAlign: 'center', padding: 8, color: 'var(--text-tertiary)' }}>
-                仅显示前 10 行，共 {selectedRows.size} 行将被导入
+                {t('common.onlyShowingFirst10Rows', { count: selectedRows.size })}
               </div>
             )}
           </div>
@@ -275,14 +278,14 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
 
   return (
     <Modal
-      title={`导入数据到 ${tableName}`}
+      title={t('common.importDataIntoTable', { tableName })}
       open={open}
       onCancel={onClose}
       width={900}
       footer={
         <Space>
           {currentStep > 0 && (
-            <Button onClick={() => setCurrentStep(currentStep - 1)}>上一步</Button>
+            <Button onClick={() => setCurrentStep(currentStep - 1)}>{t('common.previousStep')}</Button>
           )}
           {currentStep < steps.length - 1 && (
             <Button
@@ -290,12 +293,12 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
               onClick={() => setCurrentStep(currentStep + 1)}
               disabled={!parsedFile}
             >
-              下一步
+              {t('common.nextStep')}
             </Button>
           )}
           {currentStep === steps.length - 1 && (
             <Button type="primary" loading={importing} onClick={handleImport}>
-              开始导入
+              {t('common.startImport')}
             </Button>
           )}
         </Space>
@@ -312,7 +315,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
 function parseCSV(text: string): ParsedFile {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) {
-    throw new Error('CSV 文件至少需要包含表头和一行数据');
+    throw new Error(i18n.t('common.csvFileNeedsHeaderAndData'));
   }
 
   const headers = parseCsvLine(lines[0]);
@@ -363,7 +366,7 @@ async function parseExcel(file: File): Promise<ParsedFile> {
   const jsonData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
 
   if (jsonData.length < 2) {
-    throw new Error('Excel 文件至少需要包含表头和一行数据');
+    throw new Error(i18n.t('common.excelFileNeedsHeaderAndData'));
   }
 
   const headers = jsonData[0].map(String);
@@ -385,15 +388,15 @@ function parseJSON(text: string): ParsedFile {
   try {
     data = JSON.parse(text);
   } catch (e) {
-    throw new Error('JSON 格式错误');
+    throw new Error(i18n.t('common.jsonFormatError'));
   }
 
   if (!Array.isArray(data)) {
-    throw new Error('JSON 文件必须是一个对象数组');
+    throw new Error(i18n.t('common.jsonFileMustBeArray'));
   }
 
   if (data.length === 0) {
-    throw new Error('JSON 数组为空');
+    throw new Error(i18n.t('common.jsonArrayIsEmpty'));
   }
 
   const headers = Object.keys(data[0]);

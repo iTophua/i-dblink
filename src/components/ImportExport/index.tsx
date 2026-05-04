@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Modal, Tabs, Button, Space, Select, Input, message, Progress } from 'antd';
 import { UploadOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 import { useAppStore } from '../../stores/appStore';
 import { escapeSqlIdentifier } from '../../utils/sqlUtils';
@@ -34,6 +35,7 @@ export function ImportExportModal({
   tableName,
   database,
 }: ImportExportModalProps) {
+  const { t } = useTranslation();
   const dbType = useAppStore(
     (state) => state.connections.find((c) => c.id === connectionId)?.db_type
   );
@@ -74,7 +76,7 @@ export function ImportExportModal({
       );
 
       if (result.error) {
-        message.error(`导出失败：${result.error}`);
+        message.error(`${t('common.exportFailed')}: ${result.error}`);
         setExportLoading(false);
         return;
       }
@@ -82,7 +84,7 @@ export function ImportExportModal({
       const { columns, rows } = result;
 
       if (rows.length === 0) {
-        message.warning('没有数据可导出');
+        message.warning(t('common.noDataToExport'));
         setExportLoading(false);
         return;
       }
@@ -159,9 +161,9 @@ export function ImportExportModal({
       URL.revokeObjectURL(url);
 
       setProgress(100);
-      message.success(`导出成功：${rows.length} 条记录`);
+      message.success(`${t('common.exportSuccess')}: ${rows.length} ${t('common.records')}`);
     } catch (error: any) {
-      message.error(`导出失败：${error.message || error}`);
+      message.error(`${t('common.exportFailed')}: ${error.message || error}`);
     } finally {
       setExportLoading(false);
       setProgress(0);
@@ -171,7 +173,7 @@ export function ImportExportModal({
   // 导入数据
   const handleImport = useCallback(async () => {
     if (!importSql.trim()) {
-      message.warning('请输入要导入的 SQL 语句');
+      message.warning(t('common.pleaseEnterSqlForImport'));
       return;
     }
 
@@ -181,15 +183,15 @@ export function ImportExportModal({
       const result = await api.executeQuery(connectionId, importSql, database);
 
       if (result.error) {
-        message.error(`导入失败：${result.error}`);
+        message.error(`${t('common.importFailed')}: ${result.error}`);
         return;
       }
 
       const affected = result.rows_affected || 0;
-      message.success(`导入成功：影响 ${affected} 行`);
+      message.success(`${t('common.importSuccess')}: ${affected} ${t('common.rowsAffected')}`);
       setImportSql('');
     } catch (error: any) {
-      message.error(`导入失败：${error.message || error}`);
+      message.error(`${t('common.importFailed')}: ${error.message || error}`);
     } finally {
       setImportLoading(false);
     }
@@ -200,21 +202,21 @@ export function ImportExportModal({
       key: 'export',
       label: (
         <span>
-          <DownloadOutlined /> 导出
+          <DownloadOutlined /> {t('common.export')}
         </span>
       ),
       children: (
         <div style={{ padding: '16px 0' }}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>导出格式</label>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>{t('common.exportFormat')}</label>
             <Select
               value={exportOptions.format}
               onChange={(v) => setExportOptions({ ...exportOptions, format: v })}
               style={{ width: 200 }}
               options={[
-                { value: 'csv', label: 'CSV (逗号分隔)' },
+                { value: 'csv', label: t('common.csvCommaSeparated') },
                 { value: 'json', label: 'JSON' },
-                { value: 'sql', label: 'SQL INSERT 语句' },
+                { value: 'sql', label: t('common.sqlInsertStatements') },
               ]}
             />
           </div>
@@ -222,14 +224,14 @@ export function ImportExportModal({
           {exportOptions.format === 'csv' && (
             <>
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>分隔符</label>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>{t('common.delimiter')}</label>
                 <Select
                   value={exportOptions.delimiter}
                   onChange={(v) => setExportOptions({ ...exportOptions, delimiter: v })}
                   style={{ width: 200 }}
                   options={[
-                    { value: ',', label: '逗号 (,)' },
-                    { value: ';', label: '分号 (;)' },
+                    { value: ',', label: t('common.comma') },
+                    { value: ';', label: t('common.semicolon') },
                     { value: '\t', label: 'Tab' },
                   ]}
                 />
@@ -244,14 +246,14 @@ export function ImportExportModal({
                       setExportOptions({ ...exportOptions, includeHeaders: e.target.checked })
                     }
                   />
-                  <span style={{ marginLeft: 8 }}>包含表头</span>
+                  <span style={{ marginLeft: 8 }}>{t('common.includeHeaders')}</span>
                 </label>
               </div>
             </>
           )}
 
           <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12 }}>
-            将从表 <strong>{tableName}</strong> 导出最多 10000 条记录
+            {t('common.willExportMaxRecords', { tableName, count: 10000 })}
           </div>
 
           <Button
@@ -260,7 +262,7 @@ export function ImportExportModal({
             onClick={handleExport}
             loading={exportLoading}
           >
-            导出数据
+            {t('common.exportData')}
           </Button>
 
           {exportLoading && <Progress percent={progress} style={{ marginTop: 16 }} />}
@@ -271,13 +273,13 @@ export function ImportExportModal({
       key: 'import',
       label: (
         <span>
-          <UploadOutlined /> 导入
+          <UploadOutlined /> {t('common.import')}
         </span>
       ),
       children: (
         <div style={{ padding: '16px 0' }}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>导入格式</label>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>{t('common.importFormat')}</label>
             <Select
               value={importOptions.format}
               onChange={(v) => setImportOptions({ ...importOptions, format: v })}
@@ -291,19 +293,19 @@ export function ImportExportModal({
 
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
-              SQL 语句（支持 INSERT、UPDATE、DELETE）
+              {t('common.sqlStatements')}
             </label>
             <TextArea
               value={importSql}
               onChange={(e) => setImportSql(e.target.value)}
-              placeholder="输入 SQL 语句，例如：&#10;INSERT INTO users (name, email) VALUES ('张三', 'zhang@example.com');"
+              placeholder={t('common.importSqlPlaceholder')}
               rows={8}
               style={{ fontFamily: 'monospace' }}
             />
           </div>
 
           <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12 }}>
-            导入的 SQL 将直接执行，请确保语法正确
+            {t('common.importSqlDescription')}
           </div>
 
           <Space>
@@ -313,9 +315,9 @@ export function ImportExportModal({
               onClick={handleImport}
               loading={importLoading}
             >
-              执行导入
+              {t('common.executeImport')}
             </Button>
-            <Button onClick={() => setImportSql('')}>清空</Button>
+            <Button onClick={() => setImportSql('')}>{t('common.clear')}</Button>
           </Space>
         </div>
       ),
@@ -327,7 +329,7 @@ export function ImportExportModal({
       title={
         <span>
           <FileTextOutlined style={{ marginRight: 8 }} />
-          数据导入导出 - {tableName}
+          {t('common.dataImportExport')} - {tableName}
         </span>
       }
       open={open}
