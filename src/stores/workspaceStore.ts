@@ -77,6 +77,7 @@ function migrate(state: any, version: number | undefined): Partial<WorkspaceStat
       state.openedViewDefTabs = [];
     }
   }
+  // 确保返回完整的 defaultWorkspace 结构
   return { ...defaultWorkspace, ...state };
 }
 

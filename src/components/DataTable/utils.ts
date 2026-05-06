@@ -34,14 +34,15 @@ export function buildSingleCondition(cond: FilterCondition, dbType?: string): st
     .replace(/'/g, "''")
     .replace(/%/g, '\\%')
     .replace(/_/g, '\\_');
+  const quotedValue = `'${escapedValue}'`;
   let clause = '';
 
   switch (cond.operator) {
     case 'equals':
-      clause = `${field} = '${escapedValue}'`;
+      clause = `${field} = ${quotedValue}`;
       break;
     case 'notEquals':
-      clause = `${field} != '${escapedValue}'`;
+      clause = `${field} != ${quotedValue}`;
       break;
     case 'contains':
       clause = `${field} LIKE '%${escapedValue}%'`;
@@ -60,18 +61,6 @@ export function buildSingleCondition(cond: FilterCondition, dbType?: string): st
       break;
     case 'isNotNull':
       clause = `${field} IS NOT NULL`;
-      break;
-    case 'greaterThan':
-      clause = `${field} > '${escapedValue}'`;
-      break;
-    case 'lessThan':
-      clause = `${field} < '${escapedValue}'`;
-      break;
-    case 'greaterOrEqual':
-      clause = `${field} >= '${escapedValue}'`;
-      break;
-    case 'lessOrEqual':
-      clause = `${field} <= '${escapedValue}'`;
       break;
     case 'in':
       clause = `${field} IN (${escapedValue

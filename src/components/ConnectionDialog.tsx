@@ -50,6 +50,8 @@ const createFileInput = (config: FileInputConfig) => {
       const path = (file as any).path || file.name;
       form.setFieldValue(fieldName, path);
       message.success(`${i18n.t('common.fileSelected')}: ${file.name}`);
+    } else {
+      form.setFieldValue(fieldName, undefined);
     }
   };
   document.body.appendChild(input);
@@ -110,7 +112,7 @@ const DB_TYPE_PORTS: Record<string, number> = {
   oracle: 1521,
   mariadb: 3306,
   dameng: 5236,
-  kingbase: 54321,
+  kingbase: 5432,
   highgo: 5866,
   vastbase: 5432,
 };
@@ -639,6 +641,8 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     label={t('common.markColor')}
                     style={{ marginBottom: 16 }}
                     extra={t('common.markColorExtra')}
+                    getValueFromEvent={(color) => color?.toHex() || ''}
+                    getValueProps={(value) => ({ value: value ? (typeof value === 'string' ? value : value.toHex()) : undefined })}
                   >
                     <ColorPicker showText />
                   </Form.Item>

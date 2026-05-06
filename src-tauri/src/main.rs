@@ -243,14 +243,11 @@ fn create_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Menu<R>, 
 }
 
 fn main() {
-    eprintln!("DEBUG: main() started");
     tauri::Builder::default()
         .setup(|app| {
-            eprintln!("DEBUG: setup() started");
             // 创建并设置菜单
             let menu = create_menu(&app.handle())?;
             app.set_menu(menu)?;
-            eprintln!("DEBUG: menu created");
 
             // 初始化存储 — 在独立的新 tokio runtime 上同步执行
             // 注意：.setup() 不在 Tauri 的 tokio runtime 上下文中，不能直接用 Handle::current()
@@ -259,12 +256,9 @@ fn main() {
                 .enable_all()
                 .build()
                 .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
-            eprintln!("DEBUG: tokio runtime created");
             let storage = rt.block_on(async {
-                eprintln!("DEBUG: storage init started");
                 storage::init_storage(&app_handle).await
             });
-            eprintln!("DEBUG: storage init completed");
 
             let storage = match storage {
                 Ok(s) => {
@@ -287,15 +281,11 @@ fn main() {
 
             // Sidecar 在后台异步启动
             // 注意：需要用 multi_thread runtime 才能 spawn 任务
-            eprintln!("DEBUG: Creating sidecar runtime...");
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
                 .map_err(|e| format!("Failed to create tokio runtime for sidecar: {}", e))?;
-            eprintln!("DEBUG: Sidecar runtime created, spawning task...");
-            tracing::info!("Starting sidecar spawn...");
             rt.spawn(async move {
-                eprintln!("DEBUG: Sidecar task started!");
                 tracing::info!("Sidecar spawn task started, calling spawn_blocking...");
                 let result = tokio::task::spawn_blocking(SidecarManager::start).await;
 
@@ -333,9 +323,7 @@ fn main() {
                     }
                 }
             });
-            eprintln!("DEBUG: Sidecar task spawned, keeping runtime alive");
-            tracing::info!("Sidecar spawn call completed, keeping runtime alive");
-            // 保持 runtime 存活（drop 后 runtime 才真正关闭）
+            // 保持 runtime 存活，确保 sidecar 后台任务持续运行
             std::mem::forget(rt);
 
             app.manage(TokioMutex::new(Some(storage)));

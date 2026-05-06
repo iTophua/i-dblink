@@ -287,10 +287,10 @@ async fn ensure_connected(
     if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
         if !err.is_empty() {
             // 检测密码错误，返回特定错误码供前端识别
-            if err.contains("password")
-                || err.contains("Password")
-                || err.contains("认证")
-                || err.contains("authentication")
+            if err.to_lowercase().contains("password")
+                || err.to_lowercase().contains("auth")
+                || err.contains("1045")
+                || err.contains("28000")
             {
                 return Err("PASSWORD_REQUIRED".to_string());
             }

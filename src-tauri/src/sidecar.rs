@@ -28,34 +28,19 @@ impl SidecarManager {
     ///
     /// 注意：此函数包含同步阻塞 IO，应在 blocking 线程中调用
     pub fn start() -> Result<Self, String> {
-        eprintln!("DEBUG: SidecarManager::start() BEGIN");
-        eprintln!("DEBUG: Current dir: {:?}", std::env::current_dir());
-        eprintln!(
-            "DEBUG: EXE dir: {:?}",
-            std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        );
-        eprintln!("DEBUG: Calling find_binary()...");
         let binary_path = find_binary();
-        eprintln!("DEBUG: find_binary() returned: {:?}", binary_path);
         let binary_path = binary_path?;
-        eprintln!("DEBUG: find_binary() succeeded, path: {:?}", binary_path);
 
-        eprintln!("DEBUG: About to spawn child process...");
         let mut child = Command::new(&binary_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| {
-                eprintln!("DEBUG: spawn failed: {}", e);
                 format!(
                     "Failed to start sidecar at {:?}: {}. Please build Go backend first: cd go-backend && go build",
                     binary_path, e
                 )
             })?;
-        eprintln!("DEBUG: Child process spawned successfully");
-        tracing::info!("Child process spawned");
 
         // 启动后台线程消费 stderr，防止管道缓冲区满导致 sidecar 死锁
         // 日志同时写入 go-backend.log 文件，方便终端不可见时查看
@@ -84,24 +69,19 @@ impl SidecarManager {
             });
         }
 
-        eprintln!("DEBUG: Taking stdout...");
         let stdout = child.stdout.take().ok_or_else(|| {
-            eprintln!("DEBUG: Failed to take stdout");
             "Failed to capture stdout".to_string()
         })?;
-        eprintln!("DEBUG: stdout captured, creating BufReader...");
         let mut reader = BufReader::new(stdout);
         let mut port = 0u16;
         let mut buf = String::new();
 
-        eprintln!("DEBUG: Reading lines from stdout...");
         loop {
             buf.clear();
             match reader.read_line(&mut buf) {
                 Ok(0) => break,
                 Ok(_) => {
                     let line = buf.trim_end();
-                    eprintln!("DEBUG: Read line: {}", line);
                     tracing::info!("Read line from stdout: {}", line);
                     if line.starts_with("PORT: ") {
                         port = line[6..]
@@ -118,7 +98,6 @@ impl SidecarManager {
         if port == 0 {
             return Err("Sidecar did not report port".to_string());
         }
-        tracing::info!("Port parsed: {}", port);
 
         // 读取到 PORT 后，启动后台线程继续消费 stdout 剩余数据，防止 Go 端 fmt.Printf 阻塞
         std::thread::spawn(move || {
@@ -152,7 +131,7 @@ impl SidecarManager {
             .build()
             .map_err(|e| e.to_string())?;
 
-        tracing::info!("Go sidecar started successfully on port {}", port);
+        tracing::info!("Go sidecar started successfully");
 
         Ok(Self {
             port,
@@ -241,10 +220,6 @@ impl SidecarManager {
 
 /// 查找 Go 后端二进制文件
 fn find_binary() -> Result<PathBuf, String> {
-    eprintln!(
-        "DEBUG find_binary: current_dir = {:?}",
-        std::env::current_dir().ok()
-    );
     // 开发模式候选路径（相对于项目根目录和 src-tauri 目录）
     let dev_candidates = [
         // 相对于 src-tauri 目录
@@ -255,11 +230,6 @@ fn find_binary() -> Result<PathBuf, String> {
         PathBuf::from("../go-backend/go-backend.exe"),
     ];
     for candidate in &dev_candidates {
-        eprintln!(
-            "DEBUG find_binary: checking {:?} (exists: {})",
-            candidate,
-            candidate.exists()
-        );
         if candidate.exists() {
             return Ok(candidate.clone());
         }

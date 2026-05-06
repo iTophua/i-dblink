@@ -161,7 +161,7 @@ export const DataTable = memo(function DataTable({
     open: boolean;
     field: string;
     value: string;
-    rowIndex: number;
+    rowId: string;
   } | null>(null);
   const [importWizardOpen, setImportWizardOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
@@ -550,9 +550,8 @@ export const DataTable = memo(function DataTable({
         dataType === 'BYTEA' ||
         dataType === 'CLOB';
       if (!isTextBlob) return;
-      const rowIndex = event.rowIndex;
       const value = event.value === null || event.value === undefined ? '' : String(event.value);
-      setTextEditModal({ open: true, field, value, rowIndex });
+      setTextEditModal({ open: true, field, value, rowId: event.data.__row_id__ || '' });
     },
     [columns]
   );
@@ -2295,11 +2294,16 @@ export const DataTable = memo(function DataTable({
         onCancel={() => setTextEditModal(null)}
         onOk={() => {
           if (!textEditModal || !gridApiRef.current) return;
-          const { field, rowIndex } = textEditModal;
+          const { field, rowId } = textEditModal;
           const newValue = textEditModal.value;
-          const rowNode = gridApiRef.current.getDisplayedRowAtIndex(rowIndex);
-          if (rowNode) {
-            const updatedRow = { ...rowNode.data, [field]: newValue };
+          let targetRow: any = null;
+          gridApiRef.current.forEachNode((node: any) => {
+            if (node.__row_id__ === rowId) {
+              targetRow = node.data;
+            }
+          });
+          if (targetRow) {
+            const updatedRow = { ...targetRow, [field]: newValue };
             if (!updatedRow.__status__ || updatedRow.__status__ !== 'new') {
               updatedRow.__status__ = 'modified';
             }
@@ -2454,7 +2458,7 @@ export const DataTable = memo(function DataTable({
                   return;
                 }
                 const row = cellContextMenu.rowNode.data;
-                const values = columns.map((_, i) => row[String(i)] ?? null);
+                const values = columns.map((c) => row[c.column_name] ?? null);
                 const colStr = columns.map((c) => escapeSqlIdentifier(c.column_name, dbType)).join(', ');
                 const valStr = values.map(escapeSqlValue).join(', ');
                 const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStr}) VALUES (${valStr});`;
@@ -2480,7 +2484,7 @@ export const DataTable = memo(function DataTable({
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
-                const values = columns.map((_, i) => row[String(i)] ?? null);
+                const values = columns.map((c) => row[c.column_name] ?? null);
                 const setters = columns
                   .map((c, i) => `${escapeSqlIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i])}`)
                   .filter((_, i) => i !== pkIdx)

@@ -741,20 +741,55 @@ export const useDatabase = () => {
     async (connectionId: string, tableName: string, database?: string) => {
       try {
         setLoading(true);
-        const safeDb = database ? escapeSqlIdentifier(database) : '';
-        const safeTable = escapeSqlIdentifier(tableName);
-        const sql = database
-          ? `SHOW CREATE TABLE \`${safeDb}\`.\`${safeTable}\``
-          : `SHOW CREATE TABLE \`${safeTable}\``;
+        const conn = useAppStore.getState().connections.find((c) => c.id === connectionId);
+        const dbType = conn?.db_type || 'mysql';
 
-        const result = await api.executeQuery(connectionId, sql);
+        const safeTable = escapeSqlIdentifier(tableName);
+        const tableRef = database
+          ? `${escapeSqlIdentifier(database, dbType)}.${safeTable}`
+          : safeTable;
+
+        let sql = '';
+        switch (dbType) {
+          case 'mysql':
+          case 'mariadb':
+            sql = `SHOW CREATE TABLE ${tableRef}`;
+            break;
+          case 'postgresql':
+          case 'kingbase':
+          case 'highgo':
+          case 'vastbase':
+            sql = `SELECT pg_get_tabledef('${database ? `${database}.` : ''}${tableName}'::regclass)`;
+            break;
+          case 'sqlite':
+            sql = `SELECT sql FROM sqlite_master WHERE name = '${escapeSqlValue(tableName)}' AND type = 'table'`;
+            break;
+          case 'sqlserver': {
+            const sqlDb = database ? escapeSqlIdentifier(database) : '';
+            sql = database
+              ? `USE ${sqlDb}; EXEC sp_helptext '${tableName}'`
+              : `EXEC sp_helptext '${tableName}'`;
+            break;
+          }
+          case 'oracle':
+          case 'dameng':
+            sql = `SELECT DBMS_METADATA.GET_DDL('TABLE', '${tableName.toUpperCase()}') ${database ? `FROM ALL_TABLES WHERE TABLE_NAME = '${tableName.toUpperCase()}'${database ? ` AND OWNER = '${database.toUpperCase()}'` : ''}` : ''}`;
+            break;
+          default:
+            sql = `SHOW CREATE TABLE ${tableRef}`;
+        }
+
+        const result = await api.executeQuery(connectionId, sql, database);
 
         if (result.error || result.rows.length === 0) {
           return '';
         }
 
-        // SHOW CREATE TABLE 返回两列：Table 和 Create Table
-        return result.rows[0][1] as string;
+        // 根据数据库类型解析结果
+        if (dbType === 'sqlite') {
+          return result.rows[0][0] as string;
+        }
+        return result.rows[0][result.columns.length > 1 ? result.columns.indexOf('GET_DDL') : 1] as string;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取 CREATE TABLE 语句失败';
         setError(errorMsg);

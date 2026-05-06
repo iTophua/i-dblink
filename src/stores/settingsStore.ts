@@ -55,18 +55,20 @@ function migrate(state: any, version: number | undefined): Partial<SettingsState
         : oldSettings.theme === 'light'
           ? 'nordicFrost'
           : 'midnightDeep';
-    const mode =
-      oldSettings.theme === 'system'
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light'
-        : oldSettings.theme;
+    let mode: ThemeMode = 'dark';
+    if (typeof window !== 'undefined' && oldSettings.theme === 'system') {
+      mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } else if (oldSettings.theme === 'system') {
+      mode = 'dark'; // fallback for non-browser environments
+    } else {
+      mode = oldSettings.theme as ThemeMode;
+    }
     return {
       settings: {
         ...defaultSettings,
         ...oldSettings,
         themePreset: preset,
-        themeMode: mode as ThemeMode,
+        themeMode: mode,
         themeSyncSystem: oldSettings.theme === 'system',
       },
     };
