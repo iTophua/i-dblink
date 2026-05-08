@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { FilterOutlined, CaretUpOutlined, CaretDownOutlined } from '@ant-design/icons';
 import { Popover, Checkbox, Input, Button, Space, Spin } from 'antd';
+import { useTranslation } from 'react-i18next';
 import type { IHeaderParams } from 'ag-grid-community';
 
 export interface ColumnFilterHeaderProps extends IHeaderParams {
@@ -8,6 +9,7 @@ export interface ColumnFilterHeaderProps extends IHeaderParams {
 }
 
 export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
+  const { t } = useTranslation();
   const { displayName, column, api, enableSorting, progressSort, rowData } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -120,7 +122,7 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
     <div style={{ width: 200, maxHeight: 320, display: 'flex', flexDirection: 'column' }}>
       <Input
         size="small"
-        placeholder="搜索..."
+        placeholder={t('common.searchColumnFilter')}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         style={{ marginBottom: 8 }}
@@ -131,7 +133,7 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
           onChange={() => setSelected(new Set())}
           style={{ marginBottom: 4 }}
         >
-          (全部)
+          {t('common.all')}
         </Checkbox>
         {filteredValues.map((val) => (
           <div key={String(val)}>
@@ -168,16 +170,16 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
           <div
             style={{ color: 'var(--text-tertiary)', fontSize: 12, textAlign: 'center', padding: 8 }}
           >
-            无匹配项
+            {t('common.noMatchingItems')}
           </div>
         )}
       </div>
       <Space style={{ justifyContent: 'flex-end' }}>
         <Button size="small" onClick={handleClear}>
-          重置
+          {t('common.reset')}
         </Button>
         <Button type="primary" size="small" onClick={handleApply}>
-          确定
+          {t('common.confirm')}
         </Button>
       </Space>
     </div>
@@ -221,7 +223,7 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
         )}
         <Popover
           content={content}
-          title={`筛选: ${displayName}`}
+          title={`${t('common.filter')}: ${displayName}`}
           trigger="click"
           open={open}
           onOpenChange={handleOpenChange}

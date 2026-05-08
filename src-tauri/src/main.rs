@@ -336,6 +336,15 @@ fn main() {
             // 处理菜单事件
             match event.id.as_ref() {
                 "quit" => {
+                    let sidecar_state = app.state::<SidecarState>().0.clone();
+                    tokio::spawn(async move {
+                        let sidecar_guard = sidecar_state.lock().await;
+                        if let Some(sm) = sidecar_guard.as_ref() {
+                            if let Err(e) = sm.stop().await {
+                                tracing::warn!("Failed to stop sidecar: {}", e);
+                            }
+                        }
+                    });
                     std::process::exit(0);
                 }
                 "preferences" | "settings" | "options" => {
@@ -356,6 +365,24 @@ fn main() {
                         let _ = window.emit("menu-action", event.id.as_ref());
                     }
                 }
+            }
+        })
+        .on_window_event(|app, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // 阻止窗口立即关闭，先停止 Go sidecar
+                api.prevent_close();
+                let sidecar_state = app.state::<SidecarState>().0.clone();
+                let app_handle = app.clone();
+                tokio::spawn(async move {
+                    let sidecar_guard = sidecar_state.lock().await;
+                    if let Some(sm) = sidecar_guard.as_ref() {
+                        if let Err(e) = sm.stop().await {
+                            tracing::warn!("Failed to stop sidecar: {}", e);
+                        }
+                    }
+                    drop(sidecar_guard);
+                    app_handle.app_handle().exit(0);
+                });
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -413,6 +440,7 @@ fn main() {
             commands::revoke_privilege,
             commands::compare_schema,
             commands::batch_import,
+            commands::quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

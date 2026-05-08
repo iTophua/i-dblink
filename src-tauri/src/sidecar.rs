@@ -216,6 +216,16 @@ impl SidecarManager {
             Err(format!("Health check returned status: {}", resp.status()))
         }
     }
+
+    /// 停止 sidecar 进程（SIGTERM）
+    pub async fn stop(&self) -> Result<(), String> {
+        let mut child = self.process.lock().await;
+        child
+            .kill()
+            .map_err(|e| format!("Failed to kill sidecar process: {}", e))?;
+        tracing::info!("Go sidecar process stopped");
+        Ok(())
+    }
 }
 
 /// 查找 Go 后端二进制文件

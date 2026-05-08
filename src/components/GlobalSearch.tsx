@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Modal, Input, List, Tag, Empty } from 'antd';
 import { SearchOutlined, TableOutlined, EyeOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { TableInfo } from '../types/api';
 
 interface GlobalSearchProps {
@@ -11,6 +12,7 @@ interface GlobalSearchProps {
 }
 
 export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases = {} }: GlobalSearchProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
 
   const results = useMemo(() => {
@@ -50,7 +52,7 @@ export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases
 
   return (
     <Modal
-      title="全局搜索"
+      title={t('common.globalSearch')}
       open={open}
       onCancel={onClose}
       footer={null}
@@ -58,7 +60,7 @@ export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases
     >
       <Input
         prefix={<SearchOutlined />}
-        placeholder="搜索表名、视图名..."
+        placeholder={t('common.searchTableOrView')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         autoFocus
@@ -67,9 +69,9 @@ export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases
 
       {results.length === 0 ? (
         query ? (
-          <Empty description="未找到匹配结果" />
+          <Empty description={t('common.noMatchingResults')} />
         ) : (
-          <Empty description="输入关键词开始搜索" />
+          <Empty description={t('common.enterKeywordToSearch')} />
         )
       ) : (
         <List
@@ -97,7 +99,7 @@ export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases
                     <Tag style={{ fontSize: 11, padding: '0 4px' }}>{item.database}</Tag>
                     {' '}
                     <Tag style={{ fontSize: 11, padding: '0 4px' }} color={item.type === 'view' ? 'blue' : 'green'}>
-                      {item.type === 'view' ? '视图' : '表'}
+                      {item.type === 'view' ? t('common.view') : t('common.table')}
                     </Tag>
                   </span>
                 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Modal,
   Form,
@@ -65,6 +66,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
   onClose,
   connections,
 }) => {
+  const { t } = useTranslation();
   const { message: msg } = App.useApp();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -96,11 +98,11 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       if (resp.diffs) {
         setDiffs(resp.diffs);
         if (resp.diffs.length === 0) {
-          msg.info('两个数据库结构完全一致，无差异');
+          msg.info(t('common.schemasIdentical'));
         }
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '结构比较失败';
+      const errorMessage = err instanceof Error ? err.message : t('common.schemaCompareFailed');
       msg.error(errorMessage);
     } finally {
       setLoading(false);
@@ -112,9 +114,9 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
     setExecuting(true);
     try {
       await api.executeDDL(selectedConn, sql);
-      msg.success(`${tableName} 结构同步成功`);
+      msg.success(t('common.schemaSyncSuccess', { table: tableName }));
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '执行失败';
+      const errorMessage = err instanceof Error ? err.message : t('common.executeFailed');
       msg.error(errorMessage);
     } finally {
       setExecuting(false);
@@ -122,32 +124,32 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
   };
 
   const diffTypeTag: Record<string, { color: string; text: string }> = {
-    added: { color: 'green', text: '新增' },
-    modified: { color: 'orange', text: '修改' },
-    missing: { color: 'red', text: '缺失' },
+    added: { color: 'green', text: t('common.added') },
+    modified: { color: 'orange', text: t('common.modified') },
+    missing: { color: 'red', text: t('common.missing') },
   };
 
   const columnColumns: ColumnsType<DiffColumn> = [
     {
-      title: '列名',
+      title: t('common.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 150,
     },
     {
-      title: '源定义',
+      title: t('common.sourceDefinition'),
       dataIndex: 'source_def',
       key: 'source_def',
       ellipsis: true,
     },
     {
-      title: '目标定义',
+      title: t('common.targetDefinition'),
       dataIndex: 'target_def',
       key: 'target_def',
       ellipsis: true,
     },
     {
-      title: '差异类型',
+      title: t('common.diffType'),
       dataIndex: 'diff_type',
       key: 'diff_type',
       width: 100,
@@ -164,28 +166,28 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
   const indexColumns: ColumnsType<DiffIndex> = [
     {
-      title: '索引名',
+      title: t('common.indexName'),
       dataIndex: 'index_name',
       key: 'index_name',
       width: 150,
     },
     {
-      title: '列名',
+      title: t('common.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 150,
     },
     {
-      title: '唯一',
+      title: t('common.unique'),
       dataIndex: 'is_unique',
       key: 'is_unique',
       width: 80,
       render: (val: boolean) => (
-        <Tag color={val ? 'gold' : 'default'}>{val ? '是' : '否'}</Tag>
+        <Tag color={val ? 'gold' : 'default'}>{val ? t('common.yes') : t('common.no')}</Tag>
       ),
     },
     {
-      title: '差异类型',
+      title: t('common.diffType'),
       dataIndex: 'diff_type',
       key: 'diff_type',
       width: 100,
@@ -202,31 +204,31 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
   const fkColumns: ColumnsType<DiffForeignKey> = [
     {
-      title: '约束名',
+      title: t('common.constraintName'),
       dataIndex: 'constraint_name',
       key: 'constraint_name',
       width: 150,
     },
     {
-      title: '列名',
+      title: t('common.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 150,
     },
     {
-      title: '引用表',
+      title: t('common.referencedTable'),
       dataIndex: 'referenced_table',
       key: 'referenced_table',
       width: 150,
     },
     {
-      title: '引用列',
+      title: t('common.referencedColumn'),
       dataIndex: 'referenced_column',
       key: 'referenced_column',
       width: 150,
     },
     {
-      title: '差异类型',
+      title: t('common.diffType'),
       dataIndex: 'diff_type',
       key: 'diff_type',
       width: 100,
@@ -250,7 +252,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       title={
         <Space>
           <DiffOutlined />
-          数据库结构比较
+          {t('common.schemaStructureComparison')}
         </Space>
       }
       open={open}
@@ -262,11 +264,11 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
         <Form form={form} layout="vertical">
           <Form.Item
             name="sourceConnectionId"
-            label="源数据库"
-            rules={[{ required: true, message: '请选择源数据库' }]}
+            label={t('common.sourceDatabase')}
+            rules={[{ required: true, message: t('common.pleaseSelectSourceDatabase') }]}
           >
             <Select
-              placeholder="选择源数据库连接"
+              placeholder={t('common.selectSourceConnection')}
               onChange={(val) => setSelectedConn(val)}
             >
               {connections.map((c) => (
@@ -279,18 +281,18 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
           <Form.Item
             name="sourceDatabase"
-            label="源数据库名"
-            rules={[{ required: true, message: '请输入源数据库名' }]}
+            label={t('common.sourceDatabaseName')}
+            rules={[{ required: true, message: t('common.pleaseEnterSourceDatabaseName') }]}
           >
-            <Input placeholder="例如: mydb" />
+            <Input placeholder={t('common.exampleDb')} />
           </Form.Item>
 
           <Form.Item
             name="targetConnectionId"
-            label="目标数据库"
-            rules={[{ required: true, message: '请选择目标数据库' }]}
+            label={t('common.targetDatabase')}
+            rules={[{ required: true, message: t('common.pleaseSelectTargetDatabase') }]}
           >
-            <Select placeholder="选择目标数据库连接">
+            <Select placeholder={t('common.selectTargetConnection')}>
               {targetConns.map((c) => (
                 <Select.Option key={c.id} value={c.id}>
                   {c.name} ({c.db_type})
@@ -301,18 +303,18 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
           <Form.Item
             name="targetDatabase"
-            label="目标数据库名"
-            rules={[{ required: true, message: '请输入目标数据库名' }]}
+            label={t('common.targetDatabaseName')}
+            rules={[{ required: true, message: t('common.pleaseEnterTargetDatabaseName') }]}
           >
-            <Input placeholder="例如: mydb" />
+            <Input placeholder={t('common.exampleDb')} />
           </Form.Item>
 
           <Form.Item
             name="tableName"
-            label="指定表名（可选）"
-            tooltip="留空则比较整个数据库的所有表"
+            label={t('common.specifyTableNameOptional')}
+            tooltip={t('common.leaveEmptyCompareAllTables')}
           >
-            <Input placeholder="例如: users" />
+            <Input placeholder={t('common.exampleUsers')} />
           </Form.Item>
 
           <Form.Item>
@@ -323,7 +325,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
               loading={loading}
               block
             >
-              比较结构
+              {t('common.compareStructure')}
             </Button>
           </Form.Item>
         </Form>
@@ -337,10 +339,10 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
                     <Text strong>{diff.table_name}</Text>
                     {diff.has_diffs ? (
                       <Tag color="orange">
-                        {diff.column_diffs.length + diff.index_diffs.length + diff.foreign_key_diffs.length} 处差异
+                        {t('common.differencesCount', { count: diff.column_diffs.length + diff.index_diffs.length + diff.foreign_key_diffs.length })}
                       </Tag>
                     ) : (
-                      <Tag color="green">结构一致</Tag>
+                      <Tag color="green">{t('common.schemasMatch')}</Tag>
                     )}
                   </Space>
                 }
@@ -348,7 +350,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
               >
                 {diff.column_diffs.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <Title level={5}>列差异 ({diff.column_diffs.length})</Title>
+                    <Title level={5}>{t('common.columnDifferences', { count: diff.column_diffs.length })}</Title>
                     <Table
                       dataSource={diff.column_diffs}
                       columns={columnColumns}
@@ -362,7 +364,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
                 {diff.index_diffs.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <Title level={5}>索引差异 ({diff.index_diffs.length})</Title>
+                    <Title level={5}>{t('common.indexDifferences', { count: diff.index_diffs.length })}</Title>
                     <Table
                       dataSource={diff.index_diffs}
                       columns={indexColumns}
@@ -376,7 +378,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
                 {diff.foreign_key_diffs.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <Title level={5}>外键差异 ({diff.foreign_key_diffs.length})</Title>
+                    <Title level={5}>{t('common.foreignKeyDifferences', { count: diff.foreign_key_diffs.length })}</Title>
                     <Table
                       dataSource={diff.foreign_key_diffs}
                       columns={fkColumns}
@@ -390,7 +392,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
                 {diff.alter_sql.length > 0 && (
                   <div>
-                    <Title level={5}>同步 SQL 预览</Title>
+                    <Title level={5}>{t('common.syncSqlPreview')}</Title>
                     <pre
                       style={{
                         background: '#f5f5f5',
@@ -410,7 +412,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
                       onClick={() => handleExecuteSQL(diff.alter_sql.join('\n'), diff.table_name)}
                       style={{ marginTop: 8 }}
                     >
-                      执行同步
+                      {t('common.executeSync')}
                     </Button>
                   </div>
                 )}

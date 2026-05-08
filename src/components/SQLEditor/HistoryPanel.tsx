@@ -85,10 +85,10 @@ export function HistoryPanel({
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return '刚刚';
-    if (diffMins < 60) return `${diffMins} 分钟前`;
-    if (diffHours < 24) return `${diffHours} 小时前`;
-    if (diffDays < 7) return `${diffDays} 天前`;
+    if (diffMins < 1) return t('common.justNow');
+    if (diffMins < 60) return t('common.minutesAgo', { count: diffMins });
+    if (diffHours < 24) return t('common.hoursAgo', { count: diffHours });
+    if (diffDays < 7) return t('common.daysAgo', { count: diffDays });
     return date.toLocaleDateString();
   };
 
@@ -197,7 +197,7 @@ export function HistoryPanel({
                       <Space size="small">
                         <span>{formatTime(item.timestamp)}</span>
                         {item.duration && <span>{item.duration}ms</span>}
-                        {item.rowCount !== undefined && <span>{item.rowCount} 行</span>}
+                        {item.rowCount !== undefined && <span>{item.rowCount} {t('common.rows')}</span>}
                       </Space>
                     </div>
                   }

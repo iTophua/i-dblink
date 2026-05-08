@@ -42,7 +42,7 @@ export function useTableScrollHeight(dependencies: any[] = []) {
       window.removeEventListener('resize', calculateHeight);
       observer.disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [calculateHeight]);
 
   return {

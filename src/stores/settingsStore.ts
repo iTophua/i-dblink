@@ -91,12 +91,21 @@ export const useSettingsStore = create<SettingsState>()(
           }
           return { settings: newSettings };
         }),
-      resetSettings: () => set({ settings: defaultSettings }),
+      resetSettings: () =>
+        set(() => {
+          i18n.changeLanguage(defaultSettings.language);
+          return { settings: defaultSettings };
+        }),
     }),
     {
       name: 'idblink-settings',
       version: VERSION,
       migrate: migrate,
+      onRehydrateStorage: () => (state) => {
+        if (state && state.settings.language) {
+          i18n.changeLanguage(state.settings.language);
+        }
+      },
     }
   )
 );

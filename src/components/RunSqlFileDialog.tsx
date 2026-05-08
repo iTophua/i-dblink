@@ -120,7 +120,7 @@ export function RunSqlFileDialog({
           success++;
         } catch (err: any) {
           failed++;
-          errors.push(`语句 ${i + 1}: ${err.message || err}`);
+          errors.push(`${t('common.statement')} ${i + 1}: ${err.message || err}`);
         }
         setProgress(Math.round(((i + 1) / statements.length) * 100));
       }

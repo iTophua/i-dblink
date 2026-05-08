@@ -7,21 +7,35 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSettingsStore } from './stores/settingsStore';
 import { getThemeConfig, ThemeMode } from './styles/theme';
+import { SplashScreen } from './components/SplashScreen';
+import i18n from './i18n';
 import './style.css';
 import './App.css';
 
 function App() {
-  const { updateSettings } = useSettingsStore();
-  const persistedSettings = useSettingsStore.getState().settings;
+  const { settings, updateSettings } = useSettingsStore();
   const [isHydrated, setIsHydrated] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    setIsHydrated(true);
+    const off = useSettingsStore.persist.onFinishHydration((state) => {
+      if (state?.settings?.language) {
+        i18n.changeLanguage(state.settings.language);
+      }
+      setIsHydrated(true);
+    });
+    return off;
   }, []);
 
-  const themePreset = persistedSettings.themePreset;
-  const themeMode = persistedSettings.themeMode;
-  const themeSyncSystem = persistedSettings.themeSyncSystem;
+  useEffect(() => {
+    if (isHydrated && settings.language) {
+      i18n.changeLanguage(settings.language);
+    }
+  }, [isHydrated, settings.language]);
+
+  const themePreset = settings.themePreset;
+  const themeMode = settings.themeMode;
+  const themeSyncSystem = settings.themeSyncSystem;
 
   const effectiveMode: ThemeMode = themeSyncSystem
     ? window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -127,8 +141,15 @@ function App() {
     });
   }, [themePreset, effectiveMode, isHydrated]);
 
-  if (!isHydrated) {
-    return null;
+  if (showSplash) {
+    return (
+      <SplashScreen
+        onFinish={() => {
+          setShowSplash(false);
+          setIsHydrated(true);
+        }}
+      />
+    );
   }
 
   const antdThemeConfig = {
@@ -226,7 +247,7 @@ function App() {
     },
   };
 
-  const antdLocale = persistedSettings.language === 'en-US' ? enUS : zhCN;
+  const antdLocale = settings.language === 'en-US' ? enUS : zhCN;
 
   return (
     <ConfigProvider locale={antdLocale} theme={antdThemeConfig}>

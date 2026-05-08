@@ -149,6 +149,7 @@ const TableNode = React.memo<TableNodeProps>(
     onContextMenu,
     onNewQuery,
   }) => {
+    const { t } = useTranslation();
     const [hovered, setHovered] = useState(false);
     const isSelected = selectedTableId === table.table_name;
     const backgroundColor = isSelected
@@ -195,7 +196,7 @@ const TableNode = React.memo<TableNodeProps>(
             <>
               <QuickActionButton
                 icon={<PlayCircleOutlined />}
-                tooltip="新建查询"
+                tooltip={t('common.newQueryTooltip')}
                 visible={hovered}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -204,7 +205,7 @@ const TableNode = React.memo<TableNodeProps>(
               />
               <QuickActionButton
                 icon={<SwapOutlined style={{ fontSize: 10 }} />}
-                tooltip="查看数据"
+                tooltip={t('common.viewDataTooltip')}
                 visible={hovered}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -243,6 +244,7 @@ const ViewNode = React.memo<ViewNodeProps>(
     onContextMenu,
     onNewQuery,
   }) => {
+    const { t } = useTranslation();
     const [hovered, setHovered] = useState(false);
     const isSelected = selectedTableId === view.table_name;
     const backgroundColor = isSelected
@@ -292,7 +294,7 @@ const ViewNode = React.memo<ViewNodeProps>(
           {hovered && (
             <QuickActionButton
               icon={<PlayCircleOutlined />}
-              tooltip="新建查询"
+              tooltip={t('common.newQueryTooltip')}
               visible={hovered}
               onClick={(e) => {
                 e.stopPropagation();
@@ -483,87 +485,87 @@ export function EnhancedConnectionTree({
   const getConnectionMenu = useCallback(
     (conn: Connection): MenuProps => ({
       items:
-        conn.status === 'connected'
-          ? [
-              { key: 'disconnect', label: '断开连接', icon: <DisconnectOutlined /> },
-              { key: 'refresh', label: '刷新', icon: <ReloadOutlined /> },
-              { type: 'divider' },
-              { key: 'edit', label: '编辑连接', icon: <EditOutlined /> },
-              { key: 'copy', label: '复制连接配置', icon: <CopyOutlined /> },
-              { type: 'divider' },
-              { key: 'new-query', label: '新建查询', icon: <PlayCircleOutlined /> },
-              { type: 'divider' },
-              {
-                key: 'move',
-                label: '移动至分组',
-                icon: <FolderOutlined />,
-                children: [
-                  ...groups
-                    .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
-                    .map((g) => ({
-                      key: `move-to-${g.id}`,
-                      label:
-                        g.id === 'default' ? (
-                          <>
-                            <MinusOutlined /> {g.name}
-                          </>
-                        ) : (
-                          <>
-                            {g.icon} {g.name}
-                          </>
-                        ),
-                      disabled: conn.group_id === g.id,
-                    })),
-                  { type: 'divider' },
-                  { key: 'new-group', label: '新建分组', icon: <PlusOutlined /> },
-                ],
-              },
-              { type: 'divider' },
-              { key: 'delete', label: '删除连接', icon: <DeleteOutlined />, danger: true },
-            ]
-          : [
-              { key: 'connect', label: '连接', icon: <LinkOutlined /> },
-              { key: 'edit', label: '编辑连接', icon: <EditOutlined /> },
-              { key: 'copy', label: '复制连接配置', icon: <CopyOutlined /> },
-              { type: 'divider' },
-              {
-                key: 'move',
-                label: '移动至分组',
-                icon: <FolderOutlined />,
-                children: [
-                  ...groups
-                    .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
-                    .map((g) => ({
-                      key: `move-to-${g.id}`,
-                      label:
-                        g.id === 'default' ? (
-                          <>
-                            <MinusOutlined /> {g.name}
-                          </>
-                        ) : (
-                          <>
-                            {g.icon} {g.name}
-                          </>
-                        ),
-                      disabled: conn.group_id === g.id,
-                    })),
-                  { type: 'divider' },
-                  { key: 'new-group', label: '新建分组', icon: <PlusOutlined /> },
-                ],
-              },
-              { type: 'divider' },
-              { key: 'delete', label: '删除连接', icon: <DeleteOutlined />, danger: true },
-            ],
+          conn.status === 'connected'
+            ? [
+                { key: 'disconnect', label: t('common.disconnectConnection'), icon: <DisconnectOutlined /> },
+                { key: 'refresh', label: t('common.refresh'), icon: <ReloadOutlined /> },
+                { type: 'divider' },
+                { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
+                { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
+                { type: 'divider' },
+                { key: 'new-query', label: t('common.newQuery'), icon: <PlayCircleOutlined /> },
+                { type: 'divider' },
+                {
+                  key: 'move',
+                  label: t('common.moveToGroup'),
+                  icon: <FolderOutlined />,
+                  children: [
+                    ...groups
+                      .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
+                      .map((g) => ({
+                        key: `move-to-${g.id}`,
+                        label:
+                          g.id === 'default' ? (
+                            <>
+                              <MinusOutlined /> {g.name}
+                            </>
+                          ) : (
+                            <>
+                              {g.icon} {g.name}
+                            </>
+                          ),
+                        disabled: conn.group_id === g.id,
+                      })),
+                    { type: 'divider' },
+                    { key: 'new-group', label: t('common.newGroup'), icon: <PlusOutlined /> },
+                  ],
+                },
+                { type: 'divider' },
+                { key: 'delete', label: t('common.deleteConnection'), icon: <DeleteOutlined />, danger: true },
+              ]
+            : [
+                { key: 'connect', label: t('common.connect'), icon: <LinkOutlined /> },
+                { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
+                { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
+                { type: 'divider' },
+                {
+                  key: 'move',
+                  label: t('common.moveToGroup'),
+                  icon: <FolderOutlined />,
+                  children: [
+                    ...groups
+                      .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
+                      .map((g) => ({
+                        key: `move-to-${g.id}`,
+                        label:
+                          g.id === 'default' ? (
+                            <>
+                              <MinusOutlined /> {g.name}
+                            </>
+                          ) : (
+                            <>
+                              {g.icon} {g.name}
+                            </>
+                          ),
+                        disabled: conn.group_id === g.id,
+                      })),
+                    { type: 'divider' },
+                    { key: 'new-group', label: t('common.newGroup'), icon: <PlusOutlined /> },
+                  ],
+                },
+                { type: 'divider' },
+                { key: 'delete', label: t('common.deleteConnection'), icon: <DeleteOutlined />, danger: true },
+              ],
       onClick: async ({ key }) => {
         if (key === 'connect') {
           await onConnect(conn.id);
         } else if (key === 'disconnect') {
           Modal.confirm({
-            title: '确认断开连接',
-            content: `确定要断开连接 "${conn.name}" 吗？`,
-            okText: '断开',
+            title: t('common.confirmDisconnect'),
+            content: t('common.confirmDisconnectContent', { name: conn.name }),
+            okText: t('common.disconnectLabel'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: () => onDisconnect(conn.id),
           });
         } else if (key === 'refresh') {
@@ -573,11 +575,11 @@ export function EnhancedConnectionTree({
           onEditConnection(conn);
         } else if (key === 'delete') {
           Modal.confirm({
-            title: '确认删除',
-            content: `确定要删除连接 "${conn.name}" 吗？此操作不可撤销。`,
-            okText: '删除',
+            title: t('common.confirmDeleteConnectionTitle'),
+            content: t('common.confirmDeleteConnectionContent', { name: conn.name }),
+            okText: t('common.delete'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: () => onDeleteConnection(conn.id),
           });
         } else if (key === 'new-query') {
@@ -613,16 +615,16 @@ export function EnhancedConnectionTree({
   const getGroupMenu = useCallback(
     (group: ConnectionGroup): MenuProps => ({
       items: [
-        { key: 'new-connection', label: '新建连接', icon: <PlusOutlined /> },
-        { key: 'new-group', label: '新建分组', icon: <FolderOutlined /> },
+        { key: 'new-connection', label: t('common.newConnection'), icon: <PlusOutlined /> },
+        { key: 'new-group', label: t('common.newGroup'), icon: <FolderOutlined /> },
         { type: 'divider' },
-        { key: 'rename', label: '重命名 (F2)', icon: <EditOutlined /> },
+        { key: 'rename', label: t('common.renameGroup'), icon: <EditOutlined /> },
         { type: 'divider' },
-        { key: 'export', label: '导出分组' },
+        { key: 'export', label: t('common.exportGroup') },
         { type: 'divider' },
         {
           key: 'delete',
-          label: '删除分组',
+          label: t('common.deleteGroup'),
           icon: <DeleteOutlined />,
           danger: true,
           disabled: group.id === 'default',
@@ -650,14 +652,14 @@ export function EnhancedConnectionTree({
         } else if (key === 'delete') {
           const connCount = groupedConnections[group.id]?.length || 0;
           Modal.confirm({
-            title: '确认删除分组',
+            title: t('common.confirmDeleteGroupTitle'),
             content:
               connCount > 0
-                ? `确定要删除分组 "${group.name}" 吗？该分组下有 ${connCount} 个连接，连接将移至"不分组"。`
-                : `确定要删除分组 "${group.name}" 吗？`,
-            okText: '删除',
+                ? t('common.confirmDeleteGroupWithConnectionsContent', { name: group.name, count: connCount })
+                : t('common.confirmDeleteGroupContent', { name: group.name }),
+            okText: t('common.delete'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: () => onDeleteGroup(group.id),
           });
         }
@@ -669,22 +671,22 @@ export function EnhancedConnectionTree({
   const getDatabaseMenu = useCallback(
     (connId: string, dbName: string): MenuProps => ({
       items: [
-        { key: 'new-query', label: '新建查询', icon: <PlayCircleOutlined /> },
+        { key: 'new-query', label: t('common.newQuery'), icon: <PlayCircleOutlined /> },
         { type: 'divider' },
-        { key: 'refresh-db', label: '刷新数据库', icon: <ReloadOutlined /> },
-        { key: 'close-db', label: '关闭数据库', icon: <DisconnectOutlined /> },
+        { key: 'refresh-db', label: t('common.refreshDatabase'), icon: <ReloadOutlined /> },
+        { key: 'close-db', label: t('common.closeDatabase'), icon: <DisconnectOutlined /> },
         { type: 'divider' },
-        { key: 'dump-structure', label: '转储 SQL 文件 → 仅结构', disabled: true },
-        { key: 'dump-full', label: '转储 SQL 文件 → 结构和数据', disabled: true },
+        { key: 'dump-structure', label: t('common.dumpSqlStructure'), disabled: true },
+        { key: 'dump-full', label: t('common.dumpSqlStructureAndData'), disabled: true },
         { type: 'divider' },
-        { key: 'backup-db', label: '备份数据库' },
-        { key: 'restore-db', label: '恢复数据库' },
-        { key: 'user-management', label: '用户权限管理' },
-        { key: 'schema-compare', label: '结构比较' },
+        { key: 'backup-db', label: t('common.backupDatabaseMenu') },
+        { key: 'restore-db', label: t('common.restoreDatabaseMenu') },
+        { key: 'user-management', label: t('common.userPrivileges') },
+        { key: 'schema-compare', label: t('common.schemaCompare') },
         { type: 'divider' },
-        { key: 'run-sql-file', label: '运行 SQL 文件' },
+        { key: 'run-sql-file', label: t('common.runSqlFile') },
         { type: 'divider' },
-        { key: 'db-properties', label: '数据库属性' },
+        { key: 'db-properties', label: t('common.databasePropertiesMenu') },
       ],
       onClick: ({ key }) => {
         if (key === 'new-query') {
@@ -695,11 +697,11 @@ export function EnhancedConnectionTree({
           if (closingDbModalRef.current) return;
           closingDbModalRef.current = true;
           Modal.confirm({
-            title: '确认关闭数据库',
-            content: `确定要关闭数据库 "${dbName}" 吗？这将关闭所有相关的标签页。`,
-            okText: '关闭',
+            title: t('common.confirmCloseDatabaseTitle'),
+            content: t('common.confirmCloseDatabaseContent', { name: dbName }),
+            okText: t('common.close'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: () => {
               closingDbModalRef.current = false;
               onDatabaseClose?.(connId, dbName);
@@ -735,28 +737,28 @@ export function EnhancedConnectionTree({
   const getTableMenu = useCallback(
     (connId: string, tableName: string, database?: string): MenuProps => ({
       items: [
-        { key: 'open-table', label: '打开表（浏览数据）' },
-        { key: 'design-table', label: '设计表' },
+        { key: 'open-table', label: t('common.openTableBrowse') },
+        { key: 'design-table', label: t('common.designTable') },
         { type: 'divider' },
-        { key: 'copy-table', label: '复制表 → 仅结构' },
-        { key: 'copy-table-data', label: '复制表 → 结构和数据' },
+        { key: 'copy-table', label: t('common.copyTableStructure') },
+        { key: 'copy-table-data', label: t('common.copyTableStructureAndData') },
         { type: 'divider' },
-        { key: 'truncate-table', label: '清空表', danger: true },
-        { key: 'drop-table', label: '删除表', danger: true },
+        { key: 'truncate-table', label: t('common.clearTable'), danger: true },
+        { key: 'drop-table', label: t('common.dropTable'), danger: true },
         { type: 'divider' },
         {
           key: 'table-maintenance',
-          label: '表维护',
+          label: t('common.tableMaintenance'),
           children: [
-            { key: 'optimize-table', label: '优化表 (OPTIMIZE)' },
-            { key: 'analyze-table', label: '分析表 (ANALYZE)' },
-            { key: 'repair-table', label: '修复表 (REPAIR)' },
+            { key: 'optimize-table', label: t('common.optimizeTable') },
+            { key: 'analyze-table', label: t('common.analyzeTable') },
+            { key: 'repair-table', label: t('common.repairTable') },
           ],
         },
         { type: 'divider' },
-        { key: 'dump-table', label: '转储 SQL 文件' },
-        { key: 'import-csv', label: '导入数据' },
-        { key: 'export-csv', label: '导出 CSV', disabled: true },
+        { key: 'dump-table', label: t('common.dumpSqlFile') },
+        { key: 'import-csv', label: t('common.importDataMenu') },
+        { key: 'export-csv', label: t('common.exportCsvMenu'), disabled: true },
       ],
       onClick: async ({ key }) => {
         if (key === 'open-table') {
@@ -773,58 +775,58 @@ export function EnhancedConnectionTree({
           onTableOpen(tableName, database);
         } else if (key === 'truncate-table') {
           Modal.confirm({
-            title: '确认清空表',
-            content: `确定要清空表 "${tableName}" 的所有数据吗？此操作不可撤销！`,
-            okText: '清空',
+            title: t('common.confirmClearTableTitle'),
+            content: t('common.confirmClearTableContent', { name: tableName }),
+            okText: t('common.clearLabel'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: async () => {
               try {
                 await api.truncateTable(connId, tableName, database);
-                message.success(`表 "${tableName}" 已清空`);
+                message.success(t('common.tableTruncated', { name: tableName }));
                 onDatabaseRefresh?.(connId, database || '');
               } catch (err: any) {
-                message.error(`清空表失败：${err.message || err}`);
+                message.error(t('common.truncateTableFailed') + ': ' + err.message);
               }
             },
           });
         } else if (key === 'drop-table') {
           Modal.confirm({
-            title: '确认删除表',
-            content: `确定要删除表 "${tableName}" 及其所有数据吗？此操作不可撤销！`,
-            okText: '删除',
+            title: t('common.confirmDeleteTableTitle'),
+            content: t('common.confirmDeleteTableContent', { name: tableName }),
+            okText: t('common.delete'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: async () => {
               try {
                 await api.dropTable(connId, tableName, database);
-                message.success(`表 "${tableName}" 已删除`);
+                message.success(t('common.tableDeleted', { name: tableName }));
                 onDatabaseRefresh?.(connId, database || '');
               } catch (err: any) {
-                message.error(`删除表失败：${err.message || err}`);
+                message.error(t('common.deleteTableFailed') + ': ' + err.message);
               }
             },
           });
         } else if (key === 'optimize-table') {
           try {
             await api.maintainTable(connId, tableName, 'optimize', database);
-            message.success(`表 "${tableName}" 已优化`);
+            message.success(t('common.tableOptimized', { name: tableName }));
           } catch (err: any) {
-            message.error(`优化表失败：${err.message || err}`);
+            message.error(t('common.optimizeTableFailed') + ': ' + err.message);
           }
         } else if (key === 'analyze-table') {
           try {
             await api.maintainTable(connId, tableName, 'analyze', database);
-            message.success(`表 "${tableName}" 已分析`);
+            message.success(t('common.tableAnalyzed', { name: tableName }));
           } catch (err: any) {
-            message.error(`分析表失败：${err.message || err}`);
+            message.error(t('common.analyzeTableFailed') + ': ' + err.message);
           }
         } else if (key === 'repair-table') {
           try {
             await api.maintainTable(connId, tableName, 'repair', database);
-            message.success(`表 "${tableName}" 已修复`);
+            message.success(t('common.tableRepaired', { name: tableName }));
           } catch (err: any) {
-            message.error(`修复表失败：${err.message || err}`);
+            message.error(t('common.repairTableFailed') + ': ' + err.message);
           }
         }
       },
@@ -835,14 +837,14 @@ export function EnhancedConnectionTree({
   const getViewMenu = useCallback(
     (connId: string, viewName: string, database?: string): MenuProps => ({
       items: [
-        { key: 'open-view', label: '打开视图（浏览数据）' },
-        { key: 'design-view', label: '设计视图' },
+        { key: 'open-view', label: t('common.openViewBrowse') },
+        { key: 'design-view', label: t('common.designView') },
         { type: 'divider' },
-        { key: 'rename-view', label: '重命名视图', disabled: true },
-        { key: 'drop-view', label: '删除视图', danger: true },
+        { key: 'rename-view', label: t('common.renameView'), disabled: true },
+        { key: 'drop-view', label: t('common.dropView'), danger: true },
         { type: 'divider' },
-        { key: 'view-dependencies', label: '查看依赖关系', disabled: true },
-        { key: 'view-properties', label: '属性', disabled: true },
+        { key: 'view-dependencies', label: t('common.viewDependencies'), disabled: true },
+        { key: 'view-properties', label: t('common.viewProperties'), disabled: true },
       ],
       onClick: async ({ key }) => {
         if (key === 'open-view') {
@@ -851,18 +853,18 @@ export function EnhancedConnectionTree({
           onOpenViewDefinition?.(viewName, database);
         } else if (key === 'drop-view') {
           Modal.confirm({
-            title: '确认删除视图',
-            content: `确定要删除视图 "${viewName}" 吗？`,
-            okText: '删除',
+            title: t('common.confirmDeleteViewTitle'),
+            content: t('common.confirmDeleteViewContent', { name: viewName }),
+            okText: t('common.delete'),
             okType: 'danger',
-            cancelText: '取消',
+            cancelText: t('common.cancel'),
             onOk: async () => {
               try {
                 await api.dropView(connId, viewName, database);
-                message.success(`视图 "${viewName}" 已删除`);
+                message.success(t('common.viewDeleted', { name: viewName }));
                 onDatabaseRefresh?.(connId, database || '');
               } catch (err: any) {
-                message.error(`删除视图失败：${err.message || err}`);
+                message.error(t('common.deleteViewFailed') + ': ' + err.message);
               }
             },
           });
@@ -877,7 +879,7 @@ export function EnhancedConnectionTree({
       try {
         const copyData = {
           id: null,
-          name: `${conn.name} (副本)`,
+          name: `${conn.name} (${t('common.copySuffix')})`,
           db_type: conn.db_type,
           host: conn.host,
           port: conn.port,
@@ -887,9 +889,9 @@ export function EnhancedConnectionTree({
           group_id: conn.group_id,
         };
         await onSaveConnection(copyData);
-        message.success('连接配置已复制，请重新输入密码后保存');
+        message.success(t('common.connectionConfigCopied'));
       } catch (error: any) {
-        message.error(`复制连接失败：${error.message || error}`);
+        message.error(t('common.copyConnectionFailed') + ': ' + (error.message || error));
       }
     },
     [onSaveConnection]
@@ -906,9 +908,9 @@ export function EnhancedConnectionTree({
           group_id: targetGroupId === 'default' ? null : targetGroupId,
         });
         const group = groups.find((g) => g.id === targetGroupId);
-        message.success(`已移动到"${group?.name || '不分组'}"分组`);
+        message.success(t('common.movedToGroup', { name: group?.name || t('common.ungrouped') }));
       } catch (error: any) {
-        message.error(`移动失败：${error.message || error}`);
+        message.error(t('common.moveFailed') + ': ' + (error.message || error));
       }
     },
     [connections, groups, onSaveConnection]
@@ -1100,12 +1102,12 @@ export function EnhancedConnectionTree({
             style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}
           >
             <Spin size="small" />
-            <span>表 (加载中...)</span>
+            <span>{t('common.tablesLoading')}</span>
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <TableOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
-            <span>表 ({tableItems.length})</span>
+            <span>{t('common.tables', { count: tableItems.length })}</span>
           </span>
         ),
         isLeaf: false,
@@ -1115,7 +1117,7 @@ export function EnhancedConnectionTree({
                 key: `init-tables::${connId}::${db.database}`,
                 title: (
                   <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                    点击展开加载表...
+                    {t('common.clickToLoadTables')}
                   </span>
                 ),
                 isLeaf: true,
@@ -1145,7 +1147,7 @@ export function EnhancedConnectionTree({
                   {
                     key: `no-tables::${connId}::${db.database}`,
                     title: (
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无表</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{t('common.noTables')}</span>
                     ),
                     isLeaf: true,
                     selectable: false,
@@ -1166,12 +1168,12 @@ export function EnhancedConnectionTree({
             }}
           >
             <Spin size="small" />
-            <span>视图 (加载中...)</span>
+            <span>{t('common.viewsLoading')}</span>
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
-            <span>视图 ({viewItems.length})</span>
+            <span>{t('common.views', { count: viewItems.length })}</span>
           </span>
         ),
         isLeaf: false,
@@ -1181,7 +1183,7 @@ export function EnhancedConnectionTree({
                 key: `init-views::${connId}::${db.database}`,
                 title: (
                   <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                    点击展开加载视图...
+                    {t('common.clickToLoadViews')}
                   </span>
                 ),
                 isLeaf: true,
@@ -1212,7 +1214,7 @@ export function EnhancedConnectionTree({
                   {
                     key: `no-views::${connId}::${db.database}`,
                     title: (
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无视图</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{t('common.noViews')}</span>
                     ),
                     isLeaf: true,
                     selectable: false,
@@ -1230,19 +1232,19 @@ export function EnhancedConnectionTree({
         title: db.routinesLoaded ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <ThunderboltOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-            <span>存储过程 ({db.procedures?.length || 0})</span>
+            <span>{t('common.procedures', { count: db.procedures?.length || 0 })}</span>
           </span>
         ) : isDbExpanded ? (
           <span
             style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}
           >
             <Spin size="small" />
-            <span>存储过程 (加载中...)</span>
+            <span>{t('common.proceduresLoading')}</span>
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <ThunderboltOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-            <span>存储过程</span>
+            <span>{t('common.procedures')}</span>
           </span>
         ),
         isLeaf: false,
@@ -1252,7 +1254,7 @@ export function EnhancedConnectionTree({
                 key: `init-procedures::${connId}::${db.database}`,
                 title: (
                   <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                    点击展开加载...
+                    {t('common.clickToLoadProcedures')}
                   </span>
                 ),
                 isLeaf: true,
@@ -1282,7 +1284,7 @@ export function EnhancedConnectionTree({
                   key: `no-procedures::${connId}::${db.database}`,
                   title: (
                     <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                      暂无存储过程
+                      {t('common.noProcedures')}
                     </span>
                   ),
                   isLeaf: true,
@@ -1296,19 +1298,19 @@ export function EnhancedConnectionTree({
         title: db.routinesLoaded ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
-            <span>函数 ({db.functions?.length || 0})</span>
+            <span>{t('common.functions', { count: db.functions?.length || 0 })}</span>
           </span>
         ) : isDbExpanded ? (
           <span
             style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}
           >
             <Spin size="small" />
-            <span>函数 (加载中...)</span>
+            <span>{t('common.functionsLoading')}</span>
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
-            <span>函数</span>
+            <span>{t('common.functions')}</span>
           </span>
         ),
         isLeaf: false,
@@ -1318,7 +1320,7 @@ export function EnhancedConnectionTree({
                 key: `init-functions::${connId}::${db.database}`,
                 title: (
                   <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                    点击展开加载...
+                    {t('common.clickToLoadFunctions')}
                   </span>
                 ),
                 isLeaf: true,
@@ -1345,7 +1347,7 @@ export function EnhancedConnectionTree({
                 {
                   key: `no-functions::${connId}::${db.database}`,
                   title: (
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>暂无函数</span>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{t('common.noFunctions')}</span>
                   ),
                   isLeaf: true,
                   selectable: false,
@@ -1361,19 +1363,19 @@ export function EnhancedConnectionTree({
         title: db.routinesLoaded ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
-            <span>触发器 ({db.triggers?.length || 0})</span>
+            <span>{t('common.triggers', { count: db.triggers?.length || 0 })}</span>
           </span>
         ) : isDbExpanded ? (
           <span
             style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}
           >
             <Spin size="small" />
-            <span>触发器 (加载中...)</span>
+            <span>{t('common.triggersLoading')}</span>
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
-            <span>触发器</span>
+            <span>{t('common.triggers')}</span>
           </span>
         ),
         isLeaf: false,
@@ -1383,7 +1385,7 @@ export function EnhancedConnectionTree({
                 key: `init-triggers::${connId}::${db.database}`,
                 title: (
                   <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                    点击展开加载...
+                    {t('common.clickToLoadTriggers')}
                   </span>
                 ),
                 isLeaf: true,
@@ -1415,7 +1417,7 @@ export function EnhancedConnectionTree({
                   key: `no-triggers::${connId}::${db.database}`,
                   title: (
                     <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                      暂无触发器
+                      {t('common.noTriggers')}
                     </span>
                   ),
                   isLeaf: true,
@@ -1504,7 +1506,7 @@ export function EnhancedConnectionTree({
       const connNameMatch = !q || conn.name.toLowerCase().includes(q);
       const isExpanded = expandedKeys.includes(conn.id);
 
-      let dbNodes: any[] = [];
+      const dbNodes: any[] = [];
       for (const db of dbList) {
         const dbMatch = !q || db.database.toLowerCase().includes(q);
         // 直接使用 db.tables，因为 connectionDatabases 已包含加载的表数据
@@ -1567,7 +1569,7 @@ export function EnhancedConnectionTree({
                   />
                 )}
                 {conn.status === 'connected' ? (
-                  <Tooltip title="已连接">
+                  <Tooltip title={t('common.connected')}>
                     <span
                       style={{
                         width: 6,
@@ -1579,7 +1581,7 @@ export function EnhancedConnectionTree({
                     />
                   </Tooltip>
                 ) : (
-                  <Tooltip title="未连接">
+                  <Tooltip title={t('common.disconnected')}>
                     <span
                       style={{
                       width: 6,
@@ -1592,7 +1594,7 @@ export function EnhancedConnectionTree({
                 </Tooltip>
               )}
               {conn.status === 'loading' && (
-                <Tooltip title="连接中...">
+                <Tooltip title={t('common.connecting')}>
                   <span
                     style={{
                       width: 6,
@@ -1628,7 +1630,7 @@ export function EnhancedConnectionTree({
                     key: `loading::${conn.id}`,
                     title: (
                       <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                        暂无数据库
+                        {t('common.noDatabases')}
                       </span>
                     ),
                     isLeaf: true,
@@ -1993,10 +1995,10 @@ export function EnhancedConnectionTree({
         ) : connections.length === 0 ? (
           <EnhancedEmptyState
             icon={<DatabaseOutlined />}
-            title="暂无连接"
-            description="创建第一个数据库连接开始使用"
+            title={t('common.noConnections')}
+            description={t('common.connectionTreeEmpty')}
             action={{
-              label: '新建连接',
+              label: t('common.newConnection'),
               onClick: () => onCreateConnection?.(),
               icon: <PlusOutlined />,
             }}
@@ -2066,23 +2068,23 @@ export function EnhancedConnectionTree({
         {connections.length === 0 && !isLoading ? (
           <EnhancedEmptyState
             icon={<DatabaseOutlined />}
-            title="暂无连接"
-            description="创建第一个数据库连接开始使用 iDBLink"
+            title={t('common.noConnections')}
+            description={t('common.connectionTreeEmptyDescription')}
             action={{
-              label: '新建连接',
+              label: t('common.newConnection'),
               onClick: () => onCreateConnection?.(),
               icon: <PlusOutlined />,
             }}
             secondaryAction={{
-              label: '导入连接',
+              label: t('common.importConnections'),
               onClick: () => {},
               icon: <FolderOutlined />,
               disabled: true,
             }}
             tips={[
-              '点击左侧「新建连接」按钮创建您的第一个数据库连接',
-              '支持 MySQL、PostgreSQL、SQLite、SQL Server 等多种数据库',
-              '右键点击连接树可以快速访问更多操作',
+              t('common.connectionTreeTip1'),
+              t('common.connectionTreeTip2'),
+              t('common.connectionTreeTip3'),
             ]}
           />
         ) : (

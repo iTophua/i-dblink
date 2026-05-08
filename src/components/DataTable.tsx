@@ -730,7 +730,7 @@ export const DataTable = memo(function DataTable({
         for (const row of pendingChanges.updates) {
           const primaryKey = columns.find((col) => col.column_key === 'PRI');
           if (!primaryKey) {
-            errorMessage = '该表没有主键，无法更新';
+            errorMessage = t('common.tableHasNoPrimaryKeyCannotUpdate');
             errorCount++;
             break;
           }
@@ -1270,7 +1270,7 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
           >
-            新增
+            {t('common.addRowLabel')}
           </Button>
           <Button
             icon={<EditOutlined />}
@@ -1279,14 +1279,14 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
           >
-            编辑
+            {t('common.editRow')}
           </Button>
           <Popconfirm
-            title="确认删除"
-            description={`确定要删除选中的 ${selectedRows.length} 行吗？`}
+            title={t('common.confirmDeleteTitle')}
+            description={t('common.confirmDeleteRows', { count: selectedRows.length })}
             onConfirm={handleDeleteRows}
-            okText="删除"
-            cancelText="取消"
+            okText={t('common.delete')}
+            cancelText={t('common.cancel')}
           >
             <Button
               icon={<DeleteOutlined />}
@@ -1295,7 +1295,7 @@ export const DataTable = memo(function DataTable({
               size="small"
               style={{ height: 20, padding: '0 6px', fontSize: 11 }}
             >
-              删除
+              {t('common.delete')}
             </Button>
           </Popconfirm>
 
@@ -1306,7 +1306,7 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
           >
-            导出
+            {t('common.export')}
           </Button>
 
           <Button
@@ -1316,15 +1316,15 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
           >
-            筛选
+            {t('common.filter')}
           </Button>
 
           <Dropdown
             trigger={['click']}
             menu={{
-              title: '列可见性',
+              title: t('common.columnVisibility'),
               items: [
-                { key: 'showAll', label: '显示全部', onClick: showAllColumns },
+                { key: 'showAll', label: t('common.showAll'), onClick: showAllColumns },
                 { type: 'divider' },
                 ...columns.map((col) => ({
                   key: col.column_name,
@@ -1350,11 +1350,11 @@ export const DataTable = memo(function DataTable({
               size="small"
               style={{ height: 20, padding: '0 6px', fontSize: 11 }}
             >
-              显示列
+              {t('common.columnVisibility')}
             </Button>
           </Dropdown>
 
-          <Tooltip title="自动调整列宽">
+          <Tooltip title={t('common.autoSize')}>
             <Button
               icon={<ColumnWidthOutlined />}
               onClick={handleAutoSizeColumns}
@@ -1364,7 +1364,7 @@ export const DataTable = memo(function DataTable({
           </Tooltip>
 
           <Input
-            placeholder="快速搜索..."
+            placeholder={t('common.quickSearch')}
             value={quickFilter}
             onChange={(e) => handleQuickFilter(e.target.value)}
             allowClear
@@ -1378,11 +1378,11 @@ export const DataTable = memo(function DataTable({
             {tableName}
           </Tag>
           <Tag color="green" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
-            {totalCount.toLocaleString()} 行
+            {totalCount.toLocaleString()} {t('common.rows')}
           </Tag>
           {selectedRows.length > 0 && (
             <Tag color="orange" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
-              {selectedRows.length} 行
+              {selectedRows.length} {t('common.rows')}
             </Tag>
           )}
           {hasUnsavedChanges && (
@@ -1390,7 +1390,7 @@ export const DataTable = memo(function DataTable({
               color="warning"
               style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
             >
-              未保存
+              {t('common.unsaved')}
             </Tag>
           )}
         </Space>
@@ -1529,7 +1529,7 @@ export const DataTable = memo(function DataTable({
                   {!cond.isGroupStart && !cond.isGroupEnd && (
                     <>
                       <Select
-                        placeholder="字段"
+                        placeholder={t('common.fieldPlaceholder')}
                         value={cond.field || undefined}
                         onChange={(val) => updateFilterCondition(cond.id, { field: val })}
                         size="small"
@@ -1549,25 +1549,25 @@ export const DataTable = memo(function DataTable({
                         size="small"
                         style={{ width: 88, fontSize: 11 }}
                         options={[
-                          { label: '包含', value: 'contains' },
-                          { label: '不包含', value: 'notContains' },
-                          { label: '等于', value: 'equals' },
-                          { label: '不等于', value: 'notEquals' },
-                          { label: '开头是', value: 'startsWith' },
-                          { label: '结尾是', value: 'endsWith' },
-                          { label: '大于', value: 'greaterThan' },
-                          { label: '小于', value: 'lessThan' },
-                          { label: '大于等于', value: 'greaterOrEqual' },
-                          { label: '小于等于', value: 'lessOrEqual' },
-                          { label: '为空', value: 'isNull' },
-                          { label: '不为空', value: 'isNotNull' },
-                          { label: '在...中', value: 'in' },
-                          { label: '不在...中', value: 'notIn' },
+                          { label: t('common.contains'), value: 'contains' },
+                          { label: t('common.notContains'), value: 'notContains' },
+                          { label: t('common.equals'), value: 'equals' },
+                          { label: t('common.notEquals'), value: 'notEquals' },
+                          { label: t('common.startsWith'), value: 'startsWith' },
+                          { label: t('common.endsWith'), value: 'endsWith' },
+                          { label: t('common.greaterThan'), value: 'greaterThan' },
+                          { label: t('common.lessThan'), value: 'lessThan' },
+                          { label: t('common.greaterOrEqual'), value: 'greaterOrEqual' },
+                          { label: t('common.lessOrEqual'), value: 'lessOrEqual' },
+                          { label: t('common.isNull'), value: 'isNull' },
+                          { label: t('common.isNotNull'), value: 'isNotNull' },
+                          { label: t('common.in'), value: 'in' },
+                          { label: t('common.notIn'), value: 'notIn' },
                         ]}
                       />
                       {!['isNull', 'isNotNull'].includes(cond.operator) && (
                         <Input
-                          placeholder="值"
+                          placeholder={t('common.valuePlaceholder')}
                           value={cond.value}
                           onChange={(e) =>
                             updateFilterCondition(cond.id, { value: e.target.value })
@@ -1620,7 +1620,7 @@ export const DataTable = memo(function DataTable({
                           color: 'var(--color-primary)',
                         }}
                       >
-                        +同级
+                        +{t('common.addSibling')}
                       </Button>
                       <Button
                         type="link"
@@ -1676,7 +1676,7 @@ export const DataTable = memo(function DataTable({
                           color: 'var(--color-info)',
                         }}
                       >
-                        +括号
+                        +{t('common.addBracket')}
                       </Button>
                     </>
                   )}
@@ -1695,7 +1695,7 @@ export const DataTable = memo(function DataTable({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <Button size="small" onClick={clearFilter} style={{ fontSize: 11, height: 20 }}>
-              清除
+              {t('common.clearLabel')}
             </Button>
             <Button
               type="primary"
@@ -1703,7 +1703,7 @@ export const DataTable = memo(function DataTable({
               onClick={applyFilter}
               style={{ fontSize: 11, height: 20 }}
             >
-              应用
+              {t('common.applyLabel')}
             </Button>
           </div>
         </div>
@@ -1724,13 +1724,13 @@ export const DataTable = memo(function DataTable({
               background: tc.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)',
               zIndex: 10,
             }}
-          >
-            <Spin size="large" description="加载中..." />
+            >
+            <Spin size="large" description={t('common.loading')} />
           </div>
         )}
 
         {!loading && rowData.length === 0 && hasEverLoaded ? (
-          <Empty description="暂无数据" style={{ marginTop: '20%' }} />
+          <Empty description={t('common.noData')} style={{ marginTop: '20%' }} />
         ) : columns.length > 0 ? (
           <div
             className={`ag-theme-compact ${isDarkMode ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}`}
@@ -1789,83 +1789,83 @@ export const DataTable = memo(function DataTable({
               suppressScrollOnNewData={true}
               suppressAnimationFrame={true}
               localeText={{
-                pinLeft: '左侧固定',
-                pinRight: '右侧固定',
-                noPin: '取消固定',
-                autoSize: '自动列宽',
-                resetColumns: '重置列',
-                expandAll: '展开全部',
-                collapseAll: '折叠全部',
-                copyWithHeaders: '复制带表头',
-                copyWithGroupHeaders: '复制带分组表头',
-                menu: '菜单',
-                filter: '筛选',
-                filters: '筛选器',
-                columns: '列',
-                values: '值',
-                pinColumn: '固定列',
-                autoSizeColumn: '自动列宽',
-                resetColumn: '重置列',
-                moveColumn: '移动列',
-                sortAscending: '升序',
-                sortDescending: '降序',
-                sortUnsort: '取消排序',
-                close: '关闭',
-                loadingOoo: '加载中...',
-                noRowsToShow: '暂无数据',
-                enabled: '启用',
-                disabled: '禁用',
-                true: '是',
-                false: '否',
-                contains: '包含',
-                notContains: '不包含',
-                startsWith: '开始于',
-                endsWith: '结束于',
-                equals: '等于',
-                notEqual: '不等于',
-                lessThan: '小于',
-                greaterThan: '大于',
-                inRange: '范围内',
-                lessThanOrEqual: '小于等于',
-                greaterThanOrEqual: '大于等于',
-                filterOoo: '筛选中...',
-                applyFilter: '应用筛选',
-                clearFilter: '清除筛选',
-                blank: '空白',
-                notBlank: '非空白',
-                and: '且',
-                or: '或',
-                searchOoo: '搜索...',
-                selectAll: '全选',
-                selectAllFiltered: '全选筛选结果',
-                addCurrentSelectionToFilter: '将当前选择添加到筛选',
-                sum: '求和',
-                min: '最小值',
-                max: '最大值',
-                count: '计数',
-                avg: '平均值',
-                page: '页',
-                pageSize: '每页',
-                total: '共',
-                of: '条',
-                nextPage: '下一页',
-                prevPage: '上一页',
-                firstPage: '首页',
-                lastPage: '末页',
-                to: '至',
-                OOO: '可选',
-                any: '任意',
-                condition: '条件',
-                conditions: '条件',
-                operator: '运算符',
-                all: '全部',
-                group: '分组',
+                pinLeft: t('common.pinLeft'),
+                pinRight: t('common.pinRight'),
+                noPin: t('common.noPin'),
+                autoSize: t('common.autoSize'),
+                resetColumns: t('common.resetColumns'),
+                expandAll: t('common.expandAll'),
+                collapseAll: t('common.collapseAll'),
+                copyWithHeaders: t('common.copyWithHeaders'),
+                copyWithGroupHeaders: t('common.copyWithGroupHeaders'),
+                menu: t('common.menu'),
+                filter: t('common.filter'),
+                filters: t('common.filters'),
+                columns: t('common.columns'),
+                values: t('common.values'),
+                pinColumn: t('common.pinColumn'),
+                autoSizeColumn: t('common.autoSizeColumn'),
+                resetColumn: t('common.resetColumn'),
+                moveColumn: t('common.moveColumn'),
+                sortAscending: t('common.sortAscending'),
+                sortDescending: t('common.sortDescending'),
+                sortUnsort: t('common.sortUnsort'),
+                close: t('common.close'),
+                loadingOoo: t('common.loadingOoo'),
+                noRowsToShow: t('common.noRowsToShow'),
+                enabled: t('common.enabled'),
+                disabled: t('common.disabled'),
+                true: t('common.true'),
+                false: t('common.false'),
+                contains: t('common.contains'),
+                notContains: t('common.notContains'),
+                startsWith: t('common.startsWith'),
+                endsWith: t('common.endsWith'),
+                equals: t('common.equals'),
+                notEqual: t('common.notEqual'),
+                lessThan: t('common.lessThan'),
+                greaterThan: t('common.greaterThan'),
+                inRange: t('common.inRange'),
+                lessThanOrEqual: t('common.lessThanOrEqual'),
+                greaterThanOrEqual: t('common.greaterThanOrEqual'),
+                filterOoo: t('common.filterOoo'),
+                applyFilter: t('common.applyFilter'),
+                clearFilter: t('common.clearFilter'),
+                blank: t('common.blank'),
+                notBlank: t('common.notBlank'),
+                and: t('common.and'),
+                or: t('common.or'),
+                searchOoo: t('common.searchOoo'),
+                selectAll: t('common.selectAll'),
+                selectAllFiltered: t('common.selectAllFiltered'),
+                addCurrentSelectionToFilter: t('common.addCurrentSelectionToFilter'),
+                sum: t('common.sum'),
+                min: t('common.min'),
+                max: t('common.max'),
+                count: t('common.count'),
+                avg: t('common.avg'),
+                page: t('common.page'),
+                pageSize: t('common.pageSize'),
+                total: t('common.total'),
+                of: t('common.of'),
+                nextPage: t('common.nextPage'),
+                prevPage: t('common.prevPage'),
+                firstPage: t('common.firstPage'),
+                lastPage: t('common.lastPage'),
+                to: t('common.to'),
+                OOO: t('common.OOO'),
+                any: t('common.any'),
+                condition: t('common.condition'),
+                conditions: t('common.conditions'),
+                operator: t('common.operator'),
+                all: t('common.all'),
+                group: t('common.group'),
               }}
             />
           </div>
         ) : hasEverLoaded ? (
           <Empty
-            description="无法获取表结构，请检查连接或刷新重试"
+            description={t('common.noTableStructure')}
             style={{ marginTop: '20%' }}
           />
         ) : (
@@ -1879,7 +1879,7 @@ export const DataTable = memo(function DataTable({
               background: 'var(--background-card)',
             }}
           >
-            <Spin size="large" description="加载中..." />
+            <Spin size="large" description={t('common.loading')} />
           </div>
         )}
       </div>
@@ -1895,7 +1895,7 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 4px', fontSize: 11 }}
           >
-            提交
+            {t('common.submitLabel')}
           </Button>
           <Button
             icon={<UndoOutlined />}
@@ -1904,7 +1904,7 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 4px', fontSize: 11 }}
           >
-            撤销
+            {t('common.undoLabel')}
           </Button>
 
           <div style={dividerStyle} />
@@ -1916,7 +1916,7 @@ export const DataTable = memo(function DataTable({
                   color="success"
                   style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
                 >
-                  插入 {pendingChanges.inserts.length}
+                  {t('common.insertLabel')} {pendingChanges.inserts.length}
                 </Tag>
               )}
               {pendingChanges.updates.length > 0 && (
@@ -1924,7 +1924,7 @@ export const DataTable = memo(function DataTable({
                   color="warning"
                   style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
                 >
-                  更新 {pendingChanges.updates.length}
+                  {t('common.updateLabel')} {pendingChanges.updates.length}
                 </Tag>
               )}
               {pendingChanges.deletes.length > 0 && (
@@ -1932,7 +1932,7 @@ export const DataTable = memo(function DataTable({
                   color="error"
                   style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
                 >
-                  删除 {pendingChanges.deletes.length}
+                  {t('common.deleteLabel')} {pendingChanges.deletes.length}
                 </Tag>
               )}
               <div style={dividerStyle} />
@@ -1946,7 +1946,7 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 4px', fontSize: 11 }}
           >
-            刷新
+            {t('common.refreshLabel')}
           </Button>
           <Button
             icon={<ImportOutlined />}
@@ -1954,14 +1954,14 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 4px', fontSize: 11 }}
           >
-            导入
+            {t('common.import')}
           </Button>
           <Dropdown
             menu={{
               items: [
                 {
                   key: 'excel',
-                  label: '导出 Excel (.xlsx)',
+                  label: t('common.exportExcelLabel'),
                   icon: <FileTextOutlined />,
                   onClick: () => {
                     try {
@@ -2169,8 +2169,8 @@ export const DataTable = memo(function DataTable({
               size="small"
               style={{ height: 20, padding: '0 4px', fontSize: 11 }}
             >
-              复制
-            </Button>
+            {t('common.copy')}
+          </Button>
           </Tooltip>
         </div>
 
@@ -2187,7 +2187,7 @@ export const DataTable = memo(function DataTable({
               { label: '100', value: 100 },
               { label: '500', value: 500 },
               { label: '1000', value: 1000 },
-              { label: '全部', value: 'All' },
+              { label: t('common.allRows'), value: 'All' },
             ]}
           />
           <span
@@ -2211,13 +2211,13 @@ export const DataTable = memo(function DataTable({
       </div>
 
       <Modal
-        title="新增行"
+        title={t('common.addRowTitle')}
         open={addModalOpen}
         onCancel={() => setAddModalOpen(false)}
         onOk={handleSaveNewRow}
         width={600}
-        okText="保存"
-        cancelText="取消"
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
         destroyOnHidden
         transitionName=""
         maskTransitionName=""
@@ -2239,7 +2239,7 @@ export const DataTable = memo(function DataTable({
               }
               name={col.column_name}
               rules={[
-                { required: col.is_nullable !== 'YES', message: `请输入 ${col.column_name}` },
+                { required: col.is_nullable !== 'YES', message: `${t('common.pleaseEnter')} ${col.column_name}` },
               ]}
             >
               <GlobalInput placeholder={col.comment || col.data_type} />
@@ -2249,13 +2249,13 @@ export const DataTable = memo(function DataTable({
       </Modal>
 
       <Modal
-        title="编辑行"
+        title={t('common.editRowTitle')}
         open={editModalOpen}
         onCancel={() => setEditModalOpen(false)}
         onOk={handleSaveEditRow}
         width={600}
-        okText="保存"
-        cancelText="取消"
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
         destroyOnHidden
         transitionName=""
         maskTransitionName=""
@@ -2269,7 +2269,7 @@ export const DataTable = memo(function DataTable({
                   {col.column_name}
                   {col.column_key === 'PRI' && (
                     <Tag color="blue" style={{ marginLeft: 8 }}>
-                      主键
+                      {t('common.primaryKeyLabel')}
                     </Tag>
                   )}
                   <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
@@ -2289,7 +2289,7 @@ export const DataTable = memo(function DataTable({
       </Modal>
 
       <Modal
-        title={`编辑 ${textEditModal?.field || ''}`}
+        title={`${t('common.editField')} ${textEditModal?.field || ''}`}
         open={!!textEditModal?.open}
         onCancel={() => setTextEditModal(null)}
         onOk={() => {
@@ -2326,7 +2326,7 @@ export const DataTable = memo(function DataTable({
           onChange={(e) =>
             setTextEditModal((prev) => (prev ? { ...prev, value: e.target.value } : null))
           }
-          placeholder="输入内容..."
+          placeholder={t('common.enterContent')}
         />
       </Modal>
 

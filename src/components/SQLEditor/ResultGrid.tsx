@@ -802,35 +802,31 @@ export function ResultGrid({
           <strong style={{ color: 'var(--text-primary)' }}>
             {queryResult.rows.length.toLocaleString()}
           </strong>{' '}
-          行
+          {t('common.rows')}
+         </span>
+         <span>
+           <strong style={{ color: 'var(--text-primary)' }}>{queryResult.columns.length}</strong> {t('common.columns')}
         </span>
-        <span>
-          <strong style={{ color: 'var(--text-primary)' }}>{queryResult.columns.length}</strong> 列
-        </span>
-        {executionTime !== undefined && (
-          <span>
-            耗时 <strong style={{ color: 'var(--text-primary)' }}>{executionTime}ms</strong>
-          </span>
-        )}
-        {queryResult.rows_affected !== undefined && queryResult.rows_affected > 0 && (
-          <span>
-            影响{' '}
-            <strong style={{ color: 'var(--text-primary)' }}>
-              {queryResult.rows_affected.toLocaleString()}
-            </strong>{' '}
-            行
-          </span>
-        )}
+         {executionTime !== undefined && (
+           <span>
+             {t('common.duration')} <strong style={{ color: 'var(--text-primary)' }}>{executionTime}ms</strong>
+           </span>
+         )}
+         {queryResult.rows_affected !== undefined && queryResult.rows_affected > 0 && (
+           <span>
+             {t('common.affectedRows', { count: queryResult.rows_affected })}
+           </span>
+         )}
         {isEditable && (
           <Tag color="blue" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>
-            可编辑
+             {t('common.editable')}
           </Tag>
         )}
         {tableName && !isEditable && (
-          <Tooltip title="无法编辑：未找到主键或查询过于复杂">
-            <Tag color="default" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>
-              <ExclamationCircleOutlined style={{ marginRight: 4 }} />
-              只读
+           <Tooltip title={t('common.cannotEdit')}>
+             <Tag color="default" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>
+               <ExclamationCircleOutlined style={{ marginRight: 4 }} />
+               {t('common.readOnly')}
             </Tag>
           </Tooltip>
         )}
@@ -840,7 +836,7 @@ export function ResultGrid({
             items: [
               {
                 key: 'excel',
-                label: '导出 Excel (.xlsx)',
+                label: t('common.exportExcel'),
                 icon: <FileTextOutlined />,
                 onClick: () => {
                   try {
@@ -968,7 +964,7 @@ export function ResultGrid({
             disabled={selectedRowIndices.size === 0}
             style={{ fontSize: 11, height: 22 }}
           >
-            删除行
+             {t('common.deleteRow')}
           </Button>
         )}
       </div>
@@ -1018,7 +1014,7 @@ export function ResultGrid({
             flexShrink: 0,
           }}
         >
-          <span>记录: {queryResult.rows.length.toLocaleString()}</span>
+           <span>{t('common.records')}: {queryResult.rows.length.toLocaleString()}</span>
           {columnStats.map((stat) => (
             <Tag
               key={stat.columnName}
@@ -1115,7 +1111,7 @@ export function ResultGrid({
               }}
             >
               <CopyOutlined />
-              复制为 INSERT
+               {t('common.copyAsInsert')}
             </div>
           )}
           {tableName && primaryKeyCol && (
@@ -1139,7 +1135,7 @@ export function ResultGrid({
                 }}
               >
                 <CopyOutlined />
-                复制为 UPDATE
+                {t('common.copyAsUpdate')}
               </div>
               <div
                 style={{
@@ -1160,7 +1156,7 @@ export function ResultGrid({
                 }}
               >
                 <DeleteOutlined />
-                复制为 DELETE
+                {t('common.copyAsDelete')}
               </div>
             </>
           )}
@@ -1189,7 +1185,7 @@ export function ResultGrid({
                 }}
               >
                 <DeleteOutlined />
-                删除选中行
+                {t('common.deleteSelectedRows')}
               </div>
             </>
           )}
@@ -1198,7 +1194,7 @@ export function ResultGrid({
 
       {/* 新增行 Modal */}
       <Modal
-        title="新增行"
+        title={t('common.addRowTitle')}
         open={addModalOpen}
         onCancel={() => {
           setAddModalOpen(false);
@@ -1260,12 +1256,13 @@ interface ExplainPlanGridProps {
 }
 
 export function ExplainPlanGrid({ data, isDark }: ExplainPlanGridProps) {
+  const { t } = useTranslation();
   if (!data || data.length === 0) {
     return (
       <div
         style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
-        <Empty description="暂无执行计划数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <Empty description={t('common.noExplainPlanData')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </div>
     );
   }

@@ -22,15 +22,13 @@ interface LogPanelProps {
   onCollapse: () => void;
 }
 
-const initialLogs: LogEntry[] = [
-  { id: '1', timestamp: '10:23:45', level: 'INFO', message: '应用已启动' },
-  { id: '2', timestamp: '10:23:46', level: 'INFO', message: '加载连接配置完成' },
-];
-
 export function LogPanel({ onCollapse }: LogPanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'messages' | 'errors' | 'explain'>('messages');
-  const [logs, setLogs] = useState<LogEntry[]>(initialLogs);
+  const [logs, setLogs] = useState<LogEntry[]>(() => [
+    { id: '1', timestamp: '10:23:45', level: 'INFO', message: t('common.appStarted') },
+    { id: '2', timestamp: '10:23:46', level: 'INFO', message: t('common.connectionConfigLoaded') },
+  ]);
   const tc = useThemeColors();
 
   const filteredLogs = logs.filter((log) => {

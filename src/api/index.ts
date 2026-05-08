@@ -414,4 +414,8 @@ export const api = {
   }> {
     return await invoke('batch_import', params);
   },
+
+  async quitApp(): Promise<void> {
+    return await invoke('quit_app');
+  },
 };

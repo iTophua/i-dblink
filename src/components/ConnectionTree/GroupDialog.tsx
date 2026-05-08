@@ -14,28 +14,6 @@ import { useTranslation } from 'react-i18next';
 import type { ConnectionGroup } from '../../stores/appStore';
 import { GlobalInput } from '../GlobalInput';
 
-const GROUP_ICONS = [
-  { label: '文件夹', value: '📁', icon: <FolderOutlined /> },
-  { label: '地球', value: '🌐', icon: <GlobalOutlined /> },
-  { label: '服务器', value: '🖥️', icon: <CloudServerOutlined /> },
-  { label: '电脑', value: '💻', icon: <LaptopOutlined /> },
-  { label: '数据库', value: '🗄️', icon: <DatabaseOutlined /> },
-  { label: '项目', value: '📂', icon: <ProjectOutlined /> },
-  { label: '主页', value: '🏠', icon: <HomeOutlined /> },
-  { label: '收藏', value: '⭐', icon: <StarOutlined /> },
-];
-
-const GROUP_COLORS = [
-  { label: '蓝色', value: '#1890ff' },
-  { label: '绿色', value: '#52c41a' },
-  { label: '橙色', value: '#faad14' },
-  { label: '红色', value: '#ff4d4f' },
-  { label: '紫色', value: '#722ed1' },
-  { label: '青色', value: '#13c2c2' },
-  { label: '粉色', value: '#eb2f96' },
-  { label: '灰色', value: '#8c8c8c' },
-];
-
 interface GroupDialogProps {
   open: boolean;
   editingGroup?: ConnectionGroup | null;
@@ -58,6 +36,29 @@ export function GroupDialog({
   onSave,
 }: GroupDialogProps) {
   const { t } = useTranslation();
+
+  const GROUP_ICONS = [
+    { label: t('common.folder'), value: '📁', icon: <FolderOutlined /> },
+    { label: t('common.globe'), value: '🌐', icon: <GlobalOutlined /> },
+    { label: t('common.server'), value: '🖥️', icon: <CloudServerOutlined /> },
+    { label: t('common.computer'), value: '💻', icon: <LaptopOutlined /> },
+    { label: t('common.databaseLabel'), value: '🗄️', icon: <DatabaseOutlined /> },
+    { label: t('common.project'), value: '📂', icon: <ProjectOutlined /> },
+    { label: t('common.homeLabel'), value: '🏠', icon: <HomeOutlined /> },
+    { label: t('common.favorite'), value: '⭐', icon: <StarOutlined /> },
+  ];
+
+  const GROUP_COLORS = [
+    { label: t('common.blue'), value: '#1890ff' },
+    { label: t('common.green'), value: '#52c41a' },
+    { label: t('common.orange'), value: '#faad14' },
+    { label: t('common.red'), value: '#ff4d4f' },
+    { label: t('common.purple'), value: '#722ed1' },
+    { label: t('common.cyan'), value: '#13c2c2' },
+    { label: t('common.pink'), value: '#eb2f96' },
+    { label: t('common.gray'), value: '#8c8c8c' },
+  ];
+
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
 
@@ -102,7 +103,7 @@ export function GroupDialog({
 
   return (
     <Modal
-      title={editingGroup ? '编辑分组' : '新建分组'}
+      title={editingGroup ? t('common.editGroupTitle') : t('common.newGroupTitle')}
       open={open}
       onOk={handleOk}
       onCancel={onCancel}
@@ -110,22 +111,22 @@ export function GroupDialog({
       width={420}
       transitionName=""
       maskTransitionName=""
-      okText={editingGroup ? '保存' : '创建'}
-      cancelText="取消"
+      okText={editingGroup ? t('common.saveGroup') : t('common.createGroup')}
+      cancelText={t('common.cancel')}
     >
       <Form form={form} layout="vertical" size="middle" style={{ marginTop: 8 }}>
         <Form.Item
           name="name"
-          label="分组名称"
-          rules={[{ required: true, message: '请输入分组名称' }]}
+          label={t('common.groupNameLabel')}
+          rules={[{ required: true, message: t('common.nameRequired') }]}
         >
-          <GlobalInput placeholder="例如：开发环境" maxLength={50} />
+          <GlobalInput placeholder={t('common.enterGroupNamePlaceholder')} maxLength={50} />
         </Form.Item>
 
         <Form.Item
           name="icon"
-          label="分组图标"
-          rules={[{ required: true, message: '请选择分组图标' }]}
+          label={t('common.groupIconLabel')}
+          rules={[{ required: true, message: t('common.selectGroupIcon') }]}
         >
           <Select>
             {GROUP_ICONS.map((item) => (
@@ -141,8 +142,8 @@ export function GroupDialog({
 
         <Form.Item
           name="color"
-          label="分组颜色"
-          rules={[{ required: true, message: '请选择分组颜色' }]}
+          label={t('common.groupColorLabel')}
+          rules={[{ required: true, message: t('common.selectGroupColor') }]}
         >
           <Select>
             {GROUP_COLORS.map((item) => (

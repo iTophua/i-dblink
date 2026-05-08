@@ -778,7 +778,7 @@ export function TableDesigner({
       dataIndex: 'drag',
       width: 40,
       render: (_: unknown, __: DesignerColumn, index: number) => (
-        <Tooltip title="Drag to reorder">
+        <Tooltip title={t('common.dragToReorder')}>
           <DragOutlined
             style={{ cursor: 'grab', color: '#999' }}
             onMouseDown={(e) => {
@@ -811,7 +811,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Name',
+      title: t('common.columnName'),
       dataIndex: 'name',
       width: 160,
       render: (val: string, record: DesignerColumn) => (
@@ -835,7 +835,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Type',
+      title: t('common.columnType'),
       dataIndex: 'type',
       width: 160,
       render: (val: string, record: DesignerColumn) => (
@@ -851,7 +851,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Length',
+      title: t('common.columnLength'),
       dataIndex: 'length',
       width: 100,
       render: (val: number | undefined, record: DesignerColumn) => (
@@ -865,7 +865,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Nullable',
+      title: t('common.columnNullable'),
       dataIndex: 'nullable',
       width: 80,
       render: (val: boolean, record: DesignerColumn) => (
@@ -877,7 +877,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Default',
+      title: t('common.columnDefault'),
       dataIndex: 'defaultValue',
       width: 140,
       render: (val: string | undefined, record: DesignerColumn) => (
@@ -890,7 +890,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Comment',
+      title: t('common.columnComment'),
       dataIndex: 'comment',
       width: 160,
       render: (val: string | undefined, record: DesignerColumn) => (
@@ -903,7 +903,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'PK',
+      title: t('common.columnPK'),
       dataIndex: 'isPrimary',
       width: 50,
       render: (val: boolean, record: DesignerColumn) => (
@@ -919,7 +919,7 @@ export function TableDesigner({
       title: '',
       width: 50,
       render: (_: unknown, record: DesignerColumn) => (
-        <Popconfirm title="Delete this column?" onConfirm={() => deleteColumn(record.key)}>
+        <Popconfirm title={t('common.confirmDeleteColumn')} onConfirm={() => deleteColumn(record.key)}>
           <Button type="text" danger size="small" icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -929,7 +929,7 @@ export function TableDesigner({
   // ── Index Table Columns ────────────────────────────────────────────────
   const indexDefs: ColumnsType<DesignerIndex> = [
     {
-      title: 'Name',
+      title: t('common.name'),
       dataIndex: 'name',
       width: 200,
       render: (val: string, record: DesignerIndex) => (
@@ -942,7 +942,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Type',
+      title: t('common.type'),
       dataIndex: 'type',
       width: 140,
       render: (val: DesignerIndex['type'], record: DesignerIndex) => (
@@ -960,7 +960,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Columns',
+      title: t('common.columns'),
       dataIndex: 'columns',
       render: (val: string[], record: DesignerIndex) => (
         <Select
@@ -968,7 +968,7 @@ export function TableDesigner({
           size="small"
           style={{ width: '100%' }}
           value={val}
-          placeholder="Select columns"
+          placeholder={t('common.selectColumns')}
           options={columns.filter((c) => c.name).map((c) => ({ label: c.name, value: c.name }))}
           onChange={(v) => updateIndex(record.key, 'columns', v)}
         />
@@ -978,7 +978,7 @@ export function TableDesigner({
       title: '',
       width: 50,
       render: (_: unknown, record: DesignerIndex) => (
-        <Popconfirm title="Delete this index?" onConfirm={() => deleteIndex(record.key)}>
+        <Popconfirm title={t('common.confirmDeleteIndex')} onConfirm={() => deleteIndex(record.key)}>
           <Button type="text" danger size="small" icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -988,7 +988,7 @@ export function TableDesigner({
   // ── Foreign Key Table Columns ──────────────────────────────────────────
   const fkDefs: ColumnsType<DesignerForeignKey> = [
     {
-      title: 'Name',
+      title: t('common.name'),
       dataIndex: 'name',
       width: 180,
       render: (val: string, record: DesignerForeignKey) => (
@@ -1001,7 +1001,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Column',
+      title: t('common.column'),
       dataIndex: 'column',
       width: 150,
       render: (val: string, record: DesignerForeignKey) => (
@@ -1009,7 +1009,7 @@ export function TableDesigner({
           size="small"
           style={{ width: '100%' }}
           value={val || undefined}
-          placeholder="Select column"
+          placeholder={t('common.selectColumn')}
           options={columns.filter((c) => c.name).map((c) => ({ label: c.name, value: c.name }))}
           onChange={(v) => updateForeignKey(record.key, 'column', v)}
           allowClear
@@ -1017,7 +1017,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Referenced Table',
+      title: t('common.referencedTable'),
       dataIndex: 'referencedTable',
       width: 160,
       render: (val: string, record: DesignerForeignKey) => (
@@ -1030,7 +1030,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'Referenced Column',
+      title: t('common.referencedColumn'),
       dataIndex: 'referencedColumn',
       width: 160,
       render: (val: string, record: DesignerForeignKey) => (
@@ -1043,7 +1043,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'ON UPDATE',
+      title: t('common.onUpdate'),
       dataIndex: 'onUpdate',
       width: 140,
       render: (val: DesignerForeignKey['onUpdate'], record: DesignerForeignKey) => (
@@ -1063,7 +1063,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: 'ON DELETE',
+      title: t('common.onDelete'),
       dataIndex: 'onDelete',
       width: 140,
       render: (val: DesignerForeignKey['onDelete'], record: DesignerForeignKey) => (
@@ -1086,7 +1086,7 @@ export function TableDesigner({
       title: '',
       width: 50,
       render: (_: unknown, record: DesignerForeignKey) => (
-        <Popconfirm title="Delete this foreign key?" onConfirm={() => deleteForeignKey(record.key)}>
+        <Popconfirm title={t('common.confirmDeleteForeignKey')} onConfirm={() => deleteForeignKey(record.key)}>
           <Button type="text" danger size="small" icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -1099,14 +1099,14 @@ export function TableDesigner({
       key: 'columns',
       label: (
         <span>
-          <ColumnWidthOutlined /> Columns
+          <ColumnWidthOutlined /> {t('common.tabColumns')}
         </span>
       ),
       children: (
         <div>
           <div style={{ marginBottom: 12 }}>
             <Button type="primary" icon={<PlusOutlined />} onClick={addColumn}>
-              Add Column
+              {t('common.addColumn')}
             </Button>
           </div>
           <Table
@@ -1124,7 +1124,7 @@ export function TableDesigner({
       key: 'indexes',
       label: (
         <span>
-          <KeyOutlined /> Indexes
+          <KeyOutlined /> {t('common.tabIndexes')}
         </span>
       ),
       children: (
@@ -1216,7 +1216,7 @@ export function TableDesigner({
             zIndex: 10,
           }}
         >
-          <Spin tip="加载表结构..." />
+          <Spin tip={t('common.loadingTableStructure')} />
         </div>
       )}
       {/* Header */}

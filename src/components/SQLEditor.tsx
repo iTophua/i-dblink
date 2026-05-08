@@ -325,7 +325,7 @@ export function SQLEditor({
       kind: monaco.languages.CompletionItemKind.Keyword,
       insertText: kw.insertText,
       insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-      detail: kw.detail || '关键字',
+      detail: kw.detail || t('common.keyword'),
     }));
 
     const baseFunctionSuggestions = filteredFunctions.map((fn) => ({
@@ -404,7 +404,7 @@ export function SQLEditor({
                 kind: monaco.languages.CompletionItemKind.Class,
                 insertText: tableName,
                 range,
-                detail: `表 (${columns.length} 列)`,
+                detail: t('common.tableDetail', { count: columns.length }),
                 sortText: '0', // 优先排序
               });
             }
@@ -414,7 +414,7 @@ export function SQLEditor({
                 kind: monaco.languages.CompletionItemKind.Class,
                 insertText: viewName,
                 range,
-                detail: `视图 (${columns.length} 列)`,
+                detail: t('common.viewDetail', { count: columns.length }),
                 sortText: '0',
               });
             }
@@ -439,7 +439,7 @@ export function SQLEditor({
                     kind: monaco.languages.CompletionItemKind.Field,
                     insertText: column,
                     range,
-                    detail: `${tableName} 表的列`,
+                    detail: t('common.tableColumns', { table: tableName }),
                     sortText: '0',
                   });
                   addedColumns.add(column);
@@ -455,7 +455,7 @@ export function SQLEditor({
                   kind: monaco.languages.CompletionItemKind.Field,
                   insertText: `${tableName}.${column}`,
                   range,
-                  detail: `${tableName} 表的列`,
+                  detail: t('common.tableColumns', { table: tableName }),
                   sortText: '1',
                 });
               }
@@ -471,7 +471,7 @@ export function SQLEditor({
                       kind: monaco.languages.CompletionItemKind.Field,
                       insertText: `${db}.${tableName}.${column}`,
                       range,
-                      detail: `${db}.${tableName} 表的列`,
+                      detail: t('common.tableColumns', { table: `${db}.${tableName}` }),
                       sortText: '1',
                     });
                   }
@@ -491,7 +491,7 @@ export function SQLEditor({
                     kind: monaco.languages.CompletionItemKind.Field,
                     insertText: `${column} = `,
                     range,
-                    detail: `${tableName} 表的列`,
+                    detail: t('common.tableColumns', { table: tableName }),
                     sortText: '0',
                   });
                   addedColumns.add(column);
@@ -508,7 +508,7 @@ export function SQLEditor({
                 kind: monaco.languages.CompletionItemKind.Class,
                 insertText: tableName,
                 range,
-                detail: `表 (${columns.length} 列)`,
+                detail: t('common.tableDetail', { count: columns.length }),
                 sortText: '0',
               });
             }
@@ -529,7 +529,7 @@ export function SQLEditor({
                     kind: monaco.languages.CompletionItemKind.Field,
                     insertText: `${alias}.${column}`,
                     range,
-                    detail: `${tableName} 表 (别名: ${alias})`,
+                    detail: t('common.tableWithAlias', { table: tableName, alias }),
                     sortText: '0',
                   });
                 }
@@ -545,7 +545,7 @@ export function SQLEditor({
                 kind: monaco.languages.CompletionItemKind.Class,
                 insertText: tableName,
                 range,
-                detail: `表 (${columns.length} 列)`,
+                detail: t('common.tableDetail', { count: columns.length }),
                 sortText: '2',
               });
             }
@@ -555,7 +555,7 @@ export function SQLEditor({
                 kind: monaco.languages.CompletionItemKind.Class,
                 insertText: viewName,
                 range,
-                detail: `视图 (${columns.length} 列)`,
+                detail: t('common.viewDetail', { count: columns.length }),
                 sortText: '2',
               });
             }
@@ -570,7 +570,7 @@ export function SQLEditor({
                   kind: monaco.languages.CompletionItemKind.Class,
                   insertText: `${db}.${tableName}`,
                   range,
-                  detail: `${db}.${tableName} 表`,
+                  detail: t('common.dbTable', { db, table: tableName }),
                   sortText: '2',
                 });
               }
@@ -580,7 +580,7 @@ export function SQLEditor({
                   kind: monaco.languages.CompletionItemKind.Class,
                   insertText: `${db}.${viewName}`,
                   range,
-                  detail: `${db}.${viewName} 视图`,
+                  detail: t('common.dbView', { db, view: viewName }),
                   sortText: '2',
                 });
               }
@@ -702,7 +702,7 @@ export function SQLEditor({
             multiResults.push({ ...queryResult, executionTime });
 
             if (queryResult.error) {
-              msgs.push(`语句 ${i + 1} ✗：${queryResult.error}`);
+              msgs.push(t('common.statementFailed', { index: i + 1, error: queryResult.error }));
               totalErrors++;
               highlightError(queryResult.error);
               window.__sqlHistoryApi?.addHistory({
@@ -714,13 +714,13 @@ export function SQLEditor({
               const rowCount = queryResult.rows.length;
               const affectedRows = queryResult.rows_affected || 0;
               if (rowCount > 0) {
-                let msg = `语句 ${i + 1} ✓：返回 ${rowCount} 条记录，耗时 ${executionTime}ms`;
-                if (truncated) msg += `（已截断至 ${maxRows} 行）`;
+                let msg = t('common.statementSuccess', { index: i + 1, count: rowCount, time: executionTime });
+                if (truncated) msg += t('common.truncatedTo', { count: maxRows });
                 msgs.push(msg);
               } else if (affectedRows > 0) {
-                msgs.push(`语句 ${i + 1} ✓：影响 ${affectedRows} 行，耗时 ${executionTime}ms`);
+                msgs.push(t('common.statementAffected', { index: i + 1, count: affectedRows, time: executionTime }));
               } else {
-                msgs.push(`语句 ${i + 1} ✓：执行成功，耗时 ${executionTime}ms`);
+                msgs.push(t('common.statementExecuted', { index: i + 1, time: executionTime }));
               }
               totalSuccess++;
               window.__sqlHistoryApi?.addHistory({
@@ -731,7 +731,7 @@ export function SQLEditor({
               });
             }
           } catch (error: any) {
-            msgs.push(`语句 ${i + 1} ✗：${error.message || error}`);
+            msgs.push(t('common.statementFailed', { index: i + 1, error: error.message || error }));
             totalErrors++;
             window.__sqlHistoryApi?.addHistory({
               sql: statements[i],
@@ -1022,7 +1022,7 @@ export function SQLEditor({
               height: '100%',
             }}
           >
-            <Spin size="large" tip="执行中..." />
+            <Spin size="large" tip={t('common.executingLabel')} />
           </div>
         ) : !connectionId ? (
           <div
@@ -1033,7 +1033,7 @@ export function SQLEditor({
               justifyContent: 'center',
             }}
           >
-            <Empty description="请先选择一个数据库连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty description={t('common.pleaseSelectDatabaseConnection')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
           </div>
         ) : !result ? (
           <div
@@ -1044,7 +1044,7 @@ export function SQLEditor({
               justifyContent: 'center',
             }}
           >
-            <Empty description="暂无查询结果" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty description={t('common.noQueryResults')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
           </div>
         ) : (
           <ResultGrid
@@ -1068,10 +1068,10 @@ export function SQLEditor({
 
     const resultLabel =
       results.length > 1
-        ? `结果 (${results.length})`
+        ? `${t('common.resultLabel')} (${results.length})`
         : result
-          ? `结果 (${result.rows.length} 行)`
-          : '结果';
+          ? `${t('common.resultLabel')} (${result.rows.length} ${t('common.rowsCount')})`
+          : t('common.resultLabel');
 
     items.push({
       key: 'result',
@@ -1087,7 +1087,7 @@ export function SQLEditor({
               style={{ padding: '0 8px' }}
               items={results.map((r, i) => ({
                 key: `result-${i}`,
-                label: `结果 ${i + 1} (${r.rows.length} 行)${r.executionTime ? ` · ${r.executionTime}ms` : ''}`,
+                label: `${t('common.resultLabel')} ${i + 1} (${r.rows.length} ${t('common.rowsCount')})${r.executionTime ? ` · ${r.executionTime}ms` : ''}`,
                 children: renderResultTable(r),
               }))}
             />
@@ -1100,7 +1100,7 @@ export function SQLEditor({
 
     items.push({
       key: 'messages',
-      label: `消息 (${messages.length})`,
+      label: `${t('common.messageLabel')} (${messages.length})`,
       children: (
         <div
           style={{
@@ -1111,7 +1111,7 @@ export function SQLEditor({
           }}
         >
           {messages.length === 0 ? (
-            <Empty description="暂无消息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty description={t('common.noMessages')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
           ) : (
             messages.map((msg, i) => (
               <div
@@ -1141,7 +1141,7 @@ export function SQLEditor({
     if (explainPlan.length > 0) {
       items.push({
         key: 'explain',
-        label: '执行计划',
+        label: t('common.executionPlan'),
         children: (
           <div style={{ height: '100%', overflow: 'hidden' }}>
             <ExplainPlanGrid data={explainPlan} isDark={tc.isDark} />
@@ -1183,7 +1183,7 @@ export function SQLEditor({
         }}
       >
         <Space size="small">
-          <Tooltip title={`执行 (${getShortcutDisplayText('execute-query')})`}>
+          <Tooltip title={`${t('common.execute')} (${getShortcutDisplayText('execute-query')})`}>
             <Button
               type="primary"
               icon={<PlayCircleOutlined />}
@@ -1196,7 +1196,7 @@ export function SQLEditor({
               }}
               size="small"
             >
-              执行
+              {t('common.executeButton')}
             </Button>
           </Tooltip>
           <Button
@@ -1207,7 +1207,7 @@ export function SQLEditor({
             style={{ borderRadius: 4 }}
             size="small"
           >
-            停止
+            {t('common.stopButton')}
           </Button>
 
           <div
@@ -1225,7 +1225,7 @@ export function SQLEditor({
             style={{ borderRadius: 4 }}
             size="small"
           >
-            格式化
+            {t('common.formatButton')}
           </Button>
           <Button
             icon={<LineChartOutlined />}
@@ -1234,7 +1234,17 @@ export function SQLEditor({
             style={{ borderRadius: 4 }}
             size="small"
           >
-            执行计划
+            {t('common.explainPlanButton')}
+          </Button>
+          <Button
+            icon={<StopOutlined />}
+            onClick={stopQuery}
+            disabled={!loading}
+            danger
+            style={{ borderRadius: 4 }}
+            size="small"
+          >
+            {t('common.stopButton')}
           </Button>
 
           <div
@@ -1254,7 +1264,7 @@ export function SQLEditor({
               style={{ borderRadius: 4 }}
               size="small"
             >
-              开始事务
+              {t('common.beginTransaction')}
             </Button>
           ) : (
             <>
@@ -1265,7 +1275,7 @@ export function SQLEditor({
                 style={{ borderRadius: 4 }}
                 size="small"
               >
-                提交
+                {t('common.commitTransaction')}
               </Button>
               <Button
                 icon={<CloseCircleOutlined />}
@@ -1274,7 +1284,7 @@ export function SQLEditor({
                 style={{ borderRadius: 4 }}
                 size="small"
               >
-                回滚
+                {t('common.rollbackTransaction')}
               </Button>
             </>
           )}
@@ -1288,22 +1298,22 @@ export function SQLEditor({
             }}
           />
 
-          <Tooltip title="注释/取消注释 (Ctrl+/)">
+          <Tooltip title={t('common.commentSQL') + " (Ctrl+/)"}>
             <Button
               icon={<FileTextOutlined />}
               onClick={() => editorRef.current?.getAction('editor.action.commentLine')?.run()}
               style={{ borderRadius: 4 }}
               size="small"
             >
-              注释
+              {t('common.commentButton')}
             </Button>
           </Tooltip>
 
           <Dropdown
             menu={{
               items: [
-                { key: 'upper', label: '转大写' },
-                { key: 'lower', label: '转小写' },
+                { key: 'upper', label: t('common.uppercase') },
+                { key: 'lower', label: t('common.lowercase') },
               ],
               onClick: ({ key }) => {
                 const editor = editorRef.current;
@@ -1322,20 +1332,20 @@ export function SQLEditor({
             }}
           >
             <Button icon={<FormatPainterOutlined />} style={{ borderRadius: 4 }} size="small">
-              大小写
+              {t('common.caseButton')}
             </Button>
           </Dropdown>
 
           <Dropdown
             menu={{
               items: [
-                { key: 'save', label: '保存 SQL', icon: <SaveOutlined /> },
-                { key: 'copy', label: '复制 SQL', icon: <CopyOutlined /> },
-                { key: 'clear', label: '清空编辑器', icon: <ClearOutlined /> },
-                { key: 'snippets', label: '代码片段', icon: <BookOutlined /> },
+                { key: 'save', label: t('common.saveSql'), icon: <SaveOutlined /> },
+                { key: 'copy', label: t('common.copySqlMenu'), icon: <CopyOutlined /> },
+                { key: 'clear', label: t('common.clearEditor'), icon: <ClearOutlined /> },
+                { key: 'snippets', label: t('common.codeSnippets'), icon: <BookOutlined /> },
                 { type: 'divider' },
-                { key: 'history', label: '查询历史', icon: <HistoryOutlined /> },
-                { key: 'export', label: '导出结果', icon: <DownloadOutlined />, disabled: !result },
+                { key: 'history', label: t('common.queryHistoryTitle'), icon: <HistoryOutlined /> },
+                { key: 'export', label: t('common.exportResults'), icon: <DownloadOutlined />, disabled: !result },
               ],
               onClick: ({ key }) => {
                 if (key === 'save') saveSQL();
@@ -1348,7 +1358,7 @@ export function SQLEditor({
             }}
           >
             <Button icon={<FileTextOutlined />} style={{ borderRadius: 4 }} size="small">
-              更多
+              {t('common.moreButton')}
             </Button>
           </Dropdown>
         </Space>
@@ -1360,7 +1370,7 @@ export function SQLEditor({
               <Select
                 value={database || undefined}
                 onChange={(value) => onDatabaseChange?.(value)}
-                placeholder="选择数据库"
+                placeholder={t('common.selectDatabasePlaceholder')}
                 showSearch
                 optionFilterProp="label"
                 filterOption={(input, option) =>
@@ -1381,20 +1391,20 @@ export function SQLEditor({
                 }}
               >
                 <WarningOutlined />
-                未加载数据库
+                {t('common.notLoaded')}
               </span>
             )
           ) : (
-            <span style={{ color: 'var(--color-error)', fontSize: 12 }}>未选择连接</span>
+            <span style={{ color: 'var(--color-error)', fontSize: 12 }}>{t('common.notSelected')}</span>
           )}
 
           {result && !result.error && (
             <Space size="middle">
               <Tag color="success" icon={<CheckCircleOutlined />}>
-                {result.rows.length} 条记录
+                {result.rows.length} {t('common.recordsCount')}
               </Tag>
               <Tag color="processing" icon={<ClockCircleOutlined />}>
-                执行成功
+                {t('common.executionSuccess')}
               </Tag>
             </Space>
           )}
@@ -1508,7 +1518,7 @@ export function SQLEditor({
 
       {/* 查询历史抽屉 */}
       <Drawer
-        title="查询历史"
+        title={t('common.queryHistoryTitle')}
         placement="right"
         width={400}
         onClose={() => setHistoryPanelVisible(false)}

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Layout, theme, Modal, Form, Input } from 'antd';
 import { GlobalInput } from './GlobalInput';
@@ -28,6 +29,7 @@ interface MainLayoutProps {
 }
 
 function MainLayoutComponent({ children }: MainLayoutProps) {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -68,7 +70,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const workspaceRestoredRef = useRef(false);
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo>({
     type: 'objects',
-    title: '对象列表',
+    title: t('common.objectListTitle'),
   });
   const [transactionActive, setTransactionActive] = useState(false);
   const [currentResultRows, setCurrentResultRows] = useState<number>(0);
@@ -467,7 +469,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         // 检查是否是密码错误，需要弹框输入密码
         if (err?.code === 'PASSWORD_REQUIRED') {
           const conn = connections.find((c) => c.id === connectionId);
-          setPasswordDialogConn({ id: connectionId, name: conn?.name || '未知连接' });
+          setPasswordDialogConn({ id: connectionId, name: conn?.name || t('common.unknownConnection') });
           setPasswordDialogOpen(true);
           return;
         }
@@ -581,7 +583,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const handleDatabaseProperties = useCallback(
     (connectionId: string, databaseName: string) => {
       Modal.info({
-        title: `数据库属性: ${databaseName}`,
+        title: `${t('common.databasePropertiesTitle')}: ${databaseName}`,
         width: 800,
         content: (
           <DatabaseProperties
@@ -589,7 +591,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
             databaseName={databaseName}
           />
         ),
-        okText: '关闭',
+        okText: t('common.close'),
       });
     },
     []
@@ -639,10 +641,10 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       if (hasTabs && tabInfo && tabInfo.dataTabCount > 0) {
         closingDbModalRef.current = true;
         Modal.confirm({
-          title: '关闭关联标签页',
-          content: `该数据库下还有 ${tabInfo.dataTabCount} 个数据表标签页处于打开状态，关闭数据库时是否一并关闭？`,
-          okText: '关闭并关闭数据库',
-          cancelText: '仅关闭数据库',
+          title: t('common.closeRelatedTabsTitle'),
+          content: t('common.closeDatabaseTabsContent', { count: tabInfo.dataTabCount }),
+          okText: t('common.closeAndCloseDatabase'),
+          cancelText: t('common.closeDatabaseOnly'),
           onOk: () => {
             closingDbModalRef.current = false;
             tabPanelRef.current?.closeDatabaseTabs(connectionId, database);
@@ -748,16 +750,16 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
       if (hasTabs && tabInfo && (tabInfo.dataTabCount > 0 || tabInfo.sqlTabCount > 0)) {
         const tabDesc = [
-          tabInfo.dataTabCount > 0 ? `${tabInfo.dataTabCount} 个数据表` : '',
-          tabInfo.sqlTabCount > 0 ? `${tabInfo.sqlTabCount} 个 SQL 查询` : '',
+          tabInfo.dataTabCount > 0 ? t('common.dataTableCount', { count: tabInfo.dataTabCount }) : '',
+          tabInfo.sqlTabCount > 0 ? t('common.sqlQueryCount', { count: tabInfo.sqlTabCount }) : '',
         ]
           .filter(Boolean)
-          .join('、');
+          .join(t('common.enumerationSeparator'));
         Modal.confirm({
-          title: '关闭关联标签页',
-          content: `该连接下还有 ${tabDesc} 标签页处于打开状态，断开连接时是否一并关闭？`,
-          okText: '关闭并断开',
-          cancelText: '仅断开',
+          title: t('common.closeRelatedTabsTitle'),
+          content: t('common.disconnectTabsContent', { tabs: tabDesc }),
+          okText: t('common.closeAndDisconnect'),
+          cancelText: t('common.disconnectOnly'),
           onOk: () => {
             tabPanelRef.current?.closeConnectionTabs(connectionId);
             doDisconnect();
@@ -828,7 +830,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   }, []);
 
   useEffect(() => {
-    const handleMenuAction = (event: CustomEvent<{ action: string }>) => {
+    const handleMenuAction = async (event: CustomEvent<{ action: string }>) => {
       const { action } = event.detail;
       switch (action) {
         case 'new-connection':
@@ -916,7 +918,11 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           );
           break;
         case 'exit':
-          window.close();
+          try {
+            await api.quitApp();
+          } catch (e) {
+            console.error('Failed to quit:', e);
+          }
           break;
         case 'new-tab':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-tab' } }));
@@ -970,7 +976,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
             {!collapsed && (
               <div style={styles.searchContainer} className="search-container">
                 <GlobalInput
-                  placeholder="搜索..."
+                  placeholder={t('common.searchPlaceholder')}
                   value={searchText}
                   onChange={(e: any) => handleSearchChange(e.target.value)}
                   style={styles.searchInput}
@@ -1017,8 +1023,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                   tabPanelRef.current?.openSqlTab({
                     connectionId,
                     database,
-                    title: `触发器: ${name}`,
-                    defaultQuery: `-- 触发器 ${name}\nSELECT 1;`,
+                    title: `${t('common.trigger')}: ${name}`,
+                    defaultQuery: `-- Trigger ${name}\nSELECT 1;`,
                   });
                 }}
                 onExpand={handleConnectionExpand}
@@ -1042,7 +1048,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                     tabPanelRef.current?.openSqlTab({
                       connectionId: connId,
                       database: db,
-                      title: `${type === 'procedure' ? '存储过程' : '函数'}: ${name}`,
+                      title: `${type === 'procedure' ? t('common.procedure') : t('common.function')}: ${name}`,
                       defaultQuery: body,
                     });
                   } catch (err: any) {
@@ -1073,7 +1079,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                 e.currentTarget.style.background = 'var(--background-card)';
               }}
             >
-              <span style={styles.collapseButtonText}>{collapsed ? '展开' : '收起'}</span>
+              <span style={styles.collapseButtonText}>{collapsed ? t('common.expand') : t('common.collapse')}</span>
             </div>
           </div>
         </Sider>
@@ -1141,20 +1147,20 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       />
 
       <Modal
-        title={`连接 "${passwordDialogConn?.name}" 需要密码`}
+        title={`${t('common.connectionPasswordRequired', { name: passwordDialogConn?.name })}`}
         open={passwordDialogOpen}
         onOk={handlePasswordSubmit}
         onCancel={() => {
           setPasswordDialogOpen(false);
           passwordForm.resetFields();
         }}
-        okText="连接"
-        cancelText="取消"
+        okText={t('common.connect')}
+        cancelText={t('common.cancel')}
         destroyOnClose
       >
         <Form form={passwordForm} layout="vertical">
-          <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
-            <Input.Password autoFocus placeholder="请输入数据库密码" />
+          <Form.Item name="password" rules={[{ required: true, message: t('common.passwordRequired') }]}>
+            <Input.Password autoFocus placeholder={t('common.enterDatabasePassword')} />
           </Form.Item>
         </Form>
       </Modal>

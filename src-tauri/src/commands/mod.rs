@@ -1951,3 +1951,12 @@ pub async fn batch_import(
     let resp: serde_json::Value = sm.post("/batch-import", &req).await?;
     Ok(resp)
 }
+
+#[tauri::command]
+pub async fn quit_app(sidecar: State<'_, SidecarState>) -> Result<(), String> {
+    let sidecar_guard = sidecar.lock().await;
+    if let Some(sm) = sidecar_guard.as_ref() {
+        sm.stop().await?;
+    }
+    Ok(())
+}

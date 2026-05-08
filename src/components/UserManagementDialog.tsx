@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Modal,
   Form,
@@ -68,6 +69,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
   connectionId,
   database,
 }) => {
+  const { t } = useTranslation();
   const { message: msg } = App.useApp();
   const [grantForm] = Form.useForm();
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -86,7 +88,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         setUsers(resp.users);
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '获取用户列表失败';
+      const errorMessage = err instanceof Error ? err.message : t('common.getUserListFailed');
       msg.error(errorMessage);
     } finally {
       setUserLoading(false);
@@ -116,7 +118,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         setPrivileges(resp.privileges);
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '获取权限失败';
+      const errorMessage = err instanceof Error ? err.message : t('common.getPrivilegesFailed');
       msg.error(errorMessage);
     } finally {
       setLoading(false);
@@ -138,12 +140,12 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         host: values.host || '%',
         database,
       });
-      msg.success('用户创建成功');
+      msg.success(t('common.userCreated'));
       setCreateUserOpen(false);
       createUserForm.resetFields();
       loadUsers();
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '创建用户失败';
+      const errorMessage = err instanceof Error ? err.message : t('common.createUserFailed');
       msg.error(errorMessage);
     }
   };
@@ -156,14 +158,14 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         host: user.host || '%',
         database,
       });
-      msg.success('用户已删除');
+      msg.success(t('common.userDeleted'));
       if (selectedUser?.user === user.user) {
         setSelectedUser(null);
         setPrivileges([]);
       }
       loadUsers();
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '删除用户失败';
+      const errorMessage = err instanceof Error ? err.message : t('common.deleteUserFailed');
       msg.error(errorMessage);
     }
   };
@@ -181,11 +183,11 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         database: values.databaseAll ? undefined : database,
         table: values.databaseAll ? undefined : values.table,
       });
-      msg.success('权限授予成功');
+      msg.success(t('common.privilegeGranted'));
       grantForm.resetFields();
       loadPrivileges(selectedUser);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '授予权限失败';
+      const errorMessage = err instanceof Error ? err.message : t('common.grantPrivilegeFailed');
       msg.error(errorMessage);
     }
   };
@@ -202,10 +204,10 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         database: !table ? undefined : database,
         table: table,
       });
-      msg.success('权限已撤销');
+      msg.success(t('common.privilegeRevoked'));
       loadPrivileges(selectedUser);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '撤销权限失败';
+      const errorMessage = err instanceof Error ? err.message : t('common.revokePrivilegeFailed');
       msg.error(errorMessage);
     }
   };
@@ -232,7 +234,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
 
   const privilegeColumns: ColumnsType<PrivilegeItem> = [
     {
-      title: '权限',
+      title: t('common.privilege'),
       dataIndex: 'privilege',
       key: 'privilege',
       width: 150,
@@ -243,31 +245,31 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       ),
     },
     {
-      title: '数据库',
+      title: t('common.database'),
       dataIndex: 'database',
       key: 'database',
       width: 120,
     },
     {
-      title: '表',
+      title: t('common.table'),
       dataIndex: 'table',
       key: 'table',
       width: 150,
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'action',
       width: 80,
       render: (_: unknown, record: PrivilegeItem) => (
         <Popconfirm
-          title="确认撤销权限"
-          description={`撤销 ${record.privilege} 权限？`}
-          okText="确认"
-          cancelText="取消"
+          title={t('common.confirmRevokePrivilege')}
+          description={t('common.revokePrivilegeConfirm', { privilege: record.privilege })}
+          okText={t('common.confirm')}
+          cancelText={t('common.cancel')}
           onConfirm={() => handleRevoke(record.privilege, record.table)}
         >
           <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-            撤销
+            {t('common.revoke')}
           </Button>
         </Popconfirm>
       ),
@@ -276,7 +278,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
 
   const userColumns: ColumnsType<UserItem> = [
     {
-      title: '用户名',
+      title: t('common.username'),
       dataIndex: 'user',
       key: 'user',
       render: (user: string) => (
@@ -287,7 +289,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       ),
     },
     {
-      title: '主机',
+      title: t('common.host'),
       dataIndex: 'host',
       key: 'host',
       width: 120,
@@ -296,7 +298,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       ),
     },
     {
-      title: '类型',
+      title: t('common.type'),
       dataIndex: 'type',
       key: 'type',
       width: 120,
@@ -307,7 +309,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       ),
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'action',
       width: 120,
       render: (_: unknown, record: UserItem) => (
@@ -317,17 +319,17 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
             size="small"
             onClick={() => handleUserSelect(record)}
           >
-            查看权限
+            {t('common.viewPrivileges')}
           </Button>
           <Popconfirm
-            title="确认删除用户"
-            description={`删除用户 ${record.user}？`}
-            okText="确认"
-            cancelText="取消"
+            title={t('common.confirmDeleteUser')}
+            description={t('common.deleteUserConfirm', { user: record.user })}
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
             onConfirm={() => handleDropUser(record)}
           >
             <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              删除
+              {t('common.delete')}
             </Button>
           </Popconfirm>
         </Space>
@@ -341,7 +343,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         title={
           <Space>
             <SafetyOutlined />
-            用户权限管理
+            {t('common.userPrivilegeManagement')}
           </Space>
         }
         open={open}
@@ -351,13 +353,13 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       >
         <Space direction="vertical" style={{ width: '100%' }} size="large">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text strong>用户列表</Text>
+            <Text strong>{t('common.userList')}</Text>
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => setCreateUserOpen(true)}
             >
-              创建用户
+              {t('common.createUser')}
             </Button>
           </div>
 
@@ -383,34 +385,34 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
                   }}
                 >
                   <Text strong>
-                    用户 <Text code>{selectedUser.user}@{selectedUser.host}</Text> 的权限
+                    {t('common.userPrivilegesFor', { user: `${selectedUser.user}@${selectedUser.host}` })}
                   </Text>
                   <Button
                     icon={<KeyOutlined />}
                     onClick={() => grantForm.resetFields()}
                   >
-                    授予权限
+                    {t('common.grantPrivilege')}
                   </Button>
                 </div>
 
                 <Form form={grantForm} layout="inline" onFinish={handleGrant}>
-                  <Form.Item name="privileges" rules={[{ required: true, message: '请选择权限' }]}>
+                  <Form.Item name="privileges" rules={[{ required: true, message: t('common.pleaseSelectPermission') }]}>
                     <Select
                       mode="multiple"
                       options={PRIVILEGE_OPTIONS}
                       style={{ width: 200 }}
-                      placeholder="选择权限"
+                      placeholder={t('common.selectUser')}
                     />
                   </Form.Item>
                   <Form.Item name="databaseAll" valuePropName="checked">
-                    <Checkbox>所有数据库/表</Checkbox>
+                    <Checkbox>{t('common.allDatabasesTables')}</Checkbox>
                   </Form.Item>
                   <Form.Item noStyle shouldUpdate>
                     {() => (
                       <>
                         {!grantForm.getFieldValue('databaseAll') && (
                           <Select
-                            placeholder="数据库"
+                            placeholder={t('common.databaseName')}
                             style={{ width: 150, marginRight: 8 }}
                             disabled={!grantForm.isFieldTouched('databaseAll') && !grantForm.getFieldValue('databaseAll')}
                           >
@@ -419,13 +421,13 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
                         )}
                         {!grantForm.getFieldValue('databaseAll') && (
                           <Input
-                            placeholder="表名"
+                            placeholder={t('common.table')}
                             style={{ width: 150, marginRight: 8 }}
                             disabled={!grantForm.isFieldTouched('databaseAll') && !grantForm.getFieldValue('databaseAll')}
                           />
                         )}
                         <Button type="primary" htmlType="submit" icon={<ThunderboltOutlined />}>
-                          执行
+                          {t('common.execute')}
                         </Button>
                       </>
                     )}
@@ -448,7 +450,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       </Modal>
 
       <Modal
-        title="创建新用户"
+        title={t('common.createNewUser')}
         open={createUserOpen}
         onCancel={() => {
           setCreateUserOpen(false);
@@ -459,24 +461,24 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         <Form form={createUserForm} layout="vertical">
           <Form.Item
             name="username"
-            label="用户名"
-            rules={[{ required: true, message: '请输入用户名' }]}
+            label={t('common.username')}
+            rules={[{ required: true, message: t('common.pleaseEnterUsername') }]}
           >
-            <Input placeholder="请输入用户名" />
+            <Input placeholder={t('common.userNamePlaceholder')} />
           </Form.Item>
           <Form.Item
             name="password"
-            label="密码"
-            rules={[{ required: true, message: '请输入密码' }]}
+            label={t('common.password')}
+            rules={[{ required: true, message: t('common.pleaseEnterPassword') }]}
           >
-            <Input.Password placeholder="请输入密码" />
+            <Input.Password placeholder={t('common.passwordPlaceholder')} />
           </Form.Item>
           <Form.Item
             name="host"
-            label="主机"
-            tooltip="留空表示 %（允许所有主机）"
+            label={t('common.host')}
+            tooltip={t('common.hostTooltip')}
           >
-            <Input placeholder="%" />
+            <Input placeholder={t('common.percentSign')} />
           </Form.Item>
         </Form>
       </Modal>

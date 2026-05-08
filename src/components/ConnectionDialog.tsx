@@ -118,29 +118,29 @@ const DB_TYPE_PORTS: Record<string, number> = {
 };
 
 const DB_TYPE_OPTIONS = [
-  { value: 'mysql', label: 'MySQL', desc: '最流行的开源关系型数据库' },
-  { value: 'postgresql', label: 'PostgreSQL', desc: '功能强大的开源对象关系数据库' },
-  { value: 'sqlite', label: 'SQLite', desc: '轻量级嵌入式数据库' },
-  { value: 'mariadb', label: 'MariaDB', desc: 'MySQL 的分支版本' },
-  { value: 'sqlserver', label: 'SQL Server', desc: '微软企业级数据库' },
-  { value: 'oracle', label: 'Oracle', desc: '企业级商业数据库' },
-  { value: 'dameng', label: '达梦 (DM)', desc: '国产达梦数据库' },
-  { value: 'kingbase', label: '人大金仓 (Kingbase)', desc: '国产人大金仓数据库' },
-  { value: 'highgo', label: '瀚高 (HighGo)', desc: '国产瀚高数据库' },
-  { value: 'vastbase', label: '海量 (Vastbase)', desc: '国产海量数据库' },
+  { value: 'mysql', label: 'MySQL', descKey: 'common.dbDescMySQL' },
+  { value: 'postgresql', label: 'PostgreSQL', descKey: 'common.dbDescPostgreSQL' },
+  { value: 'sqlite', label: 'SQLite', descKey: 'common.dbDescSQLite' },
+  { value: 'mariadb', label: 'MariaDB', descKey: 'common.dbDescMariaDB' },
+  { value: 'sqlserver', label: 'SQL Server', descKey: 'common.dbDescSQLServer' },
+  { value: 'oracle', label: 'Oracle', descKey: 'common.dbDescOracle' },
+  { value: 'dameng', label: i18n.t('common.damengLabel'), descKey: 'common.dbDescDameng' },
+  { value: 'kingbase', label: i18n.t('common.kingbaseLabel'), descKey: 'common.dbDescKingbase' },
+  { value: 'highgo', label: i18n.t('common.highgoLabel'), descKey: 'common.dbDescHighgo' },
+  { value: 'vastbase', label: i18n.t('common.vastbaseLabel'), descKey: 'common.dbDescVastbase' },
 ];
 
 const DB_CATEGORIES = [
   {
-    name: '常用数据库',
+    nameKey: 'common.dbCategoryCommon',
     dbs: ['mysql', 'postgresql', 'sqlite', 'mariadb'],
   },
   {
-    name: '企业数据库',
+    nameKey: 'common.dbCategoryEnterprise',
     dbs: ['sqlserver', 'oracle'],
   },
   {
-    name: '国产数据库',
+    nameKey: 'common.dbCategoryDomestic',
     dbs: ['dameng', 'kingbase', 'highgo', 'vastbase'],
   },
 ];
@@ -308,13 +308,8 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   const currentDbColor =
     DB_TYPE_COLORS[dbType as keyof typeof DB_TYPE_COLORS] || DB_TYPE_COLORS.default;
 
-  const getDbCategoryLabel = (name: string) => {
-    const map: Record<string, string> = {
-      '常用数据库': 'common.dbCategoryCommon',
-      '企业数据库': 'common.dbCategoryEnterprise',
-      '国产数据库': 'common.dbCategoryDomestic',
-    };
-    return t(map[name] || name);
+  const getDbCategoryLabel = (nameKey: string) => {
+    return t(nameKey);
   };
 
   const tabs = [
@@ -363,7 +358,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '0 8px 12px' }}>
             {DB_CATEGORIES.map((category) => (
-              <div key={category.name} style={{ marginBottom: 8 }}>
+              <div key={category.nameKey} style={{ marginBottom: 8 }}>
                 <div
                   style={{
                     padding: '6px 8px',
@@ -372,7 +367,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     fontWeight: 500,
                   }}
                 >
-                  {getDbCategoryLabel(category.name)}
+                  {getDbCategoryLabel(category.nameKey)}
                 </div>
                 {category.dbs.map((dbValue) => {
                   const dbInfo = DB_TYPE_OPTIONS.find((opt) => opt.value === dbValue);
@@ -450,7 +445,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                 {editingData ? t('common.editConnection') : t('common.createNewConnection')}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                {currentDbInfo?.desc}
+                {currentDbInfo?.descKey ? t(currentDbInfo.descKey) : ''}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>

@@ -501,7 +501,7 @@ function ShortcutsSettings() {
                       {getDisplayKeys(shortcut.id)}
                     </Tag>
                     {shortcuts[shortcut.id] && (
-                      <Tooltip title="恢复默认">
+                      <Tooltip title={t('common.restoreDefault')}>
                         <Button
                           size="small"
                           type="text"

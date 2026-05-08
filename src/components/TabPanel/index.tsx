@@ -219,7 +219,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         ...prev,
         {
           key: newSqlKey,
-          title: options.title || 'SQL 查询',
+          title: options.title || t('common.sqlQuery'),
           connectionId: options.connectionId,
           database: options.database,
           defaultQuery: options.content || options.defaultQuery,
@@ -285,7 +285,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     }),
     getActiveTabInfo: () => {
       if (activeKey === 'objects') {
-        return { type: 'objects' as const, title: '对象列表' };
+        return { type: 'objects' as const, title: t('common.objectList') };
       }
       if (activeKey.endsWith('-data')) {
         const table = openedTables.find((t) => {
@@ -307,7 +307,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (designer) {
           return {
             type: 'designer' as const,
-            title: designer.tableName ? `设计: ${designer.tableName}` : '新建表',
+            title: designer.tableName ? `${t('common.design')}: ${designer.tableName}` : t('common.newTable'),
             connectionId: designer.connectionId,
             database: designer.database,
             tableName: designer.tableName,
@@ -319,7 +319,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (viewDef) {
           return {
             type: 'sql' as const,
-            title: `视图定义: ${viewDef.viewName}`,
+            title: `${t('common.viewDefinitionTitle')}: ${viewDef.viewName}`,
             connectionId: viewDef.connectionId,
             database: viewDef.database,
           };
@@ -334,7 +334,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           database: sqlTab.database,
         };
       }
-      return { type: 'objects' as const, title: '对象列表' };
+      return { type: 'objects' as const, title: t('common.objectList') };
     },
     getQueryStatus: () => ({ resultRows: 0, executionTime: 0 }),
   }));
@@ -349,7 +349,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     if (!onActiveTabChange) return;
     const info = (() => {
       if (activeKey === 'objects') {
-        return { type: 'objects' as const, title: '对象列表' };
+        return { type: 'objects' as const, title: t('common.objectList') };
       }
       if (activeKey.endsWith('-data')) {
         const table = openedTables.find((t) => {
@@ -371,7 +371,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (designer) {
           return {
             type: 'designer' as const,
-            title: designer.tableName ? `设计: ${designer.tableName}` : '新建表',
+            title: designer.tableName ? `${t('common.design')}: ${designer.tableName}` : t('common.newTable'),
             connectionId: designer.connectionId,
             database: designer.database,
             tableName: designer.tableName,
@@ -383,7 +383,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (viewDef) {
           return {
             type: 'sql' as const,
-            title: `视图定义: ${viewDef.viewName}`,
+            title: `${t('common.viewDefinitionTitle')}: ${viewDef.viewName}`,
             connectionId: viewDef.connectionId,
             database: viewDef.database,
           };
@@ -398,7 +398,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           database: sqlTab.database,
         };
       }
-      return { type: 'objects' as const, title: '对象列表' };
+        return { type: 'objects' as const, title: t('common.objectList') };
     })();
     onActiveTabChange(info);
   }, [activeKey, openedTables, openedSqlTabs, openedDesignerTabs, openedViewDefTabs, onActiveTabChange]);
@@ -526,7 +526,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           ...prev,
           {
             key: newSqlKey,
-            title: 'SQL 查询',
+            title: t('common.sqlQuery'),
             connectionId: connId || undefined,
             database: dbName,
           },
@@ -590,7 +590,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         const windowId = `floating-sql-${sqlTabKey}`;
         const appWindow = new WebviewWindow(windowId, {
           url: `/?floating=true&tabKey=${encodeURIComponent(sqlTabKey)}`,
-          title: `SQL 查询 - ${sqlTab.title}`,
+          title: `${t('common.sqlQuery')} - ${sqlTab.title}`,
           width: 1000,
           height: 700,
         });
@@ -602,10 +602,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           )
         );
 
-        message.success('已在独立窗口中打开 SQL 查询');
+        message.success(t('common.openedInNewWindow'));
       } catch (error) {
         console.error('Failed to create floating window:', error);
-        message.error('创建浮动窗口失败');
+        message.error(t('common.createFloatingWindowFailed'));
       }
     },
     [openedSqlTabs, message]
@@ -628,7 +628,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           ...prev,
           {
             key: tabKey,
-            title: isNewTable ? '新建表' : `设计表: ${tableName}`,
+            title: isNewTable ? t('common.newTable') : `${t('common.design')}: ${tableName}`,
             connectionId: selectedConnectionId,
             database: selectedDatabase,
             tableName: isNewTable ? undefined : tableName,
@@ -654,7 +654,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           ...prev,
           {
             key: tabKey,
-            title: `视图定义: ${viewName}`,
+            title: `${t('common.viewDefinitionTitle')}: ${viewName}`,
             connectionId: selectedConnectionId,
             database: selectedDatabase,
             viewName,
@@ -698,11 +698,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (table?.isDirty) {
           // 有未保存的更改，显示确认对话框
           Modal.confirm({
-            title: '未保存的更改',
-            content: `"${table.name}" 有未保存的数据更改，确定要关闭吗？`,
-            okText: '关闭',
+            title: t('common.unsavedChangesTitle'),
+            content: t('common.unsavedChangesContent'),
+            okText: t('common.close'),
             okType: 'danger',
-            cancelText: '取消',
+              cancelText: t('common.cancel'),
             onOk: () => {
               setOpenedTables((prev) =>
                 prev.filter((t) => {
@@ -803,7 +803,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             setOpenedSqlTabs((prev) => prev.filter((t) => t.key === tabKey));
           }
           setActiveKey(tabKey);
-          message.success('已关闭其他标签');
+          message.success(t('common.closeOtherTabs'));
           break;
 
         case 'closeRight':
@@ -833,7 +833,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             }
           }
           setActiveKey(tabKey);
-          message.success('已关闭右侧标签');
+          message.success(t('common.closeRightTabs'));
           break;
 
         case 'closeAll':
@@ -841,7 +841,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           setOpenedTables([]);
           setOpenedSqlTabs([]);
           setActiveKey('objects');
-          message.success('已关闭所有标签');
+          message.success(t('common.closeAllTabs'));
           break;
       }
     },
@@ -854,7 +854,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       if (action === 'add') {
         // 点击 + 号新增 SQL 查询 Tab
         const newSqlKey = `sql-${Date.now()}`;
-        setOpenedSqlTabs((prev) => [...prev, { key: newSqlKey, title: 'SQL 查询' }]);
+        setOpenedSqlTabs((prev) => [...prev, { key: newSqlKey, title: t('common.sqlQuery') }]);
         setActiveKey(newSqlKey);
       } else if (action === 'remove') {
         const key = typeof targetKey === 'string' ? targetKey : '';
@@ -871,7 +871,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       label: (
         <span>
           <AppstoreOutlined style={{ marginRight: 4 }} />
-          对象
+          {t('common.object')}
         </span>
       ),
       children: (
@@ -901,11 +901,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                     {
                       title: (
                         <span>
-                          <HomeOutlined /> 首页
+                          <HomeOutlined /> {t('common.home')}
                         </span>
                       ),
                     },
-                    selectedConnectionId ? { title: selectedConnectionName || '对象列表' } : null,
+                    selectedConnectionId ? { title: selectedConnectionName || t('common.objectList') } : null,
                     selectedDatabase ? { title: selectedDatabase } : null,
                     { title: selectedTable },
                   ].filter(Boolean) as { title: React.ReactNode }[]
@@ -938,34 +938,34 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 onTableDelete={async (tableName, db) => {
                   try {
                     await api.dropTable(selectedConnectionId, tableName, db);
-                    message.success(`表 ${tableName} 已删除`);
+                    message.success(t('common.tableDeleted'));
                     window.dispatchEvent(
                       new CustomEvent('refresh-connection-tree', {
                         detail: { connectionId: selectedConnectionId },
                       })
                     );
                   } catch (e: any) {
-                    message.error(`删除失败：${e.message || e}`);
+                    message.error(t('common.deleteTableFailed') + ': ' + (e.message || e));
                   }
                 }}
                 onTableTruncate={async (tableName, db) => {
                   try {
                     await api.truncateTable(selectedConnectionId, tableName, db);
-                    message.success(`表 ${tableName} 已清空`);
+                    message.success(t('common.tableTruncated'));
                     window.dispatchEvent(
                       new CustomEvent('refresh-connection-tree', {
                         detail: { connectionId: selectedConnectionId },
                       })
                     );
                   } catch (e: any) {
-                    message.error(`清空失败：${e.message || e}`);
+                    message.error(t('common.truncateTableFailed') + ': ' + (e.message || e));
                   }
                 }}
                 onTableCopy={(tableName) => {
-                  message.warning('复制表功能即将推出');
+                  message.warning(t('common.copyTableComingSoon'));
                 }}
                 onTableDump={(tableName) => {
-                  message.warning('转储 SQL 功能即将推出');
+                  message.warning(t('common.dumpSqlComingSoon'));
                 }}
               />
             )
@@ -979,7 +979,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 color: 'var(--text-tertiary)',
               }}
             >
-              <Empty description="请从左侧选择一个连接" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty description={t('common.pleaseSelectConnection')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
             </div>
           )}
         </div>
@@ -1044,7 +1044,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
           onDoubleClick={() => {
             Modal.confirm({
-              title: '重命名标签页',
+              title: t('common.renameTabTitle'),
               content: (
                 <input
                   autoFocus
@@ -1065,8 +1065,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   }}
                 />
               ),
-              okText: '确定',
-              cancelText: '取消',
+              okText: t('common.confirm'),
+            cancelText: t('common.cancel'),
               onOk: () => {},
             });
           }}
@@ -1141,7 +1141,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                     );
                   }
                 }
-                message.success(designerTab.isNewTable ? '表已创建' : '表结构已更新');
+                message.success(designerTab.isNewTable ? t('common.tableCreated') : t('common.tableStructureUpdated'));
                 setOpenedDesignerTabs((prev) =>
                   prev.filter((t) => t.key !== designerTab.key)
                 );
@@ -1152,7 +1152,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   })
                 );
               } catch (err: any) {
-                message.error(`执行失败：${err.message || err}`);
+                message.error(t('common.executeFailed') + ': ' + (err.message || err));
               }
             }}
             onCancel={() => {
@@ -1239,11 +1239,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         >
           <Menu
             items={[
-              { key: 'close', label: '关闭', icon: <CloseOutlined /> },
-              { key: 'closeOthers', label: '关闭其他' },
-              { key: 'closeRight', label: '关闭右侧' },
+              { key: 'close', label: t('common.closeTabMenu'), icon: <CloseOutlined /> },
+              { key: 'closeOthers', label: t('common.closeOthersTabMenu') },
+              { key: 'closeRight', label: t('common.closeRightTabMenu') },
               { type: 'divider' },
-              { key: 'closeAll', label: '关闭全部', danger: true },
+              { key: 'closeAll', label: t('common.closeAllTabMenu'), danger: true },
             ]}
             onClick={({ key }) => handleContextMenuAction(key, contextMenu.tabKey)}
           />

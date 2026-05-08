@@ -317,6 +317,7 @@ export const QuickStartGuide: React.FC<{
   onCreateConnection: () => void;
   onImportConnection: () => void;
 }> = ({ onCreateConnection, onImportConnection }) => {
+  const { t } = useTranslation();
   const tc = useThemeColors();
 
   return (
@@ -361,10 +362,10 @@ export const QuickStartGuide: React.FC<{
           <PlusOutlined style={{ fontSize: 24, color: '#fff' }} />
         </div>
         <Text strong style={{ fontSize: 15 }}>
-          新建连接
+          {t('common.newConnection')}
         </Text>
         <Text type="secondary" style={{ fontSize: 12, textAlign: 'center' }}>
-          创建新的数据库连接
+          {t('common.createNewDatabaseConnection')}
         </Text>
       </Card>
 
@@ -400,10 +401,10 @@ export const QuickStartGuide: React.FC<{
           <FolderOpenOutlined style={{ fontSize: 24, color: '#fff' }} />
         </div>
         <Text strong style={{ fontSize: 15 }}>
-          导入连接
+          {t('common.importConnections')}
         </Text>
         <Text type="secondary" style={{ fontSize: 12, textAlign: 'center' }}>
-          从文件导入连接配置
+          {t('common.importConnectionConfigFromFile')}
         </Text>
       </Card>
 
@@ -438,10 +439,10 @@ export const QuickStartGuide: React.FC<{
           <BranchesOutlined style={{ fontSize: 24, color: '#fff' }} />
         </div>
         <Text strong style={{ fontSize: 15 }}>
-          快速入门
+          {t('common.quickStart')}
         </Text>
         <Text type="secondary" style={{ fontSize: 12, textAlign: 'center' }}>
-          查看使用教程
+          {t('common.viewTutorial')}
         </Text>
       </Card>
     </div>
