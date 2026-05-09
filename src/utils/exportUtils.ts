@@ -212,10 +212,9 @@ export function exportToMarkdown(
     (row) => '| ' + fields.map((c) => escapeMd(row[c.field] ?? '')).join(' | ') + ' |'
   );
 
-  const blob = new Blob(
-    ['\uFEFF' + [headerLine, separatorLine, ...bodyLines].join('\n')],
-    { type: 'text/markdown;charset=utf-8;' }
-  );
+  const blob = new Blob(['\uFEFF' + [headerLine, separatorLine, ...bodyLines].join('\n')], {
+    type: 'text/markdown;charset=utf-8;',
+  });
   downloadBlob(blob, filename);
 }
 

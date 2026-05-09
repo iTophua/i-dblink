@@ -103,13 +103,17 @@ export function BackupRestoreDialog({
       onSuccess();
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      message.error(`${t('common.failedToBackupOrRestore', { mode: mode === 'backup' ? t('common.backup') : t('common.restore') })}: ${errorMsg}`);
+      message.error(
+        `${t('common.failedToBackupOrRestore', { mode: mode === 'backup' ? t('common.backup') : t('common.restore') })}: ${errorMsg}`
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const isSupported = ['mysql', 'mariadb', 'postgresql', 'kingbase', 'highgo', 'vastbase'].includes(dbType);
+  const isSupported = ['mysql', 'mariadb', 'postgresql', 'kingbase', 'highgo', 'vastbase'].includes(
+    dbType
+  );
 
   if (!isSupported) {
     return (
@@ -121,7 +125,9 @@ export function BackupRestoreDialog({
         width={500}
       >
         <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          {t('common.currentDbTypeNotSupported', { mode: mode === 'backup' ? t('common.backup') : t('common.restore') })}
+          {t('common.currentDbTypeNotSupported', {
+            mode: mode === 'backup' ? t('common.backup') : t('common.restore'),
+          })}
         </div>
       </Modal>
     );
@@ -179,7 +185,7 @@ export function BackupRestoreDialog({
                       <Checkbox>{t('common.includeStructure')}</Checkbox>
                     </Form.Item>
                     <Form.Item name="includeData" valuePropName="checked" noStyle>
-                      <Checkbox>{t('common.includeData')}</Checkbox>
+                      <Checkbox>{t('common.dumpDialog.includeData')}</Checkbox>
                     </Form.Item>
                   </Space>
                 </Form.Item>
@@ -188,8 +194,18 @@ export function BackupRestoreDialog({
 
             <Form.Item
               name="filePath"
-              label={mode === 'backup' ? t('common.savePath') : t('common.backupFile')}
-              rules={[{ required: true, message: mode === 'backup' ? t('common.pleaseSelectSavePath') : t('common.pleaseSelectBackupFile') }]}
+              label={
+                mode === 'backup' ? t('common.savePath') : t('common.backupRestore.backupFile')
+              }
+              rules={[
+                {
+                  required: true,
+                  message:
+                    mode === 'backup'
+                      ? t('common.pleaseSelectSavePath')
+                      : t('common.pleaseSelectBackupFile'),
+                },
+              ]}
             >
               <Space.Compact style={{ width: '100%' }}>
                 <GlobalInput

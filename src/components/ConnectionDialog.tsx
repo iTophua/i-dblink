@@ -579,7 +579,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                           <Form.Item
                             name="host"
                             label={t('common.hostAddress')}
-                            rules={[{ required: true, message: t('common.pleaseEnterHostAddress') }]}
+                            rules={[
+                              { required: true, message: t('common.pleaseEnterHostAddress') },
+                            ]}
                             style={{ marginBottom: 16 }}
                           >
                             <GlobalInput placeholder={t('common.exampleLocalhost')} />
@@ -604,7 +606,12 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                       <Form.Item
                         name="username"
                         label={t('common.username')}
-                        rules={[{ required: dbType !== 'sqlite', message: t('common.pleaseEnterUsername') }]}
+                        rules={[
+                          {
+                            required: dbType !== 'sqlite',
+                            message: t('common.pleaseEnterUsername'),
+                          },
+                        ]}
                         style={{ marginBottom: 16 }}
                       >
                         <GlobalInput placeholder={t('common.exampleRoot')} />
@@ -613,21 +620,32 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     <Col span={12}>
                       <Form.Item
                         name="password"
-                        label={t('common.password')}
+                        label={t('common.mainLayout.password')}
                         rules={[
-                          { required: !editingData && dbType !== 'sqlite', message: t('common.pleaseEnterPassword') },
+                          {
+                            required: !editingData && dbType !== 'sqlite',
+                            message: t('common.pleaseEnterPassword'),
+                          },
                         ]}
                         style={{ marginBottom: 16 }}
                       >
                         <GlobalInputPassword
-                          placeholder={editingData ? t('common.leaveBlankKeepPassword') : t('common.pleaseEnterPassword')}
+                          placeholder={
+                            editingData
+                              ? t('common.leaveBlankKeepPassword')
+                              : t('common.pleaseEnterPassword')
+                          }
                           autoComplete="new-password"
                         />
                       </Form.Item>
                     </Col>
                   </Row>
 
-                  <Form.Item name="database" label={t('common.databaseName')} style={{ marginBottom: 16 }}>
+                  <Form.Item
+                    name="database"
+                    label={t('common.databaseName')}
+                    style={{ marginBottom: 16 }}
+                  >
                     <GlobalInput placeholder={t('common.exampleMydbOptional')} />
                   </Form.Item>
 
@@ -637,7 +655,13 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     style={{ marginBottom: 16 }}
                     extra={t('common.markColorExtra')}
                     getValueFromEvent={(color) => color?.toHex() || ''}
-                    getValueProps={(value) => ({ value: value ? (typeof value === 'string' ? value : value.toHex()) : undefined })}
+                    getValueProps={(value) => ({
+                      value: value
+                        ? typeof value === 'string'
+                          ? value
+                          : value.toHex()
+                        : undefined,
+                    })}
                   >
                     <ColorPicker showText />
                   </Form.Item>
@@ -655,7 +679,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     <Switch size="small" />
                   </Form.Item>
 
-                  <Form.Item name="ssl_ca_cert" label={t('common.caCertificate')} style={{ marginBottom: 16 }}>
+                  <Form.Item
+                    name="ssl_ca_cert"
+                    label={t('common.caCertificate')}
+                    style={{ marginBottom: 16 }}
+                  >
                     <Space.Compact style={{ width: '100%' }}>
                       <GlobalInput placeholder={t('common.selectCaCertificateFile')} readOnly />
                       <AntButton
@@ -738,7 +766,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                   <Row gutter={16}>
                     <Col span={18}>
-                      <Form.Item name="ssh_host" label={t('common.sshHost')} style={{ marginBottom: 16 }}>
+                      <Form.Item
+                        name="ssh_host"
+                        label={t('common.sshHost')}
+                        style={{ marginBottom: 16 }}
+                      >
                         <GlobalInput placeholder={t('common.example1921681100')} />
                       </Form.Item>
                     </Col>
@@ -756,18 +788,33 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                   <Row gutter={16}>
                     <Col span={12}>
-                      <Form.Item name="ssh_username" label={t('common.username')} style={{ marginBottom: 16 }}>
+                      <Form.Item
+                        name="ssh_username"
+                        label={t('common.username')}
+                        style={{ marginBottom: 16 }}
+                      >
                         <GlobalInput placeholder={t('common.exampleRoot')} />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
-                      <Form.Item name="ssh_password" label={t('common.password')} style={{ marginBottom: 16 }}>
-                        <GlobalInputPassword placeholder={t('common.sshPassword')} autoComplete="new-password" />
+                      <Form.Item
+                        name="ssh_password"
+                        label={t('common.mainLayout.password')}
+                        style={{ marginBottom: 16 }}
+                      >
+                        <GlobalInputPassword
+                          placeholder={t('common.sshPassword')}
+                          autoComplete="new-password"
+                        />
                       </Form.Item>
                     </Col>
                   </Row>
 
-                  <Form.Item name="ssh_key_path" label={t('common.privateKeyFile')} style={{ marginBottom: 16 }}>
+                  <Form.Item
+                    name="ssh_key_path"
+                    label={t('common.privateKeyFile')}
+                    style={{ marginBottom: 16 }}
+                  >
                     <Space.Compact style={{ width: '100%' }}>
                       <GlobalInput placeholder={t('common.selectPrivateKeyFilePath')} readOnly />
                       <AntButton
@@ -817,7 +864,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
                   <Form.Item
                     name="charset"
-                    label={t('common.charset')}
+                    label={t('common.databaseProperties.charset')}
                     initialValue="utf8mb4"
                     style={{ marginBottom: 16 }}
                   >

@@ -5,7 +5,7 @@ import { vi } from 'vitest';
  */
 export function mockTauriInvoke() {
   const invoke = vi.fn();
-  
+
   vi.mock('@tauri-apps/api/core', () => ({
     invoke,
   }));
@@ -112,9 +112,11 @@ export function waitFor(ms = 0) {
 /**
  * Suppress console errors during tests
  */
-export function suppressConsole(methods: ('log' | 'error' | 'warn' | 'info')[] = ['error', 'warn']) {
+export function suppressConsole(
+  methods: ('log' | 'error' | 'warn' | 'info')[] = ['error', 'warn']
+) {
   const originals: Record<string, any> = {};
-  
+
   beforeAll(() => {
     methods.forEach((method) => {
       originals[method] = console[method];

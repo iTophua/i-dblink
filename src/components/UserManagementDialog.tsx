@@ -108,12 +108,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
   const loadPrivileges = async (user: UserItem) => {
     setLoading(true);
     try {
-      const resp = await api.getUserPrivileges(
-        connectionId,
-        user.user,
-        user.host || '%',
-        database
-      );
+      const resp = await api.getUserPrivileges(connectionId, user.user, user.host || '%', database);
       if (resp.privileges) {
         setPrivileges(resp.privileges);
       }
@@ -238,11 +233,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       dataIndex: 'privilege',
       key: 'privilege',
       width: 150,
-      render: (priv: string) => (
-        <Tag color={privilegeTagColor[priv] || 'default'}>
-          {priv}
-        </Tag>
-      ),
+      render: (priv: string) => <Tag color={privilegeTagColor[priv] || 'default'}>{priv}</Tag>,
     },
     {
       title: t('common.database'),
@@ -293,9 +284,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       dataIndex: 'host',
       key: 'host',
       width: 120,
-      render: (host: string) => (
-        <Text code>{host}</Text>
-      ),
+      render: (host: string) => <Text code>{host}</Text>,
     },
     {
       title: t('common.type'),
@@ -303,9 +292,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       key: 'type',
       width: 120,
       render: (type: string) => (
-        <Tag color={type === 'superuser' ? 'red' : 'default'}>
-          {type || '-'}
-        </Tag>
+        <Tag color={type === 'superuser' ? 'red' : 'default'}>{type || '-'}</Tag>
       ),
     },
     {
@@ -314,15 +301,11 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       width: 120,
       render: (_: unknown, record: UserItem) => (
         <Space>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => handleUserSelect(record)}
-          >
+          <Button type="link" size="small" onClick={() => handleUserSelect(record)}>
             {t('common.viewPrivileges')}
           </Button>
           <Popconfirm
-            title={t('common.confirmDeleteUser')}
+            title={t('common.userManagement.confirmDeleteUser')}
             description={t('common.deleteUserConfirm', { user: record.user })}
             okText={t('common.confirm')}
             cancelText={t('common.cancel')}
@@ -354,11 +337,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         <Space direction="vertical" style={{ width: '100%' }} size="large">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text strong>{t('common.userList')}</Text>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => setCreateUserOpen(true)}
-            >
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateUserOpen(true)}>
               {t('common.createUser')}
             </Button>
           </div>
@@ -385,18 +364,20 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
                   }}
                 >
                   <Text strong>
-                    {t('common.userPrivilegesFor', { user: `${selectedUser.user}@${selectedUser.host}` })}
+                    {t('common.userPrivilegesFor', {
+                      user: `${selectedUser.user}@${selectedUser.host}`,
+                    })}
                   </Text>
-                  <Button
-                    icon={<KeyOutlined />}
-                    onClick={() => grantForm.resetFields()}
-                  >
+                  <Button icon={<KeyOutlined />} onClick={() => grantForm.resetFields()}>
                     {t('common.grantPrivilege')}
                   </Button>
                 </div>
 
                 <Form form={grantForm} layout="inline" onFinish={handleGrant}>
-                  <Form.Item name="privileges" rules={[{ required: true, message: t('common.pleaseSelectPermission') }]}>
+                  <Form.Item
+                    name="privileges"
+                    rules={[{ required: true, message: t('common.pleaseSelectPermission') }]}
+                  >
                     <Select
                       mode="multiple"
                       options={PRIVILEGE_OPTIONS}
@@ -414,7 +395,10 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
                           <Select
                             placeholder={t('common.databaseName')}
                             style={{ width: 150, marginRight: 8 }}
-                            disabled={!grantForm.isFieldTouched('databaseAll') && !grantForm.getFieldValue('databaseAll')}
+                            disabled={
+                              !grantForm.isFieldTouched('databaseAll') &&
+                              !grantForm.getFieldValue('databaseAll')
+                            }
                           >
                             <Select.Option value={database}>{database}</Select.Option>
                           </Select>
@@ -423,11 +407,14 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
                           <Input
                             placeholder={t('common.table')}
                             style={{ width: 150, marginRight: 8 }}
-                            disabled={!grantForm.isFieldTouched('databaseAll') && !grantForm.getFieldValue('databaseAll')}
+                            disabled={
+                              !grantForm.isFieldTouched('databaseAll') &&
+                              !grantForm.getFieldValue('databaseAll')
+                            }
                           />
                         )}
                         <Button type="primary" htmlType="submit" icon={<ThunderboltOutlined />}>
-                          {t('common.execute')}
+                          {t('common.sqlEditor.execute')}
                         </Button>
                       </>
                     )}
@@ -468,16 +455,12 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
           </Form.Item>
           <Form.Item
             name="password"
-            label={t('common.password')}
+            label={t('common.mainLayout.password')}
             rules={[{ required: true, message: t('common.pleaseEnterPassword') }]}
           >
             <Input.Password placeholder={t('common.passwordPlaceholder')} />
           </Form.Item>
-          <Form.Item
-            name="host"
-            label={t('common.host')}
-            tooltip={t('common.hostTooltip')}
-          >
+          <Form.Item name="host" label={t('common.host')} tooltip={t('common.hostTooltip')}>
             <Input placeholder={t('common.percentSign')} />
           </Form.Item>
         </Form>

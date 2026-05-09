@@ -69,7 +69,9 @@ describe('appStore', () => {
     it('setConnections accepts updater function', () => {
       const conn1 = createMockConnection({ id: 'conn-1' });
       useAppStore.getState().setConnections([conn1]);
-      useAppStore.getState().setConnections((prev) => [...prev, createMockConnection({ id: 'conn-2' })]);
+      useAppStore
+        .getState()
+        .setConnections((prev) => [...prev, createMockConnection({ id: 'conn-2' })]);
 
       expect(useAppStore.getState().connections).toHaveLength(2);
     });
@@ -167,17 +169,19 @@ describe('appStore', () => {
     });
 
     it('setGroups replaces all groups', () => {
-      useAppStore.getState().setGroups([
-        { id: 'group-1', name: 'Group 1', icon: '📂', color: '#ff0000' },
-      ]);
+      useAppStore
+        .getState()
+        .setGroups([{ id: 'group-1', name: 'Group 1', icon: '📂', color: '#ff0000' }]);
       expect(useAppStore.getState().groups).toHaveLength(1);
     });
 
     it('setGroups accepts updater function', () => {
-      useAppStore.getState().setGroups((prev) => [
-        ...prev,
-        { id: 'group-1', name: 'Group 1', icon: '📂', color: '#ff0000' },
-      ]);
+      useAppStore
+        .getState()
+        .setGroups((prev) => [
+          ...prev,
+          { id: 'group-1', name: 'Group 1', icon: '📂', color: '#ff0000' },
+        ]);
       expect(useAppStore.getState().groups).toHaveLength(2);
     });
   });

@@ -5,7 +5,10 @@ const downloadBlobMock = vi.fn();
 vi.mock('../utils/exportUtils', () => ({
   exportToExcel: vi.fn((data: any[], columns?: any[], options?: any) => {
     if (data.length === 0) throw new Error('没有数据可导出');
-    return { filename: options?.filename || 'export.xlsx', sheetName: options?.sheetName || 'Sheet1' };
+    return {
+      filename: options?.filename || 'export.xlsx',
+      sheetName: options?.sheetName || 'Sheet1',
+    };
   }),
   exportToCSV: vi.fn((data: any[], columns?: any[], options?: any) => {
     if (data.length === 0) throw new Error('没有数据可导出');
@@ -48,8 +51,7 @@ const escapeXml = (val: unknown): string => {
     .replace(/'/g, '&apos;');
 };
 
-const sanitizeXmlTag = (name: string): string =>
-  name.replace(/[^a-zA-Z0-9_\u4e00-\u9fff.-]/g, '_');
+const sanitizeXmlTag = (name: string): string => name.replace(/[^a-zA-Z0-9_\u4e00-\u9fff.-]/g, '_');
 
 const escapeMd = (val: unknown): string => {
   if (val === null || val === undefined) return '';

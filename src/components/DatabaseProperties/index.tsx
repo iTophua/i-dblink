@@ -61,7 +61,8 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
           return sum + (isNaN(size) ? 0 : size);
         }, 0);
 
-        const engine = tables[0]?.engine || (server?.server_type || '').includes('mysql') ? 'InnoDB' : '-';
+        const engine =
+          tables[0]?.engine || (server?.server_type || '').includes('mysql') ? 'InnoDB' : '-';
 
         const items: StatItem[] = [
           {
@@ -72,7 +73,7 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
           },
           {
             key: 'tables',
-            label: t('common.tableCount'),
+            label: t('common.erDiagram.tableCount'),
             value: tables.length,
             icon: <TableOutlined />,
           },
@@ -108,13 +109,13 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
           },
           {
             key: 'charset',
-            label: t('common.charset'),
+            label: t('common.databaseProperties.charset'),
             value: server?.character_set || '-',
             icon: <Text style={{ fontSize: 12 }}>{server?.character_set || '-'}</Text>,
           },
           {
             key: 'collation',
-            label: t('common.collation'),
+            label: t('common.databaseProperties.collation'),
             value: server?.collation || '-',
             icon: <Text style={{ fontSize: 12 }}>{server?.collation || '-'}</Text>,
           },
@@ -144,7 +145,7 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
       width: 200,
     },
     {
-      title: t('common.rowCount'),
+      title: t('common.tableList.rowCount'),
       dataIndex: 'row_count',
       width: 120,
       render: (val: number) => (val ? val.toLocaleString() : '-'),
@@ -232,7 +233,7 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
             rowKey="table_name"
             columns={[
               {
-                title: t('common.viewName'),
+                title: t('common.viewDefinition.viewName'),
                 dataIndex: 'table_name',
                 width: 200,
               },

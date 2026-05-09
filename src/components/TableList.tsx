@@ -312,7 +312,7 @@ function ListHeader({ sort, onSort }: { sort: SortState; onSort: (key: SortKey) 
   const cols: { key: SortKey; label: string; align?: 'left' | 'right' | 'center' }[] = [
     { key: 'table_name', label: t('common.tableName') },
     { key: 'comment', label: t('common.comment') },
-    { key: 'row_count', label: t('common.rowCount'), align: 'right' },
+    { key: 'row_count', label: t('common.tableList.rowCount'), align: 'right' },
     { key: 'data_size', label: t('common.dataSize'), align: 'right' },
     { key: 'engine', label: t('common.engine'), align: 'center' },
     { key: 'create_time', label: t('common.createTime') },
@@ -568,7 +568,10 @@ function TableListComponent({
         }}
       >
         <Space size="small">
-          <Tooltip title={t('common.openTable')} open={!selectedRow ? false : undefined}>
+          <Tooltip
+            title={t('common.globalSearch.openTable')}
+            open={!selectedRow ? false : undefined}
+          >
             <span>
               <Button
                 icon={<FolderOpenOutlined />}
@@ -734,15 +737,27 @@ function TableListComponent({
         <Space size="small">
           {objectType === 'all' ? (
             <>
-              <Tag color="blue">{t('common.tables')} {tableCount}</Tag>
-              <Tag color="purple">{t('common.views')} {viewCount}</Tag>
+              <Tag color="blue">
+                {t('common.dumpDialog.tables')} {tableCount}
+              </Tag>
+              <Tag color="purple">
+                {t('common.databaseProperties.views')} {viewCount}
+              </Tag>
             </>
           ) : objectType === 'table' ? (
-            <Tag color="blue">{t('common.tables')} {tableCount}</Tag>
+            <Tag color="blue">
+              {t('common.dumpDialog.tables')} {tableCount}
+            </Tag>
           ) : (
-            <Tag color="purple">{t('common.views')} {viewCount}</Tag>
+            <Tag color="purple">
+              {t('common.databaseProperties.views')} {viewCount}
+            </Tag>
           )}
-          <Tooltip title={viewMode === 'list' ? t('common.switchToGridView') : t('common.switchToListView')}>
+          <Tooltip
+            title={
+              viewMode === 'list' ? t('common.switchToGridView') : t('common.switchToListView')
+            }
+          >
             <span>
               <Button
                 icon={viewMode === 'list' ? <AppstoreOutlined /> : <UnorderedListOutlined />}
@@ -777,7 +792,7 @@ function TableListComponent({
           >
             <Spin size="large" />
             <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
-              {t('common.loading')}
+              {t('common.erDiagram.loading')}
             </div>
           </div>
         ) : filteredTables.length === 0 ? (
@@ -790,7 +805,10 @@ function TableListComponent({
             }}
           >
             {searchText ? (
-              <Empty description={searchText ? t('common.noMatchingTables') : t('common.noTables')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty
+                description={searchText ? t('common.noMatchingTables') : t('common.noTables')}
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
             ) : (
               <Empty description={t('common.noTables')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}

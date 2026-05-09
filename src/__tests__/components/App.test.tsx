@@ -23,10 +23,6 @@ vi.mock('antd', () => ({
   ConfigProvider: ({ children }: any) => children,
 }));
 
-
-
-
-
 vi.mock('../stores/settingsStore', () => ({
   useSettingsStore: {
     getState: () => ({

@@ -13,10 +13,7 @@ import {
   Typography,
   App,
 } from 'antd';
-import {
-  DiffOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons';
+import { DiffOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { api } from '../api';
 import type { ConnectionOutput } from '../types/api';
@@ -116,7 +113,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       await api.executeDDL(selectedConn, sql);
       msg.success(t('common.schemaSyncSuccess', { table: tableName }));
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : t('common.executeFailed');
+      const errorMessage = err instanceof Error ? err.message : t('common.sqlEditor.executeFailed');
       msg.error(errorMessage);
     } finally {
       setExecuting(false);
@@ -131,7 +128,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
   const columnColumns: ColumnsType<DiffColumn> = [
     {
-      title: t('common.columnName'),
+      title: t('common.tableStructure.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 150,
@@ -155,30 +152,26 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       width: 100,
       render: (type: string) => {
         const config = diffTypeTag[type];
-        return config ? (
-          <Tag color={config.color}>{config.text}</Tag>
-        ) : (
-          <Tag>{type}</Tag>
-        );
+        return config ? <Tag color={config.color}>{config.text}</Tag> : <Tag>{type}</Tag>;
       },
     },
   ];
 
   const indexColumns: ColumnsType<DiffIndex> = [
     {
-      title: t('common.indexName'),
+      title: t('common.tableStructure.indexName'),
       dataIndex: 'index_name',
       key: 'index_name',
       width: 150,
     },
     {
-      title: t('common.columnName'),
+      title: t('common.tableStructure.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 150,
     },
     {
-      title: t('common.unique'),
+      title: t('common.tableStructure.unique'),
       dataIndex: 'is_unique',
       key: 'is_unique',
       width: 80,
@@ -193,11 +186,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       width: 100,
       render: (type: string) => {
         const config = diffTypeTag[type];
-        return config ? (
-          <Tag color={config.color}>{config.text}</Tag>
-        ) : (
-          <Tag>{type}</Tag>
-        );
+        return config ? <Tag color={config.color}>{config.text}</Tag> : <Tag>{type}</Tag>;
       },
     },
   ];
@@ -210,7 +199,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       width: 150,
     },
     {
-      title: t('common.columnName'),
+      title: t('common.tableStructure.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 150,
@@ -234,18 +223,12 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       width: 100,
       render: (type: string) => {
         const config = diffTypeTag[type];
-        return config ? (
-          <Tag color={config.color}>{config.text}</Tag>
-        ) : (
-          <Tag>{type}</Tag>
-        );
+        return config ? <Tag color={config.color}>{config.text}</Tag> : <Tag>{type}</Tag>;
       },
     },
   ];
 
-  const targetConns = selectedConn
-    ? connections.filter((c) => c.id !== selectedConn)
-    : connections;
+  const targetConns = selectedConn ? connections.filter((c) => c.id !== selectedConn) : connections;
 
   return (
     <Modal
@@ -339,7 +322,12 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
                     <Text strong>{diff.table_name}</Text>
                     {diff.has_diffs ? (
                       <Tag color="orange">
-                        {t('common.differencesCount', { count: diff.column_diffs.length + diff.index_diffs.length + diff.foreign_key_diffs.length })}
+                        {t('common.differencesCount', {
+                          count:
+                            diff.column_diffs.length +
+                            diff.index_diffs.length +
+                            diff.foreign_key_diffs.length,
+                        })}
                       </Tag>
                     ) : (
                       <Tag color="green">{t('common.schemasMatch')}</Tag>
@@ -350,7 +338,9 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
               >
                 {diff.column_diffs.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <Title level={5}>{t('common.columnDifferences', { count: diff.column_diffs.length })}</Title>
+                    <Title level={5}>
+                      {t('common.columnDifferences', { count: diff.column_diffs.length })}
+                    </Title>
                     <Table
                       dataSource={diff.column_diffs}
                       columns={columnColumns}
@@ -364,7 +354,9 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
                 {diff.index_diffs.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <Title level={5}>{t('common.indexDifferences', { count: diff.index_diffs.length })}</Title>
+                    <Title level={5}>
+                      {t('common.indexDifferences', { count: diff.index_diffs.length })}
+                    </Title>
                     <Table
                       dataSource={diff.index_diffs}
                       columns={indexColumns}
@@ -378,7 +370,9 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
 
                 {diff.foreign_key_diffs.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <Title level={5}>{t('common.foreignKeyDifferences', { count: diff.foreign_key_diffs.length })}</Title>
+                    <Title level={5}>
+                      {t('common.foreignKeyDifferences', { count: diff.foreign_key_diffs.length })}
+                    </Title>
                     <Table
                       dataSource={diff.foreign_key_diffs}
                       columns={fkColumns}

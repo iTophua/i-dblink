@@ -280,7 +280,8 @@ const ViewNode = React.memo<ViewNodeProps>(
           <span style={{ fontSize: 12 }}>{view.table_name}</span>
           {view.row_count !== undefined && (
             <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
-              ({view.row_count >= 1_000_000_000
+              (
+              {view.row_count >= 1_000_000_000
                 ? `${(view.row_count / 1_000_000_000).toFixed(1)}B`
                 : view.row_count >= 1_000_000
                   ? `${(view.row_count / 1_000_000).toFixed(1)}M`
@@ -288,7 +289,8 @@ const ViewNode = React.memo<ViewNodeProps>(
                     ? `${(view.row_count / 1_000).toFixed(0)}K`
                     : view.row_count >= 1_000
                       ? `${(view.row_count / 1_000).toFixed(1)}K`
-                      : String(view.row_count)})
+                      : String(view.row_count)}
+              )
             </span>
           )}
           {hovered && (
@@ -426,16 +428,32 @@ export function EnhancedConnectionTree({
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
-  const [copyTarget, setCopyTarget] = useState<{ tableName: string; database?: string; connId: string } | null>(null);
+  const [copyTarget, setCopyTarget] = useState<{
+    tableName: string;
+    database?: string;
+    connId: string;
+  } | null>(null);
   const [dumpDialogOpen, setDumpDialogOpen] = useState(false);
-  const [dumpTarget, setDumpTarget] = useState<{ tableName: string; database?: string; connId: string } | null>(null);
+  const [dumpTarget, setDumpTarget] = useState<{
+    tableName: string;
+    database?: string;
+    connId: string;
+  } | null>(null);
   const [runSqlDialogOpen, setRunSqlDialogOpen] = useState(false);
-  const [runSqlTarget, setRunSqlTarget] = useState<{ connId: string; database?: string } | null>(null);
+  const [runSqlTarget, setRunSqlTarget] = useState<{ connId: string; database?: string } | null>(
+    null
+  );
   const [backupRestoreOpen, setBackupRestoreOpen] = useState(false);
   const [backupRestoreMode, setBackupRestoreMode] = useState<'backup' | 'restore'>('backup');
-  const [backupRestoreTarget, setBackupRestoreTarget] = useState<{ connId: string; database: string } | null>(null);
+  const [backupRestoreTarget, setBackupRestoreTarget] = useState<{
+    connId: string;
+    database: string;
+  } | null>(null);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
-  const [userManagementTarget, setUserManagementTarget] = useState<{ connId: string; database?: string } | null>(null);
+  const [userManagementTarget, setUserManagementTarget] = useState<{
+    connId: string;
+    database?: string;
+  } | null>(null);
   const [schemaCompareOpen, setSchemaCompareOpen] = useState(false);
   const prevTableCountsRef = useRef<Map<string, number>>(new Map());
   const connectionDatabasesRef = useRef(connectionDatabases);
@@ -485,77 +503,95 @@ export function EnhancedConnectionTree({
   const getConnectionMenu = useCallback(
     (conn: Connection): MenuProps => ({
       items:
-          conn.status === 'connected'
-            ? [
-                { key: 'disconnect', label: t('common.disconnectConnection'), icon: <DisconnectOutlined /> },
-                { key: 'refresh', label: t('common.refresh'), icon: <ReloadOutlined /> },
-                { type: 'divider' },
-                { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
-                { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
-                { type: 'divider' },
-                { key: 'new-query', label: t('common.newQuery'), icon: <PlayCircleOutlined /> },
-                { type: 'divider' },
-                {
-                  key: 'move',
-                  label: t('common.moveToGroup'),
-                  icon: <FolderOutlined />,
-                  children: [
-                    ...groups
-                      .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
-                      .map((g) => ({
-                        key: `move-to-${g.id}`,
-                        label:
-                          g.id === 'default' ? (
-                            <>
-                              <MinusOutlined /> {g.name}
-                            </>
-                          ) : (
-                            <>
-                              {g.icon} {g.name}
-                            </>
-                          ),
-                        disabled: conn.group_id === g.id,
-                      })),
-                    { type: 'divider' },
-                    { key: 'new-group', label: t('common.newGroup'), icon: <PlusOutlined /> },
-                  ],
-                },
-                { type: 'divider' },
-                { key: 'delete', label: t('common.deleteConnection'), icon: <DeleteOutlined />, danger: true },
-              ]
-            : [
-                { key: 'connect', label: t('common.connect'), icon: <LinkOutlined /> },
-                { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
-                { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
-                { type: 'divider' },
-                {
-                  key: 'move',
-                  label: t('common.moveToGroup'),
-                  icon: <FolderOutlined />,
-                  children: [
-                    ...groups
-                      .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
-                      .map((g) => ({
-                        key: `move-to-${g.id}`,
-                        label:
-                          g.id === 'default' ? (
-                            <>
-                              <MinusOutlined /> {g.name}
-                            </>
-                          ) : (
-                            <>
-                              {g.icon} {g.name}
-                            </>
-                          ),
-                        disabled: conn.group_id === g.id,
-                      })),
-                    { type: 'divider' },
-                    { key: 'new-group', label: t('common.newGroup'), icon: <PlusOutlined /> },
-                  ],
-                },
-                { type: 'divider' },
-                { key: 'delete', label: t('common.deleteConnection'), icon: <DeleteOutlined />, danger: true },
-              ],
+        conn.status === 'connected'
+          ? [
+              {
+                key: 'disconnect',
+                label: t('common.mainLayout.disconnectConnection'),
+                icon: <DisconnectOutlined />,
+              },
+              { key: 'refresh', label: t('common.refresh'), icon: <ReloadOutlined /> },
+              { type: 'divider' },
+              { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
+              { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
+              { type: 'divider' },
+              {
+                key: 'new-query',
+                label: t('common.sqlEditor.newQuery'),
+                icon: <PlayCircleOutlined />,
+              },
+              { type: 'divider' },
+              {
+                key: 'move',
+                label: t('common.mainLayout.moveToGroup'),
+                icon: <FolderOutlined />,
+                children: [
+                  ...groups
+                    .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
+                    .map((g) => ({
+                      key: `move-to-${g.id}`,
+                      label:
+                        g.id === 'default' ? (
+                          <>
+                            <MinusOutlined /> {g.name}
+                          </>
+                        ) : (
+                          <>
+                            {g.icon} {g.name}
+                          </>
+                        ),
+                      disabled: conn.group_id === g.id,
+                    })),
+                  { type: 'divider' },
+                  { key: 'new-group', label: t('common.newGroup'), icon: <PlusOutlined /> },
+                ],
+              },
+              { type: 'divider' },
+              {
+                key: 'delete',
+                label: t('common.mainLayout.deleteConnection'),
+                icon: <DeleteOutlined />,
+                danger: true,
+              },
+            ]
+          : [
+              { key: 'connect', label: t('common.mainLayout.connect'), icon: <LinkOutlined /> },
+              { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
+              { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
+              { type: 'divider' },
+              {
+                key: 'move',
+                label: t('common.mainLayout.moveToGroup'),
+                icon: <FolderOutlined />,
+                children: [
+                  ...groups
+                    .filter((g) => g.id !== 'default' || conn.group_id !== 'default')
+                    .map((g) => ({
+                      key: `move-to-${g.id}`,
+                      label:
+                        g.id === 'default' ? (
+                          <>
+                            <MinusOutlined /> {g.name}
+                          </>
+                        ) : (
+                          <>
+                            {g.icon} {g.name}
+                          </>
+                        ),
+                      disabled: conn.group_id === g.id,
+                    })),
+                  { type: 'divider' },
+                  { key: 'new-group', label: t('common.newGroup'), icon: <PlusOutlined /> },
+                ],
+              },
+              { type: 'divider' },
+              {
+                key: 'delete',
+                label: t('common.mainLayout.deleteConnection'),
+                icon: <DeleteOutlined />,
+                danger: true,
+              },
+            ],
       onClick: async ({ key }) => {
         if (key === 'connect') {
           await onConnect(conn.id);
@@ -624,7 +660,7 @@ export function EnhancedConnectionTree({
         { type: 'divider' },
         {
           key: 'delete',
-          label: t('common.deleteGroup'),
+          label: t('common.mainLayout.deleteGroup'),
           icon: <DeleteOutlined />,
           danger: true,
           disabled: group.id === 'default',
@@ -655,7 +691,10 @@ export function EnhancedConnectionTree({
             title: t('common.confirmDeleteGroupTitle'),
             content:
               connCount > 0
-                ? t('common.confirmDeleteGroupWithConnectionsContent', { name: group.name, count: connCount })
+                ? t('common.confirmDeleteGroupWithConnectionsContent', {
+                    name: group.name,
+                    count: connCount,
+                  })
                 : t('common.confirmDeleteGroupContent', { name: group.name }),
             okText: t('common.delete'),
             okType: 'danger',
@@ -671,7 +710,7 @@ export function EnhancedConnectionTree({
   const getDatabaseMenu = useCallback(
     (connId: string, dbName: string): MenuProps => ({
       items: [
-        { key: 'new-query', label: t('common.newQuery'), icon: <PlayCircleOutlined /> },
+        { key: 'new-query', label: t('common.sqlEditor.newQuery'), icon: <PlayCircleOutlined /> },
         { type: 'divider' },
         { key: 'refresh-db', label: t('common.refreshDatabase'), icon: <ReloadOutlined /> },
         { key: 'close-db', label: t('common.closeDatabase'), icon: <DisconnectOutlined /> },
@@ -1147,7 +1186,9 @@ export function EnhancedConnectionTree({
                   {
                     key: `no-tables::${connId}::${db.database}`,
                     title: (
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{t('common.noTables')}</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                        {t('common.noTables')}
+                      </span>
                     ),
                     isLeaf: true,
                     selectable: false,
@@ -1214,7 +1255,9 @@ export function EnhancedConnectionTree({
                   {
                     key: `no-views::${connId}::${db.database}`,
                     title: (
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{t('common.noViews')}</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                        {t('common.noViews')}
+                      </span>
                     ),
                     isLeaf: true,
                     selectable: false,
@@ -1244,7 +1287,7 @@ export function EnhancedConnectionTree({
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <ThunderboltOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-            <span>{t('common.procedures')}</span>
+            <span>{t('common.databaseProperties.procedures')}</span>
           </span>
         ),
         isLeaf: false,
@@ -1310,7 +1353,7 @@ export function EnhancedConnectionTree({
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
-            <span>{t('common.functions')}</span>
+            <span>{t('common.databaseProperties.functions')}</span>
           </span>
         ),
         isLeaf: false,
@@ -1347,7 +1390,9 @@ export function EnhancedConnectionTree({
                 {
                   key: `no-functions::${connId}::${db.database}`,
                   title: (
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{t('common.noFunctions')}</span>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                      {t('common.noFunctions')}
+                    </span>
                   ),
                   isLeaf: true,
                   selectable: false,
@@ -1375,7 +1420,7 @@ export function EnhancedConnectionTree({
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
             <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
-            <span>{t('common.triggers')}</span>
+            <span>{t('common.databaseProperties.triggers')}</span>
           </span>
         ),
         isLeaf: false,
@@ -1404,9 +1449,7 @@ export function EnhancedConnectionTree({
                         onOpenTrigger?.(connId, db.database, trigger.name);
                       }}
                     >
-                      <ThunderboltOutlined
-                        style={{ color: 'var(--color-error)', fontSize: 11 }}
-                      />
+                      <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 11 }} />
                       <span style={{ fontSize: 12 }}>{trigger.name}</span>
                     </span>
                   ),
@@ -1569,7 +1612,7 @@ export function EnhancedConnectionTree({
                   />
                 )}
                 {conn.status === 'connected' ? (
-                  <Tooltip title={t('common.connected')}>
+                  <Tooltip title={t('common.mainLayout.connected')}>
                     <span
                       style={{
                         width: 6,
@@ -1581,37 +1624,37 @@ export function EnhancedConnectionTree({
                     />
                   </Tooltip>
                 ) : (
-                  <Tooltip title={t('common.disconnected')}>
+                  <Tooltip title={t('common.mainLayout.disconnected')}>
                     <span
                       style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: 'var(--text-disabled)',
-                      opacity: 0.5,
-                    }}
-                  />
-                </Tooltip>
-              )}
-              {conn.status === 'loading' && (
-                <Tooltip title={t('common.connecting')}>
-                  <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: 'var(--color-warning)',
-                      animation: 'pulse 1s infinite',
-                    }}
-                  />
-                </Tooltip>
-              )}
-            </span>
-            {conn.database && (
-              <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                ({conn.database})
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--text-disabled)',
+                        opacity: 0.5,
+                      }}
+                    />
+                  </Tooltip>
+                )}
+                {conn.status === 'loading' && (
+                  <Tooltip title={t('common.mainLayout.connecting')}>
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--color-warning)',
+                        animation: 'pulse 1s infinite',
+                      }}
+                    />
+                  </Tooltip>
+                )}
               </span>
-            )}
+              {conn.database && (
+                <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                  ({conn.database})
+                </span>
+              )}
             </div>
           </Dropdown>
         </div>
@@ -1995,7 +2038,7 @@ export function EnhancedConnectionTree({
         ) : connections.length === 0 ? (
           <EnhancedEmptyState
             icon={<DatabaseOutlined />}
-            title={t('common.noConnections')}
+            title={t('common.mainLayout.noConnections')}
             description={t('common.connectionTreeEmpty')}
             action={{
               label: t('common.newConnection'),
@@ -2068,7 +2111,7 @@ export function EnhancedConnectionTree({
         {connections.length === 0 && !isLoading ? (
           <EnhancedEmptyState
             icon={<DatabaseOutlined />}
-            title={t('common.noConnections')}
+            title={t('common.mainLayout.noConnections')}
             description={t('common.connectionTreeEmptyDescription')}
             action={{
               label: t('common.newConnection'),
@@ -2150,9 +2193,7 @@ export function EnhancedConnectionTree({
         connectionId={copyTarget?.connId || ''}
         dbType={connections.find((c) => c.id === copyTarget?.connId)?.db_type}
         databases={
-          copyTarget
-            ? connectionDatabases[copyTarget.connId]?.map((d) => d.database) || []
-            : []
+          copyTarget ? connectionDatabases[copyTarget.connId]?.map((d) => d.database) || [] : []
         }
         onCancel={() => {
           setCopyDialogOpen(false);

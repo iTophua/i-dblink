@@ -224,7 +224,11 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                   </div>
                 </Form.Item>
 
-                <Form.Item label={t('common.themePreset')} name="themePreset" rules={[{ required: true }]}>
+                <Form.Item
+                  label={t('common.themePreset')}
+                  name="themePreset"
+                  rules={[{ required: true }]}
+                >
                   <Select>
                     {THEME_PRESETS_LIST.map((item) => (
                       <Select.Option key={item.value} value={item.value}>
@@ -337,10 +341,7 @@ function ShortcutsSettings() {
       const conflict = checkConflict(editingKey, inputValue);
       if (conflict) {
         const conflictDesc = MENU_SHORTCUTS.find((s) => s.id === conflict)?.description || conflict;
-        messageApi.warning(
-          t('common.confirmWith', { desc: conflictDesc }),
-          3
-        );
+        messageApi.warning(t('common.confirmWith', { desc: conflictDesc }), 3);
         return;
       }
       const newShortcuts = { ...shortcuts };
@@ -467,7 +468,10 @@ function ShortcutsSettings() {
                           fontFamily: 'monospace',
                           fontSize: 12,
                           ...(conflictKey
-                            ? { borderColor: 'var(--color-error)', boxShadow: '0 0 0 2px rgba(255,77,79,0.2)' }
+                            ? {
+                                borderColor: 'var(--color-error)',
+                                boxShadow: '0 0 0 2px rgba(255,77,79,0.2)',
+                              }
                             : {}),
                         }}
                         autoFocus
@@ -483,7 +487,12 @@ function ShortcutsSettings() {
                     </Space>
                     {conflictKey && (
                       <div style={{ color: 'var(--color-error)', fontSize: 11, marginTop: 2 }}>
-                        ⚠ {t('common.confirmWithKey', { key: MENU_SHORTCUTS.find((s) => s.id === conflictKey)?.description || conflictKey })}
+                        ⚠{' '}
+                        {t('common.confirmWithKey', {
+                          key:
+                            MENU_SHORTCUTS.find((s) => s.id === conflictKey)?.description ||
+                            conflictKey,
+                        })}
                       </div>
                     )}
                   </div>

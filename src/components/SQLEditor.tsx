@@ -85,8 +85,6 @@ interface SQLEditorProps {
   onQueryStatusChange?: (isQuerying: boolean) => void;
 }
 
-
-
 // 预编译的正则表达式（避免每次触发重新编译）
 const REGEX_PATTERNS = {
   fromOrJoin: /\b(FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s*$/i,
@@ -714,11 +712,21 @@ export function SQLEditor({
               const rowCount = queryResult.rows.length;
               const affectedRows = queryResult.rows_affected || 0;
               if (rowCount > 0) {
-                let msg = t('common.statementSuccess', { index: i + 1, count: rowCount, time: executionTime });
+                let msg = t('common.statementSuccess', {
+                  index: i + 1,
+                  count: rowCount,
+                  time: executionTime,
+                });
                 if (truncated) msg += t('common.truncatedTo', { count: maxRows });
                 msgs.push(msg);
               } else if (affectedRows > 0) {
-                msgs.push(t('common.statementAffected', { index: i + 1, count: affectedRows, time: executionTime }));
+                msgs.push(
+                  t('common.statementAffected', {
+                    index: i + 1,
+                    count: affectedRows,
+                    time: executionTime,
+                  })
+                );
               } else {
                 msgs.push(t('common.statementExecuted', { index: i + 1, time: executionTime }));
               }
@@ -741,17 +749,23 @@ export function SQLEditor({
         }
 
         if (hasTruncated) {
-          message.warning(`${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`);
+          message.warning(
+            `${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`
+          );
         }
 
         setResults(multiResults);
         setMessages(msgs);
 
         if (totalErrors === 0) {
-          message.success(`${t('common.allExecutedSuccessfully')}: ${totalSuccess} ${t('common.statements')}`);
+          message.success(
+            `${t('common.allExecutedSuccessfully')}: ${totalSuccess} ${t('common.statements')}`
+          );
           setActiveTab('result');
         } else {
-          message.error(`${t('common.partialExecutionFailed')}: ${totalSuccess} ${t('common.success')}, ${totalErrors} ${t('common.failed')}`);
+          message.error(
+            `${t('common.partialExecutionFailed')}: ${totalSuccess} ${t('common.success')}, ${totalErrors} ${t('common.failed')}`
+          );
           setActiveTab('messages');
         }
       } else {
@@ -786,13 +800,19 @@ export function SQLEditor({
             let msg = `✓ ${t('common.querySuccess')}, ${rowCount} ${t('common.records')}, ${t('common.executionTime')} ${executionTime}ms`;
             if (truncated) {
               msg += `（${t('common.resultSetTruncated')}, ${t('common.onlyShowingFirst')}${maxRows} ${t('common.rows')}）`;
-              message.warning(`${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`);
+              message.warning(
+                `${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`
+              );
             }
             setMessages([msg]);
           } else if (affectedRows > 0) {
-            setMessages([`${t('common.executionSuccess')}, ${affectedRows} ${t('common.rowsAffected')}, ${t('common.executionTime')} ${executionTime}ms`]);
+            setMessages([
+              `${t('common.executionSuccess')}, ${affectedRows} ${t('common.rowsAffected')}, ${t('common.executionTime')} ${executionTime}ms`,
+            ]);
           } else {
-            setMessages([`${t('common.executionSuccess')}, ${t('common.executionTime')} ${executionTime}ms`]);
+            setMessages([
+              `${t('common.executionSuccess')}, ${t('common.executionTime')} ${executionTime}ms`,
+            ]);
           }
 
           setActiveTab('result');
@@ -893,7 +913,7 @@ export function SQLEditor({
         linesBetweenQueries: 2,
       });
       setSql(formatted);
-      message.success(t('common.sqlFormatted'));
+      message.success(t('common.sqlEditor.sqlFormatted'));
     } catch (e: any) {
       message.error(`${t('common.formattingFailed')}: ${e.message || e}`);
     }
@@ -1033,7 +1053,10 @@ export function SQLEditor({
               justifyContent: 'center',
             }}
           >
-            <Empty description={t('common.pleaseSelectDatabaseConnection')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty
+              description={t('common.pleaseSelectDatabaseConnection')}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           </div>
         ) : !result ? (
           <div
@@ -1183,7 +1206,9 @@ export function SQLEditor({
         }}
       >
         <Space size="small">
-          <Tooltip title={`${t('common.execute')} (${getShortcutDisplayText('execute-query')})`}>
+          <Tooltip
+            title={`${t('common.sqlEditor.execute')} (${getShortcutDisplayText('execute-query')})`}
+          >
             <Button
               type="primary"
               icon={<PlayCircleOutlined />}
@@ -1298,7 +1323,7 @@ export function SQLEditor({
             }}
           />
 
-          <Tooltip title={t('common.commentSQL') + " (Ctrl+/)"}>
+          <Tooltip title={t('common.sqlEditor.commentSQL') + ' (Ctrl+/)'}>
             <Button
               icon={<FileTextOutlined />}
               onClick={() => editorRef.current?.getAction('editor.action.commentLine')?.run()}
@@ -1345,7 +1370,12 @@ export function SQLEditor({
                 { key: 'snippets', label: t('common.codeSnippets'), icon: <BookOutlined /> },
                 { type: 'divider' },
                 { key: 'history', label: t('common.queryHistoryTitle'), icon: <HistoryOutlined /> },
-                { key: 'export', label: t('common.exportResults'), icon: <DownloadOutlined />, disabled: !result },
+                {
+                  key: 'export',
+                  label: t('common.exportResults'),
+                  icon: <DownloadOutlined />,
+                  disabled: !result,
+                },
               ],
               onClick: ({ key }) => {
                 if (key === 'save') saveSQL();
@@ -1395,7 +1425,9 @@ export function SQLEditor({
               </span>
             )
           ) : (
-            <span style={{ color: 'var(--color-error)', fontSize: 12 }}>{t('common.notSelected')}</span>
+            <span style={{ color: 'var(--color-error)', fontSize: 12 }}>
+              {t('common.notSelected')}
+            </span>
           )}
 
           {result && !result.error && (

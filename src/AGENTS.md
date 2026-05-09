@@ -29,18 +29,18 @@ src/
 
 ## 组件
 
-| 文件                         | 行数 | 复杂度                         | 备注                             |
-| ---------------------------- | ---- | ------------------------------ | -------------------------------- |
-| `MainLayout.tsx`             | ~1160 | 高                            | 布局组件，已集成快捷键           |
-| `TabPanel/index.tsx`         | ~1127 | 中                             | 标签页管理，支持多 SQL 查询      |
-| `SQLEditor.tsx`              | ~1948 | 中                             | Monaco Editor SQL 编辑器         |
-| `DataTable.tsx`              | ~2636 | 中                             | AG Grid 数据表格，已实现右键菜单 |
-| `ConnectionDialog.tsx`       | ~764 | 中                            | 连接配置对话框，已实现文件选择   |
-| `EnhancedConnectionTree.tsx` | ~2092 | 高                            | 连接树组件，已实现确认对话框     |
-| `TableList.tsx`              | 中   | 中                             | 表列表组件                       |
-| `TableDesigner/index.tsx`    | ~1034 | 中                            | 表设计器，支持多数据库类型       |
-| `DatabaseProperties/index.tsx` | 新建                           | 数据库属性面板                 |
-| `ViewDefinition/index.tsx`   | ~161                             | 视图定义查看 (DDL + 列信息)    |
+| 文件                           | 行数  | 复杂度                      | 备注                             |
+| ------------------------------ | ----- | --------------------------- | -------------------------------- |
+| `MainLayout.tsx`               | ~1160 | 高                          | 布局组件，已集成快捷键           |
+| `TabPanel/index.tsx`           | ~1127 | 中                          | 标签页管理，支持多 SQL 查询      |
+| `SQLEditor.tsx`                | ~1948 | 中                          | Monaco Editor SQL 编辑器         |
+| `DataTable.tsx`                | ~2636 | 中                          | AG Grid 数据表格，已实现右键菜单 |
+| `ConnectionDialog.tsx`         | ~764  | 中                          | 连接配置对话框，已实现文件选择   |
+| `EnhancedConnectionTree.tsx`   | ~2092 | 高                          | 连接树组件，已实现确认对话框     |
+| `TableList.tsx`                | 中    | 中                          | 表列表组件                       |
+| `TableDesigner/index.tsx`      | ~1034 | 中                          | 表设计器，支持多数据库类型       |
+| `DatabaseProperties/index.tsx` | 新建  | 数据库属性面板              |
+| `ViewDefinition/index.tsx`     | ~161  | 视图定义查看 (DDL + 列信息) |
 
 ## 约定
 

@@ -32,7 +32,7 @@ export function ParamDialog({ open, params, onCancel, onExecute }: ParamDialogPr
       onCancel={onCancel}
       confirmLoading={loading}
       width={450}
-      okText={t('common.execute')}
+      okText={t('common.sqlEditor.execute')}
       cancelText={t('common.cancel')}
     >
       <Form form={form} layout="vertical">

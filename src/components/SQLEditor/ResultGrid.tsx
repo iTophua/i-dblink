@@ -200,7 +200,10 @@ interface ColumnStats {
 
 function formatNumber(num: number, decimals?: number): string {
   if (decimals !== undefined) {
-    return num.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return num.toLocaleString(undefined, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
   }
   if (Number.isInteger(num)) {
     return num.toLocaleString();
@@ -208,21 +211,15 @@ function formatNumber(num: number, decimals?: number): string {
   return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
-function computeColumnStats(
-  columns: string[],
-  rows: unknown[][]
-): ColumnStats[] {
+function computeColumnStats(columns: string[], rows: unknown[][]): ColumnStats[] {
   const maxRows = rows.length > 10000 ? 5000 : rows.length;
   const sampleRows = rows.slice(0, maxRows);
 
   return columns.map((col, colIdx) => {
     const values = sampleRows.map((r) => r[colIdx]);
     const nonNull = values.filter((v) => v !== null && v !== undefined);
-    const numericValues = nonNull
-      .map((v) => Number(v))
-      .filter((n) => !isNaN(n));
-    const isNumeric =
-      numericValues.length > 0 && numericValues.length >= nonNull.length * 0.8;
+    const numericValues = nonNull.map((v) => Number(v)).filter((n) => !isNaN(n));
+    const isNumeric = numericValues.length > 0 && numericValues.length >= nonNull.length * 0.8;
 
     const stat: ColumnStats = {
       columnName: col,
@@ -246,9 +243,7 @@ function exportToMd(columns: string[], rows: unknown[][]): string {
   const headers = columns.map(escapeMd);
   const headerLine = '| ' + headers.join(' | ') + ' |';
   const separatorLine = '| ' + headers.map(() => '---').join(' | ') + ' |';
-  const bodyLines = rows.map(
-    (row) => '| ' + row.map((v) => escapeMd(v)).join(' | ') + ' |'
-  );
+  const bodyLines = rows.map((row) => '| ' + row.map((v) => escapeMd(v)).join(' | ') + ' |');
   return '\uFEFF' + [headerLine, separatorLine, ...bodyLines].join('\n');
 }
 
@@ -552,7 +547,9 @@ export function ResultGrid({
       if (errorMsg) {
         message.error(`${t('common.submitFailed')}: ${errorMsg}`);
       } else {
-        message.success(`${t('common.submittedSuccessfully')} ${successCount} ${t('common.changes')}`);
+        message.success(
+          `${t('common.submittedSuccessfully')} ${successCount} ${t('common.changes')}`
+        );
         setModifiedRows(new Map());
         setDeletedRowIndices(new Set());
         setNewRows([]);
@@ -610,7 +607,9 @@ export function ResultGrid({
           selectedRowIndices.forEach((i) => next.add(i));
           return next;
         });
-        message.success(`${t('common.markedForDeletion')} ${selectedRowIndices.size} ${t('common.rows')}`);
+        message.success(
+          `${t('common.markedForDeletion')} ${selectedRowIndices.size} ${t('common.rows')}`
+        );
       },
     });
   }, [isEditable, selectedRowIndices, message]);
@@ -646,7 +645,9 @@ export function ResultGrid({
     const rows = indices.map((i) => queryResult.rows[i]);
     const sql = generateInsertSql(tableName, queryResult.columns, rows, dbType);
     navigator.clipboard.writeText(sql);
-    message.success(`${t('common.copied')} ${indices.length} ${t('common.rows')} INSERT ${t('common.statements')}`);
+    message.success(
+      `${t('common.copyTable.copied')} ${indices.length} ${t('common.rows')} INSERT ${t('common.statements')}`
+    );
     closeContextMenu();
   }, [tableName, selectedRowIndices, queryResult, dbType, message, closeContextMenu]);
 
@@ -676,7 +677,9 @@ export function ResultGrid({
       )
     );
     navigator.clipboard.writeText(sqls.join('\n'));
-    message.success(`${t('common.copied')} ${indices.length} ${t('common.rows')} UPDATE ${t('common.statements')}`);
+    message.success(
+      `${t('common.copyTable.copied')} ${indices.length} ${t('common.rows')} UPDATE ${t('common.statements')}`
+    );
     closeContextMenu();
   }, [tableName, primaryKeyCol, queryResult, dbType, message, closeContextMenu]);
 
@@ -698,7 +701,9 @@ export function ResultGrid({
     const pkValues = indices.map((i) => queryResult.rows[i][pkIdx]);
     const sql = generateDeleteSql(tableName, primaryKeyCol.column_name, pkValues, dbType);
     navigator.clipboard.writeText(sql);
-    message.success(`${t('common.copied')} ${indices.length} ${t('common.rows')} DELETE ${t('common.statements')}`);
+    message.success(
+      `${t('common.copyTable.copied')} ${indices.length} ${t('common.rows')} DELETE ${t('common.statements')}`
+    );
     closeContextMenu();
   }, [tableName, primaryKeyCol, queryResult, dbType, message, closeContextMenu]);
 
@@ -738,7 +743,9 @@ export function ResultGrid({
         <Empty
           description={
             <div style={{ color: 'var(--color-error)' }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('common.queryExecutionFailed')}</div>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                {t('common.queryExecutionFailed')}
+              </div>
               <div style={{ fontSize: 12, opacity: 0.85, maxWidth: 400, wordBreak: 'break-all' }}>
                 {queryResult.error}
               </div>
@@ -760,7 +767,9 @@ export function ResultGrid({
             <div>
               <div style={{ fontWeight: 500, marginBottom: 4 }}>{t('common.querySuccess')}</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {executionTime !== undefined ? `${t('common.executionTime')} ${executionTime}ms · ` : ''}
+                {executionTime !== undefined
+                  ? `${t('common.executionTime')} ${executionTime}ms · `
+                  : ''}
                 {t('common.noDataReturned')}
               </div>
             </div>
@@ -803,30 +812,30 @@ export function ResultGrid({
             {queryResult.rows.length.toLocaleString()}
           </strong>{' '}
           {t('common.rows')}
-         </span>
-         <span>
-           <strong style={{ color: 'var(--text-primary)' }}>{queryResult.columns.length}</strong> {t('common.columns')}
         </span>
-         {executionTime !== undefined && (
-           <span>
-             {t('common.duration')} <strong style={{ color: 'var(--text-primary)' }}>{executionTime}ms</strong>
-           </span>
-         )}
-         {queryResult.rows_affected !== undefined && queryResult.rows_affected > 0 && (
-           <span>
-             {t('common.affectedRows', { count: queryResult.rows_affected })}
-           </span>
-         )}
+        <span>
+          <strong style={{ color: 'var(--text-primary)' }}>{queryResult.columns.length}</strong>{' '}
+          {t('common.tableStructure.columns')}
+        </span>
+        {executionTime !== undefined && (
+          <span>
+            {t('common.historyPanel.duration')}{' '}
+            <strong style={{ color: 'var(--text-primary)' }}>{executionTime}ms</strong>
+          </span>
+        )}
+        {queryResult.rows_affected !== undefined && queryResult.rows_affected > 0 && (
+          <span>{t('common.affectedRows', { count: queryResult.rows_affected })}</span>
+        )}
         {isEditable && (
           <Tag color="blue" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>
-             {t('common.editable')}
+            {t('common.editable')}
           </Tag>
         )}
         {tableName && !isEditable && (
-           <Tooltip title={t('common.cannotEdit')}>
-             <Tag color="default" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>
-               <ExclamationCircleOutlined style={{ marginRight: 4 }} />
-               {t('common.readOnly')}
+          <Tooltip title={t('common.cannotEdit')}>
+            <Tag color="default" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>
+              <ExclamationCircleOutlined style={{ marginRight: 4 }} />
+              {t('common.readOnly')}
             </Tag>
           </Tooltip>
         )}
@@ -836,7 +845,7 @@ export function ResultGrid({
             items: [
               {
                 key: 'excel',
-                label: t('common.exportExcel'),
+                label: t('common.importExport.exportExcel'),
                 icon: <FileTextOutlined />,
                 onClick: () => {
                   try {
@@ -854,7 +863,7 @@ export function ResultGrid({
                     });
                     message.success(t('common.exportedExcel'));
                   } catch (e: any) {
-                    message.error(`${t('common.exportFailed')}: ${e.message}`);
+                    message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
                   }
                 },
               },
@@ -964,7 +973,7 @@ export function ResultGrid({
             disabled={selectedRowIndices.size === 0}
             style={{ fontSize: 11, height: 22 }}
           >
-             {t('common.deleteRow')}
+            {t('common.dataGrid.deleteRow')}
           </Button>
         )}
       </div>
@@ -1014,7 +1023,9 @@ export function ResultGrid({
             flexShrink: 0,
           }}
         >
-           <span>{t('common.records')}: {queryResult.rows.length.toLocaleString()}</span>
+          <span>
+            {t('common.records')}: {queryResult.rows.length.toLocaleString()}
+          </span>
           {columnStats.map((stat) => (
             <Tag
               key={stat.columnName}
@@ -1028,26 +1039,13 @@ export function ResultGrid({
               {stat.isNumeric ? (
                 <>
                   {' '}
-                  SUM={formatNumber(stat.sum!)}
-                  {' '}
-                  AVG={formatNumber(stat.avg!, 2)}
-                  {' '}
-                  MIN={formatNumber(stat.min!)}
-                  {' '}
-                  MAX={formatNumber(stat.max!)}
+                  SUM={formatNumber(stat.sum!)} AVG={formatNumber(stat.avg!, 2)} MIN=
+                  {formatNumber(stat.min!)} MAX={formatNumber(stat.max!)}
                 </>
               ) : (
-                <>
-                  {' '}
-                  COUNT={stat.count}
-                </>
+                <> COUNT={stat.count}</>
               )}
-              {stat.nullCount > 0 && (
-                <span style={{ opacity: 0.7 }}>
-                  {' '}
-                  NULL={stat.nullCount}
-                </span>
-              )}
+              {stat.nullCount > 0 && <span style={{ opacity: 0.7 }}> NULL={stat.nullCount}</span>}
             </Tag>
           ))}
         </div>
@@ -1111,7 +1109,7 @@ export function ResultGrid({
               }}
             >
               <CopyOutlined />
-               {t('common.copyAsInsert')}
+              {t('common.dataGrid.copyAsInsert')}
             </div>
           )}
           {tableName && primaryKeyCol && (
@@ -1135,7 +1133,7 @@ export function ResultGrid({
                 }}
               >
                 <CopyOutlined />
-                {t('common.copyAsUpdate')}
+                {t('common.dataGrid.copyAsUpdate')}
               </div>
               <div
                 style={{
@@ -1210,7 +1208,9 @@ export function ResultGrid({
             setNewRows((prev) => [...prev, newRow]);
             setAddModalOpen(false);
             addForm.resetFields();
-            message.success(`${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`);
+            message.success(
+              `${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`
+            );
           } catch (err) {
             // 表单验证失败，不做处理
           }
@@ -1236,7 +1236,10 @@ export function ResultGrid({
               }
               name={col.column_name}
               rules={[
-                { required: col.is_nullable !== 'YES', message: t('common.pleaseEnterColumnValue', { column: col.column_name }) },
+                {
+                  required: col.is_nullable !== 'YES',
+                  message: t('common.pleaseEnterColumnValue', { column: col.column_name }),
+                },
               ]}
             >
               <Input placeholder={col.comment || col.data_type} />

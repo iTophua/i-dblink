@@ -109,12 +109,14 @@ describe('SchemaCompletionCache', () => {
         { table_name: 'v_active', table_type: 'VIEW' },
       ];
       const mockColumns = (tableName: string) =>
-        Promise.resolve([
-          { column_name: 'id' },
-          { column_name: 'name' },
-        ]);
+        Promise.resolve([{ column_name: 'id' }, { column_name: 'name' }]);
 
-      const result1 = await cache.get('conn1', 'db1', () => Promise.resolve(mockTables), mockColumns);
+      const result1 = await cache.get(
+        'conn1',
+        'db1',
+        () => Promise.resolve(mockTables),
+        mockColumns
+      );
       expect(result1.tables.size).toBe(2);
       expect(result1.views.size).toBe(1);
       expect(result1.tables.get('users')).toEqual(['id', 'name']);
@@ -132,15 +134,22 @@ describe('SchemaCompletionCache', () => {
 
       vi.advanceTimersByTime(11 * 60 * 1000);
 
-      const result = await cache.get('conn1', 'db1', () => Promise.resolve(mockTables), mockColumns);
+      const result = await cache.get(
+        'conn1',
+        'db1',
+        () => Promise.resolve(mockTables),
+        mockColumns
+      );
       expect(result.tables.size).toBe(1);
     });
 
     it('deduplicates concurrent requests', async () => {
       let resolveFn: (value: Array<{ table_name: string; table_type?: string }>) => void;
-      const tablePromise = new Promise<Array<{ table_name: string; table_type?: string }>>((resolve) => {
-        resolveFn = resolve;
-      });
+      const tablePromise = new Promise<Array<{ table_name: string; table_type?: string }>>(
+        (resolve) => {
+          resolveFn = resolve;
+        }
+      );
       const mockColumns = () => Promise.resolve([{ column_name: 'id' }]);
 
       const result1 = cache.get('conn1', 'db1', () => tablePromise, mockColumns);
@@ -164,7 +173,12 @@ describe('SchemaCompletionCache', () => {
         return Promise.resolve([{ column_name: 'id' }]);
       };
 
-      const result = await cache.get('conn1', 'db1', () => Promise.resolve(mockTables), mockColumns);
+      const result = await cache.get(
+        'conn1',
+        'db1',
+        () => Promise.resolve(mockTables),
+        mockColumns
+      );
       expect(result.tables.get('users')).toEqual(['id']);
       expect(result.tables.get('broken')).toEqual([]);
     });
@@ -178,7 +192,12 @@ describe('SchemaCompletionCache', () => {
       ];
       const mockColumns = () => Promise.resolve([{ column_name: 'id' }]);
 
-      const result = await cache.get('conn1', 'db1', () => Promise.resolve(mockTables), mockColumns);
+      const result = await cache.get(
+        'conn1',
+        'db1',
+        () => Promise.resolve(mockTables),
+        mockColumns
+      );
       expect(result.tables.size).toBe(1);
       expect(result.views.size).toBe(3);
       expect(result.tables.has('users')).toBe(true);

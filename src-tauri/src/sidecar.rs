@@ -21,6 +21,7 @@ pub struct SidecarManager {
     port: u16,
     client: reqwest::Client,
     process: AsyncMutex<Child>,
+    child_pid: u32,
 }
 
 impl SidecarManager {
@@ -133,10 +134,13 @@ impl SidecarManager {
 
         tracing::info!("Go sidecar started successfully");
 
+        let child_pid = child.id() as u32;
+
         Ok(Self {
             port,
             client,
             process: AsyncMutex::new(child),
+            child_pid,
         })
     }
 
@@ -217,14 +221,28 @@ impl SidecarManager {
         }
     }
 
-    /// 停止 sidecar 进程（SIGTERM）
+    /// 停止 sidecar 进程（SIGKILL）
     pub async fn stop(&self) -> Result<(), String> {
         let mut child = self.process.lock().await;
         child
             .kill()
             .map_err(|e| format!("Failed to kill sidecar process: {}", e))?;
+        child
+            .wait()
+            .map_err(|e| format!("Failed to wait for sidecar process: {}", e))?;
         tracing::info!("Go sidecar process stopped");
         Ok(())
+    }
+}
+
+impl Drop for SidecarManager {
+    fn drop(&mut self) {
+        if self.child_pid > 0 {
+            tracing::info!("SidecarManager drop: killing process {}", self.child_pid);
+            unsafe {
+                libc::kill(self.child_pid as libc::pid_t, libc::SIGKILL);
+            }
+        }
     }
 }
 

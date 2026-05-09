@@ -16,9 +16,7 @@ interface CopyTableDialogProps {
 
 function replaceTableNameInDDL(ddl: string, sourceTable: string, targetTable: string): string {
   // 使用字符串分割替换，避免正则特殊字符问题
-  return ddl
-    .split(sourceTable)
-    .join(targetTable);
+  return ddl.split(sourceTable).join(targetTable);
 }
 
 function getIdentifierQuotes(dbType?: string): { open: string; close: string } {
@@ -85,7 +83,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
           // 跨数据库：先查询源表数据，再插入目标表
           const selectSql = `SELECT * FROM ${escapeId(sourceTable)}`;
           const result = await api.executeQuery(connectionId, selectSql, sourceDatabase);
-          
+
           if (result.rows && result.rows.length > 0) {
             const colNames = result.columns || [];
             for (const row of result.rows) {
@@ -94,7 +92,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
                 if (typeof v === 'string') return `'${v.replace(/'/g, "''")}'`;
                 return String(v);
               });
-              
+
               const insertSql = `INSERT INTO ${escapeId(targetTable)} (${colNames.map((c: string) => escapeId(c)).join(', ')}) VALUES (${values.join(', ')})`;
               await api.executeQuery(connectionId, insertSql, targetDatabase);
             }
@@ -105,7 +103,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
       message.success(`${t('common.tableCopied')}: "${sourceTable}" → "${targetTable}"`);
       onSuccess();
     } catch (err: any) {
-      message.error(`${t('common.copyFailed')}: ${err.message || err}`);
+      message.error(`${t('common.copyTable.copyFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -136,7 +134,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
           copyType: 'structure',
         }}
       >
-        <Form.Item label={t('common.sourceTable')}>
+        <Form.Item label={t('common.copyTable.sourceTable')}>
           <Input value={sourceTable} disabled />
         </Form.Item>
 

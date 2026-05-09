@@ -14,7 +14,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Spin, Card, Button, Space, Select, message, Tooltip } from 'antd';
-import { ReloadOutlined, KeyOutlined, LinkOutlined, DownloadOutlined, LayoutOutlined } from '@ant-design/icons';
+import {
+  ReloadOutlined,
+  KeyOutlined,
+  LinkOutlined,
+  DownloadOutlined,
+  LayoutOutlined,
+} from '@ant-design/icons';
 import dagre from 'dagre';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
@@ -162,7 +168,7 @@ function ExportButton() {
       a.click();
       message.success(t('common.erDiagramExported'));
     } catch (err: any) {
-      message.error(`${t('common.exportFailed')}: ${err.message || err}`);
+      message.error(`${t('common.importExport.exportFailed')}: ${err.message || err}`);
     }
   };
 
@@ -210,9 +216,9 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
       }
       setForeignKeys(fkMap);
       setTableColumns(colMap);
-      message.success(`${t('common.loaded')} ${allTables.length} ${t('common.tables')}`);
+      message.success(`${t('common.loaded')} ${allTables.length} ${t('common.dumpDialog.tables')}`);
     } catch (error: any) {
-      message.error(`${t('common.loadFailed')}: ${error.message || error}`);
+      message.error(`${t('common.erDiagram.loadFailed')}: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -319,7 +325,10 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
     });
 
     if (useAutoLayout) {
-      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(newNodes, newEdges);
+      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+        newNodes,
+        newEdges
+      );
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
     } else {
@@ -367,11 +376,13 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
 
         {selectedTable && (
           <Button size="small" onClick={() => setSelectedTable(null)}>
-            {t('common.showAll')}
+            {t('common.erDiagram.showAll')}
           </Button>
         )}
 
-        <Tooltip title={useAutoLayout ? t('common.switchToGridLayout') : t('common.switchToAutoLayout')}>
+        <Tooltip
+          title={useAutoLayout ? t('common.switchToGridLayout') : t('common.switchToAutoLayout')}
+        >
           <Button
             icon={<LayoutOutlined />}
             size="small"
@@ -397,8 +408,12 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
           color: 'var(--text-secondary)',
         }}
       >
-        <div>{t('common.tables')}: {tables.length}</div>
-        <div>{t('common.relations')}: {edges.length}</div>
+        <div>
+          {t('common.dumpDialog.tables')}: {tables.length}
+        </div>
+        <div>
+          {t('common.relations')}: {edges.length}
+        </div>
       </div>
 
       {loading && tables.length === 0 ? (

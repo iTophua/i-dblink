@@ -291,7 +291,9 @@ export const api = {
     return result;
   },
 
-  async checkBackupTool(dbType: string): Promise<{ available: boolean; path?: string; error?: string }> {
+  async checkBackupTool(
+    dbType: string
+  ): Promise<{ available: boolean; path?: string; error?: string }> {
     return await invoke('check_backup_tool', { dbType });
   },
 

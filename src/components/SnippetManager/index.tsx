@@ -45,7 +45,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
       const data = await api.getSnippets();
       setSnippets(data);
     } catch (err: any) {
-      message.error(`${t('common.loadFailed')}: ${err.message || err}`);
+      message.error(`${t('common.erDiagram.loadFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -58,7 +58,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
         id: editingId,
         ...values,
       });
-      message.success(editingId ? t('common.updateSuccess') : t('common.saveSuccess'));
+      message.success(editingId ? t('common.dataGrid.updateSuccess') : t('common.saveSuccess'));
       form.resetFields();
       setEditingId(undefined);
       await loadSnippets();
@@ -90,10 +90,10 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
       onOk: async () => {
         try {
           await api.deleteSnippet(id);
-          message.success(t('common.deleteSuccess'));
+          message.success(t('common.dataGrid.deleteSuccess'));
           await loadSnippets();
         } catch (err: any) {
-          message.error(`${t('common.deleteFailed')}: ${err.message || err}`);
+          message.error(`${t('common.dataGrid.deleteFailed')}: ${err.message || err}`);
         }
       },
     });
@@ -112,7 +112,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
 
   return (
     <Drawer
-      title={t('common.snippets')}
+      title={t('common.sqlEditor.snippets')}
       placement="right"
       width={520}
       open={open}
@@ -134,7 +134,11 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
         {/* 编辑表单 */}
         {(editingId || !snippets.some((s) => s.name === form.getFieldValue('name'))) && (
           <Form form={form} layout="vertical" onFinish={handleSubmit}>
-            <Form.Item name="name" label={t('common.name')} rules={[{ required: true, message: t('common.pleaseEnterName') }]}>
+            <Form.Item
+              name="name"
+              label={t('common.name')}
+              rules={[{ required: true, message: t('common.pleaseEnterName') }]}
+            >
               <Input placeholder={t('common.examplePaginationQuery')} />
             </Form.Item>
 
@@ -164,7 +168,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
             <Form.Item>
               <Space>
                 <Button type="primary" htmlType="submit" loading={loading}>
-                  {editingId ? t('common.update') : t('common.save')}
+                  {editingId ? t('common.importExport.update') : t('common.save')}
                 </Button>
                 {editingId && (
                   <Button
@@ -215,9 +219,9 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
                       </Tag>
                     )}
                     {snippet.is_private && (
-                        <Tag color="orange" style={{ fontSize: 10 }}>
-                          {t('common.private')}
-                        </Tag>
+                      <Tag color="orange" style={{ fontSize: 10 }}>
+                        {t('common.private')}
+                      </Tag>
                     )}
                   </Space>
                 }

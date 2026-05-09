@@ -789,7 +789,9 @@ export const useDatabase = () => {
         if (dbType === 'sqlite') {
           return result.rows[0][0] as string;
         }
-        return result.rows[0][result.columns.length > 1 ? result.columns.indexOf('GET_DDL') : 1] as string;
+        return result.rows[0][
+          result.columns.length > 1 ? result.columns.indexOf('GET_DDL') : 1
+        ] as string;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取 CREATE TABLE 语句失败';
         setError(errorMsg);

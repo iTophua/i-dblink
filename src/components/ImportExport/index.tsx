@@ -76,7 +76,7 @@ export function ImportExportModal({
       );
 
       if (result.error) {
-        message.error(`${t('common.exportFailed')}: ${result.error}`);
+        message.error(`${t('common.importExport.exportFailed')}: ${result.error}`);
         setExportLoading(false);
         return;
       }
@@ -161,9 +161,11 @@ export function ImportExportModal({
       URL.revokeObjectURL(url);
 
       setProgress(100);
-      message.success(`${t('common.exportSuccess')}: ${rows.length} ${t('common.records')}`);
+      message.success(
+        `${t('common.importExport.exportSuccess')}: ${rows.length} ${t('common.records')}`
+      );
     } catch (error: any) {
-      message.error(`${t('common.exportFailed')}: ${error.message || error}`);
+      message.error(`${t('common.importExport.exportFailed')}: ${error.message || error}`);
     } finally {
       setExportLoading(false);
       setProgress(0);
@@ -183,15 +185,17 @@ export function ImportExportModal({
       const result = await api.executeQuery(connectionId, importSql, database);
 
       if (result.error) {
-        message.error(`${t('common.importFailed')}: ${result.error}`);
+        message.error(`${t('common.importExport.importFailed')}: ${result.error}`);
         return;
       }
 
       const affected = result.rows_affected || 0;
-      message.success(`${t('common.importSuccess')}: ${affected} ${t('common.rowsAffected')}`);
+      message.success(
+        `${t('common.importExport.importSuccess')}: ${affected} ${t('common.rowsAffected')}`
+      );
       setImportSql('');
     } catch (error: any) {
-      message.error(`${t('common.importFailed')}: ${error.message || error}`);
+      message.error(`${t('common.importExport.importFailed')}: ${error.message || error}`);
     } finally {
       setImportLoading(false);
     }
@@ -208,7 +212,9 @@ export function ImportExportModal({
       children: (
         <div style={{ padding: '16px 0' }}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>{t('common.exportFormat')}</label>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
+              {t('common.importExport.exportFormat')}
+            </label>
             <Select
               value={exportOptions.format}
               onChange={(v) => setExportOptions({ ...exportOptions, format: v })}
@@ -224,7 +230,9 @@ export function ImportExportModal({
           {exportOptions.format === 'csv' && (
             <>
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>{t('common.delimiter')}</label>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
+                  {t('common.delimiter')}
+                </label>
                 <Select
                   value={exportOptions.delimiter}
                   onChange={(v) => setExportOptions({ ...exportOptions, delimiter: v })}
@@ -262,7 +270,7 @@ export function ImportExportModal({
             onClick={handleExport}
             loading={exportLoading}
           >
-            {t('common.exportData')}
+            {t('common.dataGrid.exportData')}
           </Button>
 
           {exportLoading && <Progress percent={progress} style={{ marginTop: 16 }} />}
@@ -279,7 +287,9 @@ export function ImportExportModal({
       children: (
         <div style={{ padding: '16px 0' }}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>{t('common.importFormat')}</label>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 500 }}>
+              {t('common.importFormat')}
+            </label>
             <Select
               value={importOptions.format}
               onChange={(v) => setImportOptions({ ...importOptions, format: v })}
@@ -317,7 +327,7 @@ export function ImportExportModal({
             >
               {t('common.executeImport')}
             </Button>
-            <Button onClick={() => setImportSql('')}>{t('common.clear')}</Button>
+            <Button onClick={() => setImportSql('')}>{t('common.logPanel.clear')}</Button>
           </Space>
         </div>
       ),

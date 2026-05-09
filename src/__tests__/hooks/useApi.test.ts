@@ -192,7 +192,7 @@ describe('useTableScrollHeight logic', () => {
     expect(finalHeight).toBe(300);
   });
 
-    it('returns zero when container is not available', () => {
+  it('returns zero when container is not available', () => {
     let height = 0;
     const calculateHeight = () => {
       const container: HTMLDivElement | null = null;
@@ -210,8 +210,8 @@ describe('useMenuShortcuts logic', () => {
       'new-connection': 'mod+n',
       'execute-query': 'mod+enter',
       'save-connection': 'mod+s',
-      'delete': 'delete',
-      'refresh': 'f5',
+      delete: 'delete',
+      refresh: 'f5',
     };
 
     expect(shortcuts['new-connection']).toBe('mod+n');
@@ -329,8 +329,28 @@ describe('Connection/Group types', () => {
 
   it('DatabaseType includes all supported databases', () => {
     const dbTypes: Array<
-      'mysql' | 'postgresql' | 'sqlite' | 'sqlserver' | 'oracle' | 'mariadb' | 'dameng' | 'kingbase' | 'highgo' | 'vastbase'
-    > = ['mysql', 'postgresql', 'sqlite', 'sqlserver', 'oracle', 'mariadb', 'dameng', 'kingbase', 'highgo', 'vastbase'];
+      | 'mysql'
+      | 'postgresql'
+      | 'sqlite'
+      | 'sqlserver'
+      | 'oracle'
+      | 'mariadb'
+      | 'dameng'
+      | 'kingbase'
+      | 'highgo'
+      | 'vastbase'
+    > = [
+      'mysql',
+      'postgresql',
+      'sqlite',
+      'sqlserver',
+      'oracle',
+      'mariadb',
+      'dameng',
+      'kingbase',
+      'highgo',
+      'vastbase',
+    ];
 
     expect(dbTypes).toHaveLength(10);
   });

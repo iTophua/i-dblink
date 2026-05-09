@@ -111,7 +111,7 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
               key: 'ddl',
               label: (
                 <span>
-                  <CodeOutlined /> {t('common.ddl')}
+                  <CodeOutlined /> {t('common.viewDefinition.ddl')}
                 </span>
               ),
               children: (
@@ -138,7 +138,7 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
               key: 'columns',
               label: (
                 <span>
-                  <ColumnWidthOutlined /> {t('common.columns')}
+                  <ColumnWidthOutlined /> {t('common.tableStructure.columns')}
                 </span>
               ),
               children: (

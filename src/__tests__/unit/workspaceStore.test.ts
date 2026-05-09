@@ -37,9 +37,7 @@ describe('workspaceStore', () => {
 
     it('updates openedSqlTabs', () => {
       useWorkspaceStore.getState().updateWorkspace({
-        openedSqlTabs: [
-          { key: 'sql-1', title: 'Query 1', content: 'SELECT * FROM users' },
-        ],
+        openedSqlTabs: [{ key: 'sql-1', title: 'Query 1', content: 'SELECT * FROM users' }],
       });
       expect(useWorkspaceStore.getState().openedSqlTabs).toHaveLength(1);
       expect(useWorkspaceStore.getState().openedSqlTabs[0].key).toBe('sql-1');
@@ -47,9 +45,7 @@ describe('workspaceStore', () => {
 
     it('updates openedTables', () => {
       useWorkspaceStore.getState().updateWorkspace({
-        openedTables: [
-          { name: 'users', connectionId: 'conn-1', connectionName: 'Test DB' },
-        ],
+        openedTables: [{ name: 'users', connectionId: 'conn-1', connectionName: 'Test DB' }],
       });
       expect(useWorkspaceStore.getState().openedTables).toHaveLength(1);
     });
@@ -78,7 +74,9 @@ describe('workspaceStore', () => {
         openedSqlTabs: [{ key: 'sql-1', title: 'Query 1' }],
         openedTables: [{ name: 'users', connectionId: 'conn-1', connectionName: 'Test' }],
         openedDesignerTabs: [{ key: 'designer-1', title: 'Designer', connectionId: 'conn-1' }],
-        openedViewDefTabs: [{ key: 'view-1', title: 'View', connectionId: 'conn-1', viewName: 'v1' }],
+        openedViewDefTabs: [
+          { key: 'view-1', title: 'View', connectionId: 'conn-1', viewName: 'v1' },
+        ],
       });
 
       useWorkspaceStore.getState().clearWorkspace();

@@ -223,7 +223,7 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
         )}
         <Popover
           content={content}
-          title={`${t('common.filter')}: ${displayName}`}
+          title={`${t('common.dataGrid.filter')}: ${displayName}`}
           trigger="click"
           open={open}
           onOpenChange={handleOpenChange}

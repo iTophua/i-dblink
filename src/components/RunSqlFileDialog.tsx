@@ -126,10 +126,14 @@ export function RunSqlFileDialog({
       }
 
       if (failed > 0) {
-        message.warning(`${t('common.executionComplete')}: ${t('common.success')}: ${success}, ${t('common.failed')}: ${failed}`);
+        message.warning(
+          `${t('common.executionComplete')}: ${t('common.success')}: ${success}, ${t('common.failed')}: ${failed}`
+        );
         console.error('SQL 执行错误:', errors.slice(0, 10));
       } else {
-        message.success(`${t('common.executionComplete')}: ${t('common.success')}: ${success} ${t('common.statements')}`);
+        message.success(
+          `${t('common.executionComplete')}: ${t('common.success')}: ${success} ${t('common.statements')}`
+        );
       }
 
       onSuccess();

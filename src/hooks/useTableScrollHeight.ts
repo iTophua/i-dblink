@@ -42,7 +42,6 @@ export function useTableScrollHeight(dependencies: any[] = []) {
       window.removeEventListener('resize', calculateHeight);
       observer.disconnect();
     };
-     
   }, [calculateHeight]);
 
   return {

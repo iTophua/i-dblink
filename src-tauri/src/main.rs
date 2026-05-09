@@ -243,7 +243,14 @@ fn create_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Menu<R>, 
 }
 
 fn main() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+    }
+
+    builder
         .setup(|app| {
             // 创建并设置菜单
             let menu = create_menu(&app.handle())?;
@@ -337,14 +344,17 @@ fn main() {
             match event.id.as_ref() {
                 "quit" => {
                     let sidecar_state = app.state::<SidecarState>().0.clone();
-                    tokio::spawn(async move {
-                        let sidecar_guard = sidecar_state.lock().await;
-                        if let Some(sm) = sidecar_guard.as_ref() {
-                            if let Err(e) = sm.stop().await {
-                                tracing::warn!("Failed to stop sidecar: {}", e);
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build();
+                    if let Ok(rt) = rt {
+                        rt.block_on(async {
+                            let guard = sidecar_state.lock().await;
+                            if let Some(ref sm) = *guard {
+                                let _ = sm.stop().await;
                             }
-                        }
-                    });
+                        });
+                    }
                     std::process::exit(0);
                 }
                 "preferences" | "settings" | "options" => {
@@ -369,20 +379,20 @@ fn main() {
         })
         .on_window_event(|app, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // 阻止窗口立即关闭，先停止 Go sidecar
                 api.prevent_close();
                 let sidecar_state = app.state::<SidecarState>().0.clone();
-                let app_handle = app.clone();
-                tokio::spawn(async move {
-                    let sidecar_guard = sidecar_state.lock().await;
-                    if let Some(sm) = sidecar_guard.as_ref() {
-                        if let Err(e) = sm.stop().await {
-                            tracing::warn!("Failed to stop sidecar: {}", e);
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build();
+                if let Ok(rt) = rt {
+                    rt.block_on(async {
+                        let guard = sidecar_state.lock().await;
+                        if let Some(ref sm) = *guard {
+                            let _ = sm.stop().await;
                         }
-                    }
-                    drop(sidecar_guard);
-                    app_handle.app_handle().exit(0);
-                });
+                    });
+                }
+                app.app_handle().exit(0);
             }
         })
         .invoke_handler(tauri::generate_handler![

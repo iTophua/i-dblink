@@ -112,7 +112,7 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
               label: (
                 <span>
                   <LineChartOutlined style={{ marginRight: 4 }} />
-                  {t('common.explainPlan')}
+                  {t('common.resultGrid.explainPlan')}
                 </span>
               ),
             },
@@ -121,9 +121,9 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
         <Space size="small">
           <Button icon={<ClearOutlined />} size="small" type="text" onClick={handleClear} />
           <Button icon={<DownloadOutlined />} size="small" type="text" onClick={handleExport} />
-            <a onClick={onCollapse} style={{ fontSize: 12, color: tc.primary }}>
-              {t('common.hide')}
-            </a>
+          <a onClick={onCollapse} style={{ fontSize: 12, color: tc.primary }}>
+            {t('common.hide')}
+          </a>
         </Space>
       </div>
       <div
@@ -136,9 +136,9 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
         }}
       >
         {filteredLogs.length === 0 ? (
-            <div style={{ color: tc.textDisabled, padding: '8px 0', textAlign: 'center' }}>
-              {t('common.noLogs')}
-            </div>
+          <div style={{ color: tc.textDisabled, padding: '8px 0', textAlign: 'center' }}>
+            {t('common.logPanel.noLogs')}
+          </div>
         ) : (
           filteredLogs.map((log) => (
             <div key={log.id} style={{ padding: '1px 0', color: levelColor(log.level) }}>

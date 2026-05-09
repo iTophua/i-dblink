@@ -118,7 +118,7 @@ export function GroupDialog({
         <Form.Item
           name="name"
           label={t('common.groupNameLabel')}
-          rules={[{ required: true, message: t('common.nameRequired') }]}
+          rules={[{ required: true, message: t('common.userManagement.nameRequired') }]}
         >
           <GlobalInput placeholder={t('common.enterGroupNamePlaceholder')} maxLength={50} />
         </Form.Item>

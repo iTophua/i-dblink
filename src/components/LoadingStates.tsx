@@ -439,7 +439,7 @@ export const QuickStartGuide: React.FC<{
           <BranchesOutlined style={{ fontSize: 24, color: '#fff' }} />
         </div>
         <Text strong style={{ fontSize: 15 }}>
-          {t('common.quickStart')}
+          {t('common.welcome.quickStart')}
         </Text>
         <Text type="secondary" style={{ fontSize: 12, textAlign: 'center' }}>
           {t('common.viewTutorial')}

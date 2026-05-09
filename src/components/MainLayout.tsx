@@ -36,7 +36,11 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [selectedDatabase, setSelectedDatabase] = useState<string | undefined>();
   const [selectedObjectType, setSelectedObjectType] = useState<'table' | 'view' | 'all'>('all');
   // 双击表时触发，用于在 TabPanel 中打开新 Tab
-  const [tableToOpen, setTableToOpen] = useState<{ name: string; database?: string; isView?: boolean } | null>(null);
+  const [tableToOpen, setTableToOpen] = useState<{
+    name: string;
+    database?: string;
+    isView?: boolean;
+  } | null>(null);
   const [sqlTabCount, setSqlTabCount] = useState(0);
   const [searchText, setSearchText] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
@@ -469,7 +473,10 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         // 检查是否是密码错误，需要弹框输入密码
         if (err?.code === 'PASSWORD_REQUIRED') {
           const conn = connections.find((c) => c.id === connectionId);
-          setPasswordDialogConn({ id: connectionId, name: conn?.name || t('common.unknownConnection') });
+          setPasswordDialogConn({
+            id: connectionId,
+            name: conn?.name || t('common.unknownConnection'),
+          });
           setPasswordDialogOpen(true);
           return;
         }
@@ -580,22 +587,14 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
   const closingDbModalRef = useRef(false);
 
-  const handleDatabaseProperties = useCallback(
-    (connectionId: string, databaseName: string) => {
-      Modal.info({
-        title: `${t('common.databasePropertiesTitle')}: ${databaseName}`,
-        width: 800,
-        content: (
-          <DatabaseProperties
-            connectionId={connectionId}
-            databaseName={databaseName}
-          />
-        ),
-        okText: t('common.close'),
-      });
-    },
-    []
-  );
+  const handleDatabaseProperties = useCallback((connectionId: string, databaseName: string) => {
+    Modal.info({
+      title: `${t('common.databasePropertiesTitle')}: ${databaseName}`,
+      width: 800,
+      content: <DatabaseProperties connectionId={connectionId} databaseName={databaseName} />,
+      okText: t('common.close'),
+    });
+  }, []);
 
   const handleDatabaseClose = useCallback(
     (connectionId: string, database: string) => {
@@ -750,7 +749,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
       if (hasTabs && tabInfo && (tabInfo.dataTabCount > 0 || tabInfo.sqlTabCount > 0)) {
         const tabDesc = [
-          tabInfo.dataTabCount > 0 ? t('common.dataTableCount', { count: tabInfo.dataTabCount }) : '',
+          tabInfo.dataTabCount > 0
+            ? t('common.dataTableCount', { count: tabInfo.dataTabCount })
+            : '',
           tabInfo.sqlTabCount > 0 ? t('common.sqlQueryCount', { count: tabInfo.sqlTabCount }) : '',
         ]
           .filter(Boolean)
@@ -976,7 +977,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
             {!collapsed && (
               <div style={styles.searchContainer} className="search-container">
                 <GlobalInput
-                  placeholder={t('common.searchPlaceholder')}
+                  placeholder={t('common.tableList.searchPlaceholder')}
                   value={searchText}
                   onChange={(e: any) => handleSearchChange(e.target.value)}
                   style={styles.searchInput}
@@ -1079,7 +1080,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                 e.currentTarget.style.background = 'var(--background-card)';
               }}
             >
-              <span style={styles.collapseButtonText}>{collapsed ? t('common.expand') : t('common.collapse')}</span>
+              <span style={styles.collapseButtonText}>
+                {collapsed ? t('common.expand') : t('common.collapse')}
+              </span>
             </div>
           </div>
         </Sider>
@@ -1154,12 +1157,15 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           setPasswordDialogOpen(false);
           passwordForm.resetFields();
         }}
-        okText={t('common.connect')}
+        okText={t('common.mainLayout.connect')}
         cancelText={t('common.cancel')}
         destroyOnClose
       >
         <Form form={passwordForm} layout="vertical">
-          <Form.Item name="password" rules={[{ required: true, message: t('common.passwordRequired') }]}>
+          <Form.Item
+            name="password"
+            rules={[{ required: true, message: t('common.passwordRequired') }]}
+          >
             <Input.Password autoFocus placeholder={t('common.enterDatabasePassword')} />
           </Form.Item>
         </Form>

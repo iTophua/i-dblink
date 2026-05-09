@@ -269,8 +269,6 @@ export const DataTable = memo(function DataTable({
   const { getColumns, executeQuery } = useDatabase();
   const loadingRef = useRef(false);
 
-
-
   const loadData = useCallback(
     async (overrideWhere?: string, overrideOrderBy?: string) => {
       if (!connectionId || !tableName || loadingRef.current) return;
@@ -279,7 +277,18 @@ export const DataTable = memo(function DataTable({
         loadingRef.current = true;
         setLoading(true);
 
-        const query = buildQuery(currentPage, pageSize, tableName, database, dbType, sortModel, whereClause, orderByClause, overrideWhere, overrideOrderBy);
+        const query = buildQuery(
+          currentPage,
+          pageSize,
+          tableName,
+          database,
+          dbType,
+          sortModel,
+          whereClause,
+          orderByClause,
+          overrideWhere,
+          overrideOrderBy
+        );
         setCurrentSql(query);
 
         const [colResult, dataResult] = await Promise.all([
@@ -634,7 +643,9 @@ export const DataTable = memo(function DataTable({
             return;
           }
           navigator.clipboard.writeText(JSON.stringify(selectedRows, null, 2));
-          message.success(`${t('common.copied')} ${selectedRows.length} ${t('common.rowsToClipboard')}`);
+          message.success(
+            `${t('common.copyTable.copied')} ${selectedRows.length} ${t('common.rowsToClipboard')}`
+          );
           break;
         case 'delete-select':
           if (!primaryKey) {
@@ -779,7 +790,9 @@ export const DataTable = memo(function DataTable({
 
       // 显示结果
       if (errorCount === 0) {
-        message.success(`${t('common.submittedSuccessfully')} ${successCount} ${t('common.changes')}`);
+        message.success(
+          `${t('common.submittedSuccessfully')} ${successCount} ${t('common.changes')}`
+        );
         setPendingChanges({ inserts: [], updates: [], deletes: [] });
         setHasUnsavedChanges(false);
         loadData();
@@ -885,10 +898,12 @@ export const DataTable = memo(function DataTable({
       }));
 
       setHasUnsavedChanges(true);
-      message.success(`${t('common.markedForDeletion')} ${selectedRows.length} ${t('common.rows')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveChanges')}`);
+      message.success(
+        `${t('common.markedForDeletion')} ${selectedRows.length} ${t('common.rows')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveChanges')}`
+      );
     } catch (error: any) {
       console.error('Delete error:', error);
-      message.error(`${t('common.deleteFailed')}: ${error.message || error}`);
+      message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -908,16 +923,16 @@ export const DataTable = memo(function DataTable({
       const result = await executeQuery(connectionId, insertSQL);
 
       if (result.error) {
-        message.error(`${t('common.insertFailed')}: ${result.error}`);
+        message.error(`${t('common.dataGrid.insertFailed')}: ${result.error}`);
       } else {
-        message.success(t('common.insertSuccess'));
+        message.success(t('common.dataGrid.insertSuccess'));
         setAddModalOpen(false);
         loadData();
         loadCount(whereClause);
       }
     } catch (error: any) {
       console.error('Insert error:', error);
-      message.error(`${t('common.insertFailed')}: ${error.message || error}`);
+      message.error(`${t('common.dataGrid.insertFailed')}: ${error.message || error}`);
     }
   }, [addForm, tableName, connectionId, executeQuery, loadData, loadCount, dbType]);
 
@@ -951,15 +966,15 @@ export const DataTable = memo(function DataTable({
       const result = await executeQuery(connectionId, updateSQL);
 
       if (result.error) {
-        message.error(`${t('common.updateFailed')}: ${result.error}`);
+        message.error(`${t('common.dataGrid.updateFailed')}: ${result.error}`);
       } else {
-        message.success(t('common.updateSuccess'));
+        message.success(t('common.dataGrid.updateSuccess'));
         setEditModalOpen(false);
         loadData();
       }
     } catch (error: any) {
       console.error('Update error:', error);
-      message.error(`${t('common.updateFailed')}: ${error.message || error}`);
+      message.error(`${t('common.dataGrid.updateFailed')}: ${error.message || error}`);
     }
   }, [editForm, columns, editingRow, tableName, connectionId, executeQuery, loadData, dbType]);
 
@@ -999,7 +1014,7 @@ export const DataTable = memo(function DataTable({
     link.click();
     URL.revokeObjectURL(link.href);
 
-    message.success(t('common.exportSuccess'));
+    message.success(t('common.importExport.exportSuccess'));
   }, [rowData, columns, tableName]);
 
   const copySql = useCallback(() => {
@@ -1316,7 +1331,7 @@ export const DataTable = memo(function DataTable({
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
           >
-            {t('common.filter')}
+            {t('common.dataGrid.filter')}
           </Button>
 
           <Dropdown
@@ -1324,7 +1339,7 @@ export const DataTable = memo(function DataTable({
             menu={{
               title: t('common.columnVisibility'),
               items: [
-                { key: 'showAll', label: t('common.showAll'), onClick: showAllColumns },
+                { key: 'showAll', label: t('common.erDiagram.showAll'), onClick: showAllColumns },
                 { type: 'divider' },
                 ...columns.map((col) => ({
                   key: col.column_name,
@@ -1456,7 +1471,7 @@ export const DataTable = memo(function DataTable({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
-              {t('common.filterConditions')}
+              {t('common.dataGrid.filterConditions')}
             </span>
             <div style={{ flex: 1 }} />
             <Button
@@ -1464,7 +1479,7 @@ export const DataTable = memo(function DataTable({
               onClick={() => {
                 const sql = buildWhereClause(filterConditions, dbType);
                 Modal.info({
-                  title: t('common.sqlPreview'),
+                  title: t('common.importExport.sqlPreview'),
                   content: sql ? (
                     <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>WHERE {sql}</pre>
                   ) : (
@@ -1724,8 +1739,8 @@ export const DataTable = memo(function DataTable({
               background: tc.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)',
               zIndex: 10,
             }}
-            >
-            <Spin size="large" description={t('common.loading')} />
+          >
+            <Spin size="large" description={t('common.erDiagram.loading')} />
           </div>
         )}
 
@@ -1794,14 +1809,14 @@ export const DataTable = memo(function DataTable({
                 noPin: t('common.noPin'),
                 autoSize: t('common.autoSize'),
                 resetColumns: t('common.resetColumns'),
-                expandAll: t('common.expandAll'),
-                collapseAll: t('common.collapseAll'),
+                expandAll: t('common.mainLayout.expandAll'),
+                collapseAll: t('common.mainLayout.collapseAll'),
                 copyWithHeaders: t('common.copyWithHeaders'),
                 copyWithGroupHeaders: t('common.copyWithGroupHeaders'),
                 menu: t('common.menu'),
-                filter: t('common.filter'),
+                filter: t('common.dataGrid.filter'),
                 filters: t('common.filters'),
-                columns: t('common.columns'),
+                columns: t('common.tableStructure.columns'),
                 values: t('common.values'),
                 pinColumn: t('common.pinColumn'),
                 autoSizeColumn: t('common.autoSizeColumn'),
@@ -1830,7 +1845,7 @@ export const DataTable = memo(function DataTable({
                 greaterThanOrEqual: t('common.greaterThanOrEqual'),
                 filterOoo: t('common.filterOoo'),
                 applyFilter: t('common.applyFilter'),
-                clearFilter: t('common.clearFilter'),
+                clearFilter: t('common.dataGrid.clearFilter'),
                 blank: t('common.blank'),
                 notBlank: t('common.notBlank'),
                 and: t('common.and'),
@@ -1839,11 +1854,11 @@ export const DataTable = memo(function DataTable({
                 selectAll: t('common.selectAll'),
                 selectAllFiltered: t('common.selectAllFiltered'),
                 addCurrentSelectionToFilter: t('common.addCurrentSelectionToFilter'),
-                sum: t('common.sum'),
-                min: t('common.min'),
-                max: t('common.max'),
+                sum: t('common.dataGrid.sum'),
+                min: t('common.dataGrid.min'),
+                max: t('common.dataGrid.max'),
                 count: t('common.count'),
-                avg: t('common.avg'),
+                avg: t('common.dataGrid.avg'),
                 page: t('common.page'),
                 pageSize: t('common.pageSize'),
                 total: t('common.total'),
@@ -1864,10 +1879,7 @@ export const DataTable = memo(function DataTable({
             />
           </div>
         ) : hasEverLoaded ? (
-          <Empty
-            description={t('common.noTableStructure')}
-            style={{ marginTop: '20%' }}
-          />
+          <Empty description={t('common.noTableStructure')} style={{ marginTop: '20%' }} />
         ) : (
           <div
             style={{
@@ -1879,7 +1891,7 @@ export const DataTable = memo(function DataTable({
               background: 'var(--background-card)',
             }}
           >
-            <Spin size="large" description={t('common.loading')} />
+            <Spin size="large" description={t('common.erDiagram.loading')} />
           </div>
         )}
       </div>
@@ -1961,7 +1973,7 @@ export const DataTable = memo(function DataTable({
               items: [
                 {
                   key: 'excel',
-                  label: t('common.exportExcelLabel'),
+                  label: t('common.dataGrid.exportExcelLabel'),
                   icon: <FileTextOutlined />,
                   onClick: () => {
                     try {
@@ -1983,7 +1995,7 @@ export const DataTable = memo(function DataTable({
                       });
                       message.success(t('common.exportedExcel'));
                     } catch (e: any) {
-                      message.error(`${t('common.exportFailed')}: ${e.message}`);
+                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
@@ -2010,7 +2022,7 @@ export const DataTable = memo(function DataTable({
                       });
                       message.success(t('common.exportedCsv'));
                     } catch (e: any) {
-                      message.error(`${t('common.exportFailed')}: ${e.message}`);
+                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
@@ -2033,7 +2045,7 @@ export const DataTable = memo(function DataTable({
                       });
                       message.success(t('common.exportedJson'));
                     } catch (e: any) {
-                      message.error(`${t('common.exportFailed')}: ${e.message}`);
+                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
@@ -2061,7 +2073,7 @@ export const DataTable = memo(function DataTable({
                       });
                       message.success(t('common.exportedTxt'));
                     } catch (e: any) {
-                      message.error(`${t('common.exportFailed')}: ${e.message}`);
+                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
@@ -2088,7 +2100,7 @@ export const DataTable = memo(function DataTable({
                       });
                       message.success(t('common.exportedXml'));
                     } catch (e: any) {
-                      message.error(`${t('common.exportFailed')}: ${e.message}`);
+                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
@@ -2115,7 +2127,7 @@ export const DataTable = memo(function DataTable({
                       });
                       message.success(t('common.exportedMarkdown'));
                     } catch (e: any) {
-                      message.error(`${t('common.exportFailed')}: ${e.message}`);
+                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
                     }
                   },
                 },
@@ -2169,8 +2181,8 @@ export const DataTable = memo(function DataTable({
               size="small"
               style={{ height: 20, padding: '0 4px', fontSize: 11 }}
             >
-            {t('common.copy')}
-          </Button>
+              {t('common.copy')}
+            </Button>
           </Tooltip>
         </div>
 
@@ -2239,7 +2251,10 @@ export const DataTable = memo(function DataTable({
               }
               name={col.column_name}
               rules={[
-                { required: col.is_nullable !== 'YES', message: `${t('common.pleaseEnter')} ${col.column_name}` },
+                {
+                  required: col.is_nullable !== 'YES',
+                  message: `${t('common.pleaseEnter')} ${col.column_name}`,
+                },
               ]}
             >
               <GlobalInput placeholder={col.comment || col.data_type} />
@@ -2348,7 +2363,7 @@ export const DataTable = memo(function DataTable({
           });
 
           const pkCol = columns.find((c) => c.column_key === 'PRI');
-          
+
           try {
             const result = await api.batchImport({
               connectionId,
@@ -2358,17 +2373,21 @@ export const DataTable = memo(function DataTable({
               primaryKey: pkCol?.column_name,
               rows: mappedData,
             });
-            
+
             if (result.failed_count > 0) {
-              message.warning(`${t('common.importCompleted')}: ${t('common.success')} ${result.success_count} ${t('common.rows')}, ${t('common.failed')} ${result.failed_count} ${t('common.rows')}`);
+              message.warning(
+                `${t('common.importCompleted')}: ${t('common.success')} ${result.success_count} ${t('common.rows')}, ${t('common.failed')} ${result.failed_count} ${t('common.rows')}`
+              );
             } else {
-              message.success(`${t('common.importedSuccessfully')} ${result.success_count} ${t('common.dataRows')}`);
+              message.success(
+                `${t('common.importedSuccessfully')} ${result.success_count} ${t('common.dataRows')}`
+              );
             }
-            
+
             // 刷新数据
             loadData();
           } catch (err: any) {
-            message.error(`${t('common.importFailed')}: ${err.message || err}`);
+            message.error(`${t('common.importExport.importFailed')}: ${err.message || err}`);
           }
         }}
       />
@@ -2382,7 +2401,7 @@ export const DataTable = memo(function DataTable({
           items: [
             {
               key: 'copy-row',
-              label: t('common.copyRow'),
+              label: t('common.dataGrid.copyRow'),
               icon: <CopyOutlined />,
               onClick: () => handleContextMenuAction('copy-row'),
             },
@@ -2395,7 +2414,7 @@ export const DataTable = memo(function DataTable({
             { type: 'divider' },
             {
               key: 'delete-row',
-              label: t('common.deleteRow'),
+              label: t('common.dataGrid.deleteRow'),
               icon: <DeleteOutlined />,
               danger: true,
               onClick: () => handleContextMenuAction('delete-row'),
@@ -2440,7 +2459,7 @@ export const DataTable = memo(function DataTable({
           items: [
             {
               key: 'copy-cell-value',
-              label: t('common.copyCellValue'),
+              label: t('common.dataGrid.copyCellValue'),
               icon: <CopyOutlined />,
               onClick: () => {
                 navigator.clipboard.writeText(String(cellContextMenu.value ?? 'NULL'));
@@ -2450,7 +2469,7 @@ export const DataTable = memo(function DataTable({
             },
             {
               key: 'copy-insert',
-              label: t('common.copyAsInsert'),
+              label: t('common.dataGrid.copyAsInsert'),
               onClick: () => {
                 if (!tableName || !columns.length) {
                   message.warning(t('common.cannotDetermineTableStructure'));
@@ -2459,7 +2478,9 @@ export const DataTable = memo(function DataTable({
                 }
                 const row = cellContextMenu.rowNode.data;
                 const values = columns.map((c) => row[c.column_name] ?? null);
-                const colStr = columns.map((c) => escapeSqlIdentifier(c.column_name, dbType)).join(', ');
+                const colStr = columns
+                  .map((c) => escapeSqlIdentifier(c.column_name, dbType))
+                  .join(', ');
                 const valStr = values.map(escapeSqlValue).join(', ');
                 const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStr}) VALUES (${valStr});`;
                 navigator.clipboard.writeText(sql);
@@ -2469,7 +2490,7 @@ export const DataTable = memo(function DataTable({
             },
             {
               key: 'copy-update',
-              label: t('common.copyAsUpdate'),
+              label: t('common.dataGrid.copyAsUpdate'),
               disabled: !primaryKey,
               onClick: () => {
                 if (!tableName || !primaryKey || !columns.length) {
@@ -2486,7 +2507,10 @@ export const DataTable = memo(function DataTable({
                 }
                 const values = columns.map((c) => row[c.column_name] ?? null);
                 const setters = columns
-                  .map((c, i) => `${escapeSqlIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i])}`)
+                  .map(
+                    (c, i) =>
+                      `${escapeSqlIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i])}`
+                  )
                   .filter((_, i) => i !== pkIdx)
                   .join(', ');
                 const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(values[pkIdx])};`;

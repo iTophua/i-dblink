@@ -92,7 +92,9 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
         setFieldMapping(autoMapping);
         setSelectedRows(new Set(parsed.rows.map((_, i) => i)));
         setCurrentStep(1);
-        message.success(`${t('common.parsedSuccessfully')} ${parsed.rows.length} ${t('common.rows')}`);
+        message.success(
+          `${t('common.parsedSuccessfully')} ${parsed.rows.length} ${t('common.rows')}`
+        );
       } catch (e: any) {
         setParseError(e.message || t('common.fileParseFailed'));
         message.error(e.message || t('common.fileParseFailed'));
@@ -113,12 +115,14 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     setImporting(true);
     try {
       await onImport(rowsToImport, importMode, fieldMapping);
-      message.success(`${t('common.importedSuccessfully')} ${rowsToImport.length} ${t('common.rows')}`);
+      message.success(
+        `${t('common.importedSuccessfully')} ${rowsToImport.length} ${t('common.rows')}`
+      );
       onClose();
       setCurrentStep(0);
       setParsedFile(null);
     } catch (e: any) {
-      message.error(`${t('common.importFailed')}: ${e.message || e}`);
+      message.error(`${t('common.importExport.importFailed')}: ${e.message || e}`);
     } finally {
       setImporting(false);
     }
@@ -190,7 +194,10 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       content: (
         <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
           <Alert
-            message={t('common.autoMappedFields', { count: mappedCount, total: parsedFile?.headers.length || 0 })}
+            message={t('common.autoMappedFields', {
+              count: mappedCount,
+              total: parsedFile?.headers.length || 0,
+            })}
             type={mappedCount > 0 ? 'info' : 'warning'}
             showIcon
           />
@@ -212,7 +219,9 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
           </div>
           <Divider />
           <div>
-            <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('common.importMode')}</div>
+            <div style={{ fontWeight: 500, marginBottom: 8 }}>
+              {t('common.importExport.importMode')}
+            </div>
             <Radio.Group value={importMode} onChange={(e) => setImportMode(e.target.value)}>
               <Space direction="vertical">
                 <Radio value="append">
@@ -251,7 +260,11 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       content: (
         <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
           <Alert
-            message={t('common.preparingToImportRows', { count: selectedRows.size, total: parsedFile?.rows.length || 0, tableName })}
+            message={t('common.preparingToImportRows', {
+              count: selectedRows.size,
+              total: parsedFile?.rows.length || 0,
+              tableName,
+            })}
             type="info"
             showIcon
           />
@@ -285,7 +298,9 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       footer={
         <Space>
           {currentStep > 0 && (
-            <Button onClick={() => setCurrentStep(currentStep - 1)}>{t('common.previousStep')}</Button>
+            <Button onClick={() => setCurrentStep(currentStep - 1)}>
+              {t('common.previousStep')}
+            </Button>
           )}
           {currentStep < steps.length - 1 && (
             <Button

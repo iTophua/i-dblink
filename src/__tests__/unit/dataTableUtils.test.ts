@@ -158,7 +158,10 @@ describe('escapeSqlValue', () => {
 describe('rowsToCsv', () => {
   it('generates CSV with header and rows', () => {
     const columns = ['id', 'name'];
-    const rows = [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }];
+    const rows = [
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' },
+    ];
     const result = rowsToCsv(columns, rows);
     expect(result).toBe('id,name\n1,Alice\n2,Bob');
   });

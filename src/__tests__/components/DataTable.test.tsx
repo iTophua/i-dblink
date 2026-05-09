@@ -37,7 +37,11 @@ const escapeIdentifier = (name: string, dbType?: string): string => {
 const escapeSqlValue = (value: any): string => {
   if (value === null || value === undefined || value === '') return 'NULL';
   const str = String(value);
-  const escaped = str.replace(/\\/g, '\\\\').replace(/'/g, "''").replace(/"/g, '""').replace(/\0/g, '\\0');
+  const escaped = str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "''")
+    .replace(/"/g, '""')
+    .replace(/\0/g, '\\0');
   return `'${escaped}'`;
 };
 
@@ -58,7 +62,9 @@ const rowsToCsv = (columns: string[], rows: Record<string, any>[]): string => {
 const rowsToJson = (columns: string[], rows: Record<string, any>[]): string => {
   const objs = rows.map((row) => {
     const obj: Record<string, unknown> = {};
-    columns.forEach((col) => { obj[col] = row[col]; });
+    columns.forEach((col) => {
+      obj[col] = row[col];
+    });
     return obj;
   });
   return JSON.stringify(objs, null, 2);
@@ -129,14 +135,14 @@ describe('DataTable buildWhereClause logic', () => {
     const field = 'name';
     const value = 'Alice';
     const clause = `${escapeIdentifier(field)} = '${value}'`;
-    expect(clause).toBe('`name` = \'Alice\'');
+    expect(clause).toBe("`name` = 'Alice'");
   });
 
   it('builds LIKE clause', () => {
     const field = 'name';
     const value = 'Ali';
     const clause = `\`name\` LIKE '%${value}%'`;
-    expect(clause).toBe('`name` LIKE \'%Ali%\'');
+    expect(clause).toBe("`name` LIKE '%Ali%'");
   });
 
   it('builds IS NULL clause', () => {
@@ -154,15 +160,15 @@ describe('DataTable buildWhereClause logic', () => {
       gte: `\`${field}\` >= '${value}'`,
       lte: `\`${field}\` <= '${value}'`,
     };
-    expect(clauses.gt).toBe('`age` > \'18\'');
-    expect(clauses.lt).toBe('`age` < \'18\'');
+    expect(clauses.gt).toBe("`age` > '18'");
+    expect(clauses.lt).toBe("`age` < '18'");
   });
 
   it('builds IN clause', () => {
     const field = 'status';
     const values = ['active', 'pending'];
     const clause = `\`${field}\` IN (${values.map((v) => `'${v}'`).join(', ')})`;
-    expect(clause).toBe('`status` IN (\'active\', \'pending\')');
+    expect(clause).toBe("`status` IN ('active', 'pending')");
   });
 });
 
@@ -173,36 +179,40 @@ describe('DataTable buildSingleCondition', () => {
     const field = 'name';
     const value = 'Alice';
     const clause = `${escapeIdentifier(field)} = '${value}'`;
-    expect(clause).toBe('`name` = \'Alice\'');
+    expect(clause).toBe("`name` = 'Alice'");
   });
 
   it('handles not equals operator', () => {
     const field = 'name';
     const value = 'Alice';
     const clause = `${escapeIdentifier(field)} != '${value}'`;
-    expect(clause).toBe('`name` != \'Alice\'');
+    expect(clause).toBe("`name` != 'Alice'");
   });
 
   it('handles startsWith operator', () => {
     const field = 'name';
     const value = 'Ali';
     const clause = `${escapeIdentifier(field)} LIKE '${value}%'`;
-    expect(clause).toBe('`name` LIKE \'Ali%\'');
+    expect(clause).toBe("`name` LIKE 'Ali%'");
   });
 
   it('handles endsWith operator', () => {
     const field = 'name';
     const value = 'lice';
     const clause = `${escapeIdentifier(field)} LIKE '%${value}'`;
-    expect(clause).toBe('`name` LIKE \'%lice\'');
+    expect(clause).toBe("`name` LIKE '%lice'");
   });
 
   it('escapes LIKE special characters', () => {
     const field = 'code';
     const value = '100%';
-    const escapedValue = value.replace(/'/g, "''").replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const escapedValue = value
+      .replace(/'/g, "''")
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
     const clause = `${escapeIdentifier(field)} LIKE '%${escapedValue}%'`;
-    expect(clause).toBe('`code` LIKE \'%100\\%%\'');
+    expect(clause).toBe("`code` LIKE '%100\\%%'");
   });
 });
 
@@ -218,9 +228,9 @@ describe('DataTable query building', () => {
 
   it('builds SELECT query with WHERE clause', () => {
     const table = 'users';
-    const where = 'status = \'active\'';
+    const where = "status = 'active'";
     const query = `SELECT * FROM \`${table}\` WHERE ${where} LIMIT 100 OFFSET 0`;
-    expect(query).toBe('SELECT * FROM `users` WHERE status = \'active\' LIMIT 100 OFFSET 0');
+    expect(query).toBe("SELECT * FROM `users` WHERE status = 'active' LIMIT 100 OFFSET 0");
   });
 
   it('builds SELECT query with ORDER BY', () => {
@@ -241,21 +251,23 @@ describe('DataTable query building', () => {
     const columns = ['name', 'email'];
     const values = ["'Alice'", "'alice@example.com'"];
     const query = `INSERT INTO \`${table}\` (\`${columns.join('\`, \`')}\`) VALUES (${values.join(', ')})`;
-    expect(query).toBe('INSERT INTO `users` (`name`, `email`) VALUES (\'Alice\', \'alice@example.com\')');
+    expect(query).toBe(
+      "INSERT INTO `users` (`name`, `email`) VALUES ('Alice', 'alice@example.com')"
+    );
   });
 
   it('builds UPDATE query', () => {
     const table = 'users';
-    const setClause = '`name` = \'Bob\'';
-    const whereClause = '`id` = \'1\'';
+    const setClause = "`name` = 'Bob'";
+    const whereClause = "`id` = '1'";
     const query = `UPDATE \`${table}\` SET ${setClause} WHERE ${whereClause}`;
-    expect(query).toBe('UPDATE `users` SET `name` = \'Bob\' WHERE `id` = \'1\'');
+    expect(query).toBe("UPDATE `users` SET `name` = 'Bob' WHERE `id` = '1'");
   });
 
   it('builds DELETE query', () => {
     const table = 'users';
-    const whereClause = '`id` = \'1\'';
+    const whereClause = "`id` = '1'";
     const query = `DELETE FROM \`${table}\` WHERE ${whereClause}`;
-    expect(query).toBe('DELETE FROM `users` WHERE `id` = \'1\'');
+    expect(query).toBe("DELETE FROM `users` WHERE `id` = '1'");
   });
 });

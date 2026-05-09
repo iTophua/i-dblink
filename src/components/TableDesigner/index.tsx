@@ -482,7 +482,9 @@ function generateAlterTableSQL(
           `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(idx.name, dbType)} UNIQUE (${cols});`
         );
       } else {
-        alters.push(`ALTER TABLE ${tableRef} ADD INDEX ${escapeIdentifier(idx.name, dbType)} (${cols});`);
+        alters.push(
+          `ALTER TABLE ${tableRef} ADD INDEX ${escapeIdentifier(idx.name, dbType)} (${cols});`
+        );
       }
     }
   }
@@ -494,7 +496,9 @@ function generateAlterTableSQL(
   // 删除外键
   for (const orig of originalForeignKeys) {
     if (!newFkMap.has(orig.name)) {
-      alters.push(`ALTER TABLE ${tableRef} DROP FOREIGN KEY ${escapeIdentifier(orig.name, dbType)};`);
+      alters.push(
+        `ALTER TABLE ${tableRef} DROP FOREIGN KEY ${escapeIdentifier(orig.name, dbType)};`
+      );
     }
   }
 
@@ -811,7 +815,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: t('common.columnName'),
+      title: t('common.tableStructure.columnName'),
       dataIndex: 'name',
       width: 160,
       render: (val: string, record: DesignerColumn) => (
@@ -919,7 +923,10 @@ export function TableDesigner({
       title: '',
       width: 50,
       render: (_: unknown, record: DesignerColumn) => (
-        <Popconfirm title={t('common.confirmDeleteColumn')} onConfirm={() => deleteColumn(record.key)}>
+        <Popconfirm
+          title={t('common.confirmDeleteColumn')}
+          onConfirm={() => deleteColumn(record.key)}
+        >
           <Button type="text" danger size="small" icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -960,7 +967,7 @@ export function TableDesigner({
       ),
     },
     {
-      title: t('common.columns'),
+      title: t('common.tableStructure.columns'),
       dataIndex: 'columns',
       render: (val: string[], record: DesignerIndex) => (
         <Select
@@ -978,7 +985,10 @@ export function TableDesigner({
       title: '',
       width: 50,
       render: (_: unknown, record: DesignerIndex) => (
-        <Popconfirm title={t('common.confirmDeleteIndex')} onConfirm={() => deleteIndex(record.key)}>
+        <Popconfirm
+          title={t('common.confirmDeleteIndex')}
+          onConfirm={() => deleteIndex(record.key)}
+        >
           <Button type="text" danger size="small" icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -1086,7 +1096,10 @@ export function TableDesigner({
       title: '',
       width: 50,
       render: (_: unknown, record: DesignerForeignKey) => (
-        <Popconfirm title={t('common.confirmDeleteForeignKey')} onConfirm={() => deleteForeignKey(record.key)}>
+        <Popconfirm
+          title={t('common.confirmDeleteForeignKey')}
+          onConfirm={() => deleteForeignKey(record.key)}
+        >
           <Button type="text" danger size="small" icon={<DeleteOutlined />} />
         </Popconfirm>
       ),

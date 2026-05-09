@@ -23,14 +23,7 @@ describe('API Layer', () => {
     it('should call invoke with correct parameters for MySQL', async () => {
       mockInvoke.mockResolvedValue(true);
 
-      await api.testConnection(
-        'mysql',
-        'localhost',
-        3306,
-        'root',
-        'password',
-        'testdb'
-      );
+      await api.testConnection('mysql', 'localhost', 3306, 'root', 'password', 'testdb');
 
       expect(mockInvoke).toHaveBeenCalledWith('test_connection', {
         dbType: 'mysql',
@@ -45,27 +38,22 @@ describe('API Layer', () => {
     it('should call invoke with SSH config', async () => {
       mockInvoke.mockResolvedValue(true);
 
-      await api.testConnection(
-        'mysql',
-        'localhost',
-        3306,
-        'root',
-        'password',
-        'testdb',
-        {
-          ssh_enabled: true,
-          ssh_host: 'ssh.example.com',
-          ssh_port: 22,
-          ssh_username: 'sshuser',
-          ssh_auth_method: 'key',
-          ssh_private_key_path: '/path/to/key',
-        }
-      );
-
-      expect(mockInvoke).toHaveBeenCalledWith('test_connection', expect.objectContaining({
+      await api.testConnection('mysql', 'localhost', 3306, 'root', 'password', 'testdb', {
         ssh_enabled: true,
         ssh_host: 'ssh.example.com',
-      }));
+        ssh_port: 22,
+        ssh_username: 'sshuser',
+        ssh_auth_method: 'key',
+        ssh_private_key_path: '/path/to/key',
+      });
+
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'test_connection',
+        expect.objectContaining({
+          ssh_enabled: true,
+          ssh_host: 'ssh.example.com',
+        })
+      );
     });
 
     it('should call invoke with SSL config', async () => {
@@ -86,10 +74,13 @@ describe('API Layer', () => {
         }
       );
 
-      expect(mockInvoke).toHaveBeenCalledWith('test_connection', expect.objectContaining({
-        ssl_enabled: true,
-        ssl_ca_path: '/path/to/ca',
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'test_connection',
+        expect.objectContaining({
+          ssl_enabled: true,
+          ssl_ca_path: '/path/to/ca',
+        })
+      );
     });
 
     it('should return true on success', async () => {
@@ -147,9 +138,12 @@ describe('API Layer', () => {
 
       const result = await api.saveConnection(input as any);
 
-      expect(mockInvoke).toHaveBeenCalledWith('save_connection', expect.objectContaining({
-        input,
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'save_connection',
+        expect.objectContaining({
+          input,
+        })
+      );
       expect(result.id).toBe('1');
     });
   });
@@ -168,7 +162,10 @@ describe('API Layer', () => {
     it('should call invoke with correct parameters', async () => {
       mockInvoke.mockResolvedValue({
         columns: ['id', 'name'],
-        rows: [[1, 'Alice'], [2, 'Bob']],
+        rows: [
+          [1, 'Alice'],
+          [2, 'Bob'],
+        ],
         rows_affected: 2,
       });
 
@@ -228,9 +225,7 @@ describe('API Layer', () => {
   describe('getTableStructure', () => {
     it('should return table structure', async () => {
       mockInvoke.mockResolvedValue({
-        columns: [
-          { column_name: 'id', data_type: 'int', is_nullable: 'NO' },
-        ],
+        columns: [{ column_name: 'id', data_type: 'int', is_nullable: 'NO' }],
         indexes: [],
         foreign_keys: [],
       });
@@ -362,9 +357,7 @@ describe('API Layer', () => {
 
   describe('group APIs', () => {
     it('getGroups should return group list', async () => {
-      mockInvoke.mockResolvedValue([
-        { id: '1', name: 'Production', icon: '🚀', color: '#ff4d4f' },
-      ]);
+      mockInvoke.mockResolvedValue([{ id: '1', name: 'Production', icon: '🚀', color: '#ff4d4f' }]);
 
       const result = await api.getGroups();
 
@@ -468,18 +461,19 @@ describe('API Layer', () => {
         filePath: '/path/to/backup.sql',
       });
 
-      expect(mockInvoke).toHaveBeenCalledWith('restore_database', expect.objectContaining({
-        connectionId: 'conn-1',
-        database: 'testdb',
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'restore_database',
+        expect.objectContaining({
+          connectionId: 'conn-1',
+          database: 'testdb',
+        })
+      );
     });
   });
 
   describe('user management APIs', () => {
     it('getUsers should return user list', async () => {
-      mockInvoke.mockResolvedValue([
-        { user: 'root', host: 'localhost' },
-      ]);
+      mockInvoke.mockResolvedValue([{ user: 'root', host: 'localhost' }]);
 
       const result = await api.getUsers('conn-1', 'testdb');
 
@@ -496,9 +490,12 @@ describe('API Layer', () => {
         host: 'localhost',
       });
 
-      expect(mockInvoke).toHaveBeenCalledWith('create_user', expect.objectContaining({
-        username: 'newuser',
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'create_user',
+        expect.objectContaining({
+          username: 'newuser',
+        })
+      );
     });
 
     it('dropUser should call correct method', async () => {
@@ -510,9 +507,12 @@ describe('API Layer', () => {
         host: 'localhost',
       });
 
-      expect(mockInvoke).toHaveBeenCalledWith('drop_user', expect.objectContaining({
-        username: 'olduser',
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'drop_user',
+        expect.objectContaining({
+          username: 'olduser',
+        })
+      );
     });
 
     it('grantPrivilege should call correct method', async () => {
@@ -526,10 +526,13 @@ describe('API Layer', () => {
         databaseAll: true,
       });
 
-      expect(mockInvoke).toHaveBeenCalledWith('grant_privilege', expect.objectContaining({
-        username: 'newuser',
-        privileges: ['SELECT', 'INSERT'],
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'grant_privilege',
+        expect.objectContaining({
+          username: 'newuser',
+          privileges: ['SELECT', 'INSERT'],
+        })
+      );
     });
 
     it('revokePrivilege should call correct method', async () => {
@@ -544,9 +547,12 @@ describe('API Layer', () => {
         database: 'testdb',
       });
 
-      expect(mockInvoke).toHaveBeenCalledWith('revoke_privilege', expect.objectContaining({
-        username: 'newuser',
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'revoke_privilege',
+        expect.objectContaining({
+          username: 'newuser',
+        })
+      );
     });
   });
 
@@ -692,9 +698,7 @@ describe('API Layer', () => {
 
   describe('DDL and metadata APIs', () => {
     it('getTableDDL should return DDL statements', async () => {
-      mockInvoke.mockResolvedValue([
-        'CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(50))',
-      ]);
+      mockInvoke.mockResolvedValue(['CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(50))']);
 
       const result = await api.getTableDDL('conn-1', 'users', 'testdb');
 
@@ -714,9 +718,7 @@ describe('API Layer', () => {
     });
 
     it('getEvents should return event list', async () => {
-      mockInvoke.mockResolvedValue([
-        { name: 'cleanup_old_data', schedule: 'EVERY DAY' },
-      ]);
+      mockInvoke.mockResolvedValue([{ name: 'cleanup_old_data', schedule: 'EVERY DAY' }]);
 
       const result = await api.getEvents('conn-1', 'testdb');
 

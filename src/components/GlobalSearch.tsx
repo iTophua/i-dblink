@@ -11,7 +11,12 @@ interface GlobalSearchProps {
   connectionDatabases?: Record<string, { database: string; tables: TableInfo[] }[]>;
 }
 
-export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases = {} }: GlobalSearchProps) {
+export function GlobalSearch({
+  open,
+  onClose,
+  onSelectTable,
+  connectionDatabases = {},
+}: GlobalSearchProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
 
@@ -52,7 +57,7 @@ export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases
 
   return (
     <Modal
-      title={t('common.globalSearch')}
+      title={t('common.mainLayout.globalSearch')}
       open={open}
       onCancel={onClose}
       footer={null}
@@ -96,9 +101,11 @@ export function GlobalSearch({ open, onClose, onSelectTable, connectionDatabases
                 title={item.name}
                 description={
                   <span>
-                    <Tag style={{ fontSize: 11, padding: '0 4px' }}>{item.database}</Tag>
-                    {' '}
-                    <Tag style={{ fontSize: 11, padding: '0 4px' }} color={item.type === 'view' ? 'blue' : 'green'}>
+                    <Tag style={{ fontSize: 11, padding: '0 4px' }}>{item.database}</Tag>{' '}
+                    <Tag
+                      style={{ fontSize: 11, padding: '0 4px' }}
+                      color={item.type === 'view' ? 'blue' : 'green'}
+                    >
                       {item.type === 'view' ? t('common.view') : t('common.table')}
                     </Tag>
                   </span>

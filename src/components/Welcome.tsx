@@ -221,7 +221,7 @@ export function Welcome() {
 
       <Divider />
 
-      <Card title={t('common.features')} size="small">
+      <Card title={t('common.welcome.features')} size="small">
         <ul style={{ paddingLeft: '1.25rem', margin: 0 }}>
           <li>{t('common.featureDatabases')}</li>
           <li>{t('common.featureGroups')}</li>

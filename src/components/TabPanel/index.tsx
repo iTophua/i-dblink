@@ -189,13 +189,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   useEffect(() => {
     if (!isRestoredRef.current) return;
     const timer = setTimeout(() => {
-    useWorkspaceStore.getState().updateWorkspace({
-      openedTables: openedTables.map(({ isDirty, ...rest }) => rest),
-      openedSqlTabs: openedSqlTabs.map(({ defaultQuery: _dp, ...rest }) => rest),
-      openedDesignerTabs,
-      openedViewDefTabs: openedViewDefTabs.map(({ key: _k, ...rest }) => rest),
-      activeKey,
-    });
+      useWorkspaceStore.getState().updateWorkspace({
+        openedTables: openedTables.map(({ isDirty, ...rest }) => rest),
+        openedSqlTabs: openedSqlTabs.map(({ defaultQuery: _dp, ...rest }) => rest),
+        openedDesignerTabs,
+        openedViewDefTabs: openedViewDefTabs.map(({ key: _k, ...rest }) => rest),
+        activeKey,
+      });
     }, 500);
     return () => clearTimeout(timer);
   }, [openedTables, openedSqlTabs, openedDesignerTabs, activeKey]);
@@ -307,7 +307,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (designer) {
           return {
             type: 'designer' as const,
-            title: designer.tableName ? `${t('common.design')}: ${designer.tableName}` : t('common.newTable'),
+            title: designer.tableName
+              ? `${t('common.design')}: ${designer.tableName}`
+              : t('common.newTable'),
             connectionId: designer.connectionId,
             database: designer.database,
             tableName: designer.tableName,
@@ -371,7 +373,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (designer) {
           return {
             type: 'designer' as const,
-            title: designer.tableName ? `${t('common.design')}: ${designer.tableName}` : t('common.newTable'),
+            title: designer.tableName
+              ? `${t('common.design')}: ${designer.tableName}`
+              : t('common.newTable'),
             connectionId: designer.connectionId,
             database: designer.database,
             tableName: designer.tableName,
@@ -398,10 +402,17 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           database: sqlTab.database,
         };
       }
-        return { type: 'objects' as const, title: t('common.objectList') };
+      return { type: 'objects' as const, title: t('common.objectList') };
     })();
     onActiveTabChange(info);
-  }, [activeKey, openedTables, openedSqlTabs, openedDesignerTabs, openedViewDefTabs, onActiveTabChange]);
+  }, [
+    activeKey,
+    openedTables,
+    openedSqlTabs,
+    openedDesignerTabs,
+    openedViewDefTabs,
+    onActiveTabChange,
+  ]);
 
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{
@@ -648,7 +659,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
       const tabKey = `viewdef-${viewName}`;
 
-      const exists = openedViewDefTabs.find((t) => t.viewName === viewName && t.connectionId === selectedConnectionId);
+      const exists = openedViewDefTabs.find(
+        (t) => t.viewName === viewName && t.connectionId === selectedConnectionId
+      );
       if (!exists) {
         setOpenedViewDefTabs((prev) => [
           ...prev,
@@ -702,7 +715,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             content: t('common.unsavedChangesContent'),
             okText: t('common.close'),
             okType: 'danger',
-              cancelText: t('common.cancel'),
+            cancelText: t('common.cancel'),
             onOk: () => {
               setOpenedTables((prev) =>
                 prev.filter((t) => {
@@ -905,7 +918,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                         </span>
                       ),
                     },
-                    selectedConnectionId ? { title: selectedConnectionName || t('common.objectList') } : null,
+                    selectedConnectionId
+                      ? { title: selectedConnectionName || t('common.objectList') }
+                      : null,
                     selectedDatabase ? { title: selectedDatabase } : null,
                     { title: selectedTable },
                   ].filter(Boolean) as { title: React.ReactNode }[]
@@ -979,7 +994,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 color: 'var(--text-tertiary)',
               }}
             >
-              <Empty description={t('common.pleaseSelectConnection')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty
+                description={t('common.pleaseSelectConnection')}
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
             </div>
           )}
         </div>
@@ -1008,7 +1026,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   maxWidth: 160,
                 }}
               >
-                {table.isView ? <EyeOutlined style={{ marginRight: 4, flexShrink: 0 }} /> : <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />}
+                {table.isView ? (
+                  <EyeOutlined style={{ marginRight: 4, flexShrink: 0 }} />
+                ) : (
+                  <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />
+                )}
                 <span
                   style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                 >
@@ -1066,7 +1088,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 />
               ),
               okText: t('common.confirm'),
-            cancelText: t('common.cancel'),
+              cancelText: t('common.cancel'),
               onOk: () => {},
             });
           }}
@@ -1141,10 +1163,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                     );
                   }
                 }
-                message.success(designerTab.isNewTable ? t('common.tableCreated') : t('common.tableStructureUpdated'));
-                setOpenedDesignerTabs((prev) =>
-                  prev.filter((t) => t.key !== designerTab.key)
+                message.success(
+                  designerTab.isNewTable
+                    ? t('common.tableCreated')
+                    : t('common.tableStructureUpdated')
                 );
+                setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
                 setActiveKey('objects');
                 window.dispatchEvent(
                   new CustomEvent('refresh-connection-tree', {
@@ -1152,7 +1176,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   })
                 );
               } catch (err: any) {
-                message.error(t('common.executeFailed') + ': ' + (err.message || err));
+                message.error(t('common.sqlEditor.executeFailed') + ': ' + (err.message || err));
               }
             }}
             onCancel={() => {

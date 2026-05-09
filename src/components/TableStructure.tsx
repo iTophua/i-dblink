@@ -75,7 +75,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
 
   const columnDefs: ColumnsType<ColumnInfo> = [
     {
-      title: t('common.columnName'),
+      title: t('common.tableStructure.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       minWidth: 150,
@@ -131,7 +131,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
 
   const indexDefs: ColumnsType<IndexInfo> = [
     {
-      title: t('common.indexName'),
+      title: t('common.tableStructure.indexName'),
       dataIndex: 'index_name',
       key: 'index_name',
       width: 180,
@@ -143,13 +143,13 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       ),
     },
     {
-      title: t('common.columnName'),
+      title: t('common.tableStructure.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       width: 140,
     },
     {
-      title: t('common.unique'),
+      title: t('common.tableStructure.unique'),
       dataIndex: 'is_unique',
       key: 'is_unique',
       width: 60,
@@ -240,7 +240,9 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 <table style={{ width: '100%', fontSize: 11, lineHeight: '18px' }}>
                   <tbody>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500, width: 100 }}>{t('common.tableName')}</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500, width: 100 }}>
+                        {t('common.tableName')}
+                      </td>
                       <td>{tableInfo.table_name}</td>
                     </tr>
                     <tr>
@@ -250,7 +252,9 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.rowCount')}</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>
+                        {t('common.tableList.rowCount')}
+                      </td>
                       <td>{tableInfo.row_count?.toLocaleString() || '-'}</td>
                     </tr>
                     <tr>
@@ -270,17 +274,23 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.collation')}</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>
+                        {t('common.databaseProperties.collation')}
+                      </td>
                       <td>
                         <Tag color="green">{tableInfo.collation || '-'}</Tag>
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.createTime')}</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>
+                        {t('common.createTime')}
+                      </td>
                       <td>{tableInfo.create_time || '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.updateTime')}</td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>
+                        {t('common.updateTime')}
+                      </td>
                       <td>{tableInfo.update_time || '-'}</td>
                     </tr>
                     <tr>
@@ -296,7 +306,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
           },
           {
             key: 'columns',
-            label: `${t('common.columns')} (${columns.length})`,
+            label: `${t('common.tableStructure.columns')} (${columns.length})`,
             children:
               columns.length > 0 ? (
                 <Table
@@ -314,7 +324,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
           },
           {
             key: 'indexes',
-            label: `${t('common.indexes')} (${indexes.length})`,
+            label: `${t('common.tableStructure.indexes')} (${indexes.length})`,
             children:
               indexes.length > 0 ? (
                 <Table
@@ -353,7 +363,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
             label: (
               <span>
                 <CodeOutlined style={{ marginRight: 4 }} />
-                {t('common.sqlPreview')}
+                {t('common.importExport.sqlPreview')}
               </span>
             ),
             children: createTableSQL ? (

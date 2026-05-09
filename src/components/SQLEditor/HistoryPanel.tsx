@@ -131,12 +131,15 @@ export function HistoryPanel({
         </Space>
 
         <Space size="small">
-          <Tag color="blue">            {history.length} {t('common.items')}</Tag>
+          <Tag color="blue">
+            {' '}
+            {history.length} {t('common.items')}
+          </Tag>
           <Popconfirm
             title={t('common.confirmClear')}
             description={t('common.confirmClearHistory')}
             onConfirm={clearHistory}
-            okText={t('common.clear')}
+            okText={t('common.logPanel.clear')}
             cancelText={t('common.cancel')}
           >
             <Button icon={<ClearOutlined />} size="small" danger>
@@ -197,7 +200,11 @@ export function HistoryPanel({
                       <Space size="small">
                         <span>{formatTime(item.timestamp)}</span>
                         {item.duration && <span>{item.duration}ms</span>}
-                        {item.rowCount !== undefined && <span>{item.rowCount} {t('common.rows')}</span>}
+                        {item.rowCount !== undefined && (
+                          <span>
+                            {item.rowCount} {t('common.rows')}
+                          </span>
+                        )}
                       </Space>
                     </div>
                   }

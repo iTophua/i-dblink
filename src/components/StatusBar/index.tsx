@@ -95,20 +95,31 @@ export function StatusBar({
           {isConnected ? (
             <span>
               <CheckCircleOutlined style={{ color: 'var(--color-success)', marginRight: 4 }} />
-              {t('common.connected')}: {selectedConnection?.name || t('common.unknown')}
+              {t('common.mainLayout.connected')}: {selectedConnection?.name || t('common.unknown')}
             </span>
           ) : selectedConnection ? (
-            <span style={{ color: 'var(--text-tertiary)' }}>{t('common.notConnected')}: {selectedConnection.name}</span>
+            <span style={{ color: 'var(--text-tertiary)' }}>
+              {t('common.notConnected')}: {selectedConnection.name}
+            </span>
           ) : (
             t('common.notConnected')
           )}
         </Text>
         {selectedDatabase && (
-          <Text>{t('common.database')}: {selectedDatabase}</Text>
+          <Text>
+            {t('common.database')}: {selectedDatabase}
+          </Text>
         )}
-        {selectedTable && <Text>{t('common.table')}: {selectedTable}</Text>}
+        {selectedTable && (
+          <Text>
+            {t('common.table')}: {selectedTable}
+          </Text>
+        )}
         {isQuerying && (
-          <Tag color="processing" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
+          <Tag
+            color="processing"
+            style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}
+          >
             {t('common.querying')}
           </Tag>
         )}
@@ -129,7 +140,9 @@ export function StatusBar({
           </Tag>
         )}
         {resultRows !== undefined && resultRows > 0 && (
-          <Text style={{ fontSize: 11 }}>{t('common.rows')}: {resultRows.toLocaleString()}</Text>
+          <Text style={{ fontSize: 11 }}>
+            {t('common.rows')}: {resultRows.toLocaleString()}
+          </Text>
         )}
         {executionTime !== undefined && executionTime > 0 && (
           <Text style={{ fontSize: 11 }}>

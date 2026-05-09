@@ -32,7 +32,12 @@ vi.mock('antd', () => ({
     ],
   },
   Input: ({ value, onChange, placeholder }: any) => (
-    <input data-testid="input" value={value} onChange={(e) => onChange(e)} placeholder={placeholder} />
+    <input
+      data-testid="input"
+      value={value}
+      onChange={(e) => onChange(e)}
+      placeholder={placeholder}
+    />
   ),
   InputNumber: ({ value, onChange }: any) => (
     <input data-testid="input-number" value={value} onChange={(e) => onChange(e)} />
@@ -81,7 +86,18 @@ describe('ConnectionDialog form structure', () => {
   });
 
   it('supports all database types', () => {
-    const dbTypes = ['mysql', 'postgresql', 'sqlite', 'sqlserver', 'oracle', 'mariadb', 'dameng', 'kingbase', 'highgo', 'vastbase'];
+    const dbTypes = [
+      'mysql',
+      'postgresql',
+      'sqlite',
+      'sqlserver',
+      'oracle',
+      'mariadb',
+      'dameng',
+      'kingbase',
+      'highgo',
+      'vastbase',
+    ];
     expect(dbTypes).toHaveLength(10);
   });
 

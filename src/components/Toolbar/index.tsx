@@ -69,8 +69,16 @@ export function Toolbar(): JSX.Element {
   };
 
   const fileMenuItems: MenuProps['items'] = [
-    { key: 'new-connection', icon: <PlusOutlined />, label: `${t('common.newConnectionLabel')} (N)` },
-    { key: 'open-connection', icon: <FolderOpenOutlined />, label: `${t('common.openConnectionLabel')} (O)` },
+    {
+      key: 'new-connection',
+      icon: <PlusOutlined />,
+      label: `${t('common.newConnectionLabel')} (N)`,
+    },
+    {
+      key: 'open-connection',
+      icon: <FolderOpenOutlined />,
+      label: `${t('common.openConnectionLabel')} (O)`,
+    },
     { type: 'divider' },
     { key: 'save', icon: <SaveOutlined />, label: `${t('common.saveLabel')} (S)` },
     { key: 'save-as', label: `${t('common.saveAs')} (A)` },
@@ -82,8 +90,16 @@ export function Toolbar(): JSX.Element {
   ];
 
   const editMenuItems: MenuProps['items'] = [
-    { key: 'undo', label: `${t('common.undoLabel')} (U)`, icon: <span style={{ fontFamily: 'monospace' }}>↩</span> },
-    { key: 'redo', label: `${t('common.redoLabel')} (R)`, icon: <span style={{ fontFamily: 'monospace' }}>↪</span> },
+    {
+      key: 'undo',
+      label: `${t('common.undoLabel')} (U)`,
+      icon: <span style={{ fontFamily: 'monospace' }}>↩</span>,
+    },
+    {
+      key: 'redo',
+      label: `${t('common.redoLabel')} (R)`,
+      icon: <span style={{ fontFamily: 'monospace' }}>↪</span>,
+    },
     { type: 'divider' },
     { key: 'cut', label: `${t('common.cutLabel')} (T)` },
     { key: 'copy', label: `${t('common.copyLabel')} (C)` },
@@ -105,11 +121,19 @@ export function Toolbar(): JSX.Element {
   ];
 
   const connectionMenuItems: MenuProps['items'] = [
-    { key: 'connect-selected', icon: <LinkOutlined />, label: `${t('common.connectSelected')} (C)` },
+    {
+      key: 'connect-selected',
+      icon: <LinkOutlined />,
+      label: `${t('common.connectSelected')} (C)`,
+    },
     { key: 'disconnect', icon: <DisconnectOutlined />, label: `${t('common.disconnect')} (D)` },
     { type: 'divider' },
-    { key: 'new-query', icon: <CodeOutlined />, label: `${t('common.newQuery')} (Q)` },
-    { key: 'execute-query', icon: <PlayCircleOutlined />, label: `${t('common.executeQuery')} (E)` },
+    { key: 'new-query', icon: <CodeOutlined />, label: `${t('common.sqlEditor.newQuery')} (Q)` },
+    {
+      key: 'execute-query',
+      icon: <PlayCircleOutlined />,
+      label: `${t('common.executeQuery')} (E)`,
+    },
     { type: 'divider' },
     { key: 'close-all', label: `${t('common.closeAllConnections')} (L)` },
   ];
@@ -117,9 +141,24 @@ export function Toolbar(): JSX.Element {
   const toolsMenuItems: MenuProps['items'] = [
     { key: 'options', icon: <SettingOutlined />, label: `${t('common.options')} (O)` },
     { type: 'divider' },
-    { key: 'data-sync', icon: <SyncOutlined />, label: `${t('common.dataSync')} (S)`, disabled: true },
-    { key: 'backup', icon: <DatabaseOutlined />, label: `${t('common.backupDatabase')} (B)`, disabled: true },
-    { key: 'restore', icon: <DatabaseOutlined />, label: `${t('common.restoreDatabase')} (R)`, disabled: true },
+    {
+      key: 'data-sync',
+      icon: <SyncOutlined />,
+      label: `${t('common.dataSync')} (S)`,
+      disabled: true,
+    },
+    {
+      key: 'backup',
+      icon: <DatabaseOutlined />,
+      label: `${t('common.backupDatabase')} (B)`,
+      disabled: true,
+    },
+    {
+      key: 'restore',
+      icon: <DatabaseOutlined />,
+      label: `${t('common.restoreDatabase')} (R)`,
+      disabled: true,
+    },
     { type: 'divider' },
     { key: 'model-designer', label: `${t('common.modelDesigner')} (M)`, disabled: true },
   ];

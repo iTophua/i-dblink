@@ -60,9 +60,7 @@ vi.mock('antd', () => ({
       },
     }),
   },
-  Button: ({ children, onClick }: any) => (
-    <button onClick={onClick}>{children}</button>
-  ),
+  Button: ({ children, onClick }: any) => <button onClick={onClick}>{children}</button>,
   Space: ({ children }: any) => <div data-testid="space">{children}</div>,
   Empty: {
     PRESENTED_IMAGE_SIMPLE: 'simple',
@@ -145,7 +143,15 @@ vi.mock('../components/SnippetManager', () => ({
 
 describe('SQLEditor', () => {
   it('has expected props interface', () => {
-    const expectedProps = ['connectionId', 'database', 'defaultQuery', 'availableDatabases', 'onDatabaseChange', 'dbType', 'onQueryStatusChange'];
+    const expectedProps = [
+      'connectionId',
+      'database',
+      'defaultQuery',
+      'availableDatabases',
+      'onDatabaseChange',
+      'dbType',
+      'onQueryStatusChange',
+    ];
     expect(expectedProps).toContain('connectionId');
     expect(expectedProps).toContain('database');
     expect(expectedProps).toContain('dbType');

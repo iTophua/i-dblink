@@ -76,7 +76,7 @@ export function DumpDialog({
       message.success(t('common.sqlFileExportedSuccessfully'));
       onSuccess();
     } catch (err: any) {
-      message.error(`${t('common.exportFailed')}: ${err.message || err}`);
+      message.error(`${t('common.importExport.exportFailed')}: ${err.message || err}`);
     } finally {
       setLoading(false);
     }

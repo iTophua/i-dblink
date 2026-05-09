@@ -88,19 +88,16 @@ describe('Integration Tests', () => {
     it('should test connection before saving', async () => {
       mockInvoke.mockResolvedValue(true);
 
-      const result = await api.testConnection(
-        'mysql',
-        'localhost',
-        3306,
-        'root',
-        'secret'
-      );
+      const result = await api.testConnection('mysql', 'localhost', 3306, 'root', 'secret');
 
       expect(result).toBe(true);
-      expect(mockInvoke).toHaveBeenCalledWith('test_connection', expect.objectContaining({
-        dbType: 'mysql',
-        host: 'localhost',
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'test_connection',
+        expect.objectContaining({
+          dbType: 'mysql',
+          host: 'localhost',
+        })
+      );
     });
   });
 
@@ -127,21 +124,24 @@ describe('Integration Tests', () => {
 
       await api.executeDDL('conn-1', 'CREATE TABLE test (id INT PRIMARY KEY, name VARCHAR(50))');
 
-      expect(mockInvoke).toHaveBeenCalledWith('execute_ddl', expect.objectContaining({
-        sql: 'CREATE TABLE test (id INT PRIMARY KEY, name VARCHAR(50))',
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'execute_ddl',
+        expect.objectContaining({
+          sql: 'CREATE TABLE test (id INT PRIMARY KEY, name VARCHAR(50))',
+        })
+      );
     });
 
     it('should handle query error', async () => {
       mockInvoke.mockResolvedValue({
         columns: [],
         rows: [],
-        error: 'Table \'users\' doesn\'t exist',
+        error: "Table 'users' doesn't exist",
       });
 
       const result = await api.executeQuery('conn-1', 'SELECT * FROM users');
 
-      expect(result.error).toBe('Table \'users\' doesn\'t exist');
+      expect(result.error).toBe("Table 'users' doesn't exist");
     });
   });
 
@@ -175,7 +175,13 @@ describe('Integration Tests', () => {
           { column_name: 'email', data_type: 'varchar', is_nullable: 'YES' },
         ],
         indexes: [
-          { index_name: 'PRIMARY', column_name: 'id', is_unique: true, is_primary: true, seq_in_index: 1 },
+          {
+            index_name: 'PRIMARY',
+            column_name: 'id',
+            is_unique: true,
+            is_primary: true,
+            seq_in_index: 1,
+          },
         ],
         foreign_keys: [],
       });
@@ -277,10 +283,13 @@ describe('Integration Tests', () => {
         filePath: '/path/to/backup.sql',
       });
 
-      expect(mockInvoke).toHaveBeenCalledWith('restore_database', expect.objectContaining({
-        connectionId: 'conn-1',
-        database: 'testdb',
-      }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'restore_database',
+        expect.objectContaining({
+          connectionId: 'conn-1',
+          database: 'testdb',
+        })
+      );
     });
   });
 
@@ -377,7 +386,7 @@ describe('Integration Tests', () => {
       store.updateConnection('conn-1', { status: 'connected' });
 
       const state2 = useAppStore.getState();
-      const updated = state2.connections.find(c => c.id === 'conn-1');
+      const updated = state2.connections.find((c) => c.id === 'conn-1');
       expect(updated?.status).toBe('connected');
 
       // Delete connection

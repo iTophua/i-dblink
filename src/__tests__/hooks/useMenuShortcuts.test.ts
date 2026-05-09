@@ -4,13 +4,21 @@ import { MENU_SHORTCUTS, isMacOS } from '../../constants/menuShortcuts';
 describe('shortcut display format', () => {
   it('formats shortcut for macOS', () => {
     const formatShortcut = (keys: string): string =>
-      keys.replace('mod+', '\u2318').replace('shift+', '\u21e7').replace('enter', '\u21b5').toUpperCase();
+      keys
+        .replace('mod+', '\u2318')
+        .replace('shift+', '\u21e7')
+        .replace('enter', '\u21b5')
+        .toUpperCase();
     expect(formatShortcut('mod+n')).toBe('\u2318N');
   });
 
   it('formats shortcut for Windows', () => {
     const formatShortcut = (keys: string): string =>
-      keys.replace('mod+', 'Ctrl+').replace('shift+', '\u21e7').replace('enter', '\u21b5').toUpperCase();
+      keys
+        .replace('mod+', 'Ctrl+')
+        .replace('shift+', '\u21e7')
+        .replace('enter', '\u21b5')
+        .toUpperCase();
     expect(formatShortcut('mod+n')).toBe('CTRL+N');
   });
 });

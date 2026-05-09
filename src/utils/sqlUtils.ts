@@ -52,10 +52,7 @@ export function escapeSqlValue(value: unknown): string {
     return 'NULL';
   }
   const str = String(value);
-  const escaped = str
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "''")
-    .replace(/\0/g, '\\0');
+  const escaped = str.replace(/\\/g, '\\\\').replace(/'/g, "''").replace(/\0/g, '\\0');
   return `'${escaped}'`;
 }
 
