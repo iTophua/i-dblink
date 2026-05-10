@@ -92,6 +92,11 @@ Desktop.ini
 # Test coverage
 coverage/
 
+# Test output
+test-results/
+playwright-report/
+e2e/screenshots/
+
 # Env files (contain secrets)
 .env
 .env.local
