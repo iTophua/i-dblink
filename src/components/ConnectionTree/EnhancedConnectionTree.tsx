@@ -40,6 +40,7 @@ import { RunSqlFileDialog } from '../RunSqlFileDialog';
 import { BackupRestoreDialog } from '../BackupRestoreDialog';
 import { UserManagementDialog } from '../UserManagementDialog';
 import { SchemaCompareDialog } from '../SchemaCompareDialog';
+import { CreateDatabaseDialog } from './CreateDatabaseDialog';
 import { api } from '../../api';
 
 const isBaseTable = (tableType: string): boolean => {
@@ -184,6 +185,7 @@ const TableNode = React.memo<TableNodeProps>(
             e.stopPropagation();
             onTableOpen(table.table_name, database);
           }}
+          data-testid={`table-node-${table.table_name}`}
         >
           <TableOutlined style={{ color: 'var(--color-success)', fontSize: 11 }} />
           <span style={{ fontSize: 12 }}>{table.table_name}</span>
@@ -275,6 +277,7 @@ const ViewNode = React.memo<ViewNodeProps>(
               onTableOpen(view.table_name, database);
             }
           }}
+          data-testid={`view-node-${view.table_name}`}
         >
           <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 11 }} />
           <span style={{ fontSize: 12 }}>{view.table_name}</span>
@@ -454,6 +457,11 @@ export function EnhancedConnectionTree({
     connId: string;
     database?: string;
   } | null>(null);
+  const [createDatabaseOpen, setCreateDatabaseOpen] = useState(false);
+  const [createDatabaseTarget, setCreateDatabaseTarget] = useState<{
+    connId: string;
+    dbType?: string;
+  } | null>(null);
   const [schemaCompareOpen, setSchemaCompareOpen] = useState(false);
   const prevTableCountsRef = useRef<Map<string, number>>(new Map());
   const connectionDatabasesRef = useRef(connectionDatabases);
@@ -500,6 +508,48 @@ export function EnhancedConnectionTree({
     );
   }, [connections, searchText]);
 
+  const handleCopyConnection = useCallback(
+    async (conn: Connection) => {
+      try {
+        const copyData = {
+          id: null,
+          name: `${conn.name} (${t('common.copySuffix')})`,
+          db_type: conn.db_type,
+          host: conn.host,
+          port: conn.port,
+          username: conn.username,
+          password: '',
+          database: conn.database,
+          group_id: conn.group_id,
+        };
+        await onSaveConnection(copyData);
+        message.success(t('common.connectionConfigCopied'));
+      } catch (error: any) {
+        message.error(t('common.copyConnectionFailed') + ': ' + (error.message || error));
+      }
+    },
+    [onSaveConnection]
+  );
+
+  const handleMoveConnection = useCallback(
+    async (connectionId: string, targetGroupId: string) => {
+      const conn = connections.find((c) => c.id === connectionId);
+      if (!conn) return;
+      try {
+        await onSaveConnection({
+          ...conn,
+          id: conn.id,
+          group_id: targetGroupId === 'default' ? null : targetGroupId,
+        });
+        const group = groups.find((g) => g.id === targetGroupId);
+        message.success(t('common.movedToGroup', { name: group?.name || t('common.ungrouped') }));
+      } catch (error: any) {
+        message.error(t('common.moveFailed') + ': ' + (error.message || error));
+      }
+    },
+    [connections, groups, onSaveConnection]
+  );
+
   const getConnectionMenu = useCallback(
     (conn: Connection): MenuProps => ({
       items:
@@ -519,6 +569,11 @@ export function EnhancedConnectionTree({
                 key: 'new-query',
                 label: t('common.sqlEditor.newQuery'),
                 icon: <PlayCircleOutlined />,
+              },
+              {
+                key: 'create-database',
+                label: t('common.createDatabase'),
+                icon: <DatabaseOutlined />,
               },
               { type: 'divider' },
               {
@@ -620,6 +675,13 @@ export function EnhancedConnectionTree({
           });
         } else if (key === 'new-query') {
           onNewQuery(conn.id);
+        } else if (key === 'create-database') {
+          const connInfo = connections.find((c) => c.id === conn.id);
+          setCreateDatabaseTarget({
+            connId: conn.id,
+            dbType: connInfo?.db_type,
+          });
+          setCreateDatabaseOpen(true);
         } else if (key === 'copy') {
           handleCopyConnection(conn);
         } else if (key === 'new-group') {
@@ -645,6 +707,8 @@ export function EnhancedConnectionTree({
       setGroupDialogOpen,
       setEditingGroup,
       setParentGroupId,
+      handleCopyConnection,
+      handleMoveConnection,
     ]
   );
 
@@ -911,48 +975,6 @@ export function EnhancedConnectionTree({
       },
     }),
     [onTableOpen, onOpenDesigner, onOpenViewDefinition, onDatabaseRefresh]
-  );
-
-  const handleCopyConnection = useCallback(
-    async (conn: Connection) => {
-      try {
-        const copyData = {
-          id: null,
-          name: `${conn.name} (${t('common.copySuffix')})`,
-          db_type: conn.db_type,
-          host: conn.host,
-          port: conn.port,
-          username: conn.username,
-          password: '',
-          database: conn.database,
-          group_id: conn.group_id,
-        };
-        await onSaveConnection(copyData);
-        message.success(t('common.connectionConfigCopied'));
-      } catch (error: any) {
-        message.error(t('common.copyConnectionFailed') + ': ' + (error.message || error));
-      }
-    },
-    [onSaveConnection]
-  );
-
-  const handleMoveConnection = useCallback(
-    async (connectionId: string, targetGroupId: string) => {
-      const conn = connections.find((c) => c.id === connectionId);
-      if (!conn) return;
-      try {
-        await onSaveConnection({
-          ...conn,
-          id: conn.id,
-          group_id: targetGroupId === 'default' ? null : targetGroupId,
-        });
-        const group = groups.find((g) => g.id === targetGroupId);
-        message.success(t('common.movedToGroup', { name: group?.name || t('common.ungrouped') }));
-      } catch (error: any) {
-        message.error(t('common.moveFailed') + ': ' + (error.message || error));
-      }
-    },
-    [connections, groups, onSaveConnection]
   );
 
   const handleGroupSave = useCallback(
@@ -1488,6 +1510,7 @@ export function EnhancedConnectionTree({
               e.stopPropagation();
               handleDoubleClick(`db::${connId}::${db.database}`);
             }}
+            data-testid={`database-node-${db.database}`}
           >
             <Dropdown menu={getDatabaseMenu(connId, db.database)} trigger={['contextMenu']}>
               <div
@@ -1586,6 +1609,7 @@ export function EnhancedConnectionTree({
             e.stopPropagation();
             handleDoubleClick(conn.id);
           }}
+          data-testid={`connection-item-${conn.id}`}
         >
           <Dropdown menu={getConnectionMenu(conn)} trigger={['contextMenu']}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
@@ -2267,6 +2291,23 @@ export function EnhancedConnectionTree({
         open={schemaCompareOpen}
         connections={connections}
         onClose={() => setSchemaCompareOpen(false)}
+      />
+
+      <CreateDatabaseDialog
+        open={createDatabaseOpen}
+        connectionId={createDatabaseTarget?.connId || ''}
+        dbType={createDatabaseTarget?.dbType}
+        onCancel={() => {
+          setCreateDatabaseOpen(false);
+          setCreateDatabaseTarget(null);
+        }}
+        onSuccess={() => {
+          setCreateDatabaseOpen(false);
+          if (createDatabaseTarget?.connId) {
+            onLoadDatabases?.(createDatabaseTarget.connId);
+          }
+          setCreateDatabaseTarget(null);
+        }}
       />
     </div>
   );

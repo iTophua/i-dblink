@@ -9,6 +9,7 @@ lerna-debug.log*
 
 # Dependencies
 node_modules
+.pnpm-store/
 
 # Build outputs
 dist
@@ -25,6 +26,8 @@ src-tauri/target/
 # Go backend build output
 go-backend/go-backend
 go-backend/*.exe
+go-backend/*.test
+go-backend/vendor/
 
 # Tauri sidecars (compiled Go binaries for each platform)
 src-tauri/sidecars/
@@ -39,11 +42,27 @@ src-tauri/gen/
 *.pem
 .cargo
 
+# Tauri signing keys
+src-tauri/*.key
+src-tauri/*.key.pub
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# AI tools
+.qwen/
+.lingma/
+.claude/
+.code-review-graph/
+.cursor/
+.copilot/
+
 # Editor directories and files
-.vscode/*
-.idea
-.qwen
-.lingma
+.vscode/
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -56,6 +75,12 @@ src-tauri/gen/
 # Temporary files
 *.tmp
 *.temp
+tmp/
+.temp/
+
+# Cache files
+.eslintcache
+*.bak
 
 # OS generated files
 Thumbs.db
@@ -69,3 +94,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
+.env.test
+.gitnexus
+
+

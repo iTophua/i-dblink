@@ -58,7 +58,7 @@ const defaultWorkspace: WorkspaceSnapshot = {
   expandedKeys: [],
 };
 
-const VERSION = 3;
+const VERSION = 4;
 
 function migrate(state: any, version: number | undefined): Partial<WorkspaceState> {
   if (version === undefined) {
@@ -76,6 +76,10 @@ function migrate(state: any, version: number | undefined): Partial<WorkspaceStat
     if (!state.openedViewDefTabs) {
       state.openedViewDefTabs = [];
     }
+  }
+  if (version === 3) {
+    // v4: 应用重启后重置连接展开状态
+    state.expandedKeys = [];
   }
   // 确保返回完整的 defaultWorkspace 结构
   return { ...defaultWorkspace, ...state };

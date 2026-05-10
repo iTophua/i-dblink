@@ -87,15 +87,15 @@ mod tests {
             group_id: Some("group-1".to_string()),
             color: Some("#1890ff".to_string()),
             ssh_host: Some("ssh.example.com".to_string()),
-            ssh_port: Some(22),
+            ssh_port: Some("22".to_string()),
             ssh_username: Some("sshuser".to_string()),
             ssh_auth_method: Some("password".to_string()),
             ssh_private_key_path: None,
-            ssl_enabled: Some(true),
+            ssl_enabled: Some("true".to_string()),
             ssl_ca_path: Some("/path/to/ca".to_string()),
             ssl_cert_path: None,
             ssl_key_path: None,
-            ssl_skip_verify: Some(false),
+            ssl_skip_verify: Some("false".to_string()),
         };
 
         let output: ConnectionOutput = db_conn.into();

@@ -331,6 +331,8 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       maskTransitionName=""
       styles={{ body: { padding: 0 } }}
       footer={null}
+      className="connection-dialog-modal"
+      data-testid="connection-dialog"
     >
       <div style={{ display: 'flex', height: 520 }}>
         {/* 左侧数据库类型选择 */}
@@ -463,6 +465,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   icon={<ThunderboltOutlined />}
                   onClick={handleTestConnection}
                   size="small"
+                  data-testid="conn-test-btn"
                 >
                   {t('common.testConnection')}
                 </AntButton>
@@ -470,7 +473,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
               <AntButton onClick={handleCancel} size="small">
                 {t('common.cancel')}
               </AntButton>
-              <AntButton type="primary" onClick={handleOk} loading={saving} size="small">
+              <AntButton type="primary" onClick={handleOk} loading={saving} size="small" data-testid="conn-save-btn">
                 {editingData ? t('common.save') : t('common.create')}
               </AntButton>
             </div>
@@ -546,7 +549,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     rules={[{ required: true, message: t('common.pleaseEnterConnectionName') }]}
                     style={{ marginBottom: 16 }}
                   >
-                    <GlobalInput placeholder={t('common.exampleProdMysql')} />
+                    <GlobalInput placeholder={t('common.connectionNamePlaceholder')} data-testid="conn-name-input" />
                   </Form.Item>
 
                   {dbType === 'sqlite' ? (
@@ -584,7 +587,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                             ]}
                             style={{ marginBottom: 16 }}
                           >
-                            <GlobalInput placeholder={t('common.exampleLocalhost')} />
+                            <GlobalInput placeholder={t('common.exampleLocalhost')} data-testid="conn-host-input" />
                           </Form.Item>
                         </Col>
                         <Col span={6}>
@@ -594,7 +597,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                             rules={[{ required: true, message: t('common.pleaseEnterPort') }]}
                             style={{ marginBottom: 16 }}
                           >
-                            <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+                            <InputNumber min={1} max={65535} style={{ width: '100%' }} data-testid="conn-port-input" />
                           </Form.Item>
                         </Col>
                       </Row>
@@ -614,7 +617,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                         ]}
                         style={{ marginBottom: 16 }}
                       >
-                        <GlobalInput placeholder={t('common.exampleRoot')} />
+                        <GlobalInput placeholder={t('common.exampleRoot')} data-testid="conn-username-input" />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
@@ -636,6 +639,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                               : t('common.pleaseEnterPassword')
                           }
                           autoComplete="new-password"
+                          data-testid="conn-password-input"
                         />
                       </Form.Item>
                     </Col>
@@ -646,7 +650,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     label={t('common.databaseName')}
                     style={{ marginBottom: 16 }}
                   >
-                    <GlobalInput placeholder={t('common.exampleMydbOptional')} />
+                    <GlobalInput placeholder={t('common.exampleMydbOptional')} data-testid="conn-database-input" />
                   </Form.Item>
 
                   <Form.Item

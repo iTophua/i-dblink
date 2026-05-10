@@ -25,10 +25,11 @@ import {
   ColumnWidthOutlined,
   DragOutlined,
 } from '@ant-design/icons';
-import Editor from '@monaco-editor/react';
+import Editor, { OnMount } from '@monaco-editor/react';
 import type { ColumnsType } from 'antd/es/table';
 import { api } from '../../api';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../../types/api';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 const { Text } = Typography;
 
@@ -527,6 +528,8 @@ export function TableDesigner({
   onCancel,
 }: TableDesignerProps) {
   const { t } = useTranslation();
+  const tc = useThemeColors();
+  const editorRef = useRef<any>(null);
   const isEditMode = !!propTableName;
   const [activeTab, setActiveTab] = useState('columns');
   const [tableName, setTableName] = useState(propTableName || '');
@@ -754,25 +757,8 @@ export function TableDesigner({
       return;
     }
 
-    try {
-      setLoading(true);
-      // 逐条执行 ALTER 语句
-      const statements = sqlPreview
-        .split('\n')
-        .map((s) => s.trim())
-        .filter((s) => s && !s.startsWith('--'));
-
-      for (const stmt of statements) {
-        await api.executeDDL(connectionId, stmt, database);
-      }
-
-      message.success(isEditMode ? t('common.tableStructureUpdated') : t('common.tableCreated'));
-      onSave?.(sqlPreview);
-    } catch (err: any) {
-      message.error(`${t('common.executionFailed')}: ${err.message || err}`);
-    } finally {
-      setLoading(false);
-    }
+    // 触发 onSave，由父组件负责执行 SQL
+    onSave?.(sqlPreview);
   };
 
   // ── Column Table Columns ───────────────────────────────────────────────
@@ -822,8 +808,8 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val}
-          placeholder="column_name"
-          onChange={(e) => updateColumn(record.key, 'name', e.target.value)}
+              placeholder={t('common.tableStructure.columnPlaceholder')}
+              onChange={(e) => updateColumn(record.key, 'name', e.target.value)}
           onBlur={(e) => {
             // Sync column name to indexes
             if (val !== e.target.value && val) {
@@ -888,7 +874,7 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val || ''}
-          placeholder="NULL"
+              placeholder={t('common.tableStructure.nullDefault')}
           onChange={(e) => updateColumn(record.key, 'defaultValue', e.target.value)}
         />
       ),
@@ -901,7 +887,7 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val || ''}
-          placeholder="comment"
+              placeholder={t('common.tableStructure.commentPlaceholder')}
           onChange={(e) => updateColumn(record.key, 'comment', e.target.value)}
         />
       ),
@@ -943,7 +929,7 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val}
-          placeholder="index_name"
+              placeholder={t('common.tableStructure.indexNamePlaceholder')}
           onChange={(e) => updateIndex(record.key, 'name', e.target.value)}
         />
       ),
@@ -1005,7 +991,7 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val}
-          placeholder="fk_name"
+              placeholder={t('common.tableStructure.fkNamePlaceholder')}
           onChange={(e) => updateForeignKey(record.key, 'name', e.target.value)}
         />
       ),
@@ -1034,8 +1020,8 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val}
-          placeholder="table_name"
-          onChange={(e) => updateForeignKey(record.key, 'referencedTable', e.target.value)}
+          placeholder={t('common.tableStructure.tableNamePlaceholder')}
+              onChange={(e) => updateForeignKey(record.key, 'referencedTable', e.target.value)}
         />
       ),
     },
@@ -1047,8 +1033,8 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val}
-          placeholder="column_name"
-          onChange={(e) => updateForeignKey(record.key, 'referencedColumn', e.target.value)}
+          placeholder={t('common.tableStructure.columnPlaceholder')}
+           onChange={(e) => updateForeignKey(record.key, 'referencedColumn', e.target.value)}
         />
       ),
     },
@@ -1111,75 +1097,81 @@ export function TableDesigner({
     {
       key: 'columns',
       label: (
-        <span>
+        <Space>
           <ColumnWidthOutlined /> {t('common.tabColumns')}
-        </span>
+        </Space>
       ),
       children: (
-        <div>
-          <div style={{ marginBottom: 12 }}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={addColumn}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+            <Button type="text" icon={<PlusOutlined />} onClick={addColumn}>
               {t('common.addColumn')}
             </Button>
           </div>
-          <Table
-            rowKey="key"
-            columns={columnDefs}
-            dataSource={columns}
-            size="small"
-            pagination={false}
-            scroll={{ y: 400 }}
-          />
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <Table
+              rowKey="key"
+              columns={columnDefs}
+              dataSource={columns}
+              size="small"
+              pagination={false}
+              scroll={{ y: 'calc(100vh - 320px)' }}
+            />
+          </div>
         </div>
       ),
     },
     {
       key: 'indexes',
       label: (
-        <span>
+        <Space>
           <KeyOutlined /> {t('common.tabIndexes')}
-        </span>
+        </Space>
       ),
       children: (
-        <div>
-          <div style={{ marginBottom: 12 }}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={addIndex}>
-              Add Index
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+            <Button type="text" icon={<PlusOutlined />} onClick={addIndex}>
+              {t('common.addIndex')}
             </Button>
           </div>
-          <Table
-            rowKey="key"
-            columns={indexDefs}
-            dataSource={indexes}
-            size="small"
-            pagination={false}
-            scroll={{ y: 400 }}
-          />
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <Table
+              rowKey="key"
+              columns={indexDefs}
+              dataSource={indexes}
+              size="small"
+              pagination={false}
+              scroll={{ y: 'calc(100vh - 320px)' }}
+            />
+          </div>
         </div>
       ),
     },
     {
       key: 'foreign_keys',
       label: (
-        <span>
-          <LinkOutlined /> Foreign Keys
-        </span>
+        <Space>
+          <LinkOutlined /> {t('common.tabForeignKeys')}
+        </Space>
       ),
       children: (
-        <div>
-          <div style={{ marginBottom: 12 }}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={addForeignKey}>
-              Add Foreign Key
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+            <Button type="text" icon={<PlusOutlined />} onClick={addForeignKey}>
+              {t('common.addForeignKey')}
             </Button>
           </div>
-          <Table
-            rowKey="key"
-            columns={fkDefs}
-            dataSource={foreignKeys}
-            size="small"
-            pagination={false}
-            scroll={{ y: 400 }}
-          />
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <Table
+              rowKey="key"
+              columns={fkDefs}
+              dataSource={foreignKeys}
+              size="small"
+              pagination={false}
+              scroll={{ y: 'calc(100vh - 320px)' }}
+            />
+          </div>
         </div>
       ),
     },
@@ -1187,16 +1179,68 @@ export function TableDesigner({
       key: 'sql_preview',
       label: (
         <span>
-          <CodeOutlined /> SQL Preview
+          <CodeOutlined /> {t('common.sqlPreview')}
         </span>
       ),
       children: (
-        <Card size="small" style={{ height: 500, padding: 0 }}>
+        <Card
+          size="small"
+          className="sql-preview-card"
+          style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+          bodyStyle={{ flex: 1, overflow: 'hidden', padding: 0 }}
+        >
           <Editor
             height="100%"
             defaultLanguage="sql"
             language="sql"
             value={sqlPreview}
+            onMount={(editor, monaco) => {
+              editorRef.current = editor;
+              // 定义适配应用主题的自定义主题
+              monaco.editor.defineTheme('app-dark', {
+                base: 'vs-dark',
+                inherit: true,
+                rules: [
+                  { token: '', foreground: 'e4e4ed', background: '13132a' },
+                  { token: 'comment', foreground: '686888', fontStyle: 'italic' },
+                  { token: 'keyword', foreground: '00f5ff', fontStyle: 'bold' },
+                  { token: 'string', foreground: '39ff14' },
+                  { token: 'number', foreground: 'fbbf24' },
+                  { token: 'operator', foreground: 'f0abfc' },
+                ],
+                colors: {
+                  'editor.background': '#13132a',
+                  'editor.foreground': '#e4e4ed',
+                  'editor.lineHighlightBackground': '#1c1c38',
+                  'editorLineNumber.foreground': '#686888',
+                  'editorLineNumber.activeForeground': '#a0a0b8',
+                  'editor.selectionBackground': '#00f5ff30',
+                  'editorCursor.foreground': '#00f5ff',
+                },
+              });
+              monaco.editor.defineTheme('app-light', {
+                base: 'vs',
+                inherit: true,
+                rules: [
+                  { token: '', foreground: '1a1a2e', background: 'ffffff' },
+                  { token: 'comment', foreground: '8a8a9a', fontStyle: 'italic' },
+                  { token: 'keyword', foreground: '00e5ff', fontStyle: 'bold' },
+                  { token: 'string', foreground: '00ff55' },
+                  { token: 'number', foreground: 'd946ff' },
+                  { token: 'operator', foreground: 'e879f9' },
+                ],
+                colors: {
+                  'editor.background': '#ffffff',
+                  'editor.foreground': '#1a1a2e',
+                  'editor.lineHighlightBackground': '#f0f0f4',
+                  'editorLineNumber.foreground': '#8a8a9a',
+                  'editorLineNumber.activeForeground': '#5a5a6e',
+                  'editor.selectionBackground': '#00e5ff20',
+                  'editorCursor.foreground': '#00e5ff',
+                },
+              });
+              monaco.editor.setTheme(tc.isDark ? 'app-dark' : 'app-light');
+            }}
             options={{
               readOnly: true,
               minimap: { enabled: false },
@@ -1204,8 +1248,10 @@ export function TableDesigner({
               lineNumbers: 'on',
               scrollBeyondLastLine: false,
               wordWrap: 'on',
+              renderLineHighlight: 'none',
+              fixedOverflowWidgets: true,
+              padding: { top: 8, bottom: 8 },
             }}
-            theme="vs-dark"
           />
         </Card>
       ),
@@ -1244,37 +1290,38 @@ export function TableDesigner({
         }}
       >
         <Space>
-          <Text strong style={{ fontSize: 14 }}>
-            Table Designer
-          </Text>
+<Text strong style={{ fontSize: 14 }}>
+             {t('common.tableDesigner')}
+           </Text>
           <GlobalInput
             size="small"
             style={{ width: 200 }}
             value={tableName}
-            placeholder="Enter table name"
-            onChange={(e) => setTableName(e.target.value)}
+              placeholder={t('common.tableStructure.tableNamePlaceholder')}
+              onChange={(e) => setTableName(e.target.value)}
             prefix={<CodeOutlined style={{ color: '#999' }} />}
           />
         </Space>
         <Space>
           {onCancel && (
-            <Button size="small" onClick={onCancel}>
-              Cancel
-            </Button>
+             <Button size="small" onClick={onCancel}>
+                {t('common.tableStructure.cancel')}
+             </Button>
           )}
-          <Button type="primary" size="small" onClick={handleSave}>
-            Save SQL
-          </Button>
+             <Button type="primary" size="small" onClick={handleSave}>
+                {t('common.tableStructure.saveSQL')}
+             </Button>
         </Space>
       </div>
 
       {/* Tabs */}
-      <div style={{ flex: 1, overflow: 'hidden', padding: '12px 16px' }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '12px 16px' }}>
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
           items={tabItems}
-          style={{ height: '100%' }}
+          destroyInactiveTabPane
+          style={{ flex: 1, overflow: 'hidden' }}
         />
       </div>
     </div>

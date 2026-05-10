@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Tabs, Table, Spin, Empty, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { KeyOutlined, LinkOutlined, InfoCircleOutlined, CodeOutlined } from '@ant-design/icons';
+import { KeyOutlined, LinkOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../hooks/useApi';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../types/api';
@@ -28,29 +28,26 @@ interface TableStructureProps {
 
 export function TableStructure({ connectionId, tableName, database }: TableStructureProps) {
   const { t } = useTranslation();
-  const { getColumns, getIndexes, getForeignKeys, getTableInfo, getCreateTableSQL } = useDatabase();
+  const { getColumns, getIndexes, getForeignKeys, getTableInfo } = useDatabase();
   const [loading, setLoading] = useState(false);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
   const [indexes, setIndexes] = useState<IndexInfo[]>([]);
   const [foreignKeys, setForeignKeys] = useState<ForeignKeyInfo[]>([]);
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null);
-  const [createTableSQL, setCreateTableSQL] = useState('');
 
   const loadStructure = useCallback(async () => {
     setLoading(true);
     try {
-      const [cols, idxs, fks, info, sql] = await Promise.all([
+      const [cols, idxs, fks, info] = await Promise.all([
         getColumns(connectionId, tableName, database),
         getIndexes(connectionId, tableName, database),
         getForeignKeys(connectionId, tableName, database),
         getTableInfo(connectionId, tableName, database).catch(() => null),
-        getCreateTableSQL(connectionId, tableName, database).catch(() => ''),
       ]);
       setColumns(cols);
       setIndexes(idxs);
       setForeignKeys(fks);
       setTableInfo(info);
-      setCreateTableSQL(sql);
     } catch (error) {
       console.error('Failed to load table structure:', error);
     } finally {
@@ -64,7 +61,6 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
     getIndexes,
     getForeignKeys,
     getTableInfo,
-    getCreateTableSQL,
   ]);
 
   useEffect(() => {
@@ -226,6 +222,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       `}</style>
       <Tabs
         size="small"
+        destroyInactiveTabPane
         items={[
           {
             key: 'info',
@@ -357,37 +354,9 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
               ) : (
                 <Empty description={t('common.noForeignKeys')} />
               ),
-          },
-          {
-            key: 'sql',
-            label: (
-              <span>
-                <CodeOutlined style={{ marginRight: 4 }} />
-                {t('common.importExport.sqlPreview')}
-              </span>
-            ),
-            children: createTableSQL ? (
-              <div style={{ padding: '8px 0' }}>
-                <pre
-                  style={{
-                    background: '#f5f5f5',
-                    padding: 12,
-                    borderRadius: 4,
-                    fontSize: 12,
-                    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                    overflow: 'auto',
-                    maxHeight: 300,
-                  }}
-                >
-                  {createTableSQL}
-                </pre>
-              </div>
-            ) : (
-              <Empty description={t('common.noSql')} />
-            ),
-          },
-        ]}
-      />
-    </div>
-  );
+            },
+          ]}
+        />
+      </div>
+    );
 }

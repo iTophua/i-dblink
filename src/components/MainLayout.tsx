@@ -87,7 +87,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     if (workspaceRestoredRef.current) return;
     const ws = useWorkspaceStore.getState();
     setCollapsed(ws.sidebarCollapsed);
-    setExpandedKeys(ws.expandedKeys);
+    // 应用重启后不恢复连接展开状态，保持所有连接收起
+    setExpandedKeys([]);
     workspaceRestoredRef.current = true;
   }, []);
 
@@ -129,9 +130,11 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     document.title = title;
 
     // Tauri 窗口标题
-    getCurrentWindow()
-      .setTitle(title)
-      .catch(() => {});
+    if (typeof window !== 'undefined' && (window as any).__TAURI__) {
+      import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+        getCurrentWindow().setTitle(title).catch(() => {});
+      }).catch(() => {});
+    }
   }, [selectedConnectionId, connections, activeTabInfo]);
 
   // 监听活跃 Tab 变化，更新状态栏信息

@@ -620,7 +620,7 @@ function TableListComponent({
               />
             </span>
           </Tooltip>
-          <Tooltip title={t('common.copyTable')} open={!selectedRow ? false : undefined}>
+          <Tooltip title={t('common.copyTable.title')} open={!selectedRow ? false : undefined}>
             <span>
               <Button
                 icon={<CopyOutlined />}
@@ -631,7 +631,7 @@ function TableListComponent({
                   if (selectedRow) {
                     const newName = `${selectedRow}_copy`;
                     Modal.confirm({
-                      title: t('common.copyTable'),
+                      title: t('common.copyTable.title'),
                       okText: t('common.copy'),
                       content: (
                         <div>

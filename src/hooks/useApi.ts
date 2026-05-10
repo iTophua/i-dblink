@@ -190,8 +190,14 @@ export const useConnections = () => {
         api.getConnections(),
         api.getGroups(),
       ]);
-      setConnections(connectionsData);
+      // 应用重启后重置所有连接状态为断开
+      const resetConnections = connectionsData.map((conn) => ({
+        ...conn,
+        status: 'disconnected' as const,
+      }));
+      setConnections(resetConnections);
       setGroups(groupsData);
+      setActiveConnection(null);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '加载连接失败';
       setError(errorMsg);
@@ -199,7 +205,7 @@ export const useConnections = () => {
     } finally {
       setLoading(false);
     }
-  }, [setConnections, setGroups, setLoading, setError]);
+  }, [setConnections, setGroups, setActiveConnection, setLoading, setError]);
 
   const saveConnection = useCallback(
     async (input: ConnectionInput) => {

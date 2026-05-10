@@ -2,55 +2,59 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::time::sleep;
 
 /// SidecarState 包装 Arc<Mutex> 并实现 Deref
-/// 使用 tokio::sync::Mutex 因为它支持 async lock
-/// Arc<tokio::sync::Mutex<T>> 是 Sync 的（Arc 提供了必要的同步）
-pub struct SidecarState(pub Arc<AsyncMutex<Option<SidecarManager>>>);
+pub struct SidecarState(pub Arc<AsyncMutex<Option<Arc<SidecarManager>>>>);
 
 impl std::ops::Deref for SidecarState {
-    type Target = AsyncMutex<Option<SidecarManager>>;
+    type Target = AsyncMutex<Option<Arc<SidecarManager>>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-/// Sidecar 管理器：负责启动 Go 后端进程并提供 HTTP 客户端
+/// Sidecar 管理器：负责启动 Go 后端进程、心跳维护、看门狗和自动重启
 pub struct SidecarManager {
     port: u16,
     client: reqwest::Client,
     process: AsyncMutex<Child>,
     child_pid: u32,
+    stop_watchdog: Arc<AtomicBool>,
+    heartbeat_tx: std::sync::mpsc::Sender<()>,
 }
 
 impl SidecarManager {
-    /// 启动 Go sidecar 进程，读取 stdout 中的 PORT 行
+    /// 启动 Go sidecar 进程
     ///
-    /// 注意：此函数包含同步阻塞 IO，应在 blocking 线程中调用
+    /// 包含三层保护：
+    /// 1. 启动前清理：检查并 kill 旧的 go-backend 进程
+    /// 2. pid 文件追踪
+    /// 3. stdin 心跳绑定
     pub fn start() -> Result<Self, String> {
-        let binary_path = find_binary();
-        let binary_path = binary_path?;
+        Self::cleanup_old_processes();
+
+        let binary_path = find_binary()?;
 
         let mut child = Command::new(&binary_path)
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| {
-                format!(
-                    "Failed to start sidecar at {:?}: {}. Please build Go backend first: cd go-backend && go build",
-                    binary_path, e
-                )
-            })?;
+            .map_err(|e| format!(
+                "Failed to start sidecar at {:?}: {}. Please build Go backend first: cd go-backend && go build",
+                binary_path, e
+            ))?;
 
-        // 启动后台线程消费 stderr，防止管道缓冲区满导致 sidecar 死锁
-        // 日志同时写入 go-backend.log 文件，方便终端不可见时查看
-        let log_path = std::env::current_dir()
-            .ok()
-            .map(|p| p.join("go-backend.log"))
-            .unwrap_or_else(|| PathBuf::from("go-backend.log"));
+        let child_pid = child.id() as u32;
+        let _ = Self::write_pid_file(child_pid);
 
+        let log_path = Self::get_log_path();
         let log_path_stderr = log_path.clone();
+
         if let Some(stderr) = child.stderr.take() {
             std::thread::spawn(move || {
                 let reader = BufReader::new(stderr);
@@ -85,9 +89,7 @@ impl SidecarManager {
                     let line = buf.trim_end();
                     tracing::info!("Read line from stdout: {}", line);
                     if line.starts_with("PORT: ") {
-                        port = line[6..]
-                            .trim()
-                            .parse()
+                        port = line[6..].trim().parse()
                             .map_err(|e| format!("Invalid port: {}", e))?;
                         break;
                     }
@@ -97,10 +99,10 @@ impl SidecarManager {
         }
 
         if port == 0 {
+            let _ = Self::remove_pid_file();
             return Err("Sidecar did not report port".to_string());
         }
 
-        // 读取到 PORT 后，启动后台线程继续消费 stdout 剩余数据，防止 Go 端 fmt.Printf 阻塞
         std::thread::spawn(move || {
             let file = std::fs::OpenOptions::new()
                 .create(true)
@@ -128,20 +130,120 @@ impl SidecarManager {
         });
 
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
+            .timeout(Duration::from_secs(60))
             .build()
             .map_err(|e| e.to_string())?;
 
-        tracing::info!("Go sidecar started successfully");
+        // 启动 stdin 心跳线程
+        let mut stdin = child.stdin.take().ok_or("Failed to get stdin")?;
+        let (heartbeat_tx, heartbeat_rx) = std::sync::mpsc::channel::<()>();
 
-        let child_pid = child.id() as u32;
+        std::thread::spawn(move || {
+            let _ = stdin.write_all(b"\n");
+            let _ = stdin.flush();
+
+            loop {
+                match heartbeat_rx.recv_timeout(Duration::from_secs(5)) {
+                    Ok(()) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        if stdin.write_all(b"\n").is_err() || stdin.flush().is_err() {
+                            break;
+                        }
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                        break;
+                    }
+                }
+            }
+        });
+
+        tracing::info!("Go sidecar started successfully on port {}", port);
 
         Ok(Self {
             port,
             client,
             process: AsyncMutex::new(child),
             child_pid,
+            stop_watchdog: Arc::new(AtomicBool::new(false)),
+            heartbeat_tx,
         })
+    }
+
+    /// 启动看门狗：定期 health check，崩溃时自动重启
+    pub fn spawn_watchdog(
+        manager: Arc<Self>,
+        sidecar_state: Arc<AsyncMutex<Option<Arc<Self>>>>,
+    ) {
+        tokio::spawn(async move {
+            let mut consecutive_failures = 0;
+            let max_failures = 3;
+            let max_restarts = 3;
+            let mut restart_count = 0;
+
+            loop {
+                sleep(Duration::from_secs(10)).await;
+
+                if manager.stop_watchdog.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                match manager.health_check().await {
+                    Ok(()) => {
+                        consecutive_failures = 0;
+                    }
+                    Err(e) => {
+                        consecutive_failures += 1;
+                        tracing::warn!(
+                            "Go sidecar health check failed ({}/{}): {}",
+                            consecutive_failures,
+                            max_failures,
+                            e
+                        );
+
+                        if consecutive_failures >= max_failures {
+                            if restart_count >= max_restarts {
+                                tracing::error!(
+                                    "Go sidecar restart limit ({}) reached. Sidecar features unavailable.",
+                                    max_restarts
+                                );
+                                let mut guard = sidecar_state.lock().await;
+                                *guard = None;
+                                break;
+                            }
+
+                            restart_count += 1;
+
+                            tracing::info!(
+                                "Attempting to restart Go sidecar ({}/{})...",
+                                restart_count,
+                                max_restarts
+                            );
+
+                            // 停止旧进程
+                            let _ = manager.stop_internal().await;
+
+                            match Self::start() {
+                                Ok(new_manager) => {
+                                    let new_manager = Arc::new(new_manager);
+                                    let mut guard = sidecar_state.lock().await;
+                                    *guard = Some(new_manager.clone());
+                                    drop(guard);
+
+                                    // 启动新的看门狗，当前看门狗退出
+                                    Self::spawn_watchdog(new_manager, sidecar_state);
+                                    break;
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to restart Go sidecar: {}", e);
+                                    let mut guard = sidecar_state.lock().await;
+                                    *guard = None;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
     pub fn base_url(&self) -> String {
@@ -184,12 +286,10 @@ impl SidecarManager {
             .json(body)
             .send()
             .await
-            .map_err(|e| {
-                format!(
-                    "HTTP request failed: {}. Go sidecar may have crashed or is not responding.",
-                    e
-                )
-            })?;
+            .map_err(|e| format!(
+                "HTTP request failed: {}. Go sidecar may have crashed or is not responding.",
+                e
+            ))?;
 
         let status = resp.status();
         let text = resp.text().await.map_err(|e| e.to_string())?;
@@ -209,7 +309,7 @@ impl SidecarManager {
         let resp = self
             .client
             .get(&url)
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(Duration::from_secs(5))
             .send()
             .await
             .map_err(|e| format!("Health check failed: {}", e))?;
@@ -221,8 +321,14 @@ impl SidecarManager {
         }
     }
 
-    /// 停止 sidecar 进程（SIGKILL）
+    /// 停止 sidecar 进程（外部调用）
     pub async fn stop(&self) -> Result<(), String> {
+        self.stop_watchdog.store(true, Ordering::Relaxed);
+        self.stop_internal().await
+    }
+
+    /// 内部停止：不更新 watchdog 标志
+    async fn stop_internal(&self) -> Result<(), String> {
         let mut child = self.process.lock().await;
         child
             .kill()
@@ -230,8 +336,78 @@ impl SidecarManager {
         child
             .wait()
             .map_err(|e| format!("Failed to wait for sidecar process: {}", e))?;
+
+        let _ = self.heartbeat_tx.send(());
+        let _ = Self::remove_pid_file();
+
         tracing::info!("Go sidecar process stopped");
         Ok(())
+    }
+
+    // --- pid 文件管理 ---
+
+    fn get_pid_file_path() -> PathBuf {
+        #[cfg(debug_assertions)]
+        {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .parent()
+                .unwrap_or(&PathBuf::from("."))
+                .join(".dev-data")
+                .join(".go-backend.pid")
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            std::env::temp_dir().join("idblink-go-backend.pid")
+        }
+    }
+
+    fn get_log_path() -> PathBuf {
+        std::env::current_dir()
+            .ok()
+            .map(|p| p.join("go-backend.log"))
+            .unwrap_or_else(|| PathBuf::from("go-backend.log"))
+    }
+
+    fn write_pid_file(pid: u32) -> Result<(), String> {
+        let path = Self::get_pid_file_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::write(&path, pid.to_string())
+            .map_err(|e| format!("Failed to write pid file: {}", e))
+    }
+
+    fn read_pid_file() -> Option<u32> {
+        let path = Self::get_pid_file_path();
+        let content = std::fs::read_to_string(&path).ok()?;
+        content.trim().parse().ok()
+    }
+
+    fn remove_pid_file() -> Result<(), String> {
+        let path = Self::get_pid_file_path();
+        if path.exists() {
+            std::fs::remove_file(&path)
+                .map_err(|e| format!("Failed to remove pid file: {}", e))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 启动前清理旧的 go-backend 进程
+    fn cleanup_old_processes() {
+        // 1. 通过 pid 文件 kill 旧进程
+        if let Some(old_pid) = Self::read_pid_file() {
+            tracing::info!("Found old go-backend process with pid {}, attempting to kill...", old_pid);
+            unsafe {
+                libc::kill(old_pid as libc::pid_t, libc::SIGTERM);
+            }
+            std::thread::sleep(Duration::from_millis(500));
+            unsafe {
+                libc::kill(old_pid as libc::pid_t, libc::SIGKILL);
+            }
+            let _ = Self::remove_pid_file();
+        }
     }
 }
 
@@ -242,6 +418,7 @@ impl Drop for SidecarManager {
             unsafe {
                 libc::kill(self.child_pid as libc::pid_t, libc::SIGKILL);
             }
+            let _ = Self::remove_pid_file();
         }
     }
 }

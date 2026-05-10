@@ -297,11 +297,13 @@ fn main() {
                 let result = tokio::task::spawn_blocking(SidecarManager::start).await;
 
                 match result {
-                    Ok(Ok(sidecar)) => {
+                    Ok(Ok(manager)) => {
+                        let manager = Arc::new(manager);
+
                         // readiness probe：确认 HTTP 服务真正就绪
                         let mut healthy = false;
                         for i in 0..30 {
-                            match sidecar.health_check().await {
+                            match manager.health_check().await {
                                 Ok(()) => {
                                     tracing::info!("Go sidecar health check passed on attempt {}", i + 1);
                                     healthy = true;
@@ -317,7 +319,11 @@ fn main() {
                         if healthy {
                             tracing::info!("Go sidecar started successfully and is ready");
                             let mut guard = sidecar_state_clone.lock().await;
-                            *guard = Some(sidecar);
+                            *guard = Some(manager.clone());
+                            drop(guard);
+
+                            // 启动看门狗：监控 Go 进程健康，崩溃时自动重启
+                            SidecarManager::spawn_watchdog(manager, sidecar_state_clone);
                         } else {
                             tracing::error!("Go sidecar started but failed health checks. Sidecar features will be unavailable.");
                         }

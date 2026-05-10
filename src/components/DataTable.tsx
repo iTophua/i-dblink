@@ -1262,6 +1262,7 @@ export const DataTable = memo(function DataTable({
         flexDirection: 'column',
         background: 'var(--background-card)',
       }}
+      data-testid="data-table"
     >
       {/* 顶部工具栏 */}
       <div style={toolbarStyle}>
@@ -1284,6 +1285,7 @@ export const DataTable = memo(function DataTable({
             type="primary"
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
+            data-testid="datatable-add-row"
           >
             {t('common.addRowLabel')}
           </Button>
@@ -1293,6 +1295,7 @@ export const DataTable = memo(function DataTable({
             disabled={selectedRows.length !== 1}
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
+            data-testid="datatable-edit-row"
           >
             {t('common.editRow')}
           </Button>
@@ -1309,6 +1312,7 @@ export const DataTable = memo(function DataTable({
               danger
               size="small"
               style={{ height: 20, padding: '0 6px', fontSize: 11 }}
+              data-testid="datatable-delete-row"
             >
               {t('common.delete')}
             </Button>
@@ -1320,6 +1324,7 @@ export const DataTable = memo(function DataTable({
             disabled={rowData.length === 0}
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
+            data-testid="datatable-export"
           >
             {t('common.export')}
           </Button>
@@ -1906,6 +1911,7 @@ export const DataTable = memo(function DataTable({
             disabled={!hasUnsavedChanges}
             size="small"
             style={{ height: 20, padding: '0 4px', fontSize: 11 }}
+            data-testid="datatable-save"
           >
             {t('common.submitLabel')}
           </Button>
@@ -1915,6 +1921,7 @@ export const DataTable = memo(function DataTable({
             disabled={!hasUnsavedChanges}
             size="small"
             style={{ height: 20, padding: '0 4px', fontSize: 11 }}
+            data-testid="datatable-undo"
           >
             {t('common.undoLabel')}
           </Button>
@@ -1957,6 +1964,7 @@ export const DataTable = memo(function DataTable({
             loading={loading}
             size="small"
             style={{ height: 20, padding: '0 4px', fontSize: 11 }}
+            data-testid="datatable-refresh"
           >
             {t('common.refreshLabel')}
           </Button>

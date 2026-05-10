@@ -897,6 +897,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             overflow: 'hidden',
             height: '100%',
           }}
+          data-testid="objects-tab"
         >
           {/* 面包屑导航 */}
           {selectedTable && (
@@ -1043,7 +1044,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             </Tooltip>
           ),
           children: (
-            <div style={{ height: '100%' }}>
+            <div style={{ height: '100%' }} data-testid={`data-tab-${table.name}`}>
               <DataTable
                 tableName={table.name}
                 connectionId={table.connectionId}
@@ -1098,7 +1099,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         </span>
       ),
       children: (
-        <div style={{ height: '100%' }}>
+        <div style={{ height: '100%' }} data-testid={`sql-tab-${sqlTab.key}`}>
           <SQLEditor
             connectionId={selectedConnectionId}
             database={sqlTab.database || selectedDatabase}
@@ -1242,6 +1243,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         items={tabItems}
         onEdit={handleTabEdit}
         renderTabBar={renderDraggableTabBar}
+        data-testid="tab-panel"
       />
 
       {/* 右键菜单 */}

@@ -118,9 +118,11 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       transitionName=""
       maskTransitionName=""
       styles={{ body: { maxHeight: 'calc(100vh - 200px)', overflow: 'hidden', padding: 0 } }}
+      className="settings-dialog-modal"
+      data-testid="settings-dialog"
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Button onClick={handleReset}>{t('common.reset')}</Button>
+          <Button onClick={handleReset} data-testid="settings-reset-btn">{t('common.reset')}</Button>
           <div>
             <Button onClick={onCancel} style={{ marginRight: 8 }}>
               {t('common.cancel')}

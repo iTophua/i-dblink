@@ -89,9 +89,10 @@ export function StatusBar({
         color: 'var(--text-secondary)',
       }}
       className="status-bar-enhanced"
+      data-testid="status-bar"
     >
       <Space>
-        <Text>
+        <Text data-testid="status-connection">
           {isConnected ? (
             <span>
               <CheckCircleOutlined style={{ color: 'var(--color-success)', marginRight: 4 }} />
@@ -135,7 +136,7 @@ export function StatusBar({
           </Text>
         )}
         {transactionActive && (
-          <Tag color="orange" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
+          <Tag color="orange" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }} data-testid="status-transaction">
             {t('common.inTransaction')} {txDuration > 0 ? `${txDuration}s` : ''}
           </Tag>
         )}

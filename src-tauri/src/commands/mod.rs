@@ -89,7 +89,7 @@ impl From<DbConnection> for ConnectionOutput {
             color: conn.color,
             status: "disconnected".to_string(),
             ssh_enabled: conn.ssh_host.is_some(),
-            ssl_enabled: conn.ssl_enabled.unwrap_or(false),
+            ssl_enabled: conn.ssl_enabled.as_ref().map(|s| s == "true").unwrap_or(false),
         }
     }
 }
@@ -263,6 +263,23 @@ async fn ensure_connected(
 
     let password = password_opt.unwrap_or_default();
 
+    // 转换 SSH 端口和 SSL 配置从字符串到正确类型
+    let ssh_port: i32 = conn_config
+        .ssh_port
+        .as_ref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(22);
+    let ssl_enabled = conn_config
+        .ssl_enabled
+        .as_ref()
+        .map(|s| s == "true")
+        .unwrap_or(false);
+    let ssl_skip_verify = conn_config
+        .ssl_skip_verify
+        .as_ref()
+        .map(|s| s == "true")
+        .unwrap_or(false);
+
     let req = serde_json::json!({
         "connection_id": connection_id,
         "db_type": conn_config.db_type,
@@ -271,16 +288,17 @@ async fn ensure_connected(
         "username": conn_config.username,
         "password": password,
         "database": conn_config.database,
+        "ssh_enabled": conn_config.ssh_host.is_some(),
         "ssh_host": conn_config.ssh_host,
-        "ssh_port": conn_config.ssh_port,
+        "ssh_port": ssh_port,
         "ssh_username": conn_config.ssh_username,
         "ssh_auth_method": conn_config.ssh_auth_method,
         "ssh_private_key_path": conn_config.ssh_private_key_path,
-        "ssl_enabled": conn_config.ssl_enabled,
+        "ssl_enabled": ssl_enabled,
         "ssl_ca_path": conn_config.ssl_ca_path,
         "ssl_cert_path": conn_config.ssl_cert_path,
         "ssl_key_path": conn_config.ssl_key_path,
-        "ssl_skip_verify": conn_config.ssl_skip_verify,
+        "ssl_skip_verify": ssl_skip_verify,
     });
 
     let resp: serde_json::Value = sm.post("/connect", &req).await?;
@@ -459,16 +477,16 @@ pub async fn save_connection(
             updated.color = input.color.clone();
             // SSH
             updated.ssh_host = if input.ssh_enabled { input.ssh_host.clone() } else { None };
-            updated.ssh_port = if input.ssh_enabled { input.ssh_port.map(|p| p as i32) } else { None };
+            updated.ssh_port = if input.ssh_enabled { input.ssh_port.map(|p| p.to_string()) } else { None };
             updated.ssh_username = if input.ssh_enabled { input.ssh_username.clone() } else { None };
             updated.ssh_auth_method = if input.ssh_enabled { input.ssh_auth_method.clone() } else { None };
             updated.ssh_private_key_path = if input.ssh_enabled { input.ssh_private_key_path.clone() } else { None };
             // SSL
-            updated.ssl_enabled = Some(input.ssl_enabled);
+            updated.ssl_enabled = Some(input.ssl_enabled.to_string());
             updated.ssl_ca_path = input.ssl_ca_path.clone();
             updated.ssl_cert_path = input.ssl_cert_path.clone();
             updated.ssl_key_path = input.ssl_key_path.clone();
-            updated.ssl_skip_verify = Some(input.ssl_skip_verify);
+            updated.ssl_skip_verify = Some(input.ssl_skip_verify.to_string());
 
             storage
                 .update_connection(&id, &updated, input.password.as_deref())
@@ -490,16 +508,16 @@ pub async fn save_connection(
             );
             // SSH
             new_conn.ssh_host = if input.ssh_enabled { input.ssh_host.clone() } else { None };
-            new_conn.ssh_port = if input.ssh_enabled { input.ssh_port.map(|p| p as i32) } else { None };
+            new_conn.ssh_port = if input.ssh_enabled { input.ssh_port.map(|p| p.to_string()) } else { None };
             new_conn.ssh_username = if input.ssh_enabled { input.ssh_username.clone() } else { None };
             new_conn.ssh_auth_method = if input.ssh_enabled { input.ssh_auth_method.clone() } else { None };
             new_conn.ssh_private_key_path = if input.ssh_enabled { input.ssh_private_key_path.clone() } else { None };
             // SSL
-            new_conn.ssl_enabled = Some(input.ssl_enabled);
+            new_conn.ssl_enabled = Some(input.ssl_enabled.to_string());
             new_conn.ssl_ca_path = input.ssl_ca_path.clone();
             new_conn.ssl_cert_path = input.ssl_cert_path.clone();
             new_conn.ssl_key_path = input.ssl_key_path.clone();
-            new_conn.ssl_skip_verify = Some(input.ssl_skip_verify);
+            new_conn.ssl_skip_verify = Some(input.ssl_skip_verify.to_string());
 
             storage
                 .save_connection(&new_conn, input.password.as_deref())

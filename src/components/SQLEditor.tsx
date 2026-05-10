@@ -1194,6 +1194,7 @@ export function SQLEditor({
         minHeight: 0,
         background: 'var(--background-card)',
       }}
+      data-testid="sql-editor"
     >
       <div
         style={{
@@ -1220,6 +1221,7 @@ export function SQLEditor({
                 fontWeight: 500,
               }}
               size="small"
+              data-testid="sql-execute-btn"
             >
               {t('common.executeButton')}
             </Button>

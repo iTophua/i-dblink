@@ -163,6 +163,24 @@
   border: 1px solid var(--border-color-light, #f0f0f0);
 }
 
+/* SQL 预览卡片禁用悬浮动画 */
+.sql-preview-card,
+.sql-preview-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  transition: none !important;
+}
+
+/* SQL 预览 Monaco Editor 禁用 focus outline */
+.sql-preview-card .monaco-editor.focused {
+  outline: none !important;
+}
+
+.sql-preview-card .monaco-editor .margin,
+.sql-preview-card .monaco-editor .monaco-editor-background {
+  transition: background-color 0.2s ease;
+}
+
 .ant-card:hover {
   transform: translateY(-4px);
   box-shadow:

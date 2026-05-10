@@ -193,6 +193,7 @@ export function Toolbar(): JSX.Element {
         icon={<PlusOutlined />}
         onClick={() => handleMenuAction('new-connection')}
         style={buttonStyle}
+        data-testid="toolbar-new-connection"
       >
         {t('common.newConnectionBtn')}
       </Button>
@@ -202,6 +203,7 @@ export function Toolbar(): JSX.Element {
         icon={<ReloadOutlined />}
         onClick={() => handleMenuAction('refresh')}
         style={buttonStyle}
+        data-testid="toolbar-refresh"
       >
         {t('common.refreshBtn')}
       </Button>
@@ -211,6 +213,7 @@ export function Toolbar(): JSX.Element {
         icon={<CodeOutlined />}
         onClick={() => handleMenuAction('new-query')}
         style={buttonStyle}
+        data-testid="toolbar-new-query"
       >
         {t('common.newQueryBtn')}
       </Button>
@@ -219,13 +222,14 @@ export function Toolbar(): JSX.Element {
 
   const renderAppButtons = () => (
     <>
-      <Tooltip title={t('common.shortcutsTitle') + ' (?)'} placement="bottom">
+      <Tooltip title={t('common.shortcutsTitle') + ' (?'} placement="bottom">
         <Button
           type="text"
           size="small"
           icon={<KeyOutlined />}
           onClick={() => setShortcutsModalOpen(true)}
           style={buttonStyle}
+          data-testid="toolbar-shortcuts"
         />
       </Tooltip>
       <Button
@@ -234,6 +238,7 @@ export function Toolbar(): JSX.Element {
         icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
         onClick={handleToggleTheme}
         style={buttonStyle}
+        data-testid="toolbar-theme-toggle"
       >
         {isDarkMode ? t('common.lightModeBtn') : t('common.darkModeBtn')}
       </Button>
@@ -243,6 +248,7 @@ export function Toolbar(): JSX.Element {
         icon={<SettingOutlined />}
         onClick={() => handleMenuAction('options')}
         style={buttonStyle}
+        data-testid="toolbar-settings"
       >
         {t('common.settingsBtn')}
       </Button>

@@ -99,7 +99,7 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
         }}
       >
         <Text strong style={{ fontSize: 14 }}>
-          {t('common.viewDefinition')}: {viewName}
+          {t('common.viewDefinition.title')}: {viewName}
         </Text>
       </div>
       <div style={{ flex: 1, overflow: 'hidden', padding: '12px 16px' }}>

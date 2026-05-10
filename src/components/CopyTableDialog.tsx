@@ -116,7 +116,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
 
   return (
     <Modal
-      title={t('common.copyTable')}
+      title={t('common.copyTable.title')}
       open={open}
       onOk={handleOk}
       onCancel={handleCancel}

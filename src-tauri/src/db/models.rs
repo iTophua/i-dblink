@@ -17,16 +17,16 @@ pub struct DbConnection {
     pub color: Option<String>,
     // SSH 隧道配置
     pub ssh_host: Option<String>,
-    pub ssh_port: Option<i32>,
+    pub ssh_port: Option<String>,
     pub ssh_username: Option<String>,
     pub ssh_auth_method: Option<String>,
     pub ssh_private_key_path: Option<String>,
     // SSL/TLS 配置
-    pub ssl_enabled: Option<bool>,
+    pub ssl_enabled: Option<String>,
     pub ssl_ca_path: Option<String>,
     pub ssl_cert_path: Option<String>,
     pub ssl_key_path: Option<String>,
-    pub ssl_skip_verify: Option<bool>,
+    pub ssl_skip_verify: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
