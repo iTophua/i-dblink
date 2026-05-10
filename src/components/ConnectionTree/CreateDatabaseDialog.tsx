@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Modal, Form, Input, Select, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
@@ -35,17 +35,28 @@ export function CreateDatabaseDialog({
     Record<string, { label: string; value: string }[]>
   >({});
 
-  const resetForm = useCallback(() => {
-    form.resetFields();
-    setSelectedCharset('utf8mb4');
-    setCharsetOptions([]);
-    setCollationOptions([]);
-    setCharsetCollationsMap({});
-  }, [form]);
+  // 防止重复加载
+  const loadingRef = useRef(false);
+  const lastConnectionIdRef = useRef<string>('');
+
+  // 当弹窗关闭时重置表单
+  useEffect(() => {
+    if (!open) {
+      form.resetFields();
+      setSelectedCharset('utf8mb4');
+      setCharsetOptions([]);
+      setCollationOptions([]);
+      setCharsetCollationsMap({});
+      lastConnectionIdRef.current = '';
+    }
+  }, [open, form]);
 
   // 从数据库动态查询支持的字符集、排序规则及默认值
   useEffect(() => {
-    if (!open || !connectionId) return;
+    if (!open || !connectionId || loadingRef.current || lastConnectionIdRef.current === connectionId) return;
+
+    loadingRef.current = true;
+    lastConnectionIdRef.current = connectionId;
 
     const loadOptions = async () => {
       try {
@@ -62,7 +73,6 @@ export function CreateDatabaseDialog({
               label: `${String(row[0])}${row[1] ? ` (${String(row[1])})` : ''}`,
               value: String(row[0]),
             })) || [];
-          setCharsetOptions(charsets);
 
           const collationsMap: Record<string, { label: string; value: string }[]> = {};
           collationResult.rows?.forEach((row) => {
@@ -71,19 +81,22 @@ export function CreateDatabaseDialog({
             if (!collationsMap[charset]) collationsMap[charset] = [];
             collationsMap[charset].push({ label: collation, value: collation });
           });
-          setCharsetCollationsMap(collationsMap);
 
           const [defaultCharsetResult, defaultCollationResult] = await Promise.all([
             api.executeQuery(connectionId, "SHOW VARIABLES LIKE 'character_set_server'"),
             api.executeQuery(connectionId, "SHOW VARIABLES LIKE 'collation_server'"),
           ]);
 
+          setCharsetOptions(charsets);
+          setCharsetCollationsMap(collationsMap);
+
           if (defaultCharsetResult.rows?.[0]) {
             const charset = String(defaultCharsetResult.rows[0][1]);
-            form.setFieldValue('charset', charset);
             setSelectedCharset(charset);
             setCollationOptions(collationsMap[charset] || []);
+            form.setFieldsValue({ charset, collation: undefined });
           }
+
           if (defaultCollationResult.rows?.[0]) {
             form.setFieldValue('collation', String(defaultCollationResult.rows[0][1]));
           }
@@ -106,42 +119,42 @@ export function CreateDatabaseDialog({
               label: String(row[0]),
               value: String(row[0]),
             })) || [];
-          setCharsetOptions(encodings);
 
           const collations =
             collationResult.rows?.map((row) => ({
               label: String(row[0]),
               value: String(row[0]),
             })) || [];
-          setCollationOptions(collations);
 
           const [defaultEncodingResult, defaultLocaleResult] = await Promise.all([
             api.executeQuery(connectionId, 'SHOW server_encoding'),
             api.executeQuery(connectionId, 'SHOW lc_collate'),
           ]);
 
-          if (defaultEncodingResult.rows?.[0]) {
-            form.setFieldValue('charset', String(defaultEncodingResult.rows[0][0]));
-          }
-          if (defaultLocaleResult.rows?.[0]) {
-            form.setFieldValue('collation', String(defaultLocaleResult.rows[0][0]));
-          }
+          setCharsetOptions(encodings);
+          setCollationOptions(collations);
+
+          form.setFieldsValue({
+            charset: defaultEncodingResult.rows?.[0] ? String(defaultEncodingResult.rows[0][0]) : undefined,
+            collation: defaultLocaleResult.rows?.[0] ? String(defaultLocaleResult.rows[0][0]) : undefined,
+          });
         } else if (lowerDbType === 'sqlserver') {
-          const collationResult = await api.executeQuery(
-            connectionId,
-            'SELECT name, description FROM fn_helpcollations()'
-          );
+          const [collationResult, defaultResult] = await Promise.all([
+            api.executeQuery(connectionId, 'SELECT name, description FROM fn_helpcollations()'),
+            api.executeQuery(
+              connectionId,
+              "SELECT CAST(SERVERPROPERTY('Collation') AS NVARCHAR(128)) AS Collation"
+            ),
+          ]);
+
           const collations =
             collationResult.rows?.map((row) => ({
               label: `${String(row[0])}${row[1] ? ` (${String(row[1])})` : ''}`,
               value: String(row[0]),
             })) || [];
+
           setCollationOptions(collations);
 
-          const defaultResult = await api.executeQuery(
-            connectionId,
-            "SELECT CAST(SERVERPROPERTY('Collation') AS NVARCHAR(128)) AS Collation"
-          );
           if (defaultResult.rows?.[0]) {
             form.setFieldValue('collation', String(defaultResult.rows[0][0]));
           }
@@ -150,6 +163,8 @@ export function CreateDatabaseDialog({
         }
       } catch {
         // 静默失败
+      } finally {
+        loadingRef.current = false;
       }
     };
 
@@ -246,17 +261,14 @@ export function CreateDatabaseDialog({
       title={t('common.createDatabase')}
       open={open}
       onOk={handleOk}
-      onCancel={() => {
-        resetForm();
-        onCancel();
-      }}
+      onCancel={onCancel}
       confirmLoading={loading}
       width={520}
       okText={t('common.confirm')}
       cancelText={t('common.cancel')}
+      destroyOnClose={false}
     >
       <Form
-        key={open ? 'open' : 'closed'}
         form={form}
         layout="vertical"
         initialValues={{ charset: 'utf8mb4' }}
