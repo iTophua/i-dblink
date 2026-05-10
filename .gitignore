@@ -59,6 +59,8 @@ src-tauri/*.key.pub
 .code-review-graph/
 .cursor/
 .copilot/
+.kiro/
+.qoder/
 
 # Editor directories and files
 .vscode/
