@@ -984,6 +984,7 @@ export function ResultGrid({
         style={{ flex: 1, overflow: 'hidden' }}
       >
         <AgGridReact
+          key={`result-grid-${queryResult.columns.join('-')}-${queryResult.rows.length}-${isDark ? 'dark' : 'light'}`}
           columnDefs={colDefs}
           rowData={rowData}
           defaultColDef={{
@@ -1218,6 +1219,8 @@ export function ResultGrid({
         okText={t('common.add')}
         cancelText={t('common.cancel')}
         destroyOnClose
+        transitionName=""
+        maskTransitionName=""
       >
         <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
           {tableColumns.map((col) => (
@@ -1293,6 +1296,7 @@ export function ExplainPlanGrid({ data, isDark }: ExplainPlanGridProps) {
       style={{ height: '100%' }}
     >
       <AgGridReact
+        key={`explain-plan-${data.length}-${isDark ? 'dark' : 'light'}`}
         columnDefs={colDefs}
         rowData={rowData}
         defaultColDef={{

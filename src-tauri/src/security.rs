@@ -9,15 +9,50 @@ use std::sync::OnceLock;
 
 static ENCRYPTION_KEY: OnceLock<[u8; 32]> = OnceLock::new();
 
+/// 获取稳定的机器标识（不依赖 IP 地址）
 fn get_machine_id() -> String {
     let mut id = String::new();
 
-    // 主机名
-    id.push_str(
-        &hostname::get()
-            .map(|h| h.to_string_lossy().to_string())
-            .unwrap_or_else(|_| "default-host".to_string()),
-    );
+    // macOS: 使用 IOPlatformUUID（硬件唯一标识，不随网络变化）
+    #[cfg(target_os = "macos")]
+    {
+        let mut found_uuid = false;
+        if let Ok(output) = std::process::Command::new("ioreg")
+            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(uuid_start) = stdout.find("IOPlatformUUID") {
+                let rest = &stdout[uuid_start..];
+                if let Some(quote_start) = rest.find('"') {
+                    let uuid_part = &rest[quote_start + 1..];
+                    if let Some(quote_end) = uuid_part.find('"') {
+                        let uuid = &uuid_part[..quote_end];
+                        id.push_str(uuid);
+                        found_uuid = true;
+                    }
+                }
+            }
+        }
+        // 如果 IOPlatformUUID 获取失败，回退到主机名（与旧行为一致，确保密钥稳定性）
+        if !found_uuid {
+            id.push_str(
+                &hostname::get()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| "default-host".to_string()),
+            );
+        }
+    }
+
+    // 其他平台: 使用主机名（通常是稳定的计算机名，而非 IP）
+    #[cfg(not(target_os = "macos"))]
+    {
+        id.push_str(
+            &hostname::get()
+                .map(|h| h.to_string_lossy().to_string())
+                .unwrap_or_else(|_| "default-host".to_string()),
+        );
+    }
 
     // 用户名
     id.push_str(&std::env::var("USER").unwrap_or_else(|_| {

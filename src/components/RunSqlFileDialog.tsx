@@ -153,6 +153,8 @@ export function RunSqlFileDialog({
       title={t('common.runSqlFile')}
       open={open}
       onCancel={onCancel}
+      transitionName=""
+      maskTransitionName=""
       footer={[
         <Button key="cancel" onClick={onCancel} disabled={loading}>
           {t('common.cancel')}

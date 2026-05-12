@@ -333,6 +333,8 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         onCancel={onClose}
         width={900}
         footer={null}
+        transitionName=""
+        maskTransitionName=""
       >
         <Space direction="vertical" style={{ width: '100%' }} size="large">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -444,6 +446,8 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
           createUserForm.resetFields();
         }}
         onOk={handleCreateUser}
+        transitionName=""
+        maskTransitionName=""
       >
         <Form form={createUserForm} layout="vertical">
           <Form.Item

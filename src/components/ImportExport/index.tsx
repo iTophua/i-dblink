@@ -347,6 +347,8 @@ export function ImportExportModal({
       footer={null}
       width={600}
       destroyOnClose
+      transitionName=""
+      maskTransitionName=""
     >
       <Tabs items={tabItems} defaultActiveKey="export" />
     </Modal>

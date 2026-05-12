@@ -123,6 +123,8 @@ export function BackupRestoreDialog({
         onCancel={onCancel}
         footer={null}
         width={500}
+        transitionName=""
+        maskTransitionName=""
       >
         <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-secondary)' }}>
           {t('common.currentDbTypeNotSupported', {
@@ -142,6 +144,8 @@ export function BackupRestoreDialog({
       confirmLoading={loading}
       width={500}
       okText={mode === 'backup' ? t('common.startBackup') : t('common.startRestore')}
+      transitionName=""
+      maskTransitionName=""
     >
       <Form
         form={form}

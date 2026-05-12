@@ -266,7 +266,9 @@ export function CreateDatabaseDialog({
       width={520}
       okText={t('common.confirm')}
       cancelText={t('common.cancel')}
-      destroyOnClose={false}
+      destroyOnClose={true}
+      transitionName=""
+      maskTransitionName=""
     >
       <Form
         form={form}

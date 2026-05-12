@@ -1163,6 +1163,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         okText={t('common.mainLayout.connect')}
         cancelText={t('common.cancel')}
         destroyOnClose
+        transitionName=""
+        maskTransitionName=""
       >
         <Form form={passwordForm} layout="vertical">
           <Form.Item

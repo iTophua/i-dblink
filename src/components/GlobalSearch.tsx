@@ -62,6 +62,8 @@ export function GlobalSearch({
       onCancel={onClose}
       footer={null}
       width={600}
+      transitionName=""
+      maskTransitionName=""
     >
       <Input
         prefix={<SearchOutlined />}

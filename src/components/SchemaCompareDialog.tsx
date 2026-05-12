@@ -242,6 +242,8 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       onCancel={onClose}
       width={1000}
       footer={null}
+      transitionName=""
+      maskTransitionName=""
     >
       <Space direction="vertical" style={{ width: '100%' }} size="large">
         <Form form={form} layout="vertical">

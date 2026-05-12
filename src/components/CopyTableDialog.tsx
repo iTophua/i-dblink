@@ -124,6 +124,8 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
       okText={t('common.copy')}
       cancelText={t('common.cancel')}
       destroyOnClose
+      transitionName=""
+      maskTransitionName=""
     >
       <Form
         form={form}

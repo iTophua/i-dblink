@@ -8,20 +8,16 @@ import {
   Space,
   message,
   Modal,
-  Form,
   Tag,
-  Popconfirm,
   Select,
   Pagination,
   Tooltip,
   Dropdown,
   Input,
-  Switch,
   Checkbox,
   Divider,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { GlobalInput } from './GlobalInput';
 import { SqlInput } from './SqlInput';
 import { ColumnFilterHeader } from './DataTable/ColumnFilterHeader';
 import {
@@ -29,10 +25,6 @@ import {
   DownloadOutlined,
   PlusOutlined,
   DeleteOutlined,
-  EditOutlined,
-  SaveOutlined,
-  UndoOutlined,
-  StopOutlined,
   CopyOutlined,
   ColumnWidthOutlined,
   FilterOutlined,
@@ -127,31 +119,29 @@ export const DataTable = memo(function DataTable({
   const [loading, setLoading] = useState(false);
   const [hasEverLoaded, setHasEverLoaded] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [addModalOpen, setAddModalOpen] = useState(false);
-  const [editingRow, setEditingRow] = useState<RowData | null>(null);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
   const primaryKey = useMemo(() => columns.find((col) => col.column_key === 'PRI'), [columns]);
   const [rowData, setRowData] = useState<RowData[]>([]);
-  const [addForm] = Form.useForm();
-  const [editForm] = Form.useForm();
   const gridApiRef = useRef<GridApi | null>(null);
   const [selectedRows, setSelectedRows] = useState<RowData[]>([]);
   const defaultPageSize = 1000;
   const [pageSize, setPageSize] = useState(propPageSize ?? defaultPageSize);
   const [currentPage, setCurrentPage] = useState(1);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [currentSql, setCurrentSql] = useState('');
-  const [pendingChanges, setPendingChanges] = useState<{
-    inserts: RowData[];
-    updates: RowData[];
-    deletes: RowData[];
-  }>({ inserts: [], updates: [], deletes: [] });
+  const [lastDmlSql, setLastDmlSql] = useState('');
   const [sortModel, setSortModel] = useState<{ colId: string; sort: 'asc' | 'desc' }[]>([]);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [quickFilter, setQuickFilter] = useState('');
   const [gridKey, setGridKey] = useState(0);
+  const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
+  const [columnEditMode, setColumnEditMode] = useState<{
+    column: string;
+    value: string;
+    originalValues: Map<string, any>;
+  } | null>(null);
+  const columnEditInputRef = useRef<HTMLInputElement>(null);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const userColumnWidthsRef = useRef<Map<string, number>>(new Map());
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([
     { id: `filter-${Date.now()}`, field: '', operator: 'contains', value: '', logic: 'AND' },
   ]);
@@ -178,6 +168,44 @@ export const DataTable = memo(function DataTable({
     value: any;
     rowNode: any;
   }>({ visible: false, x: 0, y: 0, colId: '', value: null, rowNode: null });
+  
+  // 拖拽多选状态
+  const [dragSelectRange, setDragSelectRange] = useState<{
+    startRow: number;
+    endRow: number;
+    startCol: number;
+    endCol: number;
+    active: boolean;
+  } | null>(null);
+  const isDraggingRef = useRef(false);
+  const dragStartCellRef = useRef<{ rowIndex: number; colIndex: number; isStatusColumn?: boolean } | null>(null);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+
+  const [cellSelectionRange, setCellSelectionRange] = useState<{
+    startRow: number;
+    endRow: number;
+    startCol: number;
+    endCol: number;
+  } | null>(null);
+  const [rangeEditMode, setRangeEditMode] = useState<{
+    column: string;
+    startRow: number;
+    endRow: number;
+    value: string;
+    originalValues: Map<string, any>;
+  } | null>(null);
+  const rangeEditInputRef = useRef<HTMLInputElement>(null);
+  const rangeEditModeRef = useRef(rangeEditMode);
+  useEffect(() => { rangeEditModeRef.current = rangeEditMode; }, [rangeEditMode]);
+  const cellSelectionRangeRef = useRef(cellSelectionRange);
+  useEffect(() => { cellSelectionRangeRef.current = cellSelectionRange; }, [cellSelectionRange]);
+  const dragSelectRangeRef = useRef(dragSelectRange);
+  useEffect(() => { dragSelectRangeRef.current = dragSelectRange; }, [dragSelectRange]);
+  const selectedColumnRef = useRef(selectedColumn);
+  useEffect(() => { selectedColumnRef.current = selectedColumn; }, [selectedColumn]);
+  const columnEditModeRef = useRef(columnEditMode);
+  useEffect(() => { columnEditModeRef.current = columnEditMode; }, [columnEditMode]);
+
   const loadDataRef = useRef<(overrideWhere?: string, overrideOrderBy?: string) => void>(() => {});
   const overrideWhereRef = useRef<string | undefined>(undefined);
   const overrideOrderByRef = useRef<string | undefined>(undefined);
@@ -193,75 +221,6 @@ export const DataTable = memo(function DataTable({
       setPageSize(propPageSize);
     }
   }, [propPageSize]);
-
-  // 通知父组件 dirty 状态变化
-  useEffect(() => {
-    onDirtyChangeRef.current?.(hasUnsavedChanges);
-  }, [hasUnsavedChanges]);
-
-  // 撤销最后一次单元格编辑
-  const undoLastCellEdit = useCallback(() => {
-    if (pendingChanges.updates.length === 0) {
-      message.info(t('common.noCellEditsToUndo'));
-      return;
-    }
-
-    const lastUpdate = pendingChanges.updates[pendingChanges.updates.length - 1];
-    const rowId = lastUpdate.__row_id__;
-
-    // 从 pendingChanges 中移除最后一条更新
-    setPendingChanges((prev) => ({
-      ...prev,
-      updates: prev.updates.slice(0, -1),
-    }));
-
-    // 重新加载该行的原始数据
-    const originalRow = rowData.find((r) => r.__row_id__ === rowId);
-    if (originalRow) {
-      gridApiRef.current?.applyTransaction({
-        update: [originalRow],
-      });
-    }
-
-    message.success(t('common.cellEditUndone'));
-  }, [pendingChanges.updates, rowData]);
-
-  // Delete 键标记删除选中行，Ctrl+Z 撤销单元格编辑
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+Z 撤销最后一次单元格编辑
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        const target = e.target as HTMLElement;
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-          return;
-        e.preventDefault();
-        undoLastCellEdit();
-        return;
-      }
-
-      if (e.key !== 'Delete') return;
-      // 避免在输入框中触发
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-        return;
-      const api = gridApiRef.current;
-      if (!api) return;
-      const selectedToDelete = api.getSelectedRows();
-      if (selectedToDelete.length === 0) return;
-      if (!primaryKey && selectedToDelete.some((row) => row.__status__ !== 'new')) {
-        message.warning(t('common.tableHasNoPrimaryKeyCannotDeleteExistingRows'));
-        return;
-      }
-      e.preventDefault();
-      setPendingChanges((prev) => ({
-        ...prev,
-        deletes: [...prev.deletes, ...selectedToDelete],
-      }));
-      setHasUnsavedChanges(true);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [primaryKey, undoLastCellEdit]);
 
   const tc = useThemeColors();
   const isDarkMode = tc.isDark;
@@ -293,7 +252,7 @@ export const DataTable = memo(function DataTable({
 
         const [colResult, dataResult] = await Promise.all([
           getColumns(connectionId, tableName, database),
-          executeQuery(connectionId, query, database),
+          executeQuery(connectionId, query, database || ''),
         ]);
 
         if (dataResult.error) {
@@ -319,8 +278,6 @@ export const DataTable = memo(function DataTable({
           });
           setColumns(colResult || []);
           setRowData(data);
-          setHasUnsavedChanges(false);
-          setPendingChanges({ inserts: [], updates: [], deletes: [] });
           setHasEverLoaded(true);
         }
       } catch (error: any) {
@@ -360,25 +317,336 @@ export const DataTable = memo(function DataTable({
     return widths;
   }, [rowData, columns]);
 
+  // === 列批量编辑功能 ===
+  const startColumnEdit = useCallback((column: string, initialValue: string = '') => {
+    const api = gridApiRef.current;
+    if (!api) return;
+    
+    // 保存所有行的原始值
+    const originalValues = new Map<string, any>();
+    api.forEachNode((node: any) => {
+      if (node.data) {
+        originalValues.set(node.data.__row_id__, node.data[column]);
+      }
+    });
+    
+    setColumnEditMode({ column, value: initialValue, originalValues });
+    
+    // 如果有初始值，立即更新所有行
+    if (initialValue !== '') {
+      const updates: RowData[] = [];
+      api.forEachNode((node: any) => {
+        if (node.data) {
+          const updatedRow = { ...node.data, [column]: initialValue || null };
+          updates.push(updatedRow);
+        }
+      });
+      if (updates.length > 0) {
+        api.applyTransaction({ update: updates });
+      }
+    }
+    
+    // 聚焦到输入框
+    setTimeout(() => {
+      columnEditInputRef.current?.focus();
+    }, 0);
+  }, []);
+
+  const updateColumnEditValue = useCallback((newValue: string) => {
+    // 使用函数式更新获取最新的 columnEditMode
+    setColumnEditMode((prev) => {
+      if (!prev) return null;
+      
+      // 实时更新所有行的该列值
+      const api = gridApiRef.current;
+      if (api) {
+        const updates: RowData[] = [];
+        api.forEachNode((node: any) => {
+          if (node.data) {
+            const updatedRow = { ...node.data, [prev.column]: newValue || null };
+            updates.push(updatedRow);
+          }
+        });
+        
+        if (updates.length > 0) {
+          api.applyTransaction({ update: updates });
+        }
+      }
+      
+      return { ...prev, value: newValue };
+    });
+  }, []);
+
+  const commitColumnEdit = useCallback(async () => {
+    if (!columnEditMode || !tableName) return;
+    
+    const { column, value, originalValues } = columnEditMode;
+    const api = gridApiRef.current;
+    if (!api) return;
+    
+    const pkCol = columns.find((col) => col.column_key === 'PRI');
+    if (!pkCol) {
+      message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate'));
+      setColumnEditMode(null);
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      let successCount = 0;
+      let errorMessage = '';
+      const valueStr = value === '' || value === null ? 'NULL' : escapeSqlValue(value);
+      
+      // 逐行提交
+      const rowsToUpdate: { rowId: string; pkValue: any }[] = [];
+      api.forEachNode((node: any) => {
+        if (node.data && node.data.__status__ !== 'new') {
+          const originalValue = originalValues.get(node.data.__row_id__);
+          if (originalValue !== value) {
+            rowsToUpdate.push({
+              rowId: node.data.__row_id__,
+              pkValue: node.data[pkCol.column_name],
+            });
+          }
+        }
+      });
+      
+      for (const { pkValue } of rowsToUpdate) {
+        const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(column, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+        setLastDmlSql(updateSQL);
+        
+        const result = await executeQuery(connectionId, updateSQL, database || '');
+        if (result.error) {
+          errorMessage = result.error;
+          break;
+        }
+        successCount++;
+      }
+      
+      if (errorMessage) {
+        message.error(`${t('common.dataGrid.updateFailed')}: ${errorMessage}`);
+        // 回滚所有变更
+        const reverts: RowData[] = [];
+        api.forEachNode((node: any) => {
+          if (node.data) {
+            const originalValue = originalValues.get(node.data.__row_id__);
+            reverts.push({ ...node.data, [column]: originalValue });
+          }
+        });
+        api.applyTransaction({ update: reverts });
+      } else {
+        message.success(`${t('common.dataGrid.updateSuccess')} ${successCount} ${t('common.rows')}`);
+        // 更新 original_data
+        const updates: RowData[] = [];
+        api.forEachNode((node: any) => {
+          if (node.data) {
+            const updatedRow = { 
+              ...node.data, 
+              __original_data__: { ...(node.data.__original_data__ || {}), [column]: value || null },
+              __status__: node.data.__status__ === 'new' ? 'new' : undefined,
+            };
+            updates.push(updatedRow);
+          }
+        });
+        api.applyTransaction({ update: updates });
+      }
+    } catch (error: any) {
+      message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+    } finally {
+      setLoading(false);
+      setColumnEditMode(null);
+    }
+  }, [columnEditMode, columns, tableName, dbType, connectionId, database, executeQuery]);
+
+  const cancelColumnEdit = useCallback(() => {
+    if (!columnEditMode) return;
+
+    const { column, originalValues } = columnEditMode;
+    const api = gridApiRef.current;
+    if (!api) return;
+
+    const reverts: RowData[] = [];
+    api.forEachNode((node: any) => {
+      if (node.data) {
+        const originalValue = originalValues.get(node.data.__row_id__);
+        reverts.push({ ...node.data, [column]: originalValue });
+      }
+    });
+
+    api.applyTransaction({ update: reverts });
+    setColumnEditMode(null);
+  }, [columnEditMode]);
+
+  const startRangeEdit = useCallback((range: { startRow: number; endRow: number; startCol: number; endCol: number }, initialValue: string = '') => {
+    const api = gridApiRef.current;
+    if (!api) return;
+    if (range.startCol !== range.endCol) return;
+
+    const allColumns = api.getColumnDefs();
+    if (!allColumns) return;
+    const visibleCols = allColumns.filter((c: any) => !c.hide && c.field !== '__status__');
+    const colDef = visibleCols[range.startCol] as ColDef | undefined;
+    if (!colDef) return;
+    const column = colDef.field as string;
+    if (!column) return;
+
+    const minRow = Math.min(range.startRow, range.endRow);
+    const maxRow = Math.max(range.startRow, range.endRow);
+
+    const originalValues = new Map<string, any>();
+    for (let i = minRow; i <= maxRow; i++) {
+      const node = api.getDisplayedRowAtIndex(i);
+      if (node?.data) {
+        originalValues.set(node.data.__row_id__, node.data[column]);
+      }
+    }
+
+    setRangeEditMode({ column, startRow: minRow, endRow: maxRow, value: initialValue, originalValues });
+
+    if (initialValue !== '') {
+      const updates: RowData[] = [];
+      for (let i = minRow; i <= maxRow; i++) {
+        const node = api.getDisplayedRowAtIndex(i);
+        if (node?.data) {
+          updates.push({ ...node.data, [column]: initialValue || null });
+        }
+      }
+      if (updates.length > 0) {
+        api.applyTransaction({ update: updates });
+      }
+    }
+
+    setTimeout(() => {
+      rangeEditInputRef.current?.focus();
+    }, 0);
+  }, []);
+
+  const updateRangeEditValue = useCallback((newValue: string) => {
+    setRangeEditMode((prev) => {
+      if (!prev) return null;
+
+      const api = gridApiRef.current;
+      if (api) {
+        const updates: RowData[] = [];
+        for (let i = prev.startRow; i <= prev.endRow; i++) {
+          const node = api.getDisplayedRowAtIndex(i);
+          if (node?.data) {
+            updates.push({ ...node.data, [prev.column]: newValue || null });
+          }
+        }
+        if (updates.length > 0) {
+          api.applyTransaction({ update: updates });
+        }
+      }
+
+      return { ...prev, value: newValue };
+    });
+  }, []);
+
+  const commitRangeEdit = useCallback(async () => {
+    const current = rangeEditModeRef.current;
+    if (!current || !tableName) return;
+
+    const { column, value, originalValues, startRow, endRow } = current;
+    const api = gridApiRef.current;
+    if (!api) return;
+
+    const pkCol = columns.find((col) => col.column_key === 'PRI');
+    if (!pkCol) {
+      message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate'));
+      setRangeEditMode(null);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      let successCount = 0;
+      let errorMessage = '';
+      const valueStr = value === '' || value === null ? 'NULL' : escapeSqlValue(value);
+
+      const rowsToUpdate: { rowId: string; pkValue: any }[] = [];
+      for (let i = startRow; i <= endRow; i++) {
+        const node = api.getDisplayedRowAtIndex(i);
+        if (!node?.data || node.data.__status__ === 'new') continue;
+        const originalValue = originalValues.get(node.data.__row_id__);
+        if (originalValue !== value) {
+          rowsToUpdate.push({
+            rowId: node.data.__row_id__,
+            pkValue: node.data[pkCol.column_name],
+          });
+        }
+      }
+
+      for (const { pkValue } of rowsToUpdate) {
+        const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(column, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+        setLastDmlSql(updateSQL);
+
+        const result = await executeQuery(connectionId, updateSQL, database || '');
+        if (result.error) {
+          errorMessage = result.error;
+          break;
+        }
+        successCount++;
+      }
+
+      if (errorMessage) {
+        message.error(`${t('common.dataGrid.updateFailed')}: ${errorMessage}`);
+        const reverts: RowData[] = [];
+        for (let i = startRow; i <= endRow; i++) {
+          const node = api.getDisplayedRowAtIndex(i);
+          if (node?.data) {
+            const originalValue = originalValues.get(node.data.__row_id__);
+            reverts.push({ ...node.data, [column]: originalValue });
+          }
+        }
+        api.applyTransaction({ update: reverts });
+      } else {
+        message.success(`${t('common.dataGrid.updateSuccess')} ${successCount} ${t('common.rows')}`);
+        const updates: RowData[] = [];
+        for (let i = startRow; i <= endRow; i++) {
+          const node = api.getDisplayedRowAtIndex(i);
+          if (node?.data) {
+            const updatedRow = {
+              ...node.data,
+              __original_data__: { ...(node.data.__original_data__ || {}), [column]: value || null },
+              __status__: node.data.__status__ === 'new' ? 'new' : undefined,
+            };
+            updates.push(updatedRow);
+          }
+        }
+        api.applyTransaction({ update: updates });
+      }
+    } catch (error: any) {
+      message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+    } finally {
+      setLoading(false);
+      setRangeEditMode(null);
+    }
+  }, [columns, tableName, dbType, connectionId, database, executeQuery]);
+
+  const cancelRangeEdit = useCallback(() => {
+    const current = rangeEditModeRef.current;
+    if (!current) return;
+
+    const { column, originalValues, startRow, endRow } = current;
+    const api = gridApiRef.current;
+    if (!api) return;
+
+    const reverts: RowData[] = [];
+    for (let i = startRow; i <= endRow; i++) {
+      const node = api.getDisplayedRowAtIndex(i);
+      if (node?.data) {
+        const originalValue = originalValues.get(node.data.__row_id__);
+        reverts.push({ ...node.data, [column]: originalValue });
+      }
+    }
+
+    api.applyTransaction({ update: reverts });
+    setRangeEditMode(null);
+  }, []);
+
   // 性能优化：计算列定义的 useMemo
   const columnDefs = useMemo(() => {
-    const selectionColumn: ColDef = {
-      headerName: '',
-      width: 40,
-      minWidth: 40,
-      maxWidth: 40,
-      sortable: false,
-      filter: false,
-      resizable: false,
-      suppressSizeToFit: true,
-      checkboxSelection: true,
-      cellStyle: {
-        display: 'flex',
-        justifyContent: 'center',
-        paddingLeft: 8,
-      },
-    };
-
     const statusColumn: ColDef = {
       field: '__status__',
       headerName: '',
@@ -416,7 +684,8 @@ export const DataTable = memo(function DataTable({
       const headerLength = col.column_name.length;
       const dataMaxLength = colWidths[col.column_name] || 0;
       const contentWidth = Math.max(headerLength, dataMaxLength);
-      const autoWidth = Math.max(60, Math.min(300, contentWidth * 8 + 30));
+      // +40px 为排序图标(14) + 筛选图标(14) + 间距(8) 预留空间
+      const autoWidth = Math.max(80, Math.min(300, contentWidth * 8 + 30 + 40));
       const nullableInfo = col.is_nullable === 'YES' ? ' | NULL' : ' | NOT NULL';
       const commentInfo = col.comment ? ` | ${col.comment}` : '';
 
@@ -442,23 +711,79 @@ export const DataTable = memo(function DataTable({
         sortable: true,
         filter: true,
         resizable: true,
-        minWidth: 60,
+        minWidth: 80,
         maxWidth: 300,
-        width: autoWidth,
+        width: userColumnWidthsRef.current.get(col.column_name) ?? autoWidth,
         editable: true,
         cellEditor,
         headerTooltip: col.data_type + nullableInfo + commentInfo,
         headerComponent: 'columnFilterHeader',
-        headerComponentParams: { rowData },
+        headerComponentParams: {
+          rowData,
+          isSelected: selectedColumn === col.column_name,
+          onColumnSelect: (field: string) => {
+            // 如果正在列编辑，先提交当前编辑
+            if (columnEditMode) {
+              commitColumnEdit();
+            }
+            setSelectedColumn(field);
+          },
+        },
         cellClass: (params: any) => {
-          if (params.value === null) return 'null-cell';
+          const classes: string[] = [];
+          if (params.value === null) classes.push('null-cell');
           if (
             params.data?.__status__ === 'modified' &&
             params.data?.__original_data__?.[col.column_name] !== params.value
           ) {
-            return 'modified-cell';
+            classes.push('modified-cell');
           }
-          return undefined;
+          if (selectedColumn === col.column_name) {
+            classes.push('column-selected');
+          }
+          const inRange = (range: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
+            const rowIndex = params.rowIndex;
+            const allColumns = params.api.getColumnDefs();
+            const visibleCols = allColumns.filter((c: any) => !c.hide && c.field !== '__status__');
+            const colIndex = visibleCols.findIndex((c: any) => c.field === col.column_name);
+            if (colIndex < 0 || rowIndex < 0) return false;
+            const minRow = Math.min(range.startRow, range.endRow);
+            const maxRow = Math.max(range.startRow, range.endRow);
+            const minCol = Math.min(range.startCol, range.endCol);
+            const maxCol = Math.max(range.startCol, range.endCol);
+            return rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
+          };
+          const inRangeEdge = (range: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
+            const rowIndex = params.rowIndex;
+            const allColumns = params.api.getColumnDefs();
+            const visibleCols = allColumns.filter((c: any) => !c.hide && c.field !== '__status__');
+            const colIndex = visibleCols.findIndex((c: any) => c.field === col.column_name);
+            if (colIndex < 0 || rowIndex < 0) return null;
+            const minRow = Math.min(range.startRow, range.endRow);
+            const maxRow = Math.max(range.startRow, range.endRow);
+            const minCol = Math.min(range.startCol, range.endCol);
+            const maxCol = Math.max(range.startCol, range.endCol);
+            if (!(rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol)) return null;
+            const edges: string[] = [];
+            if (rowIndex === minRow) edges.push('drag-selected-range-top');
+            if (rowIndex === maxRow) edges.push('drag-selected-range-bottom');
+            if (colIndex === minCol) edges.push('drag-selected-range-left');
+            if (colIndex === maxCol) edges.push('drag-selected-range-right');
+            return edges;
+          };
+          const curDragRange = dragSelectRangeRef.current;
+          if (curDragRange?.active && inRange(curDragRange)) {
+            classes.push('drag-selected');
+            const edges = inRangeEdge(curDragRange);
+            if (edges) classes.push(...edges);
+          }
+          const curCellRange = cellSelectionRangeRef.current;
+          if (curCellRange && inRange(curCellRange)) {
+            classes.push('drag-selected');
+            const edges = inRangeEdge(curCellRange);
+            if (edges) classes.push(...edges);
+          }
+          return classes.length > 0 ? classes.join(' ') : undefined;
         },
         cellRenderer: (params: any) => {
           if (params.value === null) {
@@ -472,8 +797,8 @@ export const DataTable = memo(function DataTable({
       } as ColDef;
     });
 
-    return [selectionColumn, statusColumn, ...dataColumns];
-  }, [columns, colWidths, hiddenColumns]);
+    return [statusColumn, ...dataColumns];
+  }, [columns, colWidths, hiddenColumns, selectedColumn, columnEditMode, commitColumnEdit, dragSelectRange, cellSelectionRange]);
 
   useEffect(() => {
     if (gridApiRef.current && columns.length > 0) {
@@ -495,7 +820,7 @@ export const DataTable = memo(function DataTable({
     async (overrideWhere?: string) => {
       try {
         const query = buildCountQuery(tableName, database, dbType, whereClause, overrideWhere);
-        const result = await executeQuery(connectionId, query, database);
+        const result = await executeQuery(connectionId, query, database || '');
         if (!result.error && result.rows.length > 0) {
           setTotalCount(Number(result.rows[0][0]));
         }
@@ -507,6 +832,376 @@ export const DataTable = memo(function DataTable({
   );
 
   loadCountRef.current = loadCount;
+
+  useEffect(() => {
+    const gridContainer = gridContainerRef.current;
+    if (!gridContainer) return;
+
+    const resolveCell = (clientX: number, clientY: number) => {
+      const el = document.elementFromPoint(clientX, clientY);
+      if (!el) return { cell: null as HTMLElement | null, row: null as HTMLElement | null };
+      const cell = (el as HTMLElement).closest('.ag-cell') as HTMLElement | null;
+      const row = cell ? cell.closest('.ag-row') as HTMLElement | null : null;
+      return { cell, row };
+    };
+
+    const getVisibleCols = () => {
+      const api = gridApiRef.current;
+      if (!api) return [] as any[];
+      const allColumns = api.getColumnDefs();
+      if (!allColumns) return [] as any[];
+      return allColumns.filter((c: any) => !c.hide && c.field !== '__status__');
+    };
+
+    type StartInfo = {
+      rowIndex: number;
+      colIndex: number;
+      isStatusColumn: boolean;
+      startX: number;
+      startY: number;
+    };
+
+    let startInfo: StartInfo | null = null;
+    const DRAG_THRESHOLD = 5;
+    let lastDragRange: typeof dragSelectRange = null;
+    let moveHandler: ((e: PointerEvent) => void) | null = null;
+    let upHandler: ((e: PointerEvent) => void) | null = null;
+    let cancelHandler: ((e: PointerEvent) => void) | null = null;
+
+    const cleanupDragListeners = () => {
+      if (moveHandler) document.removeEventListener('pointermove', moveHandler);
+      if (upHandler) document.removeEventListener('pointerup', upHandler);
+      if (cancelHandler) document.removeEventListener('pointercancel', cancelHandler);
+      moveHandler = null;
+      upHandler = null;
+      cancelHandler = null;
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      if (columnEditModeRef.current || rangeEditModeRef.current) return;
+
+      const target = e.target as HTMLElement;
+      if (target.closest('.ag-header-cell')) return;
+      if (target.closest('input, textarea, select, button, .ag-popup, .ag-panel')) return;
+
+      const { cell, row } = resolveCell(e.clientX, e.clientY);
+      if (!row) return;
+
+      const rowIndex = parseInt(row.getAttribute('row-index') || '-1', 10);
+      if (rowIndex < 0) return;
+
+      const visibleCols = getVisibleCols();
+      let colIndex = -1;
+      let isStatusColumn = false;
+      if (cell) {
+        const colId = cell.getAttribute('col-id');
+        isStatusColumn = colId === '__status__';
+        if (!isStatusColumn) {
+          colIndex = visibleCols.findIndex((c: any) => c.field === colId || c.colId === colId);
+        }
+      }
+
+      startInfo = { rowIndex, colIndex, isStatusColumn, startX: e.clientX, startY: e.clientY };
+      lastDragRange = null;
+      isDraggingRef.current = false;
+      dragStartCellRef.current = { rowIndex, colIndex, isStatusColumn };
+
+      setCellSelectionRange(null);
+      cellSelectionRangeRef.current = null;
+      dragSelectRangeRef.current = null;
+      setDragSelectRange(null);
+
+      const api = gridApiRef.current;
+      if (api) {
+        api.deselectAll();
+        const node = api.getDisplayedRowAtIndex(rowIndex);
+        if (node) node.setSelected(true);
+      }
+
+      const handleMove = (me: PointerEvent) => {
+        if (!startInfo) return;
+        const dx = Math.abs(me.clientX - startInfo.startX);
+        const dy = Math.abs(me.clientY - startInfo.startY);
+
+        if (!isDraggingRef.current) {
+          if (dx <= DRAG_THRESHOLD && dy <= DRAG_THRESHOLD) return;
+          isDraggingRef.current = true;
+        }
+
+        me.preventDefault();
+
+        const api = gridApiRef.current;
+        if (!api) return;
+
+        const visCols = getVisibleCols();
+        const maxColIndex = Math.max(0, visCols.length - 1);
+        const maxRowIndex = Math.max(0, api.getDisplayedRowCount() - 1);
+
+        const { cell: curCell, row: curRow } = resolveCell(me.clientX, me.clientY);
+
+        let curRowIndex = curRow ? parseInt(curRow.getAttribute('row-index') || '-1', 10) : -1;
+        let curColIndex = -1;
+        if (curCell) {
+          const colId = curCell.getAttribute('col-id');
+          if (colId !== '__status__') {
+            curColIndex = visCols.findIndex((c: any) => c.field === colId || c.colId === colId);
+          }
+        }
+
+        if (curRowIndex < 0) {
+          curRowIndex = lastDragRange?.endRow ?? startInfo.rowIndex;
+          const rect = gridContainer.getBoundingClientRect();
+          if (me.clientY < rect.top) curRowIndex = 0;
+          else if (me.clientY > rect.bottom) curRowIndex = maxRowIndex;
+        }
+        curRowIndex = Math.max(0, Math.min(maxRowIndex, curRowIndex));
+
+        if (curColIndex < 0) {
+          curColIndex = lastDragRange?.endCol ?? Math.max(0, startInfo.colIndex);
+        }
+        curColIndex = Math.max(0, Math.min(maxColIndex, curColIndex));
+
+        const isRowSelect = startInfo.isStatusColumn || startInfo.colIndex === -1;
+        const endRow = curRowIndex;
+        const endCol = isRowSelect ? maxColIndex : curColIndex;
+        const startCol = isRowSelect ? 0 : Math.max(0, startInfo.colIndex);
+
+        lastDragRange = {
+          startRow: startInfo.rowIndex,
+          endRow,
+          startCol,
+          endCol,
+          active: true,
+        };
+        dragSelectRangeRef.current = lastDragRange;
+        setDragSelectRange(lastDragRange);
+        cellSelectionRangeRef.current = null;
+        setCellSelectionRange(null);
+
+        const minRow = Math.min(startInfo.rowIndex, endRow);
+        const maxRow = Math.max(startInfo.rowIndex, endRow);
+        api.deselectAll();
+        for (let i = minRow; i <= maxRow; i++) {
+          const node = api.getDisplayedRowAtIndex(i);
+          if (node) node.setSelected(true);
+        }
+        api.redrawRows();
+      };
+
+      const handleUp = () => {
+        cleanupDragListeners();
+        if (!startInfo) return;
+
+        if (isDraggingRef.current && lastDragRange?.active) {
+          const range = {
+            startRow: lastDragRange.startRow,
+            endRow: lastDragRange.endRow,
+            startCol: lastDragRange.startCol,
+            endCol: lastDragRange.endCol,
+          };
+          cellSelectionRangeRef.current = range;
+          setCellSelectionRange(range);
+
+          const minRow = Math.min(range.startRow, range.endRow);
+          const maxRow = Math.max(range.startRow, range.endRow);
+          const api = gridApiRef.current;
+          if (api) {
+            api.deselectAll();
+            for (let i = minRow; i <= maxRow; i++) {
+              const node = api.getDisplayedRowAtIndex(i);
+              if (node) node.setSelected(true);
+            }
+            api.redrawRows();
+          }
+        }
+
+        isDraggingRef.current = false;
+        dragStartCellRef.current = null;
+        startInfo = null;
+        dragSelectRangeRef.current = null;
+        setDragSelectRange(null);
+        lastDragRange = null;
+      };
+
+      const handleCancel = () => {
+        cleanupDragListeners();
+        isDraggingRef.current = false;
+        dragStartCellRef.current = null;
+        startInfo = null;
+        lastDragRange = null;
+        dragSelectRangeRef.current = null;
+        setDragSelectRange(null);
+      };
+
+      moveHandler = handleMove;
+      upHandler = handleUp;
+      cancelHandler = handleCancel;
+
+      document.addEventListener('pointermove', handleMove);
+      document.addEventListener('pointerup', handleUp);
+      document.addEventListener('pointercancel', handleCancel);
+    };
+
+    gridContainer.addEventListener('pointerdown', handlePointerDown);
+
+    return () => {
+      gridContainer.removeEventListener('pointerdown', handlePointerDown);
+      cleanupDragListeners();
+    };
+  }, [hasEverLoaded]);
+
+  // Delete 键立即删除选中行
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+
+      // 范围批量编辑模式：处理输入
+      if (rangeEditMode) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelRangeEdit();
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          commitRangeEdit();
+          return;
+        }
+        if (e.key.startsWith('Arrow')) {
+          e.preventDefault();
+          commitRangeEdit();
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          updateRangeEditValue(rangeEditMode.value.slice(0, -1));
+          return;
+        }
+        if (e.key === 'Delete') {
+          e.preventDefault();
+          updateRangeEditValue('');
+          return;
+        }
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          updateRangeEditValue(rangeEditMode.value + e.key);
+          return;
+        }
+        return;
+      }
+
+      // 列批量编辑模式：处理输入
+      if (columnEditMode) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelColumnEdit();
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          commitColumnEdit();
+          return;
+        }
+        if (e.key.startsWith('Arrow')) {
+          e.preventDefault();
+          commitColumnEdit();
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          updateColumnEditValue(columnEditMode.value.slice(0, -1));
+          return;
+        }
+        if (e.key === 'Delete') {
+          e.preventDefault();
+          updateColumnEditValue('');
+          return;
+        }
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          updateColumnEditValue(columnEditMode.value + e.key);
+          return;
+        }
+        return;
+      }
+
+      // 有矩形选区：按任意字符键进入范围编辑
+      if (cellSelectionRange && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+          return;
+        e.preventDefault();
+        startRangeEdit(cellSelectionRange, e.key);
+        return;
+      }
+
+      // 选中列但未进入编辑模式：按任意字符键进入列编辑
+      if (selectedColumn && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+          return;
+        e.preventDefault();
+        startColumnEdit(selectedColumn, e.key);
+        return;
+      }
+
+      // 非列编辑模式：Delete 删除选中行
+      if (e.key !== 'Delete') return;
+
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        return;
+      const api = gridApiRef.current;
+      if (!api) return;
+      const selectedToDelete = api.getSelectedRows();
+      if (selectedToDelete.length === 0) return;
+
+      const pkCol = columns.find((col) => col.column_key === 'PRI');
+      if (!pkCol && selectedToDelete.some((row) => row.__status__ !== 'new')) {
+        message.warning(t('common.tableHasNoPrimaryKeyCannotDeleteExistingRows'));
+        return;
+      }
+      e.preventDefault();
+
+      try {
+        setLoading(true);
+        let successCount = 0;
+        let errorMessage = '';
+
+        for (const row of selectedToDelete) {
+          if (row.__status__ === 'new') {
+            pendingNewRowsRef.current.delete(row.__row_id__ || '');
+            setRowData((prev) => prev.filter((r) => r.__row_id__ !== row.__row_id__));
+            successCount++;
+            continue;
+          }
+
+          const pkValue = row[pkCol!.column_name];
+          const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+          setLastDmlSql(deleteSQL);
+          const result = await executeQuery(connectionId, deleteSQL, database || '');
+
+          if (result.error) {
+            errorMessage = result.error;
+            break;
+          }
+          successCount++;
+        }
+
+        if (errorMessage) {
+          message.error(`${t('common.dataGrid.deleteFailed')}: ${errorMessage}`);
+        } else {
+          message.success(`${t('common.dataGrid.deleteSuccess')} ${successCount} ${t('common.rows')}`);
+          loadData();
+          loadCount(whereClause);
+        }
+      } catch (error: any) {
+        message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, whereClause, columnEditMode, cancelColumnEdit, commitColumnEdit, updateColumnEditValue, selectedColumn, startColumnEdit, cancelRangeEdit, commitRangeEdit, updateRangeEditValue, cellSelectionRange, startRangeEdit]);
 
   useEffect(() => {
     setHasEverLoaded(false);
@@ -565,25 +1260,75 @@ export const DataTable = memo(function DataTable({
     [columns]
   );
 
-  const onCellValueChanged = useCallback((event: any) => {
-    if (event.newValue === event.oldValue) {
+  const pendingNewRowsRef = useRef<Set<string>>(new Set());
+
+  const onCellValueChanged = useCallback(async (event: any) => {
+    if (event.newValue === event.oldValue) return;
+    
+    const field = event.colDef.field;
+    if (!field || field.startsWith('__')) return;
+    
+    const updatedRow = { ...event.data };
+    
+    // 新行：只更新本地状态，暂存待插入
+    if (updatedRow.__status__ === 'new') {
+      gridApiRef.current?.applyTransaction({ update: [updatedRow] });
+      pendingNewRowsRef.current.add(updatedRow.__row_id__);
       return;
     }
-    const updatedRow = { ...event.data };
-    if (!updatedRow.__status__ || updatedRow.__status__ !== 'new') {
-      updatedRow.__status__ = 'modified';
+    
+    // 现有行：立即执行 UPDATE
+    const pkCol = columns.find((col) => col.column_key === 'PRI');
+    if (!pkCol) {
+      message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate'));
+      return;
     }
-    gridApiRef.current?.applyTransaction({ update: [updatedRow] });
-    setHasUnsavedChanges(true);
-    setPendingChanges((prev) => {
-      const filteredUpdates = prev.updates.filter((r) => r.__row_id__ !== updatedRow.__row_id__);
-      return {
-        ...prev,
-        updates: [...filteredUpdates, updatedRow],
-      };
-    });
-  }, []);
+    
+    const pkValue = updatedRow[pkCol.column_name];
+    const valueStr = event.newValue === null || event.newValue === '' 
+      ? 'NULL' 
+      : escapeSqlValue(event.newValue);
+    const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(field, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+    setLastDmlSql(updateSQL);
+    
+    try {
+      const result = await executeQuery(connectionId, updateSQL, database || '');
+      if (result.error) {
+        message.error(`${t('common.dataGrid.updateFailed')}: ${result.error}`);
+        // 回滚单元格
+        const revertedRow = { ...event.data, [field]: event.oldValue };
+        gridApiRef.current?.applyTransaction({ update: [revertedRow] });
+        return;
+      }
+      
+      // 成功：更新 original_data
+      const newOriginalData = { ...(updatedRow.__original_data__ || {}), [field]: event.newValue };
+      updatedRow.__original_data__ = newOriginalData;
+      
+      // 检查是否还有其他字段被修改
+      const hasOtherModifications = columns.some((col) => {
+        const colName = col.column_name;
+        if (colName === pkCol.column_name) return false;
+        return updatedRow[colName] !== newOriginalData[colName];
+      });
+      
+      if (!hasOtherModifications) {
+        updatedRow.__status__ = undefined;
+      } else {
+        updatedRow.__status__ = 'modified';
+      }
+      
+      gridApiRef.current?.applyTransaction({ update: [updatedRow] });
+      
+      message.success(`${t('common.dataGrid.updateSuccess')} 1 ${t('common.rows')}`);
+    } catch (error: any) {
+      message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+      const revertedRow = { ...event.data, [field]: event.oldValue };
+      gridApiRef.current?.applyTransaction({ update: [revertedRow] });
+    }
+  }, [columns, tableName, dbType, connectionId, database, executeQuery]);
 
+  // === 列批量编辑功能 ===
   const handleContextMenu = useCallback((event: React.MouseEvent, rowData: RowData) => {
     event.preventDefault();
     event.stopPropagation();
@@ -613,29 +1358,47 @@ export const DataTable = memo(function DataTable({
           message.success(t('common.rowDataCopiedToClipboard'));
           break;
         case 'delete-row':
-          if (!primaryKey) {
-            message.warning(t('common.tableHasNoPrimaryKeyCannotDeleteSingleRow'));
-            return;
+          {
+            const pkCol = columns.find((col) => col.column_key === 'PRI');
+            if (!pkCol && row.__status__ !== 'new') {
+              message.warning(t('common.tableHasNoPrimaryKeyCannotDeleteSingleRow'));
+              return;
+            }
+            Modal.confirm({
+              title: t('common.confirmDelete'),
+              content: t('common.confirmDeleteSelectedRow'),
+              okText: t('common.delete'),
+              okType: 'danger',
+              cancelText: t('common.cancel'),
+              onOk: async () => {
+                try {
+                  if (row.__status__ === 'new') {
+                    pendingNewRowsRef.current.delete(row.__row_id__ || '');
+                    setRowData((prev) => prev.filter((r) => r.__row_id__ !== row.__row_id__));
+                    message.success(`${t('common.dataGrid.deleteSuccess')} 1 ${t('common.rows')}`);
+                    return;
+                  }
+
+                  const pkValue = row[pkCol!.column_name];
+                  const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+                  setLastDmlSql(deleteSQL);
+                  const result = await executeQuery(connectionId, deleteSQL, database || '');
+
+                  if (result.error) {
+                    message.error(`${t('common.dataGrid.deleteFailed')}: ${result.error}`);
+                  } else {
+                    message.success(`${t('common.dataGrid.deleteSuccess')} 1 ${t('common.rows')}`);
+                    loadData();
+                    loadCount(whereClause);
+                  }
+                } catch (error: any) {
+                  message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message}`);
+                }
+              },
+            });
           }
-          Modal.confirm({
-            title: t('common.confirmDelete'),
-            content: t('common.confirmDeleteSelectedRow'),
-            okText: t('common.delete'),
-            okType: 'danger',
-            cancelText: t('common.cancel'),
-            onOk: () => {
-              setPendingChanges((prev) => ({
-                ...prev,
-                deletes: [...prev.deletes, row],
-              }));
-              setHasUnsavedChanges(true);
-            },
-          });
           break;
-        case 'edit-row':
-          setEditingRow(row);
-          setEditModalOpen(true);
-          break;
+
         case 'copy-select':
           const selectedRows = gridApiRef.current?.getSelectedRows() || [];
           if (selectedRows.length === 0) {
@@ -648,206 +1411,90 @@ export const DataTable = memo(function DataTable({
           );
           break;
         case 'delete-select':
-          if (!primaryKey) {
-            message.warning(t('common.tableHasNoPrimaryKeyCannotBatchDelete'));
-            return;
+          {
+            const selectedToDelete = gridApiRef.current?.getSelectedRows() || [];
+            if (selectedToDelete.length === 0) {
+              message.warning(t('common.noRowsSelected'));
+              return;
+            }
+            Modal.confirm({
+              title: t('common.confirmDelete'),
+              content: t('common.confirmDeleteSelectedRows', { count: selectedToDelete.length }),
+              okText: t('common.delete'),
+              okType: 'danger',
+              cancelText: t('common.cancel'),
+              onOk: async () => {
+                try {
+                  setLoading(true);
+                  let successCount = 0;
+                  let errorMessage = '';
+
+                  for (const row of selectedToDelete) {
+                    if (row.__status__ === 'new') {
+                      pendingNewRowsRef.current.delete(row.__row_id__ || '');
+                      setRowData((prev) => prev.filter((r) => r.__row_id__ !== row.__row_id__));
+                      successCount++;
+                      continue;
+                    }
+
+                    const pkCol = columns.find((col) => col.column_key === 'PRI');
+                    if (!pkCol) {
+                      errorMessage = t('common.tableHasNoPrimaryKeyCannotDelete');
+                      break;
+                    }
+
+                    const pkValue = row[pkCol.column_name];
+                    const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+                    setLastDmlSql(deleteSQL);
+                    const result = await executeQuery(connectionId, deleteSQL, database || '');
+
+                    if (result.error) {
+                      errorMessage = result.error;
+                      break;
+                    }
+                    successCount++;
+                  }
+
+                  if (errorMessage) {
+                    message.error(`${t('common.dataGrid.deleteFailed')}: ${errorMessage}`);
+                  } else {
+                    message.success(`${t('common.dataGrid.deleteSuccess')} ${successCount} ${t('common.rows')}`);
+                    loadData();
+                    loadCount(whereClause);
+                  }
+                } catch (error: any) {
+                  message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message}`);
+                } finally {
+                  setLoading(false);
+                }
+              },
+            });
           }
-          const selectedToDelete = gridApiRef.current?.getSelectedRows() || [];
-          if (selectedToDelete.length === 0) {
-            message.warning(t('common.noRowsSelected'));
-            return;
-          }
-          Modal.confirm({
-            title: t('common.confirmDelete'),
-            content: t('common.confirmDeleteSelectedRows', { count: selectedToDelete.length }),
-            okText: t('common.delete'),
-            okType: 'danger',
-            cancelText: t('common.cancel'),
-            onOk: () => {
-              setPendingChanges((prev) => ({
-                ...prev,
-                deletes: [...prev.deletes, ...selectedToDelete],
-              }));
-              setHasUnsavedChanges(true);
-            },
-          });
           break;
       }
     },
     [contextMenu.rowData, columns, closeContextMenu]
   );
 
-  const handleCommit = useCallback(async () => {
-    if (!hasUnsavedChanges) {
-      message.info(t('common.noUnsavedChanges'));
-      return;
-    }
-
-    try {
-      setLoading(true);
-      let successCount = 0;
-      let errorCount = 0;
-      let errorMessage = '';
-
-      // 执行删除
-      for (const row of pendingChanges.deletes) {
-        const primaryKey = columns.find((col) => col.column_key === 'PRI');
-        if (!primaryKey) {
-          errorMessage = t('common.tableHasNoPrimaryKeyCannotDelete');
-          errorCount++;
-          break;
-        }
-
-        const primaryKeyValue = row[primaryKey.column_name];
-        const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
-        const result = await executeQuery(connectionId, deleteSQL);
-
-        if (result.error) {
-          errorCount++;
-          errorMessage = result.error;
-          break;
-        } else {
-          successCount++;
-        }
-      }
-
-      // 执行插入
-      if (!errorMessage) {
-        for (const row of pendingChanges.inserts) {
-          const columns_list = Object.keys(row).filter(
-            (key) => !key.startsWith('__') && row[key] !== undefined
-          );
-          const values_list = columns_list.map((col) =>
-            row[col] === null || row[col] === '' ? 'NULL' : escapeSqlValue(row[col])
-          );
-
-          if (columns_list.length === 0) continue;
-
-          const insertSQL = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeSqlIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
-          const result = await executeQuery(connectionId, insertSQL);
-
-          if (result.error) {
-            errorCount++;
-            errorMessage = result.error;
-            break;
-          } else {
-            successCount++;
-          }
-        }
-      }
-
-      // 执行更新
-      if (!errorMessage) {
-        for (const row of pendingChanges.updates) {
-          const primaryKey = columns.find((col) => col.column_key === 'PRI');
-          if (!primaryKey) {
-            errorMessage = t('common.tableHasNoPrimaryKeyCannotUpdate');
-            errorCount++;
-            break;
-          }
-
-          const originalData = row.__original_data__ || {};
-
-          // 对比找出修改的字段
-          const updates: string[] = [];
-          for (const col of columns) {
-            const colName = col.column_name;
-            if (colName === primaryKey.column_name) continue;
-
-            const newValue = row[colName];
-            const oldValue = originalData[colName];
-
-            if (newValue !== oldValue) {
-              const valueStr =
-                newValue === null || newValue === '' ? 'NULL' : escapeSqlValue(newValue);
-              updates.push(`${escapeSqlIdentifier(colName, dbType)} = ${valueStr}`);
-            }
-          }
-
-          if (updates.length === 0) continue; // 没有实际更改
-
-          const primaryKeyValue = row[primaryKey.column_name];
-          const setClause = updates
-            .map((u) => {
-              const eqIdx = u.indexOf(' = ');
-              return eqIdx > 0
-                ? `${escapeSqlIdentifier(u.substring(0, eqIdx), dbType)} = ${u.substring(eqIdx)}`
-                : u;
-            })
-            .join(', ');
-          const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setClause} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
-          const result = await executeQuery(connectionId, updateSQL);
-
-          if (result.error) {
-            errorCount++;
-            errorMessage = result.error;
-            break;
-          } else {
-            successCount++;
-          }
-        }
-      }
-
-      // 显示结果
-      if (errorCount === 0) {
-        message.success(
-          `${t('common.submittedSuccessfully')} ${successCount} ${t('common.changes')}`
-        );
-        setPendingChanges({ inserts: [], updates: [], deletes: [] });
-        setHasUnsavedChanges(false);
-        loadData();
-        loadCount(whereClause);
-      } else {
-        message.error(`${t('common.submitFailed')}: ${errorMessage}`);
-      }
-    } catch (error: any) {
-      console.error('Commit error:', error);
-      message.error(`${t('common.submitFailed')}: ${error.message || error}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    hasUnsavedChanges,
-    pendingChanges,
-    columns,
-    tableName,
-    connectionId,
-    executeQuery,
-    loadData,
-    loadCount,
-    dbType,
-  ]);
-
-  const handleUndo = useCallback(async () => {
-    Modal.confirm({
-      title: t('common.undoModifications'),
-      content: t('common.confirmDiscardAllChanges'),
-      onOk: () => {
-        loadData();
-        setHasUnsavedChanges(false);
-      },
-    });
-  }, [loadData]);
-
   const handleAddRow = useCallback(() => {
-    setAddModalOpen(true);
-    addForm.resetFields();
-  }, [addForm]);
+    const newRowId = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const newRow: RowData = {
+      __row_id__: newRowId,
+      __status__: 'new',
+      __original_data__: {},
+    };
+    columns.forEach((col) => {
+      newRow[col.column_name] = null;
+    });
 
-  const handleEditRow = useCallback(() => {
-    if (selectedRows.length === 0) {
-      message.warning(t('common.pleaseSelectRowsToEdit'));
-      return;
-    }
-    if (selectedRows.length > 1) {
-      message.warning(t('common.onlyOneRowAtATime'));
-      return;
-    }
+    setRowData((prev) => [...prev, newRow]);
+    pendingNewRowsRef.current.add(newRowId);
 
-    setEditingRow(selectedRows[0]);
-    editForm.setFieldsValue(selectedRows[0]);
-    setEditModalOpen(true);
-  }, [selectedRows, editForm]);
+    // 滚动到新行
+    setTimeout(() => {
+      gridApiRef.current?.ensureIndexVisible(rowData.length, 'bottom');
+    }, 50);
+  }, [columns, rowData.length]);
 
   const handleDeleteRows = useCallback(async () => {
     if (selectedRows.length === 0) {
@@ -855,128 +1502,53 @@ export const DataTable = memo(function DataTable({
       return;
     }
 
-    const primaryKey = columns.find((col) => col.column_key === 'PRI');
-    if (!primaryKey && selectedRows.some((row) => row.__status__ !== 'new')) {
+    const pkCol = columns.find((col) => col.column_key === 'PRI');
+    if (!pkCol && selectedRows.some((row) => row.__status__ !== 'new')) {
       message.warning(t('common.tableHasNoPrimaryKeyCannotDelete'));
       return;
     }
 
     try {
       setLoading(true);
+      let successCount = 0;
+      let errorMessage = '';
 
-      // 标记删除
-      const newPendingDeletes: RowData[] = [];
-      const newPendingInserts = pendingChanges.inserts.filter((insertRow) => {
-        const isSelected = selectedRows.some(
-          (selRow) => selRow.__row_id__ === insertRow.__row_id__
-        );
-        if (isSelected) {
-          newPendingDeletes.push(insertRow);
-          return false; // 从插入列表中移除
-        }
-        return true;
-      });
-
-      // 对于已存在的行，标记为删除
       for (const row of selectedRows) {
-        if (row.__status__ !== 'new') {
-          newPendingDeletes.push(row);
-
-          // 更新 rowData 中的状态
-          setRowData((prev) =>
-            prev.map((r) =>
-              r.__row_id__ === row.__row_id__ ? { ...r, __status__: 'deleted' as const } : r
-            )
-          );
+        if (row.__status__ === 'new') {
+          // 新行直接从本地移除
+          pendingNewRowsRef.current.delete(row.__row_id__ || '');
+          setRowData((prev) => prev.filter((r) => r.__row_id__ !== row.__row_id__));
+          successCount++;
+          continue;
         }
+
+        const pkValue = row[pkCol!.column_name];
+        const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+        setLastDmlSql(deleteSQL);
+        const result = await executeQuery(connectionId, deleteSQL, database || '');
+
+        if (result.error) {
+          errorMessage = result.error;
+          break;
+        }
+
+        successCount++;
       }
 
-      setPendingChanges((prev) => ({
-        ...prev,
-        inserts: newPendingInserts,
-        deletes: [...prev.deletes, ...newPendingDeletes],
-      }));
-
-      setHasUnsavedChanges(true);
-      message.success(
-        `${t('common.markedForDeletion')} ${selectedRows.length} ${t('common.rows')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveChanges')}`
-      );
+      if (errorMessage) {
+        message.error(`${t('common.dataGrid.deleteFailed')}: ${errorMessage}`);
+      } else {
+        message.success(`${t('common.dataGrid.deleteSuccess')} ${successCount} ${t('common.rows')}`);
+        loadData();
+        loadCount(whereClause);
+      }
     } catch (error: any) {
       console.error('Delete error:', error);
       message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
-  }, [selectedRows, columns, pendingChanges.inserts]);
-
-  const handleSaveNewRow = useCallback(async () => {
-    try {
-      const values = await addForm.validateFields();
-
-      const columns_list = Object.keys(values).filter((key) => values[key] !== undefined);
-      const values_list = columns_list.map((col) =>
-        values[col] === null || values[col] === '' ? 'NULL' : escapeSqlValue(values[col])
-      );
-
-      const insertSQL = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeSqlIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
-
-      const result = await executeQuery(connectionId, insertSQL);
-
-      if (result.error) {
-        message.error(`${t('common.dataGrid.insertFailed')}: ${result.error}`);
-      } else {
-        message.success(t('common.dataGrid.insertSuccess'));
-        setAddModalOpen(false);
-        loadData();
-        loadCount(whereClause);
-      }
-    } catch (error: any) {
-      console.error('Insert error:', error);
-      message.error(`${t('common.dataGrid.insertFailed')}: ${error.message || error}`);
-    }
-  }, [addForm, tableName, connectionId, executeQuery, loadData, loadCount, dbType]);
-
-  const handleSaveEditRow = useCallback(async () => {
-    try {
-      const values = await editForm.validateFields();
-
-      const primaryKey = columns.find((col) => col.column_key === 'PRI');
-      if (!primaryKey) {
-        message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate'));
-        return;
-      }
-
-      const updates = Object.entries(values)
-        .filter(([key, value]) => key !== '__row_id__' && value !== editingRow?.[key])
-        .map(
-          ([key, value]) =>
-            `${escapeSqlIdentifier(key, dbType)} = ${value === null || value === '' ? 'NULL' : escapeSqlValue(value)}`
-        )
-        .join(', ');
-
-      if (!updates) {
-        message.info(t('common.noDataModified'));
-        setEditModalOpen(false);
-        return;
-      }
-
-      const primaryKeyValue = editingRow?.[primaryKey.column_name];
-      const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${updates} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(primaryKeyValue)}`;
-
-      const result = await executeQuery(connectionId, updateSQL);
-
-      if (result.error) {
-        message.error(`${t('common.dataGrid.updateFailed')}: ${result.error}`);
-      } else {
-        message.success(t('common.dataGrid.updateSuccess'));
-        setEditModalOpen(false);
-        loadData();
-      }
-    } catch (error: any) {
-      console.error('Update error:', error);
-      message.error(`${t('common.dataGrid.updateFailed')}: ${error.message || error}`);
-    }
-  }, [editForm, columns, editingRow, tableName, connectionId, executeQuery, loadData, dbType]);
+  }, [selectedRows, columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, whereClause]);
 
   const exportToCSV = useCallback(() => {
     if (rowData.length === 0) {
@@ -1017,10 +1589,12 @@ export const DataTable = memo(function DataTable({
     message.success(t('common.importExport.exportSuccess'));
   }, [rowData, columns, tableName]);
 
+  const displayedSql = lastDmlSql || currentSql;
+  
   const copySql = useCallback(() => {
-    navigator.clipboard.writeText(currentSql);
+    navigator.clipboard.writeText(displayedSql);
     message.success(t('common.sqlCopied'));
-  }, [currentSql]);
+  }, [displayedSql]);
 
   const handleAutoSizeColumns = useCallback(() => {
     if (gridApiRef.current) {
@@ -1107,11 +1681,123 @@ export const DataTable = memo(function DataTable({
     gridApiRef.current = event.api;
   }, []);
 
+  // 记录用户手动调整的列宽
+  const onColumnResized = useCallback((event: any) => {
+    if (event.finished && event.column) {
+      const colId = event.column.getColId();
+      const newWidth = event.column.getActualWidth();
+      if (colId && newWidth) {
+        userColumnWidthsRef.current.set(colId, newWidth);
+      }
+    }
+  }, []);
+
+  // 提交待插入的新行
+  const commitPendingNewRows = useCallback(async () => {
+    if (pendingNewRowsRef.current.size === 0) return;
+
+    const rowsToInsert: RowData[] = [];
+
+    for (const rowId of Array.from(pendingNewRowsRef.current)) {
+      const node = gridApiRef.current?.getRowNode(rowId);
+      if (!node) {
+        pendingNewRowsRef.current.delete(rowId);
+        continue;
+      }
+
+      const row = node.data;
+
+      // 检查行是否有非空值
+      const hasValues = columns.some((col) => {
+        const val = row[col.column_name];
+        return val !== null && val !== undefined && val !== '';
+      });
+
+      if (!hasValues) {
+        // 移除空的新行
+        gridApiRef.current?.applyTransaction({ remove: [row] });
+        pendingNewRowsRef.current.delete(rowId);
+        continue;
+      }
+
+      rowsToInsert.push(row);
+    }
+
+    if (rowsToInsert.length === 0) return;
+
+    // 插入新行
+    for (const row of rowsToInsert) {
+      try {
+        const columns_list = Object.keys(row).filter(
+          (key) => !key.startsWith('__') && row[key] !== undefined
+        );
+        const values_list = columns_list.map((col) =>
+          row[col] === null || row[col] === '' ? 'NULL' : escapeSqlValue(row[col])
+        );
+
+        if (columns_list.length === 0) continue;
+
+        const insertSQL = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${columns_list.map((col) => escapeSqlIdentifier(col, dbType)).join(', ')}) VALUES (${values_list.join(', ')})`;
+        setLastDmlSql(insertSQL);
+        const result = await executeQuery(connectionId, insertSQL, database || '');
+
+        if (result.error) {
+          message.error(`${t('common.dataGrid.insertFailed')}: ${result.error}`);
+          // 保留新行，让用户修正
+        } else {
+          pendingNewRowsRef.current.delete(row.__row_id__ || '');
+          message.success(`${t('common.dataGrid.insertSuccess')} 1 ${t('common.rows')}`);
+        }
+      } catch (error: any) {
+        message.error(`${t('common.dataGrid.insertFailed')}: ${error.message}`);
+      }
+    }
+
+    // 如果有成功插入的，刷新数据
+    if (rowsToInsert.some((r) => !pendingNewRowsRef.current.has(r.__row_id__ || ''))) {
+      loadData();
+      loadCount(whereClause);
+    }
+  }, [columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, whereClause]);
+
+  // 当焦点离开新行时，尝试自动插入
+  const onCellFocused = useCallback(async (event: any) => {
+    if (pendingNewRowsRef.current.size === 0) return;
+
+    const focusedRowId = event.rowIndex != null
+      ? gridApiRef.current?.getDisplayedRowAtIndex(event.rowIndex)?.data?.__row_id__
+      : null;
+
+    // 只有焦点真正离开了新行才提交
+    const hasLeftNewRow = Array.from(pendingNewRowsRef.current).some(
+      (rowId) => rowId !== focusedRowId
+    );
+
+    if (hasLeftNewRow) {
+      await commitPendingNewRows();
+    }
+  }, [commitPendingNewRows]);
+
   // 单元格复制粘贴功能
   useEffect(() => {
     const handleCopy = (e: ClipboardEvent) => {
       const api = gridApiRef.current;
       if (!api) return;
+
+      // 如果有列被选中，复制整列数据
+      if (selectedColumn) {
+        const allRows: string[] = [];
+        api.forEachNode((node: any) => {
+          const value = node.data?.[selectedColumn];
+          allRows.push(value === null || value === undefined ? 'NULL' : String(value));
+        });
+
+        const text = allRows.join('\n');
+        e.clipboardData?.setData('text/plain', text);
+        e.preventDefault();
+        message.success(`${t('common.copyTable.copied')} ${allRows.length} ${t('common.rowsFromColumn')} ${selectedColumn}`);
+        return;
+      }
 
       const selectedRows = api.getSelectedRows();
       if (selectedRows.length > 0) {
@@ -1133,6 +1819,7 @@ export const DataTable = memo(function DataTable({
     };
 
     const handlePaste = async (e: ClipboardEvent) => {
+      if (columnEditModeRef.current || rangeEditModeRef.current || cellSelectionRangeRef.current || selectedColumnRef.current) return;
       const api = gridApiRef.current;
       if (!api) return;
 
@@ -1178,16 +1865,6 @@ export const DataTable = memo(function DataTable({
           updatedRows.push(rowData);
         }
 
-        setHasUnsavedChanges(true);
-        setPendingChanges((prev) => {
-          const filteredUpdates = prev.updates.filter(
-            (r) => !updatedRows.some((ur) => ur.__row_id__ === r.__row_id__)
-          );
-          return {
-            ...prev,
-            updates: [...filteredUpdates, ...updatedRows],
-          };
-        });
         message.success(t('common.pasteSuccess'));
       } catch (error: any) {
         message.error(`${t('common.pasteFailed')}: ${error.message}`);
@@ -1201,7 +1878,7 @@ export const DataTable = memo(function DataTable({
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('paste', handlePaste);
     };
-  }, [columns]);
+  }, [columns, selectedColumn]);
 
   const handlePageChange = useCallback(
     (page: number, size?: number | string) => {
@@ -1233,10 +1910,7 @@ export const DataTable = memo(function DataTable({
 
   const statusBarStyle: React.CSSProperties = {
     borderTop: '1px solid var(--border-color)',
-    background: hasUnsavedChanges
-      ? 'var(--color-warning-bg, #fffbe6)'
-      : 'var(--background-toolbar)',
-    borderBottom: hasUnsavedChanges ? '2px solid var(--color-warning)' : undefined,
+    background: 'var(--background-toolbar)',
     padding: '1px 4px',
     display: 'flex',
     alignItems: 'center',
@@ -1263,6 +1937,33 @@ export const DataTable = memo(function DataTable({
         background: 'var(--background-card)',
       }}
       data-testid="data-table"
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        // 如果正在列编辑或范围编辑，先提交
+        if ((columnEditMode || rangeEditMode) && !target.closest('.ag-header-cell')) {
+          if (columnEditMode) {
+            commitColumnEdit();
+          } else {
+            commitRangeEdit();
+          }
+          return;
+        }
+        // 点击空白区域（非列头、非单元格）时强制停止编辑、取消选择并提交新行
+        if (!target.closest('.ag-header-cell') && !target.closest('.ag-cell')) {
+          gridApiRef.current?.stopEditing();
+          setSelectedColumn(null);
+          cellSelectionRangeRef.current = null;
+          dragSelectRangeRef.current = null;
+          setCellSelectionRange(null);
+          setDragSelectRange(null);
+          gridApiRef.current?.deselectAll();
+          gridApiRef.current?.refreshCells({ force: true });
+          commitPendingNewRows();
+        } else if (!target.closest('.ag-header-cell')) {
+          // 点击单元格但非列头，只取消列选中
+          setSelectedColumn(null);
+        }
+      }}
     >
       {/* 顶部工具栏 */}
       <div style={toolbarStyle}>
@@ -1290,33 +1991,16 @@ export const DataTable = memo(function DataTable({
             {t('common.addRowLabel')}
           </Button>
           <Button
-            icon={<EditOutlined />}
-            onClick={handleEditRow}
-            disabled={selectedRows.length !== 1}
+            icon={<DeleteOutlined />}
+            onClick={handleDeleteRows}
+            disabled={selectedRows.length === 0}
+            danger
             size="small"
             style={{ height: 20, padding: '0 6px', fontSize: 11 }}
-            data-testid="datatable-edit-row"
+            data-testid="datatable-delete-row"
           >
-            {t('common.editRow')}
+            {t('common.delete')}
           </Button>
-          <Popconfirm
-            title={t('common.confirmDeleteTitle')}
-            description={t('common.confirmDeleteRows', { count: selectedRows.length })}
-            onConfirm={handleDeleteRows}
-            okText={t('common.delete')}
-            cancelText={t('common.cancel')}
-          >
-            <Button
-              icon={<DeleteOutlined />}
-              disabled={selectedRows.length === 0}
-              danger
-              size="small"
-              style={{ height: 20, padding: '0 6px', fontSize: 11 }}
-              data-testid="datatable-delete-row"
-            >
-              {t('common.delete')}
-            </Button>
-          </Popconfirm>
 
           <Button
             icon={<DownloadOutlined />}
@@ -1403,14 +2087,6 @@ export const DataTable = memo(function DataTable({
           {selectedRows.length > 0 && (
             <Tag color="orange" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>
               {selectedRows.length} {t('common.rows')}
-            </Tag>
-          )}
-          {hasUnsavedChanges && (
-            <Tag
-              color="warning"
-              style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
-            >
-              {t('common.unsaved')}
             </Tag>
           )}
         </Space>
@@ -1753,12 +2429,43 @@ export const DataTable = memo(function DataTable({
           <Empty description={t('common.noData')} style={{ marginTop: '20%' }} />
         ) : columns.length > 0 ? (
           <div
+            ref={gridContainerRef}
             className={`ag-theme-compact ${isDarkMode ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}`}
-            style={{ height: '100%', width: '100%' }}
+            style={{ height: '100%', width: '100%', position: 'relative', userSelect: 'none' }}
+            onPaste={(e) => {
+              if (rangeEditMode) {
+                e.preventDefault();
+                e.stopPropagation();
+                const pastedText = e.clipboardData.getData('text');
+                updateRangeEditValue(pastedText);
+              } else if (columnEditMode) {
+                e.preventDefault();
+                e.stopPropagation();
+                const pastedText = e.clipboardData.getData('text');
+                updateColumnEditValue(pastedText);
+              } else if (cellSelectionRange) {
+                e.preventDefault();
+                e.stopPropagation();
+                const pastedText = e.clipboardData.getData('text');
+                startRangeEdit(cellSelectionRange);
+                setTimeout(() => {
+                  updateRangeEditValue(pastedText);
+                }, 0);
+              } else if (selectedColumn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const pastedText = e.clipboardData.getData('text');
+                startColumnEdit(selectedColumn);
+                setTimeout(() => {
+                  updateColumnEditValue(pastedText);
+                }, 0);
+              }
+            }}
           >
             <AgGridReact
               key={gridKey}
               onGridReady={onGridReady}
+              onColumnResized={onColumnResized}
               rowData={rowData}
               columnDefs={columnDefs}
               defaultColDef={defaultColDef}
@@ -1766,6 +2473,7 @@ export const DataTable = memo(function DataTable({
               getRowId={(params) => params.data.__row_id__}
               onCellValueChanged={onCellValueChanged}
               onCellDoubleClicked={onCellDoubleClicked}
+              onCellFocused={onCellFocused}
               onSelectionChanged={onSelectionChanged}
               onSortChanged={(event) => {
                 const api = event.api;
@@ -1798,6 +2506,7 @@ export const DataTable = memo(function DataTable({
               suppressRowClickSelection={true}
               suppressPaginationPanel={true}
               suppressCellFocus={true}
+              stopEditingWhenCellsLoseFocus={true}
               animateRows={false}
               headerHeight={24}
               rowHeight={22}
@@ -1882,6 +2591,59 @@ export const DataTable = memo(function DataTable({
                 group: t('common.group'),
               }}
             />
+            {/* 列/范围批量编辑透明输入框 */}
+            {(columnEditMode || rangeEditMode) && (
+              <input
+                ref={columnEditMode ? columnEditInputRef : rangeEditInputRef}
+                value={columnEditMode ? columnEditMode.value : rangeEditMode!.value}
+                onChange={(e) => {
+                  if (columnEditMode) {
+                    updateColumnEditValue(e.target.value);
+                  } else {
+                    updateRangeEditValue(e.target.value);
+                  }
+                }}
+                onBlur={() => {
+                  setTimeout(() => {
+                    if (columnEditMode) {
+                      commitColumnEdit();
+                    } else if (rangeEditMode) {
+                      commitRangeEdit();
+                    }
+                  }, 200);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (columnEditMode) {
+                      commitColumnEdit();
+                    } else {
+                      commitRangeEdit();
+                    }
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (columnEditMode) {
+                      cancelColumnEdit();
+                    } else {
+                      cancelRangeEdit();
+                    }
+                  }
+                }}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  opacity: 0,
+                  cursor: 'text',
+                  zIndex: 5,
+                }}
+                autoFocus
+              />
+            )}
           </div>
         ) : hasEverLoaded ? (
           <Empty description={t('common.noTableStructure')} style={{ marginTop: '20%' }} />
@@ -1904,60 +2666,6 @@ export const DataTable = memo(function DataTable({
       {/* 底部状态栏 */}
       <div style={statusBarStyle}>
         <Space size={2}>
-          <Button
-            icon={<SaveOutlined />}
-            type={hasUnsavedChanges ? 'primary' : 'default'}
-            onClick={handleCommit}
-            disabled={!hasUnsavedChanges}
-            size="small"
-            style={{ height: 20, padding: '0 4px', fontSize: 11 }}
-            data-testid="datatable-save"
-          >
-            {t('common.submitLabel')}
-          </Button>
-          <Button
-            icon={<UndoOutlined />}
-            onClick={handleUndo}
-            disabled={!hasUnsavedChanges}
-            size="small"
-            style={{ height: 20, padding: '0 4px', fontSize: 11 }}
-            data-testid="datatable-undo"
-          >
-            {t('common.undoLabel')}
-          </Button>
-
-          <div style={dividerStyle} />
-
-          {hasUnsavedChanges && (
-            <>
-              {pendingChanges.inserts.length > 0 && (
-                <Tag
-                  color="success"
-                  style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
-                >
-                  {t('common.insertLabel')} {pendingChanges.inserts.length}
-                </Tag>
-              )}
-              {pendingChanges.updates.length > 0 && (
-                <Tag
-                  color="warning"
-                  style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
-                >
-                  {t('common.updateLabel')} {pendingChanges.updates.length}
-                </Tag>
-              )}
-              {pendingChanges.deletes.length > 0 && (
-                <Tag
-                  color="error"
-                  style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}
-                >
-                  {t('common.deleteLabel')} {pendingChanges.deletes.length}
-                </Tag>
-              )}
-              <div style={dividerStyle} />
-            </>
-          )}
-
           <Button
             icon={<ReloadOutlined />}
             onClick={() => loadData()}
@@ -2164,6 +2872,14 @@ export const DataTable = memo(function DataTable({
             marginLeft: 8,
           }}
         >
+          {lastDmlSql && (
+            <Tag
+              color="blue"
+              style={{ margin: 0, fontSize: 10, lineHeight: '14px', height: 16 }}
+            >
+              DML
+            </Tag>
+          )}
           <code
             style={{
               flex: 1,
@@ -2171,7 +2887,7 @@ export const DataTable = memo(function DataTable({
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               fontSize: 11,
-              color: 'var(--text-secondary)',
+              color: lastDmlSql ? 'var(--color-primary)' : 'var(--text-secondary)',
               fontFamily: "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace",
               padding: '2px 6px',
               background: 'var(--background-toolbar)',
@@ -2179,7 +2895,7 @@ export const DataTable = memo(function DataTable({
               border: '1px solid var(--border-color)',
             }}
           >
-            {currentSql}
+            {displayedSql}
           </code>
           <Tooltip title={t('common.copySql')}>
             <Button
@@ -2231,90 +2947,11 @@ export const DataTable = memo(function DataTable({
       </div>
 
       <Modal
-        title={t('common.addRowTitle')}
-        open={addModalOpen}
-        onCancel={() => setAddModalOpen(false)}
-        onOk={handleSaveNewRow}
-        width={600}
-        okText={t('common.save')}
-        cancelText={t('common.cancel')}
-        destroyOnHidden
-        transitionName=""
-        maskTransitionName=""
-      >
-        <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
-          {columns.map((col) => (
-            <Form.Item
-              key={col.column_name}
-              label={
-                <span>
-                  {col.column_name}
-                  {col.is_nullable !== 'YES' && (
-                    <span style={{ color: 'var(--color-error)' }}> *</span>
-                  )}
-                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
-                    {col.data_type}
-                  </span>
-                </span>
-              }
-              name={col.column_name}
-              rules={[
-                {
-                  required: col.is_nullable !== 'YES',
-                  message: `${t('common.pleaseEnter')} ${col.column_name}`,
-                },
-              ]}
-            >
-              <GlobalInput placeholder={col.comment || col.data_type} />
-            </Form.Item>
-          ))}
-        </Form>
-      </Modal>
-
-      <Modal
-        title={t('common.editRowTitle')}
-        open={editModalOpen}
-        onCancel={() => setEditModalOpen(false)}
-        onOk={handleSaveEditRow}
-        width={600}
-        okText={t('common.save')}
-        cancelText={t('common.cancel')}
-        destroyOnHidden
-        transitionName=""
-        maskTransitionName=""
-      >
-        <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
-          {columns.map((col) => (
-            <Form.Item
-              key={col.column_name}
-              label={
-                <span>
-                  {col.column_name}
-                  {col.column_key === 'PRI' && (
-                    <Tag color="blue" style={{ marginLeft: 8 }}>
-                      {t('common.primaryKeyLabel')}
-                    </Tag>
-                  )}
-                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
-                    {col.data_type}
-                  </span>
-                </span>
-              }
-              name={col.column_name}
-            >
-              <GlobalInput
-                placeholder={col.comment || col.data_type}
-                disabled={col.column_key === 'PRI'}
-              />
-            </Form.Item>
-          ))}
-        </Form>
-      </Modal>
-
-      <Modal
         title={`${t('common.editField')} ${textEditModal?.field || ''}`}
         open={!!textEditModal?.open}
         onCancel={() => setTextEditModal(null)}
+        transitionName=""
+        maskTransitionName=""
         onOk={() => {
           if (!textEditModal || !gridApiRef.current) return;
           const { field, rowId } = textEditModal;
@@ -2327,17 +2964,49 @@ export const DataTable = memo(function DataTable({
           });
           if (targetRow) {
             const updatedRow = { ...targetRow, [field]: newValue };
-            if (!updatedRow.__status__ || updatedRow.__status__ !== 'new') {
-              updatedRow.__status__ = 'modified';
+            
+            // 新行：只更新本地状态
+            if (updatedRow.__status__ === 'new') {
+              gridApiRef.current.applyTransaction({ update: [updatedRow] });
+              pendingNewRowsRef.current.add(updatedRow.__row_id__);
+              setTextEditModal(null);
+              return;
             }
-            gridApiRef.current.applyTransaction({ update: [updatedRow] });
-            setHasUnsavedChanges(true);
-            setPendingChanges((prev) => {
-              const filteredUpdates = prev.updates.filter(
-                (r) => r.__row_id__ !== updatedRow.__row_id__
-              );
-              return { ...prev, updates: [...filteredUpdates, updatedRow] };
-            });
+            
+            // 现有行：立即执行 UPDATE
+            const pkCol = columns.find((col) => col.column_key === 'PRI');
+            if (!pkCol) {
+              message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate'));
+              setTextEditModal(null);
+              return;
+            }
+            
+            const pkValue = updatedRow[pkCol.column_name];
+            const valueStr = newValue === null || newValue === ''
+              ? 'NULL'
+              : escapeSqlValue(newValue);
+            const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(field, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+            setLastDmlSql(updateSQL);
+            
+            executeQuery(connectionId, updateSQL, database || '')
+              .then((result) => {
+                if (result.error) {
+                  message.error(`${t('common.dataGrid.updateFailed')}: ${result.error}`);
+                  // 回滚
+                  const revertedRow = { ...targetRow };
+                  gridApiRef.current?.applyTransaction({ update: [revertedRow] });
+                } else {
+                  // 成功：更新 original_data
+                  updatedRow.__original_data__ = { ...(updatedRow.__original_data__ || {}), [field]: newValue };
+                  updatedRow.__status__ = undefined;
+                  gridApiRef.current?.applyTransaction({ update: [updatedRow] });
+                }
+              })
+              .catch((error: any) => {
+                message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+                const revertedRow = { ...targetRow };
+                gridApiRef.current?.applyTransaction({ update: [revertedRow] });
+              });
           }
           setTextEditModal(null);
         }}
@@ -2413,13 +3082,6 @@ export const DataTable = memo(function DataTable({
               icon: <CopyOutlined />,
               onClick: () => handleContextMenuAction('copy-row'),
             },
-            {
-              key: 'edit-row',
-              label: t('common.editRow'),
-              icon: <EditOutlined />,
-              onClick: () => handleContextMenuAction('edit-row'),
-            },
-            { type: 'divider' },
             {
               key: 'delete-row',
               label: t('common.dataGrid.deleteRow'),
@@ -2544,24 +3206,47 @@ export const DataTable = memo(function DataTable({
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
+                
                 const updatedRow = { ...rowNode.data };
-                updatedRow[colId] = null;
-                if (!updatedRow.__status__ || updatedRow.__status__ !== 'new') {
-                  updatedRow.__status__ = 'modified';
+                
+                // 新行：只更新本地状态
+                if (updatedRow.__status__ === 'new') {
+                  updatedRow[colId] = null;
+                  gridApiRef.current?.applyTransaction({ update: [updatedRow] });
+                  setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                  message.success(`${t('common.set')} ${colId} ${t('common.toNull')}`);
+                  return;
                 }
-                gridApiRef.current?.applyTransaction({ update: [updatedRow] });
-                setHasUnsavedChanges(true);
-                setPendingChanges((prev) => {
-                  const filteredUpdates = prev.updates.filter(
-                    (r) => r.__row_id__ !== updatedRow.__row_id__
-                  );
-                  return {
-                    ...prev,
-                    updates: [...filteredUpdates, updatedRow],
-                  };
-                });
+                
+                // 现有行：立即执行 UPDATE
+                const pkCol = columns.find((c) => c.column_key === 'PRI');
+                if (!pkCol) {
+                  message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate'));
+                  setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                  return;
+                }
+                
+                const pkValue = updatedRow[pkCol.column_name];
+                const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = NULL WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+                setLastDmlSql(updateSQL);
+                
+                executeQuery(connectionId, updateSQL, database || '')
+                  .then((result) => {
+                    if (result.error) {
+                      message.error(`${t('common.dataGrid.updateFailed')}: ${result.error}`);
+                    } else {
+                      updatedRow[colId] = null;
+                      updatedRow.__original_data__ = { ...(updatedRow.__original_data__ || {}), [colId]: null };
+                      updatedRow.__status__ = undefined;
+                      gridApiRef.current?.applyTransaction({ update: [updatedRow] });
+                      message.success(`${t('common.set')} ${colId} ${t('common.toNull')}`);
+                    }
+                  })
+                  .catch((error: any) => {
+                    message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+                  });
+                
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
-                message.success(`${t('common.set')} ${colId} ${t('common.toNull')}`);
               },
             },
             { type: 'divider' },

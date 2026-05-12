@@ -1,16 +1,18 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { FilterOutlined, CaretUpOutlined, CaretDownOutlined } from '@ant-design/icons';
-import { Popover, Checkbox, Input, Button, Space, Spin } from 'antd';
+import { Popover, Checkbox, Input, Button, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { IHeaderParams } from 'ag-grid-community';
 
 export interface ColumnFilterHeaderProps extends IHeaderParams {
   rowData: any[];
+  isSelected?: boolean;
+  onColumnSelect?: (field: string) => void;
 }
 
 export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
   const { t } = useTranslation();
-  const { displayName, column, api, enableSorting, progressSort, rowData } = props;
+  const { displayName, column, api, enableSorting, progressSort, rowData, isSelected, onColumnSelect } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const field = column.getColId();
@@ -185,6 +187,19 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
     </div>
   );
 
+  const handleSortClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (enableSorting) {
+      progressSort();
+    }
+  };
+
+  const handleColumnClick = (e: React.MouseEvent) => {
+    // 点击列名区域选整列（不是图标区域）
+    if ((e.target as HTMLElement).closest('.header-icon')) return;
+    onColumnSelect?.(field);
+  };
+
   return (
     <div
       style={{
@@ -194,15 +209,10 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
         width: '100%',
         padding: '0 4px',
         userSelect: 'none',
-        cursor: enableSorting ? 'pointer' : 'default',
+        cursor: 'pointer',
+        fontWeight: isSelected ? 600 : 'normal',
       }}
-      onClick={(e) => {
-        // 点击列名区域触发排序（不是图标区域）
-        if ((e.target as HTMLElement).closest('.header-icon')) return;
-        if (enableSorting) {
-          progressSort();
-        }
-      }}
+      onClick={handleColumnClick}
     >
       <span
         style={{
@@ -210,15 +220,27 @@ export function ColumnFilterHeader(props: ColumnFilterHeaderProps) {
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           flex: 1,
+          color: isSelected ? 'var(--color-primary)' : 'inherit',
         }}
         title={displayName}
       >
         {displayName}
       </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 4 }}>
-        {sort && (
-          <span style={{ fontSize: 10, color: 'var(--color-primary)' }}>
-            {sort === 'asc' ? <CaretUpOutlined /> : <CaretDownOutlined />}
+        {/* 排序按钮 */}
+        {enableSorting && (
+          <span
+            className="header-icon"
+            style={{
+              fontSize: 10,
+              color: sort ? 'var(--color-primary)' : 'var(--text-tertiary)',
+              cursor: 'pointer',
+              padding: 2,
+            }}
+            onClick={handleSortClick}
+            title={sort ? (sort === 'asc' ? t('common.sortAscending') : t('common.sortDescending')) : t('common.sort')}
+          >
+            {sort === 'asc' ? <CaretUpOutlined /> : sort === 'desc' ? <CaretDownOutlined /> : <CaretUpOutlined style={{ opacity: 0.4 }} />}
           </span>
         )}
         <Popover

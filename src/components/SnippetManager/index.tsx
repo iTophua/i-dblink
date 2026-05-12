@@ -58,7 +58,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
         id: editingId,
         ...values,
       });
-      message.success(editingId ? t('common.dataGrid.updateSuccess') : t('common.saveSuccess'));
+      message.success(editingId ? t('common.updateSuccess') : t('common.saveSuccess'));
       form.resetFields();
       setEditingId(undefined);
       await loadSnippets();
@@ -90,7 +90,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
       onOk: async () => {
         try {
           await api.deleteSnippet(id);
-          message.success(t('common.dataGrid.deleteSuccess'));
+          message.success(t('common.deleteSuccess'));
           await loadSnippets();
         } catch (err: any) {
           message.error(`${t('common.dataGrid.deleteFailed')}: ${err.message || err}`);

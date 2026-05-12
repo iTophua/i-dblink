@@ -90,6 +90,8 @@ export function DumpDialog({
       onCancel={onCancel}
       confirmLoading={loading}
       width={500}
+      transitionName=""
+      maskTransitionName=""
     >
       <Form
         form={form}

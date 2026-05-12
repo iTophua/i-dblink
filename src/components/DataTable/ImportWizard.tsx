@@ -295,6 +295,8 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       open={open}
       onCancel={onClose}
       width={900}
+      transitionName=""
+      maskTransitionName=""
       footer={
         <Space>
           {currentStep > 0 && (

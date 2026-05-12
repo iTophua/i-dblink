@@ -34,6 +34,8 @@ export function ParamDialog({ open, params, onCancel, onExecute }: ParamDialogPr
       width={450}
       okText={t('common.sqlEditor.execute')}
       cancelText={t('common.cancel')}
+      transitionName=""
+      maskTransitionName=""
     >
       <Form form={form} layout="vertical">
         {params.map((param) => (
