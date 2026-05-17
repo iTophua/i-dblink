@@ -17,20 +17,26 @@ func main() {
 	}
 
 	// 监听 stdin：如果父进程退出，stdin 会收到 EOF，Go 端立即退出
-	go func() {
-		buf := make([]byte, 1)
-		for {
-			_, err := os.Stdin.Read(buf)
-			if err != nil {
-				// EOF 或读取错误：父进程已退出/崩溃
-				fmt.Fprintln(os.Stderr, "Parent process lost (stdin EOF), shutting down...")
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				_ = server.Shutdown(ctx)
-				os.Exit(0)
+	// 监听 stdin：如果父进程退出，stdin 会收到 EOF，Go 端立即退出
+	// 当通过 nohup 或后台模式运行时 stdin 是 /dev/null，立即 EOF
+	// 此时 stat 存在但 Mode() 是 ModeDevice，我们只对 pipe stdin（Tauri 模式）做检测
+	stat, _ := os.Stdin.Stat()
+	isPipe := stat != nil && (stat.Mode()&os.ModeNamedPipe != 0)
+	if isPipe {
+		go func() {
+			buf := make([]byte, 1)
+			for {
+				_, err := os.Stdin.Read(buf)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "Parent process lost (stdin EOF), shutting down...")
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer cancel()
+					_ = server.Shutdown(ctx)
+					os.Exit(0)
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	// 等待退出信号
 	sigCh := make(chan os.Signal, 1)

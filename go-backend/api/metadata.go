@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"idblink-backend/db"
 	"idblink-backend/models"
 )
 
@@ -74,6 +75,11 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, err.Error())
 		return
 	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -113,6 +119,11 @@ func (h *Handler) GetTablesCategorized(w http.ResponseWriter, r *http.Request) {
 	}
 
 	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -168,6 +179,11 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, err.Error())
 		return
 	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -215,6 +231,11 @@ func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -267,6 +288,11 @@ func (h *Handler) GetForeignKeys(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, err.Error())
 		return
 	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -311,6 +337,11 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 	}
 
 	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -369,6 +400,11 @@ func (h *Handler) GetRoutines(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, err.Error())
 		return
 	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -404,6 +440,11 @@ func (h *Handler) GetProcedures(w http.ResponseWriter, r *http.Request) {
 	}
 
 	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -449,6 +490,11 @@ func (h *Handler) GetFunctions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -502,6 +548,16 @@ func (h *Handler) GetProcedureBody(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, err.Error())
 		return
 	}
+	if req.Database != "" {
+		switch dbType {
+		case "postgresql", "kingbase", "highgo", "vastbase":
+			exec, err = h.mgr.GetExecutor(req.ConnectionID, req.Database)
+			if err != nil {
+				writeJSONError(w, err.Error())
+				return
+			}
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -547,6 +603,16 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, err.Error())
 		return
 	}
+	if req.Database != "" {
+		switch dbType {
+		case "postgresql", "kingbase", "highgo", "vastbase":
+			exec, err = h.mgr.GetExecutor(req.ConnectionID, req.Database)
+			if err != nil {
+				writeJSONError(w, err.Error())
+				return
+			}
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -573,4 +639,15 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"body": body})
+}
+
+// resolvePGExec 为 PG 系数据库解析带 database 的执行器，其他类型原样返回
+func (h *Handler) resolvePGExec(exec db.Executor, connectionID string, dbType string, database *string) (db.Executor, error) {
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		if database != nil && *database != "" {
+			return h.mgr.GetExecutor(connectionID, *database)
+		}
+	}
+	return exec, nil
 }

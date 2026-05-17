@@ -519,26 +519,52 @@ export const SqlInput: React.FC<SqlInputProps> = ({
       if (now - lastSelectedRef.current < 100) {
         return;
       }
-      onPressEnter?.();
+
+      // 只有 Cmd+Enter 或 Ctrl+Enter 才触发 onPressEnter
+      if (e.metaKey || e.ctrlKey) {
+        onPressEnter?.();
+      }
     }
   };
 
   const handleSelect = (val: string) => {
     lastSelectedRef.current = Date.now();
+    const currentValue = value || '';
 
-    const upperVal = val.toUpperCase();
+    // 构建新的完整值：追加或替换最后一个 token
+    let newValue: string;
+    if (currentValue.endsWith(' ')) {
+      newValue = currentValue + val;
+    } else {
+      const parsed = parseInput(currentValue);
+      const { lastWord } = parsed;
+      if (lastWord) {
+        const lastIndex = currentValue.lastIndexOf(lastWord);
+        if (lastIndex >= 0) {
+          newValue = currentValue.slice(0, lastIndex) + val;
+        } else {
+          newValue = currentValue + val;
+        }
+      } else {
+        newValue = val;
+      }
+    }
+
+    const trimmedUpperVal = val.trim().toUpperCase();
     const endsWithSpace = val.endsWith(' ');
 
+    // 如果选择的是列名（带空格），自动打开下拉列表继续提示
     if (val.startsWith('`') && endsWithSpace) {
       isAutoSelectedRef.current = true;
       setAutoOpen(true);
       setTimeout(() => {
-        onChange?.(val);
+        onChange?.(newValue);
         setAutoOpen(false);
       }, 0);
       return;
     }
 
+    // 如果选择的是运算符（带空格），自动打开下拉列表继续提示
     if (
       [
         '=',
@@ -555,29 +581,30 @@ export const SqlInput: React.FC<SqlInputProps> = ({
         'IN',
         'NOT IN',
         'BETWEEN',
-      ].includes(upperVal) &&
+      ].includes(trimmedUpperVal) &&
       endsWithSpace
     ) {
       isAutoSelectedRef.current = true;
       setAutoOpen(true);
       setTimeout(() => {
-        onChange?.(val);
+        onChange?.(newValue);
         setAutoOpen(false);
       }, 0);
       return;
     }
 
+    // 如果选择的是值（带空格），自动打开下拉列表继续提示
     if ((val.startsWith("'") || val === 'NULL') && endsWithSpace) {
       isAutoSelectedRef.current = true;
       setAutoOpen(true);
       setTimeout(() => {
-        onChange?.(val);
+        onChange?.(newValue);
         setAutoOpen(false);
       }, 0);
       return;
     }
 
-    onChange?.(val);
+    onChange?.(newValue);
   };
 
   const filterOption = () => true;
@@ -595,7 +622,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
       dropdownMatchSelectWidth={false}
       dropdownStyle={{ minWidth: 200, fontSize: 12, maxHeight: 300, overflowY: 'auto' }}
       filterOption={filterOption}
-      open={autoOpen}
+      open={autoOpen || undefined}
     >
       <Input
         ref={inputRef}

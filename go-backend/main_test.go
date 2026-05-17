@@ -17,7 +17,7 @@ func TestEscapeSqlString(t *testing.T) {
 		{"C:\\path", "C:\\\\path"},
 		{"safe", "safe"},
 		{"", ""},
-		{"'"; "''"},
+		{"'", "''"},
 	}
 
 	for _, tt := range tests {
@@ -216,7 +216,7 @@ func TestQueryResult(t *testing.T) {
 		Columns:      []string{"id", "name"},
 		Rows:         [][]interface{}{{1, "Alice"}},
 		RowsAffected: 1,
-		Error:        nil,
+		Error:        "",
 	}
 
 	if len(result.Columns) != 2 {
@@ -269,9 +269,21 @@ func TestPagination(t *testing.T) {
 			endRow int
 		}
 	}{
-		{1, 100, 250, {0, 100, 100}},
-		{2, 100, 250, {100, 100, 200}},
-		{3, 100, 250, {200, 50, 250}},
+		{1, 100, 250, struct {
+			offset int
+			limit  int
+			endRow int
+		}{0, 100, 100}},
+		{2, 100, 250, struct {
+			offset int
+			limit  int
+			endRow int
+		}{100, 100, 200}},
+		{3, 100, 250, struct {
+			offset int
+			limit  int
+			endRow int
+		}{200, 50, 250}},
 	}
 
 	for _, tt := range tests {

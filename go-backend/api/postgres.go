@@ -28,7 +28,8 @@ func postgresGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, er
 	return result, rows.Err()
 }
 
-func postgresGetTables(ctx context.Context, dbConn db.Executor, _database *string) ([]models.TableInfo, error) {
+func postgresGetTables(ctx context.Context, dbConn db.Executor, database *string) ([]models.TableInfo, error) {
+	_ = database
 	query := `
 		SELECT c.relname AS table_name,
 			CASE c.relkind WHEN 'r' THEN 'BASE TABLE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'OTHER' END AS table_type,
@@ -41,9 +42,10 @@ func postgresGetTables(ctx context.Context, dbConn db.Executor, _database *strin
 		LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
 		WHERE c.relkind IN ('r','v','m','f')
 			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-			AND n.nspname NOT LIKE 'pg_toast%'
+			AND n.nspname NOT LIKE 'pg_toast%%'
 		ORDER BY c.relname
 	`
+
 	rows, err := dbConn.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -54,8 +56,8 @@ func postgresGetTables(ctx context.Context, dbConn db.Executor, _database *strin
 	for rows.Next() {
 		var t models.TableInfo
 		var comment string
-		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6 interface{}
-		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6); err != nil {
+		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7 interface{}
+		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7); err != nil {
 			return nil, err
 		}
 		t.Comment = strPtr(comment)
@@ -64,7 +66,7 @@ func postgresGetTables(ctx context.Context, dbConn db.Executor, _database *strin
 	return result, rows.Err()
 }
 
-func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, _database *string, search *string) (models.TablesResult, error) {
+func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, database *string, search *string) (models.TablesResult, error) {
 	result := models.TablesResult{
 		Tables: []models.TableInfo{},
 		Views:  []models.TableInfo{},
@@ -85,7 +87,7 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, _data
 			LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
 			WHERE c.relkind IN ('r','v','m','f')
 				AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-				AND n.nspname NOT LIKE 'pg_toast%'
+				AND n.nspname NOT LIKE 'pg_toast%%'
 				AND c.relname LIKE $1
 			ORDER BY c.relname
 		`
@@ -103,7 +105,7 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, _data
 			LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
 			WHERE c.relkind IN ('r','v','m','f')
 				AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-				AND n.nspname NOT LIKE 'pg_toast%'
+				AND n.nspname NOT LIKE 'pg_toast%%'
 			ORDER BY c.relname
 		`
 	}
@@ -117,8 +119,8 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, _data
 	for rows.Next() {
 		var t models.TableInfo
 		var comment string
-		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6 interface{}
-		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6); err != nil {
+		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7 interface{}
+		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7); err != nil {
 			continue
 		}
 		t.Comment = strPtr(comment)
@@ -132,7 +134,7 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, _data
 	return result, rows.Err()
 }
 
-func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.ColumnInfo, error) {
+func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
 	query := `
 		SELECT a.attname AS column_name,
 			pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
@@ -149,9 +151,10 @@ func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName strin
 		WHERE a.attnum > 0 AND NOT a.attisdropped
 			AND c.relname = $1
 			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-			AND n.nspname NOT LIKE 'pg_toast%'
-		ORDER BY a.attnum
+			AND n.nspname NOT LIKE 'pg_toast%%'
 	`
+	query += " ORDER BY a.attnum"
+
 	rows, err := dbConn.QueryContext(ctx, query, tableName)
 	if err != nil {
 		return nil, err
@@ -175,7 +178,7 @@ func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName strin
 	return result, rows.Err()
 }
 
-func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.IndexInfo, error) {
+func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.IndexInfo, error) {
 	query := `
 		SELECT i.relname AS index_name, a.attname AS column_name,
 			ix.indisunique AS is_unique, ix.indisprimary AS is_primary,
@@ -184,9 +187,12 @@ func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName strin
 		JOIN pg_class t ON t.oid = ix.indrelid
 		JOIN pg_class i ON i.oid = ix.indexrelid
 		JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+		JOIN pg_namespace n ON n.oid = t.relnamespace
 		WHERE t.relname = $1
-		ORDER BY i.relname, a.attnum
+			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 	`
+	query += " ORDER BY i.relname, a.attnum"
+
 	rows, err := dbConn.QueryContext(ctx, query, tableName)
 	if err != nil {
 		return nil, err
@@ -204,7 +210,7 @@ func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName strin
 	return result, rows.Err()
 }
 
-func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.ForeignKeyInfo, error) {
+func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ForeignKeyInfo, error) {
 	query := `
 		SELECT tc.constraint_name, kcu.column_name,
 			ccu.table_name AS referenced_table,
@@ -213,8 +219,9 @@ func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName s
 		JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
 		JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
 		WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = $1
-		ORDER BY tc.constraint_name, kcu.ordinal_position
 	`
+	query += " ORDER BY tc.constraint_name, kcu.ordinal_position"
+
 	rows, err := dbConn.QueryContext(ctx, query, tableName)
 	if err != nil {
 		return nil, err
@@ -232,18 +239,18 @@ func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName s
 	return result, rows.Err()
 }
 
-func postgresGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, _database *string) (models.TableStructure, error) {
+func postgresGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, database *string) (models.TableStructure, error) {
 	var result models.TableStructure
 	var err error
-	result.Columns, err = postgresGetColumns(ctx, dbConn, tableName, _database)
+	result.Columns, err = postgresGetColumns(ctx, dbConn, tableName, database)
 	if err != nil {
 		return result, err
 	}
-	result.Indexes, err = postgresGetIndexes(ctx, dbConn, tableName, _database)
+	result.Indexes, err = postgresGetIndexes(ctx, dbConn, tableName, database)
 	if err != nil {
 		return result, err
 	}
-	result.ForeignKeys, err = postgresGetForeignKeys(ctx, dbConn, tableName, _database)
+	result.ForeignKeys, err = postgresGetForeignKeys(ctx, dbConn, tableName, database)
 	if err != nil {
 		return result, err
 	}
@@ -259,14 +266,15 @@ func postgresGetTableStructure(ctx context.Context, dbConn db.Executor, tableNam
 	return result, nil
 }
 
-func postgresGetRoutines(ctx context.Context, dbConn db.Executor, _database *string) (models.RoutinesResult, error) {
+func postgresGetRoutines(ctx context.Context, dbConn db.Executor, database *string) (models.RoutinesResult, error) {
 	var result models.RoutinesResult
 	query := `
 		SELECT routine_name, routine_type, routine_definition
 		FROM information_schema.routines
 		WHERE routine_schema NOT IN ('pg_catalog', 'information_schema')
-		ORDER BY routine_name
 	`
+	query += " ORDER BY routine_name"
+
 	rows, err := dbConn.QueryContext(ctx, query)
 	if err != nil {
 		return result, err

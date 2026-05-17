@@ -26,6 +26,7 @@ import { TableDesigner } from '../TableDesigner';
 import { ViewDefinition } from '../ViewDefinition';
 import type { TableInfo, DatabaseType } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { useAppStore } from '../../stores/appStore';
 import { api } from '../../api';
 import { useFloatingWindowManager } from '../../hooks/useFloatingWindowManager';
 
@@ -141,6 +142,14 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 ) {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const connections = useAppStore((state) => state.connections);
+  const getDbType = useCallback(
+    (connectionId: string | undefined | null): DatabaseType | undefined => {
+      if (!connectionId) return undefined;
+      return connections.find((c) => c.id === connectionId)?.db_type as DatabaseType | undefined;
+    },
+    [connections]
+  );
   // 已打开的数据浏览 Tab 列表
   const [openedTables, setOpenedTables] = useState<OpenedTable[]>([]);
   // SQL 查询 Tab 列表（动态添加/删除）
@@ -716,6 +725,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             okText: t('common.close'),
             okType: 'danger',
             cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
             onOk: () => {
               setOpenedTables((prev) =>
                 prev.filter((t) => {
@@ -1090,6 +1101,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               ),
               okText: t('common.confirm'),
               cancelText: t('common.cancel'),
+              transitionName: '',
+              maskTransitionName: '',
               onOk: () => {},
             });
           }}
@@ -1104,13 +1117,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             connectionId={selectedConnectionId}
             database={sqlTab.database || selectedDatabase}
             defaultQuery={sqlTab.defaultQuery}
-            dbType={
-              selectedConnectionId
-                ? (connectionDatabases?.[selectedConnectionId]?.[0]?.db_type as
-                    | DatabaseType
-                    | undefined)
-                : undefined
-            }
+            dbType={getDbType(selectedConnectionId)}
             availableDatabases={
               selectedConnectionId && connectionDatabases?.[selectedConnectionId]
                 ? connectionDatabases[selectedConnectionId].map((db) => db.database)
@@ -1145,13 +1152,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             connectionId={designerTab.connectionId}
             tableName={designerTab.tableName}
             database={designerTab.database}
-            dbType={
-              designerTab.connectionId
-                ? (connectionDatabases?.[designerTab.connectionId]?.[0]?.db_type as
-                    | DatabaseType
-                    | undefined)
-                : undefined
-            }
+            dbType={getDbType(designerTab.connectionId)}
             onSave={async (sql: string) => {
               try {
                 const statements = sql.split(';').filter((s) => s.trim());
@@ -1230,7 +1231,6 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         activeKey={activeKey}
         onChange={setActiveKey}
         hideAdd
-        destroyInactiveTabPane
         style={{
           flex: 1,
           overflow: 'hidden',

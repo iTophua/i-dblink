@@ -62,7 +62,7 @@ function generateInsertSql(
 ): string {
   const tableRef = escapeSqlIdentifier(tableName, dbType);
   const colStr = columns.map((c) => escapeSqlIdentifier(c, dbType)).join(', ');
-  const values = rows.map((row) => `(${row.map(escapeSqlValue).join(', ')})`).join(',\n');
+  const values = rows.map((row) => `(${row.map((v) => escapeSqlValue(v, dbType)).join(', ')})`).join(',\n');
   return `INSERT INTO ${tableRef} (${colStr})\nVALUES\n${values};`;
 }
 
@@ -76,10 +76,10 @@ function generateUpdateSql(
 ): string {
   const tableRef = escapeSqlIdentifier(tableName, dbType);
   const setters = columns
-    .map((col, i) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(row[i])}`)
+    .map((col, i) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(row[i], dbType)}`)
     .filter((_, i) => i !== pkIdx)
     .join(', ');
-  return `UPDATE ${tableRef} SET ${setters} WHERE ${escapeSqlIdentifier(pkCol, dbType)} = ${escapeSqlValue(row[pkIdx])};`;
+  return `UPDATE ${tableRef} SET ${setters} WHERE ${escapeSqlIdentifier(pkCol, dbType)} = ${escapeSqlValue(row[pkIdx], dbType)}`;
 }
 
 function generateDeleteSql(
@@ -89,7 +89,7 @@ function generateDeleteSql(
   dbType?: DatabaseType
 ): string {
   const tableRef = escapeSqlIdentifier(tableName, dbType);
-  const values = pkValues.map(escapeSqlValue).join(', ');
+  const values = pkValues.map((v) => escapeSqlValue(v, dbType)).join(', ');
   return `DELETE FROM ${tableRef} WHERE ${escapeSqlIdentifier(pkCol, dbType)} IN (${values});`;
 }
 
@@ -443,17 +443,17 @@ export function ResultGrid({
       const setters = changedCols
         .map(
           (col, idx) =>
-            `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[idx])}`
+            `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[idx], dbType)}`
         )
         .join(', ');
       lines.push(
-        `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx])};`
+        `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx], dbType)};`
       );
     }
     for (const rowId of deletedRowIndices) {
       const originalRow = queryResult.rows[rowId];
       lines.push(
-        `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx])};`
+        `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx], dbType)};`
       );
     }
     setOperationSql(lines.join('\n'));
@@ -487,7 +487,7 @@ export function ResultGrid({
             }
           });
           if (cols.length === 0) continue;
-          const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')}) VALUES (${vals.map(escapeSqlValue).join(', ')})`;
+          const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')}) VALUES (${vals.map((v) => escapeSqlValue(v, dbType)).join(', ')})`;
           const res = await executeQuery(connectionId, sql, database);
           if (res.error) {
             errorMsg = res.error;
@@ -517,10 +517,10 @@ export function ResultGrid({
 
         const setters = changedCols
           .map(
-            (col, i) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[i])}`
+            (col, i) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[i], dbType)}`
           )
           .join(', ');
-        const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx])}`;
+        const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx], dbType)}`;
 
         const res = await executeQuery(connectionId, sql, database);
         if (res.error) {
@@ -534,7 +534,7 @@ export function ResultGrid({
       if (!errorMsg) {
         for (const rowId of deletedRowIndices) {
           const originalRow = queryResult.rows[rowId];
-          const sql = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx])}`;
+          const sql = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx], dbType)}`;
           const res = await executeQuery(connectionId, sql, database);
           if (res.error) {
             errorMsg = res.error;
@@ -576,6 +576,8 @@ export function ResultGrid({
     Modal.confirm({
       title: t('common.undoModifications'),
       content: t('common.confirmDiscardAllChanges'),
+      transitionName: '',
+      maskTransitionName: '',
       onOk: () => {
         setModifiedRows(new Map());
         setDeletedRowIndices(new Set());
@@ -601,6 +603,8 @@ export function ResultGrid({
       okText: t('common.markForDeletion'),
       okType: 'danger',
       cancelText: t('common.cancel'),
+      transitionName: '',
+      maskTransitionName: '',
       onOk: () => {
         setDeletedRowIndices((prev) => {
           const next = new Set(prev);
@@ -617,7 +621,8 @@ export function ResultGrid({
   // 右键菜单事件
   const handleContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
-    setContextMenu({ visible: true, x: event.clientX, y: event.clientY });
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextMenu({ visible: true, x: event.clientX - rect.left, y: event.clientY - rect.top });
   }, []);
 
   const closeContextMenu = useCallback(() => {
@@ -716,6 +721,8 @@ export function ResultGrid({
     Modal.info({
       title: t('common.operationSqlPreview'),
       width: 800,
+      transitionName: '',
+      maskTransitionName: '',
       content: (
         <pre
           style={{
@@ -790,7 +797,7 @@ export function ResultGrid({
 
   return (
     <div
-      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}
       onContextMenu={handleContextMenu}
     >
       {/* 顶部元信息栏 */}
@@ -1078,7 +1085,7 @@ export function ResultGrid({
       {contextMenu.visible && (
         <div
           style={{
-            position: 'fixed',
+            position: 'absolute',
             top: contextMenu.y,
             left: contextMenu.x,
             zIndex: 1000,

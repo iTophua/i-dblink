@@ -1,5 +1,5 @@
 import type { ColumnInfo } from '../../types/api';
-import { escapeSqlIdentifier, escapeSqlValue } from '../../utils/sqlUtils';
+import { getDialect } from '../../utils/sqlDialects';
 
 export interface FilterCondition {
   id: string;
@@ -28,57 +28,45 @@ export interface DataTableProps {
 }
 
 export function buildSingleCondition(cond: FilterCondition, dbType?: string): string {
-  const field = escapeSqlIdentifier(cond.field, dbType);
-  const escapedValue = cond.value
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "''")
-    .replace(/%/g, '\\%')
-    .replace(/_/g, '\\_');
-  const quotedValue = `'${escapedValue}'`;
-  let clause = '';
+  const dialect = getDialect(dbType);
+  const field = dialect.escapeIdentifier(cond.field);
 
   switch (cond.operator) {
     case 'equals':
-      clause = `${field} = ${quotedValue}`;
-      break;
+      return `${field} = ${dialect.escapeValue(cond.value)}`;
     case 'notEquals':
-      clause = `${field} != ${quotedValue}`;
-      break;
-    case 'contains':
-      clause = `${field} LIKE '%${escapedValue}%'`;
-      break;
-    case 'notContains':
-      clause = `${field} NOT LIKE '%${escapedValue}%'`;
-      break;
-    case 'startsWith':
-      clause = `${field} LIKE '${escapedValue}%'`;
-      break;
-    case 'endsWith':
-      clause = `${field} LIKE '%${escapedValue}'`;
-      break;
+      return `${field} != ${dialect.escapeValue(cond.value)}`;
+    case 'contains': {
+      const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}%`);
+      return condition.replace('?', dialect.escapeValue(`%${cond.value}%`));
+    }
+    case 'notContains': {
+      const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}%`);
+      return condition.replace('LIKE', 'NOT LIKE').replace('?', dialect.escapeValue(`%${cond.value}%`));
+    }
+    case 'startsWith': {
+      const { condition } = dialect.buildLikeCondition(cond.field, `${cond.value}%`);
+      return condition.replace('?', dialect.escapeValue(`${cond.value}%`));
+    }
+    case 'endsWith': {
+      const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}`);
+      return condition.replace('?', dialect.escapeValue(`%${cond.value}`));
+    }
     case 'isNull':
-      clause = `${field} IS NULL`;
-      break;
+      return `${field} IS NULL`;
     case 'isNotNull':
-      clause = `${field} IS NOT NULL`;
-      break;
-    case 'in':
-      clause = `${field} IN (${escapedValue
-        .split(',')
-        .map((v) => `'${v.trim()}'`)
-        .join(', ')})`;
-      break;
-    case 'notIn':
-      clause = `${field} NOT IN (${escapedValue
-        .split(',')
-        .map((v) => `'${v.trim()}'`)
-        .join(', ')})`;
-      break;
+      return `${field} IS NOT NULL`;
+    case 'in': {
+      const values = cond.value.split(',').map((v) => dialect.escapeValue(v.trim()));
+      return `${field} IN (${values.join(', ')})`;
+    }
+    case 'notIn': {
+      const values = cond.value.split(',').map((v) => dialect.escapeValue(v.trim()));
+      return `${field} NOT IN (${values.join(', ')})`;
+    }
     default:
-      clause = `${field} LIKE '%${escapedValue}%'`;
+      return `${field} = ${dialect.escapeValue(cond.value)}`;
   }
-
-  return clause;
 }
 
 export function buildWhereClause(conditions: FilterCondition[], dbType?: string): string {
@@ -153,30 +141,29 @@ export function buildQuery(
   overrideWhere?: string,
   overrideOrderBy?: string
 ): string {
+  const dialect = getDialect(dbType);
+  const tableRef = dialect.buildTableRef(tableName, database);
   const offset = (page - 1) * size;
-  const tableRef = database
-    ? `${escapeSqlIdentifier(database, dbType)}.${escapeSqlIdentifier(tableName, dbType)}`
-    : `${escapeSqlIdentifier(tableName, dbType)}`;
-  let query = `SELECT * FROM ${tableRef}`;
 
   const whereToUse = overrideWhere !== undefined ? overrideWhere : whereClause;
   const orderByToUse = overrideOrderBy !== undefined ? overrideOrderBy : orderByClause;
 
-  if (whereToUse) {
-    query += ` WHERE ${whereToUse}`;
-  }
-
-  if (orderByToUse) {
-    query += ` ORDER BY ${orderByToUse}`;
-  } else if (sort && sort.length > 0) {
-    const orderClauses = sort
-      .map((s) => `${escapeSqlIdentifier(s.colId, dbType)} ${s.sort.toUpperCase()}`)
+  let orderBy = orderByToUse;
+  if (!orderBy && sort && sort.length > 0) {
+    orderBy = sort
+      .map((s) => `${dialect.escapeIdentifier(s.colId)} ${s.sort.toUpperCase()}`)
       .join(', ');
-    query += ` ORDER BY ${orderClauses}`;
   }
 
-  query += ` LIMIT ${size} OFFSET ${offset}`;
-  return query;
+  let sql = `SELECT * FROM ${tableRef}`;
+  if (whereToUse) {
+    sql += ` WHERE ${whereToUse}`;
+  }
+  if (orderBy) {
+    sql += ` ORDER BY ${orderBy}`;
+  }
+
+  return dialect.buildPaginationQuery(sql, { offset, limit: size });
 }
 
 export function buildCountQuery(
@@ -186,13 +173,8 @@ export function buildCountQuery(
   whereClause: string,
   overrideWhere?: string
 ): string {
-  const tableRef = database
-    ? `${escapeSqlIdentifier(database, dbType)}.${escapeSqlIdentifier(tableName, dbType)}`
-    : `${escapeSqlIdentifier(tableName, dbType)}`;
+  const dialect = getDialect(dbType);
+  const tableRef = dialect.buildTableRef(tableName, database);
   const whereToUse = overrideWhere !== undefined ? overrideWhere : whereClause;
-  let query = `SELECT COUNT(*) AS cnt FROM ${tableRef}`;
-  if (whereToUse) {
-    query += ` WHERE ${whereToUse}`;
-  }
-  return query;
+  return dialect.buildCountQuery(tableRef, whereToUse || undefined);
 }

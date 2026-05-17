@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, GridApi } from 'ag-grid-community';
+import { ColDef, GridApi, RowNode, ICellRendererParams, ColumnResizedEvent, SelectionChangedEvent, CellFocusedEvent, CellValueChangedEvent, CellDoubleClickedEvent, SuppressKeyboardEventParams } from 'ag-grid-community';
 import {
   Spin,
   Empty,
@@ -60,43 +60,6 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import './DataTable.css';
 
-function downloadBlob(content: string, filename: string, type: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function rowsToCsv(columns: string[], rows: RowData[]): string {
-  const escape = (val: unknown) => {
-    if (val === null || val === undefined) return '';
-    const str = String(val);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  };
-  const header = columns.map(escape).join(',');
-  const body = rows.map((row) => columns.map((c) => escape(row[c])).join(',')).join('\n');
-  return `${header}\n${body}`;
-}
-
-function rowsToJson(columns: string[], rows: RowData[]): string {
-  const objs = rows.map((row) => {
-    const obj: Record<string, unknown> = {};
-    columns.forEach((col) => {
-      obj[col] = row[col];
-    });
-    return obj;
-  });
-  return JSON.stringify(objs, null, 2);
-}
-
 interface DataTableProps {
   connectionId: string;
   tableName: string;
@@ -137,7 +100,7 @@ export const DataTable = memo(function DataTable({
   const [columnEditMode, setColumnEditMode] = useState<{
     column: string;
     value: string;
-    originalValues: Map<string, any>;
+    originalValues: Map<string, unknown>;
   } | null>(null);
   const columnEditInputRef = useRef<HTMLInputElement>(null);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
@@ -165,8 +128,8 @@ export const DataTable = memo(function DataTable({
     x: number;
     y: number;
     colId: string;
-    value: any;
-    rowNode: any;
+    value: unknown;
+    rowNode: RowNode | null;
   }>({ visible: false, x: 0, y: 0, colId: '', value: null, rowNode: null });
   
   // 拖拽多选状态
@@ -192,7 +155,7 @@ export const DataTable = memo(function DataTable({
     startRow: number;
     endRow: number;
     value: string;
-    originalValues: Map<string, any>;
+    originalValues: Map<string, unknown>;
   } | null>(null);
   const rangeEditInputRef = useRef<HTMLInputElement>(null);
   const rangeEditModeRef = useRef(rangeEditMode);
@@ -205,12 +168,16 @@ export const DataTable = memo(function DataTable({
   useEffect(() => { selectedColumnRef.current = selectedColumn; }, [selectedColumn]);
   const columnEditModeRef = useRef(columnEditMode);
   useEffect(() => { columnEditModeRef.current = columnEditMode; }, [columnEditMode]);
+  const visibleColumnMapRef = useRef<Map<string, number>>(new Map());
 
   const loadDataRef = useRef<(overrideWhere?: string, overrideOrderBy?: string) => void>(() => {});
   const overrideWhereRef = useRef<string | undefined>(undefined);
   const overrideOrderByRef = useRef<string | undefined>(undefined);
-  const loadTriggerRef = useRef(0);
   const loadCountRef = useRef<(where?: string) => void>(() => {});
+  const loadDataRequestIdRef = useRef(0);
+  const loadCountRequestIdRef = useRef(0);
+  const countLoadingRef = useRef(false);
+  const rowIdCounterRef = useRef(0);
   const onDirtyChangeRef = useRef(onDirtyChange);
   const isInitialLoadRef = useRef(true);
   onDirtyChangeRef.current = onDirtyChange;
@@ -231,6 +198,7 @@ export const DataTable = memo(function DataTable({
   const loadData = useCallback(
     async (overrideWhere?: string, overrideOrderBy?: string) => {
       if (!connectionId || !tableName || loadingRef.current) return;
+      const requestId = ++loadDataRequestIdRef.current;
 
       try {
         loadingRef.current = true;
@@ -255,18 +223,18 @@ export const DataTable = memo(function DataTable({
           executeQuery(connectionId, query, database || ''),
         ]);
 
+        if (requestId !== loadDataRequestIdRef.current) return;
+
         if (dataResult.error) {
           message.error(`${t('common.failedToLoadData')}: ${dataResult.error}`);
           setColumns([]);
           setRowData([]);
         } else {
-          const rowIdPrefix = `row-${Date.now()}-`;
-          let rowIdCounter = 0;
           const data = dataResult.rows.map((row) => {
             const rowData: RowData = {
-              __row_id__: `${rowIdPrefix}${rowIdCounter++}`,
+              __row_id__: `row-${++rowIdCounterRef.current}`,
             };
-            const originalData: Record<string, any> = {};
+            const originalData: Record<string, unknown> = {};
             for (let colIndex = 0; colIndex < dataResult.columns.length; colIndex++) {
               const col = dataResult.columns[colIndex];
               const value = row[colIndex];
@@ -280,18 +248,21 @@ export const DataTable = memo(function DataTable({
           setRowData(data);
           setHasEverLoaded(true);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (requestId !== loadDataRequestIdRef.current) return;
         console.error('Failed to load table data:', error);
-        message.error(`${t('common.failedToLoadData')}: ${error.message || error}`);
+        message.error(`${t('common.failedToLoadData')}: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`);
         setColumns([]);
         setRowData([]);
         setHasEverLoaded(true);
       } finally {
-        setLoading(false);
-        loadingRef.current = false;
+        if (requestId === loadDataRequestIdRef.current) {
+          setLoading(false);
+          loadingRef.current = false;
+        }
       }
     },
-    [connectionId, tableName, database, currentPage, pageSize, sortModel]
+    [connectionId, tableName, database, currentPage, pageSize, sortModel, whereClause, orderByClause]
   );
 
   loadDataRef.current = loadData;
@@ -323,8 +294,8 @@ export const DataTable = memo(function DataTable({
     if (!api) return;
     
     // 保存所有行的原始值
-    const originalValues = new Map<string, any>();
-    api.forEachNode((node: any) => {
+    const originalValues = new Map<string, unknown>();
+    api.forEachNode((node: RowNode) => {
       if (node.data) {
         originalValues.set(node.data.__row_id__, node.data[column]);
       }
@@ -335,7 +306,7 @@ export const DataTable = memo(function DataTable({
     // 如果有初始值，立即更新所有行
     if (initialValue !== '') {
       const updates: RowData[] = [];
-      api.forEachNode((node: any) => {
+      api.forEachNode((node: RowNode) => {
         if (node.data) {
           const updatedRow = { ...node.data, [column]: initialValue || null };
           updates.push(updatedRow);
@@ -361,7 +332,7 @@ export const DataTable = memo(function DataTable({
       const api = gridApiRef.current;
       if (api) {
         const updates: RowData[] = [];
-        api.forEachNode((node: any) => {
+        api.forEachNode((node: RowNode) => {
           if (node.data) {
             const updatedRow = { ...node.data, [prev.column]: newValue || null };
             updates.push(updatedRow);
@@ -395,11 +366,11 @@ export const DataTable = memo(function DataTable({
       setLoading(true);
       let successCount = 0;
       let errorMessage = '';
-      const valueStr = value === '' || value === null ? 'NULL' : escapeSqlValue(value);
+      const valueStr = value === '' || value === null ? 'NULL' : escapeSqlValue(value, dbType);
       
       // 逐行提交
-      const rowsToUpdate: { rowId: string; pkValue: any }[] = [];
-      api.forEachNode((node: any) => {
+      const rowsToUpdate: { rowId: string; pkValue: unknown }[] = [];
+      api.forEachNode((node: RowNode) => {
         if (node.data && node.data.__status__ !== 'new') {
           const originalValue = originalValues.get(node.data.__row_id__);
           if (originalValue !== value) {
@@ -412,7 +383,7 @@ export const DataTable = memo(function DataTable({
       });
       
       for (const { pkValue } of rowsToUpdate) {
-        const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(column, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+        const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(column, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
         setLastDmlSql(updateSQL);
         
         const result = await executeQuery(connectionId, updateSQL, database || '');
@@ -427,7 +398,7 @@ export const DataTable = memo(function DataTable({
         message.error(`${t('common.dataGrid.updateFailed')}: ${errorMessage}`);
         // 回滚所有变更
         const reverts: RowData[] = [];
-        api.forEachNode((node: any) => {
+        api.forEachNode((node: RowNode) => {
           if (node.data) {
             const originalValue = originalValues.get(node.data.__row_id__);
             reverts.push({ ...node.data, [column]: originalValue });
@@ -438,7 +409,7 @@ export const DataTable = memo(function DataTable({
         message.success(`${t('common.dataGrid.updateSuccess')} ${successCount} ${t('common.rows')}`);
         // 更新 original_data
         const updates: RowData[] = [];
-        api.forEachNode((node: any) => {
+        api.forEachNode((node: RowNode) => {
           if (node.data) {
             const updatedRow = { 
               ...node.data, 
@@ -450,8 +421,8 @@ export const DataTable = memo(function DataTable({
         });
         api.applyTransaction({ update: updates });
       }
-    } catch (error: any) {
-      message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+    } catch (error: unknown) {
+      message.error(`${t('common.dataGrid.updateFailed')}: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
       setColumnEditMode(null);
@@ -466,7 +437,7 @@ export const DataTable = memo(function DataTable({
     if (!api) return;
 
     const reverts: RowData[] = [];
-    api.forEachNode((node: any) => {
+    api.forEachNode((node: RowNode) => {
       if (node.data) {
         const originalValue = originalValues.get(node.data.__row_id__);
         reverts.push({ ...node.data, [column]: originalValue });
@@ -484,7 +455,7 @@ export const DataTable = memo(function DataTable({
 
     const allColumns = api.getColumnDefs();
     if (!allColumns) return;
-    const visibleCols = allColumns.filter((c: any) => !c.hide && c.field !== '__status__');
+    const visibleCols = allColumns.filter((c: ColDef) => !c.hide && c.field !== '__status__');
     const colDef = visibleCols[range.startCol] as ColDef | undefined;
     if (!colDef) return;
     const column = colDef.field as string;
@@ -493,7 +464,7 @@ export const DataTable = memo(function DataTable({
     const minRow = Math.min(range.startRow, range.endRow);
     const maxRow = Math.max(range.startRow, range.endRow);
 
-    const originalValues = new Map<string, any>();
+    const originalValues = new Map<string, unknown>();
     for (let i = minRow; i <= maxRow; i++) {
       const node = api.getDisplayedRowAtIndex(i);
       if (node?.data) {
@@ -562,9 +533,9 @@ export const DataTable = memo(function DataTable({
       setLoading(true);
       let successCount = 0;
       let errorMessage = '';
-      const valueStr = value === '' || value === null ? 'NULL' : escapeSqlValue(value);
+      const valueStr = value === '' || value === null ? 'NULL' : escapeSqlValue(value, dbType);
 
-      const rowsToUpdate: { rowId: string; pkValue: any }[] = [];
+      const rowsToUpdate: { rowId: string; pkValue: unknown }[] = [];
       for (let i = startRow; i <= endRow; i++) {
         const node = api.getDisplayedRowAtIndex(i);
         if (!node?.data || node.data.__status__ === 'new') continue;
@@ -578,7 +549,7 @@ export const DataTable = memo(function DataTable({
       }
 
       for (const { pkValue } of rowsToUpdate) {
-        const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(column, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+        const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(column, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
         setLastDmlSql(updateSQL);
 
         const result = await executeQuery(connectionId, updateSQL, database || '');
@@ -616,8 +587,8 @@ export const DataTable = memo(function DataTable({
         }
         api.applyTransaction({ update: updates });
       }
-    } catch (error: any) {
-      message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+    } catch (error: unknown) {
+      message.error(`${t('common.dataGrid.updateFailed')}: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
       setRangeEditMode(null);
@@ -657,7 +628,7 @@ export const DataTable = memo(function DataTable({
       filter: false,
       resizable: false,
       suppressSizeToFit: true,
-      cellRenderer: (params: any) => {
+      cellRenderer: (params: ICellRendererParams) => {
         const status = params.data?.__status__;
         if (status === 'new')
           return <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>+</span>;
@@ -694,7 +665,7 @@ export const DataTable = memo(function DataTable({
       const isDate = dataType.includes('DATE') || dataType.includes('TIME');
       const isEnum = dataType.startsWith('ENUM') || dataType.startsWith('SET');
 
-      let cellEditor: any = undefined;
+      let cellEditor: unknown = undefined;
       if (isBoolean) {
         cellEditor = 'agCheckboxCellEditor';
       } else if (isDate) {
@@ -729,7 +700,7 @@ export const DataTable = memo(function DataTable({
             setSelectedColumn(field);
           },
         },
-        cellClass: (params: any) => {
+        cellClass: (params: ICellRendererParams) => {
           const classes: string[] = [];
           if (params.value === null) classes.push('null-cell');
           if (
@@ -741,12 +712,14 @@ export const DataTable = memo(function DataTable({
           if (selectedColumn === col.column_name) {
             classes.push('column-selected');
           }
+
+          const rowIndex = params.rowIndex;
+          const colIndex = visibleColumnMapRef.current.get(col.column_name);
+          if (colIndex === undefined || rowIndex < 0) {
+            return classes.length > 0 ? classes.join(' ') : undefined;
+          }
+
           const inRange = (range: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
-            const rowIndex = params.rowIndex;
-            const allColumns = params.api.getColumnDefs();
-            const visibleCols = allColumns.filter((c: any) => !c.hide && c.field !== '__status__');
-            const colIndex = visibleCols.findIndex((c: any) => c.field === col.column_name);
-            if (colIndex < 0 || rowIndex < 0) return false;
             const minRow = Math.min(range.startRow, range.endRow);
             const maxRow = Math.max(range.startRow, range.endRow);
             const minCol = Math.min(range.startCol, range.endCol);
@@ -754,11 +727,6 @@ export const DataTable = memo(function DataTable({
             return rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
           };
           const inRangeEdge = (range: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
-            const rowIndex = params.rowIndex;
-            const allColumns = params.api.getColumnDefs();
-            const visibleCols = allColumns.filter((c: any) => !c.hide && c.field !== '__status__');
-            const colIndex = visibleCols.findIndex((c: any) => c.field === col.column_name);
-            if (colIndex < 0 || rowIndex < 0) return null;
             const minRow = Math.min(range.startRow, range.endRow);
             const maxRow = Math.max(range.startRow, range.endRow);
             const minCol = Math.min(range.startCol, range.endCol);
@@ -785,7 +753,7 @@ export const DataTable = memo(function DataTable({
           }
           return classes.length > 0 ? classes.join(' ') : undefined;
         },
-        cellRenderer: (params: any) => {
+        cellRenderer: (params: ICellRendererParams) => {
           if (params.value === null) {
             return <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>NULL</span>;
           }
@@ -797,8 +765,16 @@ export const DataTable = memo(function DataTable({
       } as ColDef;
     });
 
-    return [statusColumn, ...dataColumns];
-  }, [columns, colWidths, hiddenColumns, selectedColumn, columnEditMode, commitColumnEdit, dragSelectRange, cellSelectionRange]);
+    const allCols = [statusColumn, ...dataColumns];
+    const visibleCols = allCols.filter((c: ColDef) => !c.hide && c.field !== '__status__');
+    const newMap = new Map<string, number>();
+    visibleCols.forEach((c: ColDef, idx: number) => {
+      if (c.field) newMap.set(c.field, idx);
+    });
+    visibleColumnMapRef.current = newMap;
+
+    return allCols;
+  }, [columns, colWidths, hiddenColumns, selectedColumn, columnEditMode, commitColumnEdit]);
 
   useEffect(() => {
     if (gridApiRef.current && columns.length > 0) {
@@ -818,20 +794,45 @@ export const DataTable = memo(function DataTable({
 
   const loadCount = useCallback(
     async (overrideWhere?: string) => {
+      if (!connectionId || !tableName || countLoadingRef.current) return;
+      const requestId = ++loadCountRequestIdRef.current;
+
       try {
+        countLoadingRef.current = true;
         const query = buildCountQuery(tableName, database, dbType, whereClause, overrideWhere);
         const result = await executeQuery(connectionId, query, database || '');
+        if (requestId !== loadCountRequestIdRef.current) return;
         if (!result.error && result.rows.length > 0) {
           setTotalCount(Number(result.rows[0][0]));
         }
       } catch (error) {
+        if (requestId !== loadCountRequestIdRef.current) return;
         console.error('Failed to load count:', error);
+      } finally {
+        if (requestId === loadCountRequestIdRef.current) {
+          countLoadingRef.current = false;
+        }
       }
     },
     [connectionId, tableName, database, executeQuery, dbType, whereClause]
   );
 
   loadCountRef.current = loadCount;
+
+  const latestRef = useRef({
+    columns, tableName, dbType, connectionId, database, executeQuery,
+    whereClause, loadData, loadCount, t,
+    cancelColumnEdit, commitColumnEdit, updateColumnEditValue,
+    startColumnEdit, cancelRangeEdit, commitRangeEdit, updateRangeEditValue,
+    startRangeEdit,
+  });
+  latestRef.current = {
+    columns, tableName, dbType, connectionId, database, executeQuery,
+    whereClause, loadData, loadCount, t,
+    cancelColumnEdit, commitColumnEdit, updateColumnEditValue,
+    startColumnEdit, cancelRangeEdit, commitRangeEdit, updateRangeEditValue,
+    startRangeEdit,
+  };
 
   useEffect(() => {
     const gridContainer = gridContainerRef.current;
@@ -847,10 +848,10 @@ export const DataTable = memo(function DataTable({
 
     const getVisibleCols = () => {
       const api = gridApiRef.current;
-      if (!api) return [] as any[];
+      if (!api) return [] as ColDef[];
       const allColumns = api.getColumnDefs();
-      if (!allColumns) return [] as any[];
-      return allColumns.filter((c: any) => !c.hide && c.field !== '__status__');
+      if (!allColumns) return [] as ColDef[];
+      return allColumns.filter((c: ColDef) => !c.hide && c.field !== '__status__');
     };
 
     type StartInfo = {
@@ -898,7 +899,7 @@ export const DataTable = memo(function DataTable({
         const colId = cell.getAttribute('col-id');
         isStatusColumn = colId === '__status__';
         if (!isStatusColumn) {
-          colIndex = visibleCols.findIndex((c: any) => c.field === colId || c.colId === colId);
+          colIndex = visibleCols.findIndex((c: ColDef) => c.field === colId || c.colId === colId);
         }
       }
 
@@ -919,8 +920,15 @@ export const DataTable = memo(function DataTable({
         if (node) node.setSelected(true);
       }
 
-      const handleMove = (me: PointerEvent) => {
-        if (!startInfo) return;
+      let rafId = 0;
+      let pendingMove: PointerEvent | null = null;
+      
+      const processMove = () => {
+        rafId = 0;
+        const me = pendingMove;
+        if (!me || !startInfo) return;
+        pendingMove = null;
+
         const dx = Math.abs(me.clientX - startInfo.startX);
         const dy = Math.abs(me.clientY - startInfo.startY);
 
@@ -945,7 +953,7 @@ export const DataTable = memo(function DataTable({
         if (curCell) {
           const colId = curCell.getAttribute('col-id');
           if (colId !== '__status__') {
-            curColIndex = visCols.findIndex((c: any) => c.field === colId || c.colId === colId);
+            curColIndex = visCols.findIndex((c: ColDef) => c.field === colId || c.colId === colId);
           }
         }
 
@@ -967,15 +975,25 @@ export const DataTable = memo(function DataTable({
         const endCol = isRowSelect ? maxColIndex : curColIndex;
         const startCol = isRowSelect ? 0 : Math.max(0, startInfo.colIndex);
 
-        lastDragRange = {
+        const newRange = {
           startRow: startInfo.rowIndex,
           endRow,
           startCol,
           endCol,
           active: true,
         };
-        dragSelectRangeRef.current = lastDragRange;
-        setDragSelectRange(lastDragRange);
+        
+        const rangeChanged = !lastDragRange || 
+          lastDragRange.startRow !== newRange.startRow ||
+          lastDragRange.endRow !== newRange.endRow ||
+          lastDragRange.startCol !== newRange.startCol ||
+          lastDragRange.endCol !== newRange.endCol;
+        
+        if (!rangeChanged) return;
+        
+        lastDragRange = newRange;
+        dragSelectRangeRef.current = newRange;
+        setDragSelectRange(newRange);
         cellSelectionRangeRef.current = null;
         setCellSelectionRange(null);
 
@@ -988,9 +1006,27 @@ export const DataTable = memo(function DataTable({
         }
         api.redrawRows();
       };
+      
+      const handleMove = (me: PointerEvent) => {
+        if (!startInfo) return;
+        const dx = Math.abs(me.clientX - startInfo.startX);
+        const dy = Math.abs(me.clientY - startInfo.startY);
+        if (!isDraggingRef.current && dx <= DRAG_THRESHOLD && dy <= DRAG_THRESHOLD) return;
+        
+        pendingMove = me;
+        if (!rafId) {
+          rafId = requestAnimationFrame(processMove);
+        }
+      };
 
       const handleUp = () => {
         cleanupDragListeners();
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+          rafId = 0;
+        }
+        pendingMove = null;
+        
         if (!startInfo) return;
 
         if (isDraggingRef.current && lastDragRange?.active) {
@@ -1026,6 +1062,11 @@ export const DataTable = memo(function DataTable({
 
       const handleCancel = () => {
         cleanupDragListeners();
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+          rafId = 0;
+        }
+        pendingMove = null;
         isDraggingRef.current = false;
         dragStartCellRef.current = null;
         startInfo = null;
@@ -1055,92 +1096,106 @@ export const DataTable = memo(function DataTable({
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
+      const latest = latestRef.current;
+
+      // AG Grid 编辑模式下 Cmd+Enter 提交编辑
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        const api = gridApiRef.current;
+        if (api) {
+          const editingCells = (api as unknown as { getEditingCells?: () => unknown[] }).getEditingCells?.() || [];
+          if (editingCells.length > 0) {
+            e.preventDefault();
+            api.stopEditing();
+            return;
+          }
+        }
+      }
 
       // 范围批量编辑模式：处理输入
-      if (rangeEditMode) {
+      if (rangeEditModeRef.current) {
         if (e.key === 'Escape') {
           e.preventDefault();
-          cancelRangeEdit();
+          latest.cancelRangeEdit();
           return;
         }
         if (e.key === 'Enter' || e.key === 'Tab') {
           e.preventDefault();
-          commitRangeEdit();
+          latest.commitRangeEdit();
           return;
         }
         if (e.key.startsWith('Arrow')) {
           e.preventDefault();
-          commitRangeEdit();
+          latest.commitRangeEdit();
           return;
         }
         if (e.key === 'Backspace') {
           e.preventDefault();
-          updateRangeEditValue(rangeEditMode.value.slice(0, -1));
+          latest.updateRangeEditValue(rangeEditModeRef.current.value.slice(0, -1));
           return;
         }
         if (e.key === 'Delete') {
           e.preventDefault();
-          updateRangeEditValue('');
+          latest.updateRangeEditValue('');
           return;
         }
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
-          updateRangeEditValue(rangeEditMode.value + e.key);
+          latest.updateRangeEditValue(rangeEditModeRef.current.value + e.key);
           return;
         }
         return;
       }
 
       // 列批量编辑模式：处理输入
-      if (columnEditMode) {
+      if (columnEditModeRef.current) {
         if (e.key === 'Escape') {
           e.preventDefault();
-          cancelColumnEdit();
+          latest.cancelColumnEdit();
           return;
         }
         if (e.key === 'Enter' || e.key === 'Tab') {
           e.preventDefault();
-          commitColumnEdit();
+          latest.commitColumnEdit();
           return;
         }
         if (e.key.startsWith('Arrow')) {
           e.preventDefault();
-          commitColumnEdit();
+          latest.commitColumnEdit();
           return;
         }
         if (e.key === 'Backspace') {
           e.preventDefault();
-          updateColumnEditValue(columnEditMode.value.slice(0, -1));
+          latest.updateColumnEditValue(columnEditModeRef.current.value.slice(0, -1));
           return;
         }
         if (e.key === 'Delete') {
           e.preventDefault();
-          updateColumnEditValue('');
+          latest.updateColumnEditValue('');
           return;
         }
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
-          updateColumnEditValue(columnEditMode.value + e.key);
+          latest.updateColumnEditValue(columnEditModeRef.current.value + e.key);
           return;
         }
         return;
       }
 
       // 有矩形选区：按任意字符键进入范围编辑
-      if (cellSelectionRange && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (cellSelectionRangeRef.current && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
           return;
         e.preventDefault();
-        startRangeEdit(cellSelectionRange, e.key);
+        latest.startRangeEdit(cellSelectionRangeRef.current, e.key);
         return;
       }
 
       // 选中列但未进入编辑模式：按任意字符键进入列编辑
-      if (selectedColumn && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (selectedColumnRef.current && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
           return;
         e.preventDefault();
-        startColumnEdit(selectedColumn, e.key);
+        latest.startColumnEdit(selectedColumnRef.current, e.key);
         return;
       }
 
@@ -1154,9 +1209,9 @@ export const DataTable = memo(function DataTable({
       const selectedToDelete = api.getSelectedRows();
       if (selectedToDelete.length === 0) return;
 
-      const pkCol = columns.find((col) => col.column_key === 'PRI');
-      if (!pkCol && selectedToDelete.some((row) => row.__status__ !== 'new')) {
-        message.warning(t('common.tableHasNoPrimaryKeyCannotDeleteExistingRows'));
+      const pkCol = latest.columns.find((col: ColumnInfo) => col.column_key === 'PRI');
+      if (!pkCol && selectedToDelete.some((row: RowData) => row.__status__ !== 'new')) {
+        message.warning(latest.t('common.tableHasNoPrimaryKeyCannotDeleteExistingRows'));
         return;
       }
       e.preventDefault();
@@ -1175,9 +1230,9 @@ export const DataTable = memo(function DataTable({
           }
 
           const pkValue = row[pkCol!.column_name];
-          const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+          const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(latest.tableName, latest.dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, latest.dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
           setLastDmlSql(deleteSQL);
-          const result = await executeQuery(connectionId, deleteSQL, database || '');
+          const result = await latest.executeQuery(latest.connectionId, deleteSQL, latest.database || '');
 
           if (result.error) {
             errorMessage = result.error;
@@ -1187,26 +1242,27 @@ export const DataTable = memo(function DataTable({
         }
 
         if (errorMessage) {
-          message.error(`${t('common.dataGrid.deleteFailed')}: ${errorMessage}`);
+          message.error(`${latest.t('common.dataGrid.deleteFailed')}: ${errorMessage}`);
         } else {
-          message.success(`${t('common.dataGrid.deleteSuccess')} ${successCount} ${t('common.rows')}`);
-          loadData();
-          loadCount(whereClause);
+          message.success(`${latest.t('common.dataGrid.deleteSuccess')} ${successCount} ${latest.t('common.rows')}`);
+          latest.loadData();
+          latest.loadCount(latest.whereClause);
         }
-      } catch (error: any) {
-        message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message}`);
+      } catch (error: unknown) {
+        message.error(`${latest.t('common.dataGrid.deleteFailed')}: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         setLoading(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, whereClause, columnEditMode, cancelColumnEdit, commitColumnEdit, updateColumnEditValue, selectedColumn, startColumnEdit, cancelRangeEdit, commitRangeEdit, updateRangeEditValue, cellSelectionRange, startRangeEdit]);
+  }, []);
 
   useEffect(() => {
     setHasEverLoaded(false);
     setSortModel([]);
     isInitialLoadRef.current = true;
+    pendingNewRowsRef.current.clear();
     loadDataRef.current();
     loadCountRef.current(whereClause);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1231,13 +1287,19 @@ export const DataTable = memo(function DataTable({
       maxWidth: 300,
       width: 120,
       cellStyle: { padding: '0 6px', fontSize: 12 },
+      suppressKeyboardEvent: (params: SuppressKeyboardEventParams) => {
+        if (params.editing && params.event.key === 'Enter' && !params.event.metaKey && !params.event.ctrlKey) {
+          return true;
+        }
+        return false;
+      },
     }),
     []
   );
 
   const onCellDoubleClicked = useCallback(
-    (event: any) => {
-      const field = event.colDef.field;
+(event: CellDoubleClickedEvent) => {
+    const field = event.colDef.field;
       if (!field) return;
       const colInfo = columns.find((c) => c.column_name === field);
       if (!colInfo) return;
@@ -1262,7 +1324,7 @@ export const DataTable = memo(function DataTable({
 
   const pendingNewRowsRef = useRef<Set<string>>(new Set());
 
-  const onCellValueChanged = useCallback(async (event: any) => {
+  const onCellValueChanged = useCallback(async (event: CellValueChangedEvent) => {
     if (event.newValue === event.oldValue) return;
     
     const field = event.colDef.field;
@@ -1287,8 +1349,8 @@ export const DataTable = memo(function DataTable({
     const pkValue = updatedRow[pkCol.column_name];
     const valueStr = event.newValue === null || event.newValue === '' 
       ? 'NULL' 
-      : escapeSqlValue(event.newValue);
-    const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(field, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+      : escapeSqlValue(event.newValue, dbType);
+    const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(field, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
     setLastDmlSql(updateSQL);
     
     try {
@@ -1321,25 +1383,14 @@ export const DataTable = memo(function DataTable({
       gridApiRef.current?.applyTransaction({ update: [updatedRow] });
       
       message.success(`${t('common.dataGrid.updateSuccess')} 1 ${t('common.rows')}`);
-    } catch (error: any) {
-      message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+    } catch (error: unknown) {
+      message.error(`${t('common.dataGrid.updateFailed')}: ${error instanceof Error ? error.message : String(error)}`);
       const revertedRow = { ...event.data, [field]: event.oldValue };
       gridApiRef.current?.applyTransaction({ update: [revertedRow] });
     }
-  }, [columns, tableName, dbType, connectionId, database, executeQuery]);
+  }, [columns, tableName, dbType, connectionId, database, executeQuery, t]);
 
   // === 列批量编辑功能 ===
-  const handleContextMenu = useCallback((event: React.MouseEvent, rowData: RowData) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setContextMenu({
-      visible: true,
-      x: event.clientX,
-      y: event.clientY,
-      rowData,
-    });
-  }, []);
-
   const closeContextMenu = useCallback(() => {
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, []);
@@ -1349,8 +1400,6 @@ export const DataTable = memo(function DataTable({
       closeContextMenu();
       const row = contextMenu.rowData;
       if (!row) return;
-
-      const primaryKey = columns.find((col) => col.column_key === 'PRI');
 
       switch (action) {
         case 'copy-row':
@@ -1370,6 +1419,8 @@ export const DataTable = memo(function DataTable({
               okText: t('common.delete'),
               okType: 'danger',
               cancelText: t('common.cancel'),
+              transitionName: '',
+              maskTransitionName: '',
               onOk: async () => {
                 try {
                   if (row.__status__ === 'new') {
@@ -1380,7 +1431,7 @@ export const DataTable = memo(function DataTable({
                   }
 
                   const pkValue = row[pkCol!.column_name];
-                  const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+                  const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
                   setLastDmlSql(deleteSQL);
                   const result = await executeQuery(connectionId, deleteSQL, database || '');
 
@@ -1391,15 +1442,94 @@ export const DataTable = memo(function DataTable({
                     loadData();
                     loadCount(whereClause);
                   }
-                } catch (error: any) {
-                  message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message}`);
+                } catch (error: unknown) {
+                  message.error(`${t('common.dataGrid.deleteFailed')}: ${error instanceof Error ? error.message : String(error)}`);
                 }
               },
             });
           }
           break;
 
-        case 'copy-select':
+        case 'copy-as-insert-select': {
+          const selectedRowsInsert = gridApiRef.current?.getSelectedRows() || [];
+          if (selectedRowsInsert.length === 0) {
+            message.warning(t('common.noRowsSelected'));
+            return;
+          }
+          if (!tableName || !columns.length) {
+            message.warning(t('common.cannotDetermineTableStructure'));
+            return;
+          }
+          const colStr = columns
+            .map((c) => escapeSqlIdentifier(c.column_name, dbType))
+            .join(', ');
+          const valuesStr = selectedRowsInsert.map((row: RowData) => {
+            const vals = columns.map((c) => escapeSqlValue(row[c.column_name] ?? null, dbType));
+            return `(${vals.join(', ')})`;
+          }).join(',\n');
+          const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStr})\nVALUES\n${valuesStr};`;
+          navigator.clipboard.writeText(sql);
+          message.success(
+            `${t('common.insertStatementCopied')} (${selectedRowsInsert.length} ${t('common.rows')})`
+          );
+          break;
+        }
+        case 'copy-as-insert-multi-select': {
+          const selectedRowsInsertMulti = gridApiRef.current?.getSelectedRows() || [];
+          if (selectedRowsInsertMulti.length === 0) {
+            message.warning(t('common.noRowsSelected'));
+            return;
+          }
+          if (!tableName || !columns.length) {
+            message.warning(t('common.cannotDetermineTableStructure'));
+            return;
+          }
+          const colStrMulti = columns
+            .map((c) => escapeSqlIdentifier(c.column_name, dbType))
+            .join(', ');
+          const sqls = selectedRowsInsertMulti.map((row: RowData) => {
+            const vals = columns.map((c) => escapeSqlValue(row[c.column_name] ?? null, dbType));
+            return `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStrMulti}) VALUES (${vals.join(', ')});`;
+          });
+          navigator.clipboard.writeText(sqls.join('\n'));
+          message.success(
+            `${t('common.insertStatementCopied')} (${selectedRowsInsertMulti.length} ${t('common.rows')})`
+          );
+          break;
+        }
+        case 'copy-as-update-select': {
+          const selectedRowsUpdate = gridApiRef.current?.getSelectedRows() || [];
+          if (selectedRowsUpdate.length === 0) {
+            message.warning(t('common.noRowsSelected'));
+            return;
+          }
+          if (!tableName || !primaryKey || !columns.length) {
+            message.warning(t('common.cannotGenerateUpdateStatement'));
+            return;
+          }
+          const pkIdx = columns.findIndex((c) => c.column_name === primaryKey.column_name);
+          if (pkIdx < 0) {
+            message.warning(t('common.primaryKeyColumnNotFound'));
+            return;
+          }
+          const sqls = selectedRowsUpdate.map((row: RowData) => {
+            const values = columns.map((c) => row[c.column_name] ?? null);
+            const setters = columns
+              .map(
+                (c, i) =>
+                  `${escapeSqlIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i], dbType)}`
+              )
+              .filter((_, i) => i !== pkIdx)
+              .join(', ');
+            return `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(values[pkIdx], dbType)};`;
+          });
+          navigator.clipboard.writeText(sqls.join('\n'));
+          message.success(
+            `${t('common.updateStatementCopied')} (${selectedRowsUpdate.length} ${t('common.rows')})`
+          );
+          break;
+        }
+        case 'copy-select': {
           const selectedRows = gridApiRef.current?.getSelectedRows() || [];
           if (selectedRows.length === 0) {
             message.warning(t('common.noRowsSelected'));
@@ -1410,6 +1540,7 @@ export const DataTable = memo(function DataTable({
             `${t('common.copyTable.copied')} ${selectedRows.length} ${t('common.rowsToClipboard')}`
           );
           break;
+        }
         case 'delete-select':
           {
             const selectedToDelete = gridApiRef.current?.getSelectedRows() || [];
@@ -1423,6 +1554,8 @@ export const DataTable = memo(function DataTable({
               okText: t('common.delete'),
               okType: 'danger',
               cancelText: t('common.cancel'),
+              transitionName: '',
+              maskTransitionName: '',
               onOk: async () => {
                 try {
                   setLoading(true);
@@ -1444,7 +1577,7 @@ export const DataTable = memo(function DataTable({
                     }
 
                     const pkValue = row[pkCol.column_name];
-                    const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+                    const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
                     setLastDmlSql(deleteSQL);
                     const result = await executeQuery(connectionId, deleteSQL, database || '');
 
@@ -1462,8 +1595,8 @@ export const DataTable = memo(function DataTable({
                     loadData();
                     loadCount(whereClause);
                   }
-                } catch (error: any) {
-                  message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message}`);
+                } catch (error: unknown) {
+                  message.error(`${t('common.dataGrid.deleteFailed')}: ${error instanceof Error ? error.message : String(error)}`);
                 } finally {
                   setLoading(false);
                 }
@@ -1523,7 +1656,7 @@ export const DataTable = memo(function DataTable({
         }
 
         const pkValue = row[pkCol!.column_name];
-        const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+        const deleteSQL = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
         setLastDmlSql(deleteSQL);
         const result = await executeQuery(connectionId, deleteSQL, database || '');
 
@@ -1542,9 +1675,9 @@ export const DataTable = memo(function DataTable({
         loadData();
         loadCount(whereClause);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Delete error:', error);
-      message.error(`${t('common.dataGrid.deleteFailed')}: ${error.message || error}`);
+      message.error(`${t('common.dataGrid.deleteFailed')}: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`);
     } finally {
       setLoading(false);
     }
@@ -1589,7 +1722,7 @@ export const DataTable = memo(function DataTable({
     message.success(t('common.importExport.exportSuccess'));
   }, [rowData, columns, tableName]);
 
-  const displayedSql = lastDmlSql || currentSql;
+  const displayedSql = currentSql;
   
   const copySql = useCallback(() => {
     navigator.clipboard.writeText(displayedSql);
@@ -1634,13 +1767,6 @@ export const DataTable = memo(function DataTable({
     }
   }, []);
 
-  const addFilterCondition = useCallback(() => {
-    setFilterConditions((prev) => [
-      ...prev,
-      { id: `filter-${Date.now()}`, field: '', operator: 'contains', value: '', logic: 'AND' },
-    ]);
-  }, []);
-
   const removeFilterCondition = useCallback((id: string) => {
     setFilterConditions((prev) => prev.filter((c) => c.id !== id));
   }, []);
@@ -1655,7 +1781,7 @@ export const DataTable = memo(function DataTable({
     setCurrentPage(1);
     loadData(where, orderByClause);
     loadCount(where);
-  }, [filterConditions, buildWhereClause, orderByClause]);
+  }, [filterConditions, buildWhereClause, orderByClause, dbType, loadData, loadCount]);
 
   const clearFilter = useCallback(() => {
     setFilterConditions([
@@ -1672,17 +1798,17 @@ export const DataTable = memo(function DataTable({
     setFilterPanelOpen((prev) => !prev);
   }, []);
 
-  const onSelectionChanged = useCallback((event: any) => {
+  const onSelectionChanged = useCallback((event: SelectionChangedEvent) => {
     const selected = event.api.getSelectedRows();
     setSelectedRows(selected);
   }, []);
 
-  const onGridReady = useCallback((event: any) => {
+  const onGridReady = useCallback((event: { api: GridApi }) => {
     gridApiRef.current = event.api;
   }, []);
 
   // 记录用户手动调整的列宽
-  const onColumnResized = useCallback((event: any) => {
+  const onColumnResized = useCallback((event: ColumnResizedEvent) => {
     if (event.finished && event.column) {
       const colId = event.column.getColId();
       const newWidth = event.column.getActualWidth();
@@ -1732,7 +1858,7 @@ export const DataTable = memo(function DataTable({
           (key) => !key.startsWith('__') && row[key] !== undefined
         );
         const values_list = columns_list.map((col) =>
-          row[col] === null || row[col] === '' ? 'NULL' : escapeSqlValue(row[col])
+          row[col] === null || row[col] === '' ? 'NULL' : escapeSqlValue(row[col], dbType)
         );
 
         if (columns_list.length === 0) continue;
@@ -1748,8 +1874,8 @@ export const DataTable = memo(function DataTable({
           pendingNewRowsRef.current.delete(row.__row_id__ || '');
           message.success(`${t('common.dataGrid.insertSuccess')} 1 ${t('common.rows')}`);
         }
-      } catch (error: any) {
-        message.error(`${t('common.dataGrid.insertFailed')}: ${error.message}`);
+      } catch (error: unknown) {
+        message.error(`${t('common.dataGrid.insertFailed')}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
@@ -1761,7 +1887,7 @@ export const DataTable = memo(function DataTable({
   }, [columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, whereClause]);
 
   // 当焦点离开新行时，尝试自动插入
-  const onCellFocused = useCallback(async (event: any) => {
+  const onCellFocused = useCallback(async (event: CellFocusedEvent) => {
     if (pendingNewRowsRef.current.size === 0) return;
 
     const focusedRowId = event.rowIndex != null
@@ -1784,10 +1910,14 @@ export const DataTable = memo(function DataTable({
       const api = gridApiRef.current;
       if (!api) return;
 
+      const hasFocus = document.activeElement?.closest('.ag-root') !== null;
+      const hasSelection = api.getSelectedRows().length > 0 || selectedColumnRef.current;
+      if (!hasFocus && !hasSelection) return;
+
       // 如果有列被选中，复制整列数据
       if (selectedColumn) {
         const allRows: string[] = [];
-        api.forEachNode((node: any) => {
+        api.forEachNode((node: RowNode) => {
           const value = node.data?.[selectedColumn];
           allRows.push(value === null || value === undefined ? 'NULL' : String(value));
         });
@@ -1823,6 +1953,9 @@ export const DataTable = memo(function DataTable({
       const api = gridApiRef.current;
       if (!api) return;
 
+      const hasFocus = document.activeElement?.closest('.ag-root') !== null;
+      if (!hasFocus) return;
+
       const text = e.clipboardData?.getData('text/plain');
       if (!text) return;
 
@@ -1833,7 +1966,7 @@ export const DataTable = memo(function DataTable({
         const rows = text.split('\n').filter((r) => r.trim());
         const allColumnDefs = api.getColumnDefs() || [];
         const startColId = focusedCell.column.getColId();
-        const startColIndex = allColumnDefs.findIndex((col: any) => col.colId === startColId);
+        const startColIndex = allColumnDefs.findIndex((col: ColumnInfo) => col.colId === startColId);
         const startRowIndex = focusedCell.rowIndex;
         const updatedRows: RowData[] = [];
 
@@ -1866,8 +1999,8 @@ export const DataTable = memo(function DataTable({
         }
 
         message.success(t('common.pasteSuccess'));
-      } catch (error: any) {
-        message.error(`${t('common.pasteFailed')}: ${error.message}`);
+      } catch (error: unknown) {
+        message.error(`${t('common.pasteFailed')}: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
 
@@ -1919,13 +2052,6 @@ export const DataTable = memo(function DataTable({
     gap: 4,
     minHeight: 22,
     transition: 'background 0.3s ease',
-  };
-
-  const dividerStyle: React.CSSProperties = {
-    width: 1,
-    height: 14,
-    background: 'var(--border-color)',
-    margin: '0 4px',
   };
 
   return (
@@ -2161,6 +2287,8 @@ export const DataTable = memo(function DataTable({
                 const sql = buildWhereClause(filterConditions, dbType);
                 Modal.info({
                   title: t('common.importExport.sqlPreview'),
+                  transitionName: '',
+                  maskTransitionName: '',
                   content: sql ? (
                     <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>WHERE {sql}</pre>
                   ) : (
@@ -2479,8 +2607,8 @@ export const DataTable = memo(function DataTable({
                 const api = event.api;
                 const state = api.getColumnState();
                 const sortState = state
-                  .filter((col: any) => col.sort && col.sort !== 'none')
-                  .map((col: any) => ({
+                  .filter((col: ColumnInfo) => col.sort && col.sort !== 'none')
+                  .map((col: ColumnInfo) => ({
                     colId: col.colId,
                     sort: col.sort as 'asc' | 'desc',
                   }));
@@ -2698,7 +2826,7 @@ export const DataTable = memo(function DataTable({
                         headerName: c.column_name,
                       }));
                       const cleanData = rowData.map((row) => {
-                        const newRow: Record<string, any> = {};
+                        const newRow: Record<string, unknown> = {};
                         columns.forEach((c) => {
                           const val = row[c.column_name];
                           newRow[c.column_name] = val === null ? '' : val;
@@ -2710,8 +2838,8 @@ export const DataTable = memo(function DataTable({
                         sheetName: tableName,
                       });
                       message.success(t('common.exportedExcel'));
-                    } catch (e: any) {
-                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
+                    } catch (e: unknown) {
+                      message.error(`${t('common.importExport.exportFailed')}: ${e instanceof Error ? e.message : String(e)}`);
                     }
                   },
                 },
@@ -2726,7 +2854,7 @@ export const DataTable = memo(function DataTable({
                         headerName: c.column_name,
                       }));
                       const cleanData = rowData.map((row) => {
-                        const newRow: Record<string, any> = {};
+                        const newRow: Record<string, unknown> = {};
                         columns.forEach((c) => {
                           const val = row[c.column_name];
                           newRow[c.column_name] = val === null ? '' : val;
@@ -2737,8 +2865,8 @@ export const DataTable = memo(function DataTable({
                         filename: `${tableName}_${Date.now()}.csv`,
                       });
                       message.success(t('common.exportedCsv'));
-                    } catch (e: any) {
-                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
+                    } catch (e: unknown) {
+                      message.error(`${t('common.importExport.exportFailed')}: ${e instanceof Error ? e.message : String(e)}`);
                     }
                   },
                 },
@@ -2749,7 +2877,7 @@ export const DataTable = memo(function DataTable({
                   onClick: () => {
                     try {
                       const cleanData = rowData.map((row) => {
-                        const newRow: Record<string, any> = {};
+                        const newRow: Record<string, unknown> = {};
                         columns.forEach((c) => {
                           const val = row[c.column_name];
                           newRow[c.column_name] = val === null ? '' : val;
@@ -2760,8 +2888,8 @@ export const DataTable = memo(function DataTable({
                         filename: `${tableName}_${Date.now()}.json`,
                       });
                       message.success(t('common.exportedJson'));
-                    } catch (e: any) {
-                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
+                    } catch (e: unknown) {
+                      message.error(`${t('common.importExport.exportFailed')}: ${e instanceof Error ? e.message : String(e)}`);
                     }
                   },
                 },
@@ -2777,7 +2905,7 @@ export const DataTable = memo(function DataTable({
                         headerName: c.column_name,
                       }));
                       const cleanData = rowData.map((row) => {
-                        const newRow: Record<string, any> = {};
+                        const newRow: Record<string, unknown> = {};
                         columns.forEach((c) => {
                           const val = row[c.column_name];
                           newRow[c.column_name] = val === null ? '' : val;
@@ -2788,8 +2916,8 @@ export const DataTable = memo(function DataTable({
                         filename: `${tableName}_${Date.now()}.txt`,
                       });
                       message.success(t('common.exportedTxt'));
-                    } catch (e: any) {
-                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
+                    } catch (e: unknown) {
+                      message.error(`${t('common.importExport.exportFailed')}: ${e instanceof Error ? e.message : String(e)}`);
                     }
                   },
                 },
@@ -2804,7 +2932,7 @@ export const DataTable = memo(function DataTable({
                         headerName: c.column_name,
                       }));
                       const cleanData = rowData.map((row) => {
-                        const newRow: Record<string, any> = {};
+                        const newRow: Record<string, unknown> = {};
                         columns.forEach((c) => {
                           const val = row[c.column_name];
                           newRow[c.column_name] = val === null ? '' : val;
@@ -2815,8 +2943,8 @@ export const DataTable = memo(function DataTable({
                         filename: `${tableName}_${Date.now()}.xml`,
                       });
                       message.success(t('common.exportedXml'));
-                    } catch (e: any) {
-                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
+                    } catch (e: unknown) {
+                      message.error(`${t('common.importExport.exportFailed')}: ${e instanceof Error ? e.message : String(e)}`);
                     }
                   },
                 },
@@ -2831,7 +2959,7 @@ export const DataTable = memo(function DataTable({
                         headerName: c.column_name,
                       }));
                       const cleanData = rowData.map((row) => {
-                        const newRow: Record<string, any> = {};
+                        const newRow: Record<string, unknown> = {};
                         columns.forEach((c) => {
                           const val = row[c.column_name];
                           newRow[c.column_name] = val === null ? '' : val;
@@ -2842,8 +2970,8 @@ export const DataTable = memo(function DataTable({
                         filename: `${tableName}_${Date.now()}.md`,
                       });
                       message.success(t('common.exportedMarkdown'));
-                    } catch (e: any) {
-                      message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
+                    } catch (e: unknown) {
+                      message.error(`${t('common.importExport.exportFailed')}: ${e instanceof Error ? e.message : String(e)}`);
                     }
                   },
                 },
@@ -2956,8 +3084,8 @@ export const DataTable = memo(function DataTable({
           if (!textEditModal || !gridApiRef.current) return;
           const { field, rowId } = textEditModal;
           const newValue = textEditModal.value;
-          let targetRow: any = null;
-          gridApiRef.current.forEachNode((node: any) => {
+          let targetRow: RowNode | null = null;
+          gridApiRef.current.forEachNode((node: RowNode) => {
             if (node.__row_id__ === rowId) {
               targetRow = node.data;
             }
@@ -2984,8 +3112,8 @@ export const DataTable = memo(function DataTable({
             const pkValue = updatedRow[pkCol.column_name];
             const valueStr = newValue === null || newValue === ''
               ? 'NULL'
-              : escapeSqlValue(newValue);
-            const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(field, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+              : escapeSqlValue(newValue, dbType);
+            const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(field, dbType)} = ${valueStr} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
             setLastDmlSql(updateSQL);
             
             executeQuery(connectionId, updateSQL, database || '')
@@ -3002,8 +3130,8 @@ export const DataTable = memo(function DataTable({
                   gridApiRef.current?.applyTransaction({ update: [updatedRow] });
                 }
               })
-              .catch((error: any) => {
-                message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+              .catch((error: unknown) => {
+                message.error(`${t('common.dataGrid.updateFailed')}: ${error instanceof Error ? error.message : String(error)}`);
                 const revertedRow = { ...targetRow };
                 gridApiRef.current?.applyTransaction({ update: [revertedRow] });
               });
@@ -3018,6 +3146,13 @@ export const DataTable = memo(function DataTable({
           onChange={(e) =>
             setTextEditModal((prev) => (prev ? { ...prev, value: e.target.value } : null))
           }
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              e.preventDefault();
+              const okButton = document.querySelector('.ant-modal-footer .ant-btn-primary') as HTMLButtonElement;
+              okButton?.click();
+            }
+          }}
           placeholder={t('common.enterContent')}
         />
       </Modal>
@@ -3030,7 +3165,7 @@ export const DataTable = memo(function DataTable({
         onImport={async (data, mode, mapping) => {
           // 根据映射转换数据
           const mappedData = data.map((row) => {
-            const newRow: Record<string, any> = {};
+            const newRow: Record<string, unknown> = {};
             Object.entries(mapping).forEach(([sourceField, targetField]) => {
               if (targetField && row[sourceField] !== undefined) {
                 newRow[targetField] = row[sourceField];
@@ -3063,8 +3198,8 @@ export const DataTable = memo(function DataTable({
 
             // 刷新数据
             loadData();
-          } catch (err: any) {
-            message.error(`${t('common.importExport.importFailed')}: ${err.message || err}`);
+          } catch (err: unknown) {
+            message.error(`${t('common.importExport.importFailed')}: ${err instanceof Error ? err.message : String(err)}`);
           }
         }}
       />
@@ -3090,6 +3225,25 @@ export const DataTable = memo(function DataTable({
               onClick: () => handleContextMenuAction('delete-row'),
             },
             { type: 'divider' },
+            {
+              key: 'copy-as-insert-select',
+              label: `${t('common.dataGrid.copyAsInsert')} (VALUES)`,
+              icon: <CopyOutlined />,
+              onClick: () => handleContextMenuAction('copy-as-insert-select'),
+            },
+            {
+              key: 'copy-as-insert-multi-select',
+              label: `${t('common.dataGrid.copyAsInsert')} (多语句)`,
+              icon: <CopyOutlined />,
+              onClick: () => handleContextMenuAction('copy-as-insert-multi-select'),
+            },
+            {
+              key: 'copy-as-update-select',
+              label: t('common.dataGrid.copyAsUpdate'),
+              icon: <CopyOutlined />,
+              disabled: !primaryKey,
+              onClick: () => handleContextMenuAction('copy-as-update-select'),
+            },
             {
               key: 'copy-select',
               label: t('common.copySelectedRows'),
@@ -3139,23 +3293,53 @@ export const DataTable = memo(function DataTable({
             },
             {
               key: 'copy-insert',
-              label: t('common.dataGrid.copyAsInsert'),
+              label: `${t('common.dataGrid.copyAsInsert')} (VALUES)`,
               onClick: () => {
                 if (!tableName || !columns.length) {
                   message.warning(t('common.cannotDetermineTableStructure'));
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
-                const row = cellContextMenu.rowNode.data;
-                const values = columns.map((c) => row[c.column_name] ?? null);
+                const selectedRows = gridApiRef.current?.getSelectedRows() || [];
+                const rowsToCopy = selectedRows.length > 0 ? selectedRows : [cellContextMenu.rowNode.data];
                 const colStr = columns
                   .map((c) => escapeSqlIdentifier(c.column_name, dbType))
                   .join(', ');
-                const valStr = values.map(escapeSqlValue).join(', ');
-                const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStr}) VALUES (${valStr});`;
+                const valuesStr = rowsToCopy.map((row: RowData) => {
+                  const vals = columns.map((c) => escapeSqlValue(row[c.column_name] ?? null, dbType));
+                  return `(${vals.join(', ')})`;
+                }).join(',\n');
+                const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStr})\nVALUES\n${valuesStr};`;
                 navigator.clipboard.writeText(sql);
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
-                message.success(t('common.insertStatementCopied'));
+                message.success(
+                  `${t('common.insertStatementCopied')} (${rowsToCopy.length} ${t('common.rows')})`
+                );
+              },
+            },
+            {
+              key: 'copy-insert-multi',
+              label: `${t('common.dataGrid.copyAsInsert')} (多语句)`,
+              onClick: () => {
+                if (!tableName || !columns.length) {
+                  message.warning(t('common.cannotDetermineTableStructure'));
+                  setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                  return;
+                }
+                const selectedRows = gridApiRef.current?.getSelectedRows() || [];
+                const rowsToCopy = selectedRows.length > 0 ? selectedRows : [cellContextMenu.rowNode.data];
+                const colStr = columns
+                  .map((c) => escapeSqlIdentifier(c.column_name, dbType))
+                  .join(', ');
+                const sqls = rowsToCopy.map((row: RowData) => {
+            const vals = columns.map((c) => escapeSqlValue(row[c.column_name] ?? null, dbType));
+                  return `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colStr}) VALUES (${vals.join(', ')});`;
+                });
+                navigator.clipboard.writeText(sqls.join('\n'));
+                setCellContextMenu((prev) => ({ ...prev, visible: false }));
+                message.success(
+                  `${t('common.insertStatementCopied')} (${rowsToCopy.length} ${t('common.rows')})`
+                );
               },
             },
             {
@@ -3168,25 +3352,30 @@ export const DataTable = memo(function DataTable({
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
-                const row = cellContextMenu.rowNode.data;
+                const selectedRows = gridApiRef.current?.getSelectedRows() || [];
+                const rowsToCopy = selectedRows.length > 0 ? selectedRows : [cellContextMenu.rowNode.data];
                 const pkIdx = columns.findIndex((c) => c.column_name === primaryKey.column_name);
                 if (pkIdx < 0) {
                   message.warning(t('common.primaryKeyColumnNotFound'));
                   setCellContextMenu((prev) => ({ ...prev, visible: false }));
                   return;
                 }
-                const values = columns.map((c) => row[c.column_name] ?? null);
-                const setters = columns
-                  .map(
-                    (c, i) =>
-                      `${escapeSqlIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i])}`
-                  )
-                  .filter((_, i) => i !== pkIdx)
-                  .join(', ');
-                const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(values[pkIdx])};`;
-                navigator.clipboard.writeText(sql);
+                const sqls = rowsToCopy.map((row: RowData) => {
+                  const values = columns.map((c) => row[c.column_name] ?? null);
+                  const setters = columns
+                    .map(
+                      (c, i) =>
+                        `${escapeSqlIdentifier(c.column_name, dbType)} = ${escapeSqlValue(values[i], dbType)}`
+                    )
+                    .filter((_, i) => i !== pkIdx)
+                    .join(', ');
+                  return `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKey.column_name, dbType)} = ${escapeSqlValue(values[pkIdx], dbType)};`;
+                });
+                navigator.clipboard.writeText(sqls.join('\n'));
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));
-                message.success(t('common.updateStatementCopied'));
+                message.success(
+                  `${t('common.updateStatementCopied')} (${rowsToCopy.length} ${t('common.rows')})`
+                );
               },
             },
             { type: 'divider' },
@@ -3227,7 +3416,7 @@ export const DataTable = memo(function DataTable({
                 }
                 
                 const pkValue = updatedRow[pkCol.column_name];
-                const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = NULL WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue)}`;
+                const updateSQL = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = NULL WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
                 setLastDmlSql(updateSQL);
                 
                 executeQuery(connectionId, updateSQL, database || '')
@@ -3242,8 +3431,8 @@ export const DataTable = memo(function DataTable({
                       message.success(`${t('common.set')} ${colId} ${t('common.toNull')}`);
                     }
                   })
-                  .catch((error: any) => {
-                    message.error(`${t('common.dataGrid.updateFailed')}: ${error.message}`);
+                  .catch((error: unknown) => {
+                    message.error(`${t('common.dataGrid.updateFailed')}: ${error instanceof Error ? error.message : String(error)}`);
                   });
                 
                 setCellContextMenu((prev) => ({ ...prev, visible: false }));

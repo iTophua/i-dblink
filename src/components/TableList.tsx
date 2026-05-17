@@ -52,6 +52,8 @@ export interface TableData {
   collation?: string;
 }
 
+const nextCopyIdRef = { current: 0 };
+
 export interface TableListProps {
   connectionId: string;
   database?: string;
@@ -129,11 +131,7 @@ const TableGridCard = React.memo(
     );
   },
   (prevProps, nextProps) => {
-    return (
-      prevProps.table === nextProps.table &&
-      prevProps.selected === nextProps.selected &&
-      prevProps.onClick === nextProps.onClick
-    );
+    return prevProps.table === nextProps.table && prevProps.selected === nextProps.selected;
   }
 );
 
@@ -148,16 +146,21 @@ const TableRow = React.memo(
     selected: boolean;
     onClick: () => void;
   }) {
+    const formatSafeDate = (dateStr?: string) => {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
+    };
     const rowCount = table.row_count != null ? table.row_count.toLocaleString() : '-';
-    const createTime = table.create_time ? new Date(table.create_time).toLocaleDateString() : '-';
-    const updateTime = table.update_time ? new Date(table.update_time).toLocaleDateString() : '-';
+    const createTime = formatSafeDate(table.create_time);
+    const updateTime = formatSafeDate(table.update_time);
 
     return (
       <div
         onClick={onClick}
         style={{
           display: 'grid',
-          gridTemplateColumns: '400px 200px 80px 80px 70px 130px 130px',
+          gridTemplateColumns: '280px 180px 70px 70px 60px 110px 110px',
           padding: '4px 12px',
           alignItems: 'center',
           cursor: 'pointer',
@@ -322,7 +325,7 @@ function ListHeader({ sort, onSort }: { sort: SortState; onSort: (key: SortKey) 
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '400px 200px 80px 80px 70px 130px 130px',
+        gridTemplateColumns: '280px 180px 70px 70px 60px 110px 110px',
         padding: '6px 12px',
         background: 'var(--header-bg)',
         borderBottom: '1px solid var(--border)',
@@ -403,6 +406,24 @@ function TableListComponent({
   const loading = localLoading || cacheData?.loading || false;
 
   const prevCacheKeyRef = useRef<string | null>(null);
+  const prevDatabaseRef = useRef<string | undefined>(undefined);
+  const isMountedRef = useRef(true);
+  const autoLoadTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+      }
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -413,16 +434,21 @@ function TableListComponent({
   useEffect(() => {
     // 未选择数据库时不自动加载
     if (!database) return;
+    if (autoLoadTriggeredRef.current) return;
+    autoLoadTriggeredRef.current = true;
 
     const currentCacheKey = `${connectionId}::${database || ''}`;
     // 只在 connectionId/database 真正变化时（或组件重新挂载时）自动加载，
     // 避免 clearTableData 清除缓存后触发重复请求和重复 toast
     if (currentCacheKey !== prevCacheKeyRef.current) {
       prevCacheKeyRef.current = currentCacheKey;
+      prevDatabaseRef.current = database;
       if (!cacheData?.loaded && !cacheData?.loading && !cacheData?.loadFailed) {
         setLocalLoading(true);
         getTables(connectionId, database).finally(() => {
-          setLocalLoading(false);
+          if (isMountedRef.current) {
+            setLocalLoading(false);
+          }
         });
       }
     }
@@ -430,6 +456,7 @@ function TableListComponent({
 
   const handleTableClick = useCallback(
     (tableName: string) => {
+      if (!isMountedRef.current) return;
       setSelectedRow(tableName);
       if (clickTimerRef.current) {
         clearTimeout(clickTimerRef.current);
@@ -438,7 +465,9 @@ function TableListComponent({
       } else {
         clickTimerRef.current = setTimeout(() => {
           clickTimerRef.current = null;
-          onTableSelect?.(tableName, database);
+          if (isMountedRef.current) {
+            onTableSelect?.(tableName, database);
+          }
         }, 250);
       }
     },
@@ -448,17 +477,22 @@ function TableListComponent({
   const handleTableClickRef = useRef(handleTableClick);
   handleTableClickRef.current = handleTableClick;
 
-  const refreshTables = async () => {
+  const refreshTablesRef = useCallback(async () => {
+    if (!database) return;
     try {
       setLocalLoading(true);
       await getTables(connectionId, database, true, undefined);
     } catch (error: any) {
-      console.error('Failed to refresh tables:', error);
-      message.error(`${t('common.failedToRefreshTableList')}: ${error}`);
+      if (isMountedRef.current) {
+        console.error('Failed to refresh tables:', error);
+        message.error(`${t('common.failedToRefreshTableList')}: ${error}`);
+      }
     } finally {
-      setLocalLoading(false);
+      if (isMountedRef.current) {
+        setLocalLoading(false);
+      }
     }
-  };
+  }, [connectionId, database, message, t]);
 
   const handleSort = useCallback((key: SortKey) => {
     setSort((prev) => {
@@ -476,13 +510,18 @@ function TableListComponent({
       clearTimeout(searchTimeoutRef.current);
     }
     searchTimeoutRef.current = setTimeout(async () => {
+      if (!database) return;
       try {
         setLocalLoading(true);
         await getTables(connectionId, database, true, value || undefined);
       } catch (error: any) {
-        console.error('Search failed:', error);
+        if (isMountedRef.current) {
+          console.error('Search failed:', error);
+        }
       } finally {
-        setLocalLoading(false);
+        if (isMountedRef.current) {
+          setLocalLoading(false);
+        }
       }
     }, 300);
   };
@@ -630,6 +669,7 @@ function TableListComponent({
                 onClick={() => {
                   if (selectedRow) {
                     const newName = `${selectedRow}_copy`;
+                    const inputId = `copy-table-name-${++nextCopyIdRef.current}`;
                     Modal.confirm({
                       title: t('common.copyTable.title'),
                       okText: t('common.copy'),
@@ -637,7 +677,7 @@ function TableListComponent({
                         <div>
                           <p>{t('common.willCopyTable', { tableName: selectedRow })}</p>
                           <input
-                            id="copy-table-name"
+                            id={inputId}
                             autoFocus
                             defaultValue={newName}
                             style={{
@@ -651,10 +691,8 @@ function TableListComponent({
                           />
                         </div>
                       ),
+                      getContainer: false,
                       onOk: () => {
-                        const input = document.getElementById(
-                          'copy-table-name'
-                        ) as HTMLInputElement;
                         onTableCopy?.(selectedRow, database);
                       },
                     });
@@ -713,7 +751,7 @@ function TableListComponent({
               <Button
                 icon={<ReloadOutlined />}
                 size="small"
-                onClick={refreshTables}
+                onClick={refreshTablesRef}
                 loading={loading}
               />
             </span>
@@ -812,20 +850,6 @@ function TableListComponent({
             ) : (
               <Empty description={t('common.noTables')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}
-          </div>
-        ) : filteredTables.length === 0 ? (
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Empty
-              description={searchText ? t('common.noMatchingTables') : t('common.noTables')}
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            />
           </div>
         ) : viewMode === 'list' ? (
           <div style={{ background: 'var(--background-card)' }}>

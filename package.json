@@ -39,7 +39,7 @@
     "@xyflow/react": "^12.10.2",
     "ag-grid-community": "^35.2.1",
     "ag-grid-react": "^35.2.1",
-    "antd": "^6.3.7",
+    "antd": "^6.4.2",
     "dagre": "^0.8.5",
     "html-to-image": "^1.11.13",
     "i18next": "^26.0.8",

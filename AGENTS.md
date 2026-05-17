@@ -1,6 +1,6 @@
 # AGENTS.md — iDBLink
 
-**Last verified:** 2026-05-03
+**Last verified:** 2026-05-17
 
 ## Quick commands
 
@@ -9,7 +9,10 @@ pnpm install                          # Install deps
 pnpm tauri dev                        # Dev mode (Vite + Tauri window; auto-builds Go sidecar)
 pnpm tauri build                      # Production build → src-tauri/target/release/bundle/
 pnpm test                             # Vitest (jsdom env)
-pnpm lint                             # ESLint (ignores src-tauri/)
+pnpm test:unit                        # Unit tests only
+pnpm test:rust                        # Rust tests (cd src-tauri && cargo test)
+pnpm test:go                          # Go tests (cd go-backend && go test ./...)
+pnpm lint                             # ESLint (flat config, ignores src-tauri/)
 pnpm lint:fix
 pnpm format                           # Prettier write
 pnpm exec tsc --noEmit                # Type check
@@ -20,28 +23,28 @@ pnpm exec tsc --noEmit                # Type check
 Three-layer architecture: **React frontend → Tauri v2 Rust shell → Go sidecar**
 
 ```
-src/                          # Frontend (React 18 + TS + Vite)
-  api/index.ts                # Tauri invoke wrappers (create/update/delete/query connections, DB ops)
-  types/api.ts                # Core types: DatabaseType, ConnectionInput, QueryResult (referenced everywhere)
-  stores/                     # Zustand stores: appStore, settingsStore, workspaceStore
-  hooks/                      # useApi (CRUD + TTL cache), useMenuShortcuts, useTableScrollHeight, useThemeColors, useViewStats
-  components/                 # ~35 React components (MainLayout, SQLEditor, DataTable, ConnectionDialog, DatabaseProperties, ViewDefinition, etc.)
+src/                          # Frontend (React 19 + TS + Vite)
+  api/index.ts                # Tauri invoke wrappers (12 commands)
+  types/api.ts                # Core types: DatabaseType, ConnectionInput, QueryResult
+  stores/                     # Zustand: appStore, settingsStore, workspaceStore
+  hooks/                      # 5 hooks: useApi, useMenuShortcuts, useTableScrollHeight, useThemeColors, useViewStats
+  components/                 # ~39 React components (~7,500 total lines)
 
 src-tauri/src/
-  main.rs                     # Rust entry, Tauri setup, menu
+  main.rs                     # Rust entry, Tauri setup, menu system
+  commands/mod.rs             # 1980 lines, 54 Tauri commands → HTTP → Go sidecar
   sidecar.rs                  # Go sidecar process lifecycle (start/stop)
-  commands.rs                 # Tauri commands → HTTP → Go sidecar (1156 lines, NEEDS REFACTORING)
   security.rs                 # System keychain password storage (keyring crate)
   storage.rs                  # Local SQLite for connection/group configs (sqlx)
-  db/                         # Models, pool, migrations, repository (local DB config only)
+  db/                         # Models, pool, migrations, repository (local config only)
 
 go-backend/                   # Go sidecar (database engine — NOT in Rust)
-  db/                         # Drivers: MySQL, PostgreSQL, SQLite, Dameng(达梦), Kingbase, Highgo, VastBase
-  api/                        # HTTP handlers: connection, query, metadata, DDL, transactions
+  db/                         # 10 database drivers
+  api/                        # HTTP handlers
   models/models.go            # Shared structs (JSON contract with Rust)
 ```
 
-**Key fact:** All database drivers live in `go-backend/`, NOT in Rust. Rust `commands.rs` forwards HTTP requests to the Go sidecar. The old docs mentioning `src-tauri/src/drivers/` are stale — that directory does not exist.
+**Key fact:** All database drivers live in `go-backend/`, NOT in Rust. Rust `commands/mod.rs` forwards HTTP requests to the Go sidecar.
 
 ## Communication patterns
 
@@ -51,25 +54,28 @@ go-backend/                   # Go sidecar (database engine — NOT in Rust)
 
 ## Configuration facts
 
-- **Vite port:** 5100 (configured in `vite.config.ts`)
-- **Tauri CLI:** `@tauri-apps/cli@^2.10.1` (NOT v1.x)
+- **Vite port:** 5100 (strictPort, `vite.config.ts`)
+- **Tauri CLI:** `@tauri-apps/cli@^2.10.1`
+- **React:** v19 (not 18)
 - **Ant Design:** v6 (not v5)
-- **ESLint:** `eslint.config.mjs` (flat config, ignores `src-tauri/`)
-- **Prettier:** `.prettierrc.json` (semi, singleQuote, printWidth 100)
-- **EditorConfig:** `.editorconfig` (2-space indent, LF, UTF-8)
-- **Go deps:** `go-backend/go.mod` — uses `dm` (达梦), `gokb` (Kingbase), `modernc/sqlite`
+- **ESLint:** Flat config (`eslint.config.mjs`), ignores `src-tauri/` and `dist/`
+- **Prettier:** `.prettierrc.json` (semi, singleQuote, printWidth 100, tabWidth 2)
+- **EditorConfig:** 2-space indent, LF, UTF-8
+- **Go version:** 1.25.7 (`go-backend/go.mod`)
+- **Go drivers:** `dm` (达梦), `gokb` (Kingbase), `modernc/sqlite`, `go-mssqldb`, `go-ora`
 - **Dev data:** `.dev-data/` (gitignored, contains `connections.db`)
 - **Build artifacts:** `go-backend/go-backend`, `src-tauri/target/` (gitignored)
 
 ## Gotchas
 
-1. **`commands.rs` is 1156 lines** with repetitive switch logic. Refactor into modules when touching DB commands.
-2. **Go sidecar must exist** for DB operations. Vite plugin auto-builds it from `go-backend/` on dev startup. If `go-backend/` is missing, sidecar features are unavailable but Vite still starts.
-3. **Production build:** `scripts/build-sidecar-release.js` compiles Go sidecar into `sidecars/` directory. Tauri bundler picks it up.
-4. **Three Zustand stores:** `appStore`, `settingsStore`, `workspaceStore` — not just one.
-5. **Four hooks:** `useApi`, `useMenuShortcuts`, `useTableScrollHeight`, `useThemeColors` — not just two.
-6. **Test setup:** `src/__tests__/setupTests.ts` required by vitest. Environment is `jsdom`.
-7. **P0/P1/P3 partially completed:** P0 (experience fixes), P1 (interaction enhancements) fully done. P3 (advanced features) partially done — structure compare, backup/restore, user management, SQL Server/Oracle drivers, query parameterization implemented. i18n not yet started. See `doc/DEVELOPMENT_PLAN.md` for status.
+1. **`commands/mod.rs` is 1980 lines** — was recently refactored from `commands.rs` into a module. Further modularization still needed.
+2. **Go sidecar auto-build** — Vite plugin (`vite.config.ts:buildSidecarPlugin`) rebuilds `go-backend/go-backend` on dev startup if Go source is newer than binary. If `go-backend/` is missing, Vite starts but DB operations fail.
+3. **Production sidecar** — `scripts/build-sidecar-release.js` compiles Go binary into `sidecars/` for Tauri bundler.
+4. **Three Zustand stores** — `appStore`, `settingsStore`, `workspaceStore`.
+5. **Five hooks** — `useApi`, `useMenuShortcuts`, `useTableScrollHeight`, `useThemeColors`, `useViewStats`.
+6. **Test setup** — `src/__tests__/setupTests.ts` extends vitest with `@testing-library/jest-dom`. Environment: `jsdom`.
+7. **Tab state persistence** — `workspaceStore` saves/restores opened tabs. SQL tab keys are regenerated on restore to avoid timestamp collisions.
+8. **i18n not started** — All UI text is hardcoded Chinese. See `doc/I18N_ISSUES.md`.
 
 ## Database support (via Go sidecar)
 
@@ -78,19 +84,19 @@ go-backend/                   # Go sidecar (database engine — NOT in Rust)
 | MySQL | ✅ |
 | PostgreSQL | ✅ |
 | SQLite | ✅ |
-| Dameng (达梦) | ✅ |
-| Kingbase (人大金仓) | ✅ |
-| Highgo (瀚高) | ✅ |
-| VastBase (人大金仓衍生) | ✅ |
 | SQL Server | ✅ |
 | Oracle | ✅ |
 | MariaDB | ✅ |
+| Dameng (达梦) | ✅ |
+| Kingbase (人大金仓) | ✅ |
+| Highgo (瀚高) | ✅ |
+| VastBase | ✅ |
 
 ## Files to check when stuck
 
 - Frontend API: `src/api/index.ts`
 - Types: `src/types/api.ts`
-- DB commands: `src-tauri/src/commands.rs`
+- DB commands: `src-tauri/src/commands/mod.rs`
 - Sidecar lifecycle: `src-tauri/src/sidecar.rs`
 - Go DB drivers: `go-backend/db/`
 - Go HTTP handlers: `go-backend/api/`
@@ -99,7 +105,7 @@ go-backend/                   # Go sidecar (database engine — NOT in Rust)
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **i-dblink** (4857 symbols, 8596 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **i-dblink** (5269 symbols, 9447 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

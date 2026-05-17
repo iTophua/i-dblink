@@ -5,6 +5,7 @@ import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
 
 import { escapeSqlIdentifier, escapeSqlValue } from '../utils/sqlUtils';
+import { getDialect } from '../utils/sqlDialects';
 
 // 防重复调用：跟踪正在加载的 cacheKey
 const loadingTablesKeys = new Set<string>();
@@ -75,7 +76,7 @@ class TTLCache<T> {
   }
 }
 
-const structureCache = new TTLCache<Promise<import('../api').TableStructure>>(100, 10 * 60 * 1000);
+const structureCache = new TTLCache<import('../api').TableStructure>(100, 10 * 60 * 1000);
 
 // Schema 补全缓存：用于智能代码补全
 interface SchemaCompletionEntry {
@@ -451,8 +452,11 @@ export const useDatabase = () => {
       const promise = (async () => {
         try {
           setTableDataLoading(cacheKey, true);
+          console.log('[DEBUG] Calling getTablesCategorized with:', { connectionId, database, search });
           const result = await api.getTablesCategorized(connectionId, database, search);
+          console.log('[DEBUG] getTablesCategorized result:', JSON.stringify(result, null, 2));
           const allTables = [...(result.tables || []), ...(result.views || [])];
+          console.log('[DEBUG] allTables count:', allTables.length, 'tables:', result.tables?.length, 'views:', result.views?.length);
           setTableData(cacheKey, allTables);
           return allTables;
         } catch (err) {
@@ -510,8 +514,25 @@ export const useDatabase = () => {
         return cached;
       }
 
-      const promise = api.getTableStructure(connectionId, tableName, database);
-      structureCache.set(cacheKey, promise);
+      const TIMEOUT_MS = 15000; // 15秒超时
+
+      const promise = (async () => {
+        const result = await Promise.race([
+          api.getTableStructure(connectionId, tableName, database),
+          new Promise<import('../api').TableStructure>((_, reject) =>
+            setTimeout(() => reject(new Error('获取表结构超时 (15s)，请检查 Go sidecar 是否运行或网络连接')), TIMEOUT_MS)
+          ),
+        ]);
+        // 缓存实际结果，不缓存失败的 Promise
+        structureCache.set(cacheKey, result);
+        return result;
+      })();
+
+      // 如果失败，不缓存，下次会重新请求
+      promise.catch(() => {
+        structureCache.delete(cacheKey);
+      });
+
       return promise;
     },
     []
@@ -547,106 +568,9 @@ export const useDatabase = () => {
         setLoading(true);
         const conn = useAppStore.getState().connections.find((c) => c.id === connectionId);
         const dbType = conn?.db_type || 'mysql';
+        const dialect = getDialect(dbType);
 
-        const safeTable = escapeSqlIdentifier(tableName);
-
-        let sql: string;
-        switch (dbType) {
-          case 'mysql':
-          case 'mariadb': {
-            const safeDb = database ? escapeSqlValue(database) : '';
-            sql = database
-              ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${safeDb}' AND TABLE_NAME = '${safeTable}'`
-              : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${safeTable}'`;
-            break;
-          }
-          case 'postgresql':
-          case 'kingbase':
-          case 'highgo':
-          case 'vastbase': {
-            const safeDb = database ? escapeSqlValue(database) : '';
-            sql = `
-              SELECT c.relname AS table_name,
-                CASE WHEN c.relkind = 'r' THEN 'BASE TABLE' WHEN c.relkind = 'v' THEN 'VIEW' ELSE c.relkind END AS table_type,
-                NULL AS row_count,
-                pg_table_size(c.oid) AS data_size,
-                pg_total_relation_size(c.oid) AS total_size,
-                obj_description(c.oid) AS comment
-              FROM pg_class c
-              JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE c.relname = '${safeTable}'
-                AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-                AND n.nspname NOT LIKE 'pg_toast%'
-            `;
-            if (database) {
-              sql += ` AND n.nspname = '${safeDb}'`;
-            }
-            break;
-          }
-          case 'sqlite': {
-            sql = `
-              SELECT name, type, sql FROM sqlite_master WHERE name = '${safeTable}'
-            `;
-            break;
-          }
-          case 'dameng': {
-            const safeDb = database ? escapeSqlValue(database) : '';
-            sql = `
-              SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
-              FROM USER_TABLES t
-              WHERE t.TABLE_NAME = '${safeTable}'
-            `;
-            if (database) {
-              sql = `
-                SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
-                FROM "${escapeSqlValue(database)}".USER_TABLES t
-                WHERE t.TABLE_NAME = '${safeTable}'
-              `;
-            }
-            break;
-          }
-          case 'oracle': {
-            const safeDb = database ? escapeSqlValue(database) : '';
-            sql = `
-              SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
-              FROM ALL_TABLES t
-              WHERE t.TABLE_NAME = '${safeTable}'
-            `;
-            if (database) {
-              sql = `
-                SELECT t.TABLE_NAME, t.NUM_ROWS, t.BYTES, t.COMMENTS
-                FROM ALL_TABLES t
-                WHERE t.OWNER = '${escapeSqlValue(database)}' AND t.TABLE_NAME = '${safeTable}'
-              `;
-            }
-            break;
-          }
-          case 'sqlserver': {
-            const safeDb = database ? escapeSqlValue(database) : '';
-            sql = `
-              SELECT OBJECT_NAME(p.object_id) AS table_name,
-                CASE WHEN t.name IS NULL THEN 'BASE TABLE' ELSE 'VIEW' END AS table_type,
-                p.rows AS row_count,
-                SUM(a.total_pages) * 8192 AS data_size
-              FROM sys.partitions p
-              JOIN sys.tables t ON t.object_id = p.object_id
-              JOIN sys.indexes i ON i.object_id = p.object_id AND p.index_id = i.index_id
-              JOIN sys.allocation_units a ON a.container_id = p.hobt_id
-              WHERE OBJECT_NAME(p.object_id) = '${safeTable}'
-            `;
-            if (database) {
-              sql = `USE ${escapeSqlIdentifier(database)}; ${sql}`;
-            }
-            break;
-          }
-          default: {
-            const safeDb = database ? escapeSqlValue(database) : '';
-            sql = database
-              ? `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${safeDb}' AND TABLE_NAME = '${safeTable}'`
-              : `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_NAME = '${safeTable}'`;
-          }
-        }
-
+        const sql = dialect.buildTableInfoQuery(tableName, database);
         const result = await api.executeQuery(connectionId, sql);
 
         if (result.error || result.rows.length === 0) {
@@ -656,81 +580,27 @@ export const useDatabase = () => {
         const columns = result.columns;
         const row = result.rows[0];
 
-        switch (dbType) {
-          case 'mysql':
-          case 'mariadb': {
-            return {
-              table_name: row[columns.indexOf('TABLE_NAME')] as string,
-              engine: row[columns.indexOf('ENGINE')] as string,
-              row_count: row[columns.indexOf('TABLE_ROWS')] as number,
-              data_length: row[columns.indexOf('DATA_LENGTH')] as number,
-              index_length: row[columns.indexOf('INDEX_LENGTH')] as number,
-              create_time: row[columns.indexOf('CREATE_TIME')] as string,
-              update_time: row[columns.indexOf('UPDATE_TIME')] as string,
-              collation: row[columns.indexOf('TABLE_COLLATION')] as string,
-              comment: row[columns.indexOf('TABLE_COMMENT')] as string,
-            };
+        // 统一的字段映射
+        const getValue = (names: string[]): any => {
+          for (const name of names) {
+            const idx = columns.indexOf(name);
+            if (idx >= 0) return row[idx];
           }
-          case 'postgresql':
-          case 'kingbase':
-          case 'highgo':
-          case 'vastbase': {
-            return {
-              table_name: row[columns.indexOf('table_name')] as string,
-              table_type: row[columns.indexOf('table_type')] as string,
-              row_count: undefined,
-              comment: row[columns.indexOf('comment')] as string,
-              data_size: row[columns.indexOf('data_size')] as number,
-              index_size:
-                (row[columns.indexOf('total_size')] as number) -
-                (row[columns.indexOf('data_size')] as number),
-            };
-          }
-          case 'sqlite': {
-            return {
-              table_name: row[columns.indexOf('name')] as string,
-              table_type: row[columns.indexOf('type')] as string,
-              comment: undefined,
-            };
-          }
-          case 'dameng': {
-            return {
-              table_name: row[columns.indexOf('TABLE_NAME')] as string,
-              row_count: row[columns.indexOf('NUM_ROWS')] as number,
-              data_size: row[columns.indexOf('BYTES')] as number,
-              comment: row[columns.indexOf('COMMENTS')] as string,
-            };
-          }
-          case 'oracle': {
-            return {
-              table_name: row[columns.indexOf('TABLE_NAME')] as string,
-              row_count: row[columns.indexOf('NUM_ROWS')] as number,
-              data_size: row[columns.indexOf('BYTES')] as number,
-              comment: row[columns.indexOf('COMMENTS')] as string,
-            };
-          }
-          case 'sqlserver': {
-            return {
-              table_name: row[columns.indexOf('table_name')] as string,
-              table_type: row[columns.indexOf('table_type')] as string,
-              row_count: row[columns.indexOf('rows')] as number,
-              data_size: row[columns.indexOf('data_size')] as number,
-            };
-          }
-          default: {
-            return {
-              table_name: row[columns.indexOf('TABLE_NAME')] as string,
-              engine: row[columns.indexOf('ENGINE')] as string,
-              row_count: row[columns.indexOf('TABLE_ROWS')] as number,
-              data_length: row[columns.indexOf('DATA_LENGTH')] as number,
-              index_length: row[columns.indexOf('INDEX_LENGTH')] as number,
-              create_time: row[columns.indexOf('CREATE_TIME')] as string,
-              update_time: row[columns.indexOf('UPDATE_TIME')] as string,
-              collation: row[columns.indexOf('TABLE_COLLATION')] as string,
-              comment: row[columns.indexOf('TABLE_COMMENT')] as string,
-            };
-          }
-        }
+          return undefined;
+        };
+
+        return {
+          table_name: getValue(['table_name', 'TABLE_NAME', 'name']) as string,
+          table_type: getValue(['table_type', 'TABLE_TYPE', 'type']) as string,
+          engine: getValue(['engine', 'ENGINE']) as string,
+          row_count: getValue(['row_count', 'TABLE_ROWS', 'NUM_ROWS', 'rows']) as number,
+          data_length: getValue(['data_length', 'DATA_LENGTH', 'data_size', 'BYTES']) as number,
+          index_length: getValue(['index_length', 'INDEX_LENGTH', 'index_size']) as number,
+          create_time: getValue(['create_time', 'CREATE_TIME']) as string,
+          update_time: getValue(['update_time', 'UPDATE_TIME']) as string,
+          collation: getValue(['collation', 'TABLE_COLLATION']) as string,
+          comment: getValue(['comment', 'TABLE_COMMENT', 'COMMENTS']) as string,
+        };
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取表信息失败';
         setError(errorMsg);
@@ -749,42 +619,9 @@ export const useDatabase = () => {
         setLoading(true);
         const conn = useAppStore.getState().connections.find((c) => c.id === connectionId);
         const dbType = conn?.db_type || 'mysql';
+        const dialect = getDialect(dbType);
 
-        const safeTable = escapeSqlIdentifier(tableName);
-        const tableRef = database
-          ? `${escapeSqlIdentifier(database, dbType)}.${safeTable}`
-          : safeTable;
-
-        let sql = '';
-        switch (dbType) {
-          case 'mysql':
-          case 'mariadb':
-            sql = `SHOW CREATE TABLE ${tableRef}`;
-            break;
-          case 'postgresql':
-          case 'kingbase':
-          case 'highgo':
-          case 'vastbase':
-            sql = `SELECT pg_get_tabledef('${database ? `${database}.` : ''}${tableName}'::regclass)`;
-            break;
-          case 'sqlite':
-            sql = `SELECT sql FROM sqlite_master WHERE name = '${escapeSqlValue(tableName)}' AND type = 'table'`;
-            break;
-          case 'sqlserver': {
-            const sqlDb = database ? escapeSqlIdentifier(database) : '';
-            sql = database
-              ? `USE ${sqlDb}; EXEC sp_helptext '${tableName}'`
-              : `EXEC sp_helptext '${tableName}'`;
-            break;
-          }
-          case 'oracle':
-          case 'dameng':
-            sql = `SELECT DBMS_METADATA.GET_DDL('TABLE', '${tableName.toUpperCase()}') ${database ? `FROM ALL_TABLES WHERE TABLE_NAME = '${tableName.toUpperCase()}'${database ? ` AND OWNER = '${database.toUpperCase()}'` : ''}` : ''}`;
-            break;
-          default:
-            sql = `SHOW CREATE TABLE ${tableRef}`;
-        }
-
+        const sql = dialect.buildTableDDLQuery(tableName, database);
         const result = await api.executeQuery(connectionId, sql, database);
 
         if (result.error || result.rows.length === 0) {
@@ -795,9 +632,8 @@ export const useDatabase = () => {
         if (dbType === 'sqlite') {
           return result.rows[0][0] as string;
         }
-        return result.rows[0][
-          result.columns.length > 1 ? result.columns.indexOf('GET_DDL') : 1
-        ] as string;
+        // 大多数数据库返回单列结果
+        return result.rows[0][result.columns.length > 1 ? 1 : 0] as string;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取 CREATE TABLE 语句失败';
         setError(errorMsg);

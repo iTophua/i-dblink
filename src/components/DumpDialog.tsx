@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { Modal, Form, Checkbox, Radio, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { getDialect } from '../utils/sqlDialects';
+import type { DatabaseType } from '../types/api';
 
 interface DumpDialogProps {
   open: boolean;
   tableName: string;
   database?: string;
   connectionId: string;
+  dbType?: DatabaseType;
   onCancel: () => void;
   onSuccess: () => void;
 }
@@ -29,12 +32,14 @@ export function DumpDialog({
   tableName,
   database,
   connectionId,
+  dbType,
   onCancel,
   onSuccess,
 }: DumpDialogProps) {
   const { t } = useTranslation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const dialect = getDialect(dbType);
 
   const handleOk = async () => {
     try {
@@ -44,7 +49,8 @@ export function DumpDialog({
       let sqlContent = '';
 
       if (values.includeDrop) {
-        sqlContent += `DROP TABLE IF EXISTS \`${tableName}\`;\n\n`;
+        const tableRef = dialect.buildTableRef(tableName, database);
+        sqlContent += dialect.buildDropTable(tableRef, true) + '\n\n';
       }
 
       // 获取 DDL
@@ -56,17 +62,16 @@ export function DumpDialog({
       if (values.dumpType === 'structure_and_data' && values.includeData) {
         // 流式导出数据
         const result = await api.streamExportTable(connectionId, tableName, database, 1000);
-        if (result && result.rows) {
+        if (result && result.rows && result.columns) {
+          const colStr = result.columns.map((c: string) => dialect.escapeIdentifier(c)).join(', ');
+          const tableRef = dialect.buildTableRef(tableName, database);
+          
           for (const row of result.rows) {
-            const columns = Object.keys(row).join(', ');
-            const values = Object.values(row)
-              .map((v) => {
-                if (v === null || v === undefined) return 'NULL';
-                if (typeof v === 'string') return `'${String(v).replace(/'/g, "''")}'`;
-                return String(v);
-              })
-              .join(', ');
-            sqlContent += `INSERT INTO \`${tableName}\` (${columns}) VALUES (${values});\n`;
+            const vals = result.columns.map((col: string) => {
+              const v = (row as Record<string, unknown>)[col];
+              return dialect.escapeValue(v);
+            });
+            sqlContent += `INSERT INTO ${tableRef} (${colStr}) VALUES (${vals.join(', ')});\n`;
           }
         }
       }
@@ -120,10 +125,12 @@ export function DumpDialog({
           </Form.Item>
           <br />
           <Form.Item name="includeData" valuePropName="checked" noStyle>
-            <Checkbox>{t('common.insertData')}</Checkbox>
+            <Checkbox>{t('common.includeData')}</Checkbox>
           </Form.Item>
         </Form.Item>
       </Form>
     </Modal>
   );
 }
+
+export default DumpDialog;

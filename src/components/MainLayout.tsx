@@ -594,6 +594,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     Modal.info({
       title: `${t('common.databasePropertiesTitle')}: ${databaseName}`,
       width: 800,
+      transitionName: '',
+      maskTransitionName: '',
       content: <DatabaseProperties connectionId={connectionId} databaseName={databaseName} />,
       okText: t('common.close'),
     });
@@ -647,6 +649,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           content: t('common.closeDatabaseTabsContent', { count: tabInfo.dataTabCount }),
           okText: t('common.closeAndCloseDatabase'),
           cancelText: t('common.closeDatabaseOnly'),
+          transitionName: '',
+          maskTransitionName: '',
           onOk: () => {
             closingDbModalRef.current = false;
             tabPanelRef.current?.closeDatabaseTabs(connectionId, database);
@@ -764,6 +768,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           content: t('common.disconnectTabsContent', { tabs: tabDesc }),
           okText: t('common.closeAndDisconnect'),
           cancelText: t('common.disconnectOnly'),
+          transitionName: '',
+          maskTransitionName: '',
           onOk: () => {
             tabPanelRef.current?.closeConnectionTabs(connectionId);
             doDisconnect();
@@ -957,10 +963,28 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     };
 
     window.addEventListener('menu-action', handleMenuAction);
+
+    const handleRefreshConnectionTree = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ connectionId: string; database?: string }>;
+      const { connectionId, database } = customEvent.detail;
+      if (database) {
+        await loadDatabaseTables(connectionId, database, true);
+      } else {
+        // 如果没有指定数据库，刷新该连接下的所有数据库
+        const dbList = connectionDatabases[connectionId] || [];
+        for (const db of dbList) {
+          await loadDatabaseTables(connectionId, db.database, true);
+        }
+      }
+    };
+
+    window.addEventListener('refresh-connection-tree', handleRefreshConnectionTree);
+
     return () => {
       window.removeEventListener('menu-action', handleMenuAction);
+      window.removeEventListener('refresh-connection-tree', handleRefreshConnectionTree);
     };
-  }, [selectedConnectionId, selectedDatabase, loadDatabaseTables, handleConnect, handleDisconnect]);
+  }, [selectedConnectionId, selectedDatabase, loadDatabaseTables, handleConnect, handleDisconnect, connectionDatabases]);
 
   return (
     <Layout style={styles.root}>

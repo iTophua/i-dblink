@@ -30,6 +30,8 @@ import type { ColumnsType } from 'antd/es/table';
 import { api } from '../../api';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../../types/api';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { getDialect } from '../../utils/sqlDialects';
+import type { CreateTableOptions, AlterTableOptions, DialectColumn, DialectIndex, DialectForeignKey } from '../../utils/sqlDialects/types';
 
 const { Text } = Typography;
 
@@ -288,233 +290,38 @@ const genKey = () => Math.random().toString(36).slice(2, 10);
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function escapeIdentifier(name: string, dbType?: string): string {
-  let open = '`';
-  let close = '`';
-  let escapeQuote = (n: string) => n.replace(/`/g, '``');
-
-  switch (dbType) {
-    case 'postgresql':
-    case 'kingbase':
-    case 'highgo':
-    case 'vastbase':
-    case 'oracle':
-    case 'dameng':
-      open = '"';
-      close = '"';
-      escapeQuote = (n) => n.replace(/"/g, '""');
-      break;
-    case 'sqlserver':
-      open = '[';
-      close = ']';
-      escapeQuote = (n) => n.replace(/\]/g, ']]');
-      break;
-  }
-
-  return `${open}${escapeQuote(name)}${close}`;
+/** 将 DesignerColumn 转换为 DialectColumn */
+function toDialectColumn(col: DesignerColumn): DialectColumn {
+  return {
+    name: col.name,
+    type: col.type,
+    length: col.length,
+    nullable: col.nullable,
+    defaultValue: col.defaultValue,
+    comment: col.comment,
+    isPrimary: col.isPrimary,
+  };
 }
 
-function generateColumnDef(col: DesignerColumn, dbType?: string): string {
-  let line = `${escapeIdentifier(col.name, dbType)} ${col.type}`;
-  if (col.length && col.type !== 'BOOLEAN' && col.type !== 'JSON') {
-    line += `(${col.length})`;
-  }
-  if (!col.nullable) {
-    line += ' NOT NULL';
-  }
-  if (col.defaultValue) {
-    const val = col.defaultValue.trim();
-    // 处理特殊默认值（根据数据库类型）
-    const upperVal = val.toUpperCase();
-    if (
-      upperVal === 'CURRENT_TIMESTAMP' ||
-      upperVal === 'NOW()' ||
-      upperVal === 'NULL' ||
-      upperVal === 'TRUE' ||
-      upperVal === 'FALSE'
-    ) {
-      // 保留关键字和函数原样
-      line += ` DEFAULT ${val}`;
-    } else if (/^-?\d+(\.\d+)?$/.test(val)) {
-      // 纯数字
-      line += ` DEFAULT ${val}`;
-    } else {
-      // 字符串默认值：需要加引号
-      // 根据数据库类型选择引号风格
-      const quote = dbType === 'sqlserver' ? "'" : "'";
-      const escaped = val.replace(/'/g, "''");
-      line += ` DEFAULT ${quote}${escaped}${quote}`;
-    }
-  }
-  if (col.comment && (dbType === 'mysql' || dbType === 'mariadb')) {
-    line += ` COMMENT '${col.comment.replace(/'/g, "''")}'`;
-  }
-  return line;
+/** 将 DesignerIndex 转换为 DialectIndex */
+function toDialectIndex(idx: DesignerIndex): DialectIndex {
+  return {
+    name: idx.name,
+    type: idx.type,
+    columns: idx.columns,
+  };
 }
 
-function generateCreateTableSQL(
-  tableName: string,
-  columns: DesignerColumn[],
-  indexes: DesignerIndex[],
-  foreignKeys: DesignerForeignKey[],
-  dbType?: string
-): string {
-  if (!tableName) return '-- Enter table name to generate SQL';
-
-  const parts: string[] = [];
-
-  // Column definitions
-  for (const col of columns) {
-    if (!col.name) continue;
-    parts.push(`  ${generateColumnDef(col, dbType)}`);
-  }
-
-  // Index definitions
-  for (const idx of indexes) {
-    if (!idx.name || idx.columns.length === 0) continue;
-    const cols = idx.columns.map((c) => escapeIdentifier(c, dbType)).join(', ');
-    if (idx.type === 'PRIMARY') {
-      parts.push(`  PRIMARY KEY (${cols})`);
-    } else if (idx.type === 'UNIQUE') {
-      parts.push(`  CONSTRAINT ${escapeIdentifier(idx.name, dbType)} UNIQUE (${cols})`);
-    } else {
-      parts.push(`  INDEX ${escapeIdentifier(idx.name, dbType)} (${cols})`);
-    }
-  }
-
-  // Auto-add primary key from column flag if no explicit PK index
-  const pkColumns = columns.filter((c) => c.isPrimary).map((c) => escapeIdentifier(c.name, dbType));
-  if (pkColumns.length > 0 && !indexes.some((i) => i.type === 'PRIMARY')) {
-    parts.push(`  PRIMARY KEY (${pkColumns.join(', ')})`);
-  }
-
-  // Foreign key definitions
-  for (const fk of foreignKeys) {
-    if (!fk.name || !fk.column || !fk.referencedTable || !fk.referencedColumn) continue;
-    parts.push(
-      `  CONSTRAINT ${escapeIdentifier(fk.name, dbType)} FOREIGN KEY (${escapeIdentifier(fk.column, dbType)}) REFERENCES ${escapeIdentifier(fk.referencedTable, dbType)}(${escapeIdentifier(fk.referencedColumn, dbType)}) ON UPDATE ${fk.onUpdate} ON DELETE ${fk.onDelete}`
-    );
-  }
-
-  const isMySQL = dbType === 'mysql' || dbType === 'mariadb';
-  const tableSuffix = isMySQL ? '\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;' : '\n);';
-
-  return `CREATE TABLE ${escapeIdentifier(tableName, dbType)} (\n${parts.join(',\n')}${tableSuffix}`;
-}
-
-function generateAlterTableSQL(
-  tableName: string,
-  columns: DesignerColumn[],
-  indexes: DesignerIndex[],
-  foreignKeys: DesignerForeignKey[],
-  originalColumns: DesignerColumn[],
-  originalIndexes: DesignerIndex[],
-  originalForeignKeys: DesignerForeignKey[],
-  dbType?: string
-): string {
-  if (!tableName) return '-- Enter table name to generate SQL';
-
-  const alters: string[] = [];
-  const tableRef = escapeIdentifier(tableName, dbType);
-
-  // --- 列变更 ---
-  const origColMap = new Map(originalColumns.map((c) => [c.name, c]));
-  const newColMap = new Map(columns.map((c) => [c.name, c]));
-
-  // 新增列
-  for (const col of columns) {
-    if (!col.name) continue;
-    if (!origColMap.has(col.name)) {
-      alters.push(`ALTER TABLE ${tableRef} ADD COLUMN ${generateColumnDef(col, dbType)};`);
-    }
-  }
-
-  // 修改列
-  for (const col of columns) {
-    if (!col.name) continue;
-    const orig = origColMap.get(col.name);
-    if (!orig) continue;
-    const hasChanged =
-      orig.type !== col.type ||
-      orig.length !== col.length ||
-      orig.nullable !== col.nullable ||
-      orig.defaultValue !== col.defaultValue ||
-      orig.comment !== col.comment ||
-      orig.isPrimary !== col.isPrimary;
-    if (hasChanged) {
-      alters.push(`ALTER TABLE ${tableRef} MODIFY COLUMN ${generateColumnDef(col, dbType)};`);
-    }
-  }
-
-  // 删除列
-  for (const orig of originalColumns) {
-    if (!newColMap.has(orig.name)) {
-      alters.push(`ALTER TABLE ${tableRef} DROP COLUMN ${escapeIdentifier(orig.name, dbType)};`);
-    }
-  }
-
-  // --- 索引变更 ---
-  const origIdxMap = new Map(originalIndexes.map((i) => [i.name, i]));
-  const newIdxMap = new Map(indexes.map((i) => [i.name, i]));
-
-  // 删除索引
-  for (const orig of originalIndexes) {
-    if (!newIdxMap.has(orig.name)) {
-      alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(orig.name, dbType)};`);
-    }
-  }
-
-  // 新增/修改索引
-  for (const idx of indexes) {
-    if (!idx.name || idx.columns.length === 0) continue;
-    const orig = origIdxMap.get(idx.name);
-    const cols = idx.columns.map((c) => escapeIdentifier(c, dbType)).join(', ');
-    const idxChanged =
-      !orig ||
-      orig.type !== idx.type ||
-      orig.columns.length !== idx.columns.length ||
-      orig.columns.some((c, i) => c !== idx.columns[i]);
-    if (idxChanged) {
-      if (orig) {
-        alters.push(`ALTER TABLE ${tableRef} DROP INDEX ${escapeIdentifier(idx.name, dbType)};`);
-      }
-      if (idx.type === 'UNIQUE') {
-        alters.push(
-          `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(idx.name, dbType)} UNIQUE (${cols});`
-        );
-      } else {
-        alters.push(
-          `ALTER TABLE ${tableRef} ADD INDEX ${escapeIdentifier(idx.name, dbType)} (${cols});`
-        );
-      }
-    }
-  }
-
-  // --- 外键变更 ---
-  const origFkMap = new Map(originalForeignKeys.map((f) => [f.name, f]));
-  const newFkMap = new Map(foreignKeys.map((f) => [f.name, f]));
-
-  // 删除外键
-  for (const orig of originalForeignKeys) {
-    if (!newFkMap.has(orig.name)) {
-      alters.push(
-        `ALTER TABLE ${tableRef} DROP FOREIGN KEY ${escapeIdentifier(orig.name, dbType)};`
-      );
-    }
-  }
-
-  // 新增外键
-  for (const fk of foreignKeys) {
-    if (!fk.name || !fk.column || !fk.referencedTable || !fk.referencedColumn) continue;
-    if (!origFkMap.has(fk.name)) {
-      alters.push(
-        `ALTER TABLE ${tableRef} ADD CONSTRAINT ${escapeIdentifier(fk.name, dbType)} FOREIGN KEY (${escapeIdentifier(fk.column, dbType)}) REFERENCES ${escapeIdentifier(fk.referencedTable, dbType)}(${escapeIdentifier(fk.referencedColumn, dbType)}) ON UPDATE ${fk.onUpdate} ON DELETE ${fk.onDelete};`
-      );
-    }
-  }
-
-  if (alters.length === 0) return '-- 没有检测到结构变更';
-  return alters.join('\n');
+/** 将 DesignerForeignKey 转换为 DialectForeignKey */
+function toDialectForeignKey(fk: DesignerForeignKey): DialectForeignKey {
+  return {
+    name: fk.name,
+    column: fk.column,
+    referencedTable: fk.referencedTable,
+    referencedColumn: fk.referencedColumn,
+    onUpdate: fk.onUpdate,
+    onDelete: fk.onDelete,
+  };
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -630,19 +437,79 @@ export function TableDesigner({
 
   // ── SQL Preview ────────────────────────────────────────────────────────
   const sqlPreview = useMemo(() => {
+    const dialect = getDialect(dbType);
+    
     if (isEditMode) {
-      return generateAlterTableSQL(
+      // 生成 ALTER TABLE SQL
+      const columnChanges = columns.map((col) => {
+        const orig = originalColumns.find((c) => c.name === col.name);
+        if (!orig) return { type: 'add' as const, column: toDialectColumn(col) };
+        const hasChanged =
+          orig.type !== col.type ||
+          orig.length !== col.length ||
+          orig.nullable !== col.nullable ||
+          orig.defaultValue !== col.defaultValue ||
+          orig.comment !== col.comment ||
+          orig.isPrimary !== col.isPrimary;
+        if (hasChanged) return { type: 'modify' as const, column: toDialectColumn(col) };
+        return null;
+      }).filter(Boolean) as AlterTableOptions['columns'];
+
+      // 删除的列
+      const deletedColumns = originalColumns
+        .filter((orig) => !columns.find((c) => c.name === orig.name))
+        .map((orig) => ({ type: 'drop' as const, column: toDialectColumn(orig) }));
+
+      // 索引变更
+      const indexChanges = indexes.map((idx) => {
+        const orig = originalIndexes.find((i) => i.name === idx.name);
+        if (!orig) return { type: 'add' as const, index: toDialectIndex(idx) };
+        const hasChanged =
+          orig.type !== idx.type ||
+          orig.columns.length !== idx.columns.length ||
+          orig.columns.some((c, i) => c !== idx.columns[i]);
+        if (hasChanged) {
+          return [
+            { type: 'drop' as const, index: toDialectIndex(orig) },
+            { type: 'add' as const, index: toDialectIndex(idx) },
+          ];
+        }
+        return null;
+      }).flat().filter(Boolean) as AlterTableOptions['indexes'];
+
+      const deletedIndexes = originalIndexes
+        .filter((orig) => !indexes.find((i) => i.name === orig.name))
+        .map((orig) => ({ type: 'drop' as const, index: toDialectIndex(orig) }));
+
+      // 外键变更
+      const fkChanges = foreignKeys.map((fk) => {
+        const orig = originalForeignKeys.find((f) => f.name === fk.name);
+        if (!orig) return { type: 'add' as const, foreignKey: toDialectForeignKey(fk) };
+        return null;
+      }).filter(Boolean) as AlterTableOptions['foreignKeys'];
+
+      const deletedFks = originalForeignKeys
+        .filter((orig) => !foreignKeys.find((f) => f.name === orig.name))
+        .map((orig) => ({ type: 'drop' as const, foreignKey: toDialectForeignKey(orig) }));
+
+      const statements = dialect.buildAlterTable({
         tableName,
-        columns,
-        indexes,
-        foreignKeys,
-        originalColumns,
-        originalIndexes,
-        originalForeignKeys,
-        dbType
-      );
+        columns: [...columnChanges, ...deletedColumns],
+        indexes: [...indexChanges, ...deletedIndexes],
+        foreignKeys: [...fkChanges, ...deletedFks],
+      });
+
+      if (statements.length === 0) return '-- 没有检测到结构变更';
+      return statements.join('\n');
     }
-    return generateCreateTableSQL(tableName, columns, indexes, foreignKeys, dbType);
+
+    // 生成 CREATE TABLE SQL
+    return dialect.buildCreateTable({
+      tableName,
+      columns: columns.filter((c) => c.name).map(toDialectColumn),
+      indexes: indexes.map(toDialectIndex),
+      foreignKeys: foreignKeys.map(toDialectForeignKey),
+    });
   }, [
     tableName,
     columns,

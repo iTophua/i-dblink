@@ -22,8 +22,12 @@ describe('escapeSqlValue', () => {
     expect(escapeSqlValue(undefined)).toBe('NULL');
   });
 
-  it('returns NULL for empty string', () => {
-    expect(escapeSqlValue('')).toBe('NULL');
+  it('returns empty quoted string for empty string (MySQL default)', () => {
+    expect(escapeSqlValue('')).toBe("''");
+  });
+
+  it('returns NULL for empty string in Oracle', () => {
+    expect(escapeSqlValue('', 'oracle')).toBe('NULL');
   });
 
   it('handles string with only special chars', () => {

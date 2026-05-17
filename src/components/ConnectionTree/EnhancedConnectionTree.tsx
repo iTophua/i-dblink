@@ -657,6 +657,8 @@ export function EnhancedConnectionTree({
             okText: t('common.disconnectLabel'),
             okType: 'danger',
             cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
             onOk: () => onDisconnect(conn.id),
           });
         } else if (key === 'refresh') {
@@ -671,6 +673,8 @@ export function EnhancedConnectionTree({
             okText: t('common.delete'),
             okType: 'danger',
             cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
             onOk: () => onDeleteConnection(conn.id),
           });
         } else if (key === 'new-query') {
@@ -763,6 +767,8 @@ export function EnhancedConnectionTree({
             okText: t('common.delete'),
             okType: 'danger',
             cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
             onOk: () => onDeleteGroup(group.id),
           });
         }
@@ -805,6 +811,8 @@ export function EnhancedConnectionTree({
             okText: t('common.close'),
             okType: 'danger',
             cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
             onOk: () => {
               closingDbModalRef.current = false;
               onDatabaseClose?.(connId, dbName);
@@ -883,6 +891,8 @@ export function EnhancedConnectionTree({
             okText: t('common.clearLabel'),
             okType: 'danger',
             cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
             onOk: async () => {
               try {
                 await api.truncateTable(connId, tableName, database);
@@ -900,6 +910,8 @@ export function EnhancedConnectionTree({
             okText: t('common.delete'),
             okType: 'danger',
             cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
             onOk: async () => {
               try {
                 await api.dropTable(connId, tableName, database);
@@ -961,6 +973,8 @@ export function EnhancedConnectionTree({
             okText: t('common.delete'),
             okType: 'danger',
             cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
             onOk: async () => {
               try {
                 await api.dropView(connId, viewName, database);
@@ -1203,7 +1217,7 @@ export function EnhancedConnectionTree({
                 ),
               }))
             : tableItems.length > 0
-              ? undefined
+              ? []
               : [
                   {
                     key: `no-tables::${connId}::${db.database}`,
@@ -1272,7 +1286,7 @@ export function EnhancedConnectionTree({
                 ),
               }))
             : viewItems.length > 0
-              ? undefined
+              ? []
               : [
                   {
                     key: `no-views::${connId}::${db.database}`,
@@ -1343,7 +1357,7 @@ export function EnhancedConnectionTree({
                     </span>
                   ),
                 }))
-              : undefined
+              : []
             : [
                 {
                   key: `no-procedures::${connId}::${db.database}`,
@@ -1402,12 +1416,12 @@ export function EnhancedConnectionTree({
                       style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
                       onClick={() => onOpenRoutine?.(connId, db.database, func, 'function')}
                     >
-                      <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 11 }} />
+                      <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
                       <span style={{ fontSize: 12 }}>{func}</span>
                     </span>
                   ),
                 }))
-              : undefined
+              : []
             : [
                 {
                   key: `no-functions::${connId}::${db.database}`,
@@ -1476,7 +1490,7 @@ export function EnhancedConnectionTree({
                     </span>
                   ),
                 }))
-              : undefined
+              : []
             : [
                 {
                   key: `no-triggers::${connId}::${db.database}`,

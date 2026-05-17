@@ -199,20 +199,15 @@ func (m *Manager) ConnectWithDatabase(connectionID string, database string) erro
 
 	key := connectionID + ":" + database
 
-	fmt.Printf("[DEBUG] ConnectWithDatabase: connectionID=%s, database=%s, key=%s\n", connectionID, database, key)
-	fmt.Printf("[DEBUG] original args.Database=%s\n", info.args.Database)
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if _, exists := m.pools[key]; exists {
-		fmt.Printf("[DEBUG] Connection already exists for key=%s\n", key)
 		return nil
 	}
 
 	dbArgs := info.args
 	dbArgs.Database = database
-	fmt.Printf("[DEBUG] Creating new connection with Database=%s\n", dbArgs.Database)
 	db, err := openDB(dbArgs)
 	if err != nil {
 		return err

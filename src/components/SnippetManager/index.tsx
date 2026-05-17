@@ -87,6 +87,8 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
       okText: t('common.delete'),
       okType: 'danger',
       cancelText: t('common.cancel'),
+      transitionName: '',
+      maskTransitionName: '',
       onOk: async () => {
         try {
           await api.deleteSnippet(id);

@@ -83,8 +83,8 @@ func sqlserverGetTables(ctx context.Context, dbConn db.Executor, database *strin
 	for rows.Next() {
 		var t models.TableInfo
 		var comment string
-		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6 interface{}
-		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6); err != nil {
+		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7 interface{}
+		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7); err != nil {
 			return nil, err
 		}
 		t.Comment = strPtr(comment)

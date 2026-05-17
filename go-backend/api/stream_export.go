@@ -44,7 +44,7 @@ func (h *Handler) StreamExport(w http.ResponseWriter, r *http.Request) {
 		if dbType == "sqlserver" {
 			tableRef = fmt.Sprintf("[%s].[%s]", req.Database, req.TableName)
 		} else if dbType == "postgresql" || dbType == "kingbase" || dbType == "highgo" || dbType == "vastbase" || dbType == "oracle" || dbType == "dameng" {
-			tableRef = fmt.Sprintf("\"%s\".\"%s\"", req.Database, req.TableName)
+			tableRef = fmt.Sprintf(`"%s"."%s"`, req.Database, req.TableName)
 		} else {
 			tableRef = fmt.Sprintf("`%s`.`%s`", req.Database, req.TableName)
 		}
@@ -93,8 +93,8 @@ func (h *Handler) StreamExport(w http.ResponseWriter, r *http.Request) {
 	offset := 0
 
 	for {
-		// 构建带分页的查询
-		pagedSQL := fmt.Sprintf("SELECT * FROM %s LIMIT %d OFFSET %d", tableRef, batchSize, offset)
+		// 根据数据库类型构建带分页的查询
+		pagedSQL := buildPagedQuery(sql, dbType, batchSize, offset)
 
 		pagedRows, err := exec.QueryContext(ctx, pagedSQL)
 		if err != nil {
@@ -151,5 +151,24 @@ func (h *Handler) StreamExport(w http.ResponseWriter, r *http.Request) {
 		})
 
 		offset += batchSize
+	}
+}
+
+// buildPagedQuery 根据数据库类型构建分页查询
+func buildPagedQuery(baseSQL string, dbType string, limit int, offset int) string {
+	switch dbType {
+	case "sqlserver":
+		// SQL Server 2012+ 使用 OFFSET FETCH
+		// 注意：需要 ORDER BY，这里假设使用默认排序
+		return fmt.Sprintf("%s ORDER BY (SELECT NULL) OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", baseSQL, offset, limit)
+	case "oracle", "dameng":
+		// Oracle 12c+ 使用 OFFSET FETCH
+		return fmt.Sprintf("%s OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", baseSQL, offset, limit)
+	case "mysql", "mariadb", "postgresql", "kingbase", "highgo", "vastbase", "sqlite":
+		// 这些数据库支持 LIMIT/OFFSET
+		return fmt.Sprintf("%s LIMIT %d OFFSET %d", baseSQL, limit, offset)
+	default:
+		// 默认使用 LIMIT/OFFSET
+		return fmt.Sprintf("%s LIMIT %d OFFSET %d", baseSQL, limit, offset)
 	}
 }

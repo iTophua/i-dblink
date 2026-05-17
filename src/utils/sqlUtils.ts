@@ -1,4 +1,5 @@
 import type { DatabaseType } from '../types/api';
+import { getDialect } from './sqlDialects';
 
 /**
  * 数据库标识符转义 - 根据数据库类型选择合适的引号
@@ -7,39 +8,7 @@ import type { DatabaseType } from '../types/api';
  * @returns 转义后的标识符
  */
 export function escapeSqlIdentifier(name: string, dbType?: string): string {
-  const { open, close } = (() => {
-    switch (dbType) {
-      case 'postgresql':
-      case 'kingbase':
-      case 'highgo':
-      case 'vastbase':
-      case 'oracle':
-      case 'dameng':
-        return { open: '"', close: '"' };
-      case 'sqlserver':
-        return { open: '[', close: ']' };
-      default:
-        return { open: '`', close: '`' };
-    }
-  })();
-
-  const escapeQuote = (n: string): string => {
-    switch (dbType) {
-      case 'postgresql':
-      case 'kingbase':
-      case 'highgo':
-      case 'vastbase':
-      case 'oracle':
-      case 'dameng':
-        return n.replace(/"/g, '""');
-      case 'sqlserver':
-        return n.replace(/]/g, ']]');
-      default:
-        return n.replace(/`/g, '``');
-    }
-  };
-
-  return `${open}${escapeQuote(name)}${close}`;
+  return getDialect(dbType).escapeIdentifier(name);
 }
 
 /**
@@ -47,13 +16,8 @@ export function escapeSqlIdentifier(name: string, dbType?: string): string {
  * @param value 任意值
  * @returns 转义后的 SQL 值字符串
  */
-export function escapeSqlValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') {
-    return 'NULL';
-  }
-  const str = String(value);
-  const escaped = str.replace(/\\/g, '\\\\').replace(/'/g, "''").replace(/\0/g, '\\0');
-  return `'${escaped}'`;
+export function escapeSqlValue(value: unknown, dbType?: string): string {
+  return getDialect(dbType).escapeValue(value);
 }
 
 /**

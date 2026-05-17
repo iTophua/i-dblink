@@ -650,6 +650,8 @@ export function SQLEditor({
           content: t('common.queryWithoutLimitWarning'),
           okText: t('common.continueExecution'),
           cancelText: t('common.cancel'),
+          transitionName: '',
+          maskTransitionName: '',
           onOk: () => resolve(true),
           onCancel: () => resolve(false),
         });
