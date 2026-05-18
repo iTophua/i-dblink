@@ -14,12 +14,19 @@ function buildSidecarPlugin(): Plugin {
   const goDir = path.resolve("go-backend");
   const binary = path.join(goDir, "go-backend");
 
-  function getGoFiles(): string[] {
-    if (!fs.existsSync(goDir)) return [];
-    return fs
-      .readdirSync(goDir)
-      .filter((f) => f.endsWith(".go"))
-      .map((f) => path.join(goDir, f));
+  function getGoFiles(dir: string = goDir): string[] {
+    if (!fs.existsSync(dir)) return [];
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const files: string[] = [];
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory() && entry.name !== "vendor" && entry.name !== "node_modules") {
+        files.push(...getGoFiles(full));
+      } else if (entry.isFile() && entry.name.endsWith(".go")) {
+        files.push(full);
+      }
+    }
+    return files;
   }
 
   function needsRebuild(): boolean {

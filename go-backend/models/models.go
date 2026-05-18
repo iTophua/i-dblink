@@ -44,10 +44,11 @@ type ForeignKeyInfo struct {
 
 // QueryResult SQL 查询结果
 type QueryResult struct {
-	Columns      []string        `json:"columns,omitempty"`
-	Rows         [][]interface{} `json:"rows,omitempty"`
-	RowsAffected *uint64         `json:"rows_affected,omitempty"`
-	Error        string          `json:"error,omitempty"`
+	Columns         []string        `json:"columns,omitempty"`
+	Rows            [][]interface{} `json:"rows,omitempty"`
+	RowsAffected    *uint64         `json:"rows_affected,omitempty"`
+	Error           string          `json:"error,omitempty"`
+	ExecutionTimeMs int64           `json:"execution_time_ms,omitempty"`
 }
 
 // TablesResult 分类表和视图
@@ -246,4 +247,9 @@ type BatchImportResponse struct {
 	FailedCount  int    `json:"failed_count"`
 	TotalCount   int    `json:"total_count"`
 	LastError    string `json:"last_error,omitempty"`
+}
+
+// AllColumnsResult 批量获取所有表列信息响应
+type AllColumnsResult struct {
+	Tables map[string][]ColumnInfo `json:"tables"`
 }

@@ -31,6 +31,8 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 
 	debugLog("Query: connectionID=%s, database=%s, sql=%s", req.ConnectionID, req.Database, req.SQL)
 
+	startTime := time.Now()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -42,13 +44,17 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 
 	result, err := executeSQL(ctx, exec, req.SQL)
 
+	executionTimeMs := time.Since(startTime).Milliseconds()
+
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		json.NewEncoder(w).Encode(models.QueryResult{
-			Error: err.Error(),
+			Error:           err.Error(),
+			ExecutionTimeMs: executionTimeMs,
 		})
 		return
 	}
+	result.ExecutionTimeMs = executionTimeMs
 	json.NewEncoder(w).Encode(result)
 }
 

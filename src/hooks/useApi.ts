@@ -119,20 +119,36 @@ class SchemaCompletionCache {
       const tablesMap = new Map<string, string[]>();
       const viewsMap = new Map<string, string[]>();
 
-      for (const table of tablesResult) {
-        const tableType = (table.table_type || '').toUpperCase().trim();
-        const isView =
-          tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
-        const targetMap = isView ? viewsMap : tablesMap;
+      // 分批并行获取列信息，每批10个，避免同时发起过多请求压垮 sidecar
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < tablesResult.length; i += BATCH_SIZE) {
+        const batch = tablesResult.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (table) => {
+            const tableType = (table.table_type || '').toUpperCase().trim();
+            const isView =
+              tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
 
-        try {
-          const columns = await getColumns(table.table_name);
-          targetMap.set(
-            table.table_name,
-            columns.map((c) => c.column_name)
-          );
-        } catch {
-          targetMap.set(table.table_name, []);
+            try {
+              const columns = await getColumns(table.table_name);
+              return {
+                tableName: table.table_name,
+                columns: columns.map((c) => c.column_name),
+                isView,
+              };
+            } catch {
+              return {
+                tableName: table.table_name,
+                columns: [],
+                isView,
+              };
+            }
+          })
+        );
+
+        for (const result of batchResults) {
+          const targetMap = result.isView ? viewsMap : tablesMap;
+          targetMap.set(result.tableName, result.columns);
         }
       }
 
@@ -546,6 +562,24 @@ export const useDatabase = () => {
     [getTableStructureCached]
   );
 
+  const getAllColumns = useCallback(
+    async (connectionId: string, database?: string) => {
+      try {
+        setLoading(true);
+        const result = await api.getAllColumns(connectionId, database);
+        return result;
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : '批量获取列信息失败';
+        setError(errorMsg);
+        message.error(errorMsg);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setLoading, setError]
+  );
+
   const getIndexes = useCallback(
     async (connectionId: string, tableName: string, database?: string) => {
       const result = await getTableStructureCached(connectionId, tableName, database);
@@ -672,6 +706,7 @@ export const useDatabase = () => {
     refreshTables,
     getDatabases,
     getColumns,
+    getAllColumns,
     getIndexes,
     getForeignKeys,
     getTableInfo,

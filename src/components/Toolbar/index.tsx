@@ -7,7 +7,6 @@ import {
   PlusOutlined,
   ReloadOutlined,
   PlayCircleOutlined,
-  FolderOpenOutlined,
   SaveOutlined,
   ImportOutlined,
   ExportOutlined,
@@ -19,28 +18,25 @@ import {
   DatabaseOutlined,
   CodeOutlined,
   SyncOutlined,
-  QuestionCircleOutlined,
-  ThunderboltOutlined,
   KeyOutlined,
 } from '@ant-design/icons';
 import { KeyboardShortcutsModal } from '../../utils/uxEnhancements';
+import { getShortcutMenuLabel, isMacOS } from '../../constants/menuShortcuts';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 type ToolbarStyle = React.CSSProperties;
 
 const { Header } = Layout;
-
-const isMacOS =
-  typeof navigator !== 'undefined' &&
-  (navigator.platform === 'MacIntel' ||
-    navigator.platform === 'MacPPC' ||
-    navigator.platform === 'Mac68K' ||
-    navigator.userAgent.includes('Mac'));
 
 export function Toolbar(): JSX.Element {
   const tc = useThemeColors();
   const isDarkMode = tc.isDark;
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const { t } = useTranslation();
+  const shortcuts = useSettingsStore((s) => s.settings.shortcuts || {});
+  const isMac = isMacOS();
+
+  const getLabel = (key: string, text: string) => `${text}${getShortcutMenuLabel(key, shortcuts, isMac)}`;
 
   const handleMenuAction = useCallback((action: string) => {
     window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
@@ -72,112 +68,107 @@ export function Toolbar(): JSX.Element {
     {
       key: 'new-connection',
       icon: <PlusOutlined />,
-      label: `${t('common.newConnectionLabel')} (N)`,
-    },
-    {
-      key: 'open-connection',
-      icon: <FolderOpenOutlined />,
-      label: `${t('common.openConnectionLabel')} (O)`,
+      label: getLabel('new-connection', t('common.newConnectionLabel')),
     },
     { type: 'divider' },
-    { key: 'save', icon: <SaveOutlined />, label: `${t('common.saveLabel')} (S)` },
-    { key: 'save-as', label: `${t('common.saveAs')} (A)` },
+    { key: 'save', icon: <SaveOutlined />, label: getLabel('save', t('common.saveLabel')) },
+    { key: 'save-as', label: getLabel('save-as', t('common.saveAs')) },
     { type: 'divider' },
-    { key: 'import', icon: <ImportOutlined />, label: `${t('common.importLabel')} (I)` },
-    { key: 'export', icon: <ExportOutlined />, label: `${t('common.exportLabel')} (E)` },
+    { key: 'import', icon: <ImportOutlined />, label: getLabel('import', t('common.importLabel')) },
+    { key: 'export', icon: <ExportOutlined />, label: getLabel('export', t('common.exportLabel')) },
     { type: 'divider' },
-    { key: 'exit', label: `${t('common.exitLabel')} (X)` },
+    { key: 'exit', label: getLabel('exit', t('common.exitLabel')) },
   ];
 
   const editMenuItems: MenuProps['items'] = [
     {
       key: 'undo',
-      label: `${t('common.undoLabel')} (U)`,
+      label: getLabel('undo', t('common.undoLabel')),
       icon: <span style={{ fontFamily: 'monospace' }}>↩</span>,
     },
     {
       key: 'redo',
-      label: `${t('common.redoLabel')} (R)`,
+      label: getLabel('redo', t('common.redoLabel')),
       icon: <span style={{ fontFamily: 'monospace' }}>↪</span>,
     },
     { type: 'divider' },
-    { key: 'cut', label: `${t('common.cutLabel')} (T)` },
-    { key: 'copy', label: `${t('common.copyLabel')} (C)` },
-    { key: 'paste', label: `${t('common.pasteLabel')} (P)` },
-    { key: 'delete', label: `${t('common.deleteLabel')} (D)` },
+    { key: 'cut', label: getLabel('cut', t('common.cutLabel')) },
+    { key: 'copy', label: getLabel('copy', t('common.copyLabel')) },
+    { key: 'paste', label: getLabel('paste', t('common.pasteLabel')) },
+    { key: 'delete', label: getLabel('delete', t('common.deleteLabel')) },
     { type: 'divider' },
-    { key: 'select-all', label: `${t('common.selectAllLabel')} (A)` },
-    { key: 'find', label: `${t('common.findReplaceLabel')} (F)` },
+    { key: 'select-all', label: getLabel('select-all', t('common.selectAllLabel')) },
+    { key: 'find', label: getLabel('find', t('common.findReplaceLabel')) },
   ];
 
   const viewMenuItems: MenuProps['items'] = [
-    { key: 'refresh', icon: <ReloadOutlined />, label: `${t('common.refreshLabel')} (R)` },
+    { key: 'refresh', icon: <ReloadOutlined />, label: getLabel('refresh', t('common.refreshLabel')) },
     { type: 'divider' },
-    { key: 'zoom-in', label: `${t('common.zoomInLabel')} (I)` },
-    { key: 'zoom-out', label: `${t('common.zoomOutLabel')} (O)` },
-    { key: 'zoom-reset', label: `${t('common.actualSizeLabel')} (Z)` },
+    { key: 'zoom-in', label: getLabel('zoom-in', t('common.zoomInLabel')) },
+    { key: 'zoom-out', label: getLabel('zoom-out', t('common.zoomOutLabel')) },
+    { key: 'zoom-reset', label: getLabel('zoom-reset', t('common.actualSizeLabel')) },
     { type: 'divider' },
-    { key: 'fullscreen', label: `${t('common.fullscreenLabel')} (B)` },
+    { key: 'fullscreen', label: getLabel('fullscreen', t('common.fullscreenLabel')) },
   ];
 
   const connectionMenuItems: MenuProps['items'] = [
     {
       key: 'connect-selected',
       icon: <LinkOutlined />,
-      label: `${t('common.connectSelected')} (C)`,
+      label: getLabel('connect-selected', t('common.connectSelected')),
     },
-    { key: 'disconnect', icon: <DisconnectOutlined />, label: `${t('common.disconnect')} (D)` },
+    { key: 'disconnect', icon: <DisconnectOutlined />, label: getLabel('disconnect', t('common.disconnect')) },
     { type: 'divider' },
-    { key: 'new-query', icon: <CodeOutlined />, label: `${t('common.sqlEditor.newQuery')} (Q)` },
+    { key: 'new-query', icon: <CodeOutlined />, label: getLabel('new-query', t('common.sqlEditor.newQuery')) },
     {
       key: 'execute-query',
       icon: <PlayCircleOutlined />,
-      label: `${t('common.executeQuery')} (E)`,
+      label: getLabel('execute-query', t('common.executeQuery')),
     },
     { type: 'divider' },
-    { key: 'close-all', label: `${t('common.closeAllConnections')} (L)` },
+    { key: 'close-all', label: getLabel('close-all', t('common.closeAllConnections')) },
   ];
 
   const toolsMenuItems: MenuProps['items'] = [
-    { key: 'options', icon: <SettingOutlined />, label: `${t('common.options')} (O)` },
+    { key: 'options', icon: <SettingOutlined />, label: getLabel('options', t('common.options')) },
     { type: 'divider' },
     {
       key: 'data-sync',
       icon: <SyncOutlined />,
-      label: `${t('common.dataSync')} (S)`,
+      label: getLabel('data-sync', t('common.dataSync')),
       disabled: true,
     },
     {
       key: 'backup',
       icon: <DatabaseOutlined />,
-      label: `${t('common.backupDatabase')} (B)`,
+      label: getLabel('backup', t('common.backupDatabase')),
       disabled: true,
     },
     {
       key: 'restore',
       icon: <DatabaseOutlined />,
-      label: `${t('common.restoreDatabase')} (R)`,
+      label: getLabel('restore', t('common.restoreDatabase')),
       disabled: true,
     },
     { type: 'divider' },
-    { key: 'model-designer', label: `${t('common.modelDesigner')} (M)`, disabled: true },
+    { key: 'model-designer', label: getLabel('model-designer', t('common.modelDesigner')), disabled: true },
   ];
 
   const windowMenuItems: MenuProps['items'] = [
-    { key: 'new-tab', label: `${t('common.newTab')} (N)` },
-    { key: 'close-tab', label: `${t('common.closeTab')} (C)` },
+    { key: 'new-tab', label: getLabel('new-tab', t('common.newTab')) },
+    { key: 'close-tab', label: getLabel('close-tab', t('common.closeTab')) },
     { type: 'divider' },
-    { key: 'next-tab', label: `${t('common.nextTab')}` },
-    { key: 'prev-tab', label: `${t('common.prevTab')}` },
+    { key: 'next-tab', label: getLabel('next-tab', t('common.nextTab')) },
+    { key: 'prev-tab', label: getLabel('prev-tab', t('common.prevTab')) },
   ];
 
   const helpMenuItems: MenuProps['items'] = [
-    { key: 'documentation', label: `${t('common.documentationLabel')} (D)` },
-    { key: 'search', label: `${t('common.searchLabel')} (S)` },
+    { key: 'documentation', label: getLabel('documentation', t('common.documentationLabel')) },
+    { key: 'search', label: getLabel('search', t('common.searchLabel')) },
     { type: 'divider' },
-    { key: 'check-update', label: `${t('common.checkUpdateLabel')} (U)` },
+    { key: 'check-update', label: getLabel('check-update', t('common.checkUpdateLabel')) },
     { type: 'divider' },
-    { key: 'about', label: `${t('common.aboutLabel')} (A)` },
+    { key: 'about', label: getLabel('about', t('common.aboutLabel')) },
   ];
 
   const buttonStyle: React.CSSProperties = {
@@ -259,7 +250,7 @@ export function Toolbar(): JSX.Element {
     <>
       <Header style={toolbarStyle} className="toolbar-enhanced">
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {!isMacOS && (
+          {!isMac && (
             <>
               <Dropdown
                 menu={{ items: fileMenuItems, onClick: ({ key }) => handleMenuAction(key) }}

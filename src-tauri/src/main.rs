@@ -247,7 +247,9 @@ fn main() {
 
     #[cfg(debug_assertions)]
     {
-        builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+        if std::env::var("DISABLE_MCP_BRIDGE").is_err() {
+            builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+        }
     }
 
     builder
@@ -417,6 +419,7 @@ fn main() {
             commands::get_table_structure,
             commands::get_databases,
             commands::get_columns,
+            commands::get_all_columns,
             commands::get_indexes,
             commands::get_foreign_keys,
             commands::execute_query,

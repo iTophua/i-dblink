@@ -166,6 +166,50 @@ func mysqlGetTablesCategorized(ctx context.Context, dbConn db.Executor, database
 	return result, rows.Err()
 }
 
+func mysqlGetAllColumns(ctx context.Context, dbConn db.Executor, database *string) (models.AllColumnsResult, error) {
+	query := `
+		SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY,
+			COLUMN_DEFAULT, EXTRA, COALESCE(COLUMN_COMMENT, '') AS COLUMN_COMMENT
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		ORDER BY TABLE_NAME, ORDINAL_POSITION
+	`
+	var args []any
+	if database != nil && *database != "" {
+		query = `
+			SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY,
+				COLUMN_DEFAULT, EXTRA, COALESCE(COLUMN_COMMENT, '') AS COLUMN_COMMENT
+			FROM information_schema.COLUMNS
+			WHERE TABLE_SCHEMA = ?
+			ORDER BY TABLE_NAME, ORDINAL_POSITION
+		`
+		args = append(args, *database)
+	}
+
+	rows, err := dbConn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return models.AllColumnsResult{}, err
+	}
+	defer rows.Close()
+
+	result := models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}
+	for rows.Next() {
+		var c models.ColumnInfo
+		var tableName string
+		var key, extra, comment string
+		var def sql.NullString
+		if err := rows.Scan(&tableName, &c.ColumnName, &c.DataType, &c.IsNullable, &key, &def, &extra, &comment); err != nil {
+			continue
+		}
+		c.ColumnKey = strPtr(key)
+		c.ColumnDefault = nullStrEmpty(def)
+		c.Extra = strPtr(extra)
+		c.Comment = strPtr(comment)
+		result.Tables[tableName] = append(result.Tables[tableName], c)
+	}
+	return result, rows.Err()
+}
+
 func mysqlGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
 	query := `
 		SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY,

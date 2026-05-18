@@ -121,7 +121,8 @@ vi.mock('../api', () => ({
 }));
 
 vi.mock('../constants/menuShortcuts', () => ({
-  getShortcutDisplayText: vi.fn(() => 'Ctrl+Enter'),
+  formatShortcutForDisplay: vi.fn(() => 'Ctrl+Enter'),
+  getEffectiveShortcut: vi.fn(() => 'mod+enter'),
 }));
 
 vi.mock('../hooks/useMenuShortcuts', () => ({

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"idblink-backend/api"
 	"idblink-backend/db"
@@ -26,7 +27,10 @@ func StartServer() (*http.Server, error) {
 	port := listener.Addr().(*net.TCPAddr).Port
 
 	server := &http.Server{
-		Handler: mux,
+		Handler:      mux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  90 * time.Second,
 	}
 
 	// 打印端口，Rust 侧读取

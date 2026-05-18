@@ -3,16 +3,16 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"net/url"
 
 	_ "gitee.com/chunanyong/dm"
 )
 
 func openDameng(args ConnectArgs) (*sql.DB, error) {
-	encodedPassword := url.QueryEscape(args.Password)
+	// 达梦驱动不使用 URL 编码，特殊字符直接拼接到 DSN
+	// 参考: https://gitee.com/chunanyong/dm
 	dsn := fmt.Sprintf("dm://%s:%s@%s:%d",
 		args.Username,
-		encodedPassword,
+		args.Password,
 		args.Host,
 		args.Port,
 	)

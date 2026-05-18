@@ -16,7 +16,12 @@ import {
 } from 'antd';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
 import { ThemePreset, THEME_PRESETS_LIST } from '../styles/theme';
-import { MENU_SHORTCUTS, isMacOS } from '../constants/menuShortcuts';
+import {
+  MENU_SHORTCUTS,
+  isMacOS,
+  formatShortcutForDisplay,
+  getEffectiveShortcut,
+} from '../constants/menuShortcuts';
 import { useTranslation } from 'react-i18next';
 
 interface SettingsDialogProps {
@@ -313,17 +318,17 @@ function ShortcutsSettings() {
   const effectiveShortcuts = useMemo(() => {
     const map: Record<string, string> = {};
     MENU_SHORTCUTS.forEach((s) => {
-      const effective = isMac && s.macKeys ? s.macKeys : s.keys;
-      map[s.id] = shortcuts[s.id] || effective;
+      map[s.id] = getEffectiveShortcut(s.id, shortcuts, isMac);
     });
     return map;
   }, [shortcuts, isMac]);
 
   // 检查快捷键冲突，返回冲突的快捷键 id，无冲突返回 null
   const checkConflict = (targetKey: string, newKeys: string): string | null => {
+    if (!newKeys) return null;
     const normalized = newKeys.toLowerCase();
     for (const [id, k] of Object.entries(effectiveShortcuts)) {
-      if (id !== targetKey && k.toLowerCase() === normalized) {
+      if (id !== targetKey && k && k.toLowerCase() === normalized) {
         return id;
       }
     }
@@ -333,14 +338,14 @@ function ShortcutsSettings() {
   const handleShortcutClick = (shortcutId: string) => {
     setEditingKey(shortcutId);
     setConflictKey(null);
-    const current =
-      shortcuts[shortcutId] || MENU_SHORTCUTS.find((s) => s.id === shortcutId)?.keys || '';
+    // 显示当前生效的快捷键（用户自定义或默认）
+    const current = getEffectiveShortcut(shortcutId, shortcuts, isMac);
     setInputValue(current);
   };
 
   const handleShortcutSave = () => {
     if (editingKey) {
-      const conflict = checkConflict(editingKey, inputValue);
+      const conflict = inputValue ? checkConflict(editingKey, inputValue) : null;
       if (conflict) {
         const conflictDesc = MENU_SHORTCUTS.find((s) => s.id === conflict)?.description || conflict;
         messageApi.warning(t('common.confirmWith', { desc: conflictDesc }), 3);
@@ -350,10 +355,11 @@ function ShortcutsSettings() {
       if (inputValue) {
         newShortcuts[editingKey] = inputValue;
       } else {
-        delete newShortcuts[editingKey];
+        // 用户清空输入，保存为空字符串表示禁用
+        newShortcuts[editingKey] = '';
       }
       updateSettings({ shortcuts: newShortcuts });
-      messageApi.success(t('common.shortcutSaved'));
+      messageApi.success(inputValue ? t('common.shortcutSaved') : t('common.shortcutDisabled'));
     }
     setEditingKey(null);
     setInputValue('');
@@ -362,11 +368,19 @@ function ShortcutsSettings() {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     e.preventDefault();
+
+    // Delete / Backspace 清空快捷键（表示禁用）
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      setInputValue('');
+      setConflictKey(null);
+      return;
+    }
+
     const keys: string[] = [];
     if (e.metaKey || e.ctrlKey) keys.push('mod');
     if (e.altKey) keys.push('alt');
     if (e.shiftKey) keys.push('shift');
-    if (!['Control', 'Meta', 'Alt', 'Shift'].includes(e.key)) {
+    if (!['Control', 'Meta', 'Alt', 'Shift', 'Delete', 'Backspace'].includes(e.key)) {
       keys.push(e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase());
     }
     if (keys.length > 0) {
@@ -392,29 +406,18 @@ function ShortcutsSettings() {
   };
 
   const getDisplayKeys = (shortcutId: string) => {
-    const custom = shortcuts[shortcutId];
-    if (custom) {
-      return custom
-        .replace('mod+', isMac ? '⌘' : 'Ctrl+')
-        .replace('shift+', '⇧')
-        .replace('alt+', isMac ? '⌥' : 'Alt+')
-        .replace('enter', '↵')
-        .toUpperCase();
-    }
-    const defaultShortcut = MENU_SHORTCUTS.find((s) => s.id === shortcutId);
-    if (!defaultShortcut) return '';
-    const keys = isMac && defaultShortcut.macKeys ? defaultShortcut.macKeys : defaultShortcut.keys;
-    return keys
-      .replace('mod+', isMac ? '⌘' : 'Ctrl+')
-      .replace('shift+', '⇧')
-      .replace('alt+', isMac ? '⌥' : 'Alt+')
-      .replace('enter', '↵')
-      .toUpperCase();
+    const keys = getEffectiveShortcut(shortcutId, shortcuts, isMac);
+    if (!keys) return t('common.disabled');
+    return formatShortcutForDisplay(keys, isMac);
   };
+
+  const isCustomized = (shortcutId: string) => shortcutId in shortcuts;
 
   const categories = useMemo(() => {
     const cats: Record<string, typeof MENU_SHORTCUTS> = {};
     MENU_SHORTCUTS.forEach((s) => {
+      // 编辑类快捷键为系统级，不允许修改
+      if (s.category === 'edit') return;
       if (!cats[s.category]) cats[s.category] = [];
       cats[s.category].push(s);
     });
@@ -435,7 +438,7 @@ function ShortcutsSettings() {
     <div>
       {contextHolder}
       <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12 }}>
-        {t('common.clickToModify')}
+        {t('common.clickToModifyOrDelete')}
       </div>
       {Object.entries(categories).map(([category, catShortcuts]) => (
         <div key={category} style={{ marginBottom: 20 }}>
@@ -477,7 +480,7 @@ function ShortcutsSettings() {
                             : {}),
                         }}
                         autoFocus
-                        placeholder={t('common.pressComboKeys')}
+                        placeholder={t('common.pressComboKeysOrDelete')}
                         status={conflictKey ? 'error' : undefined}
                       />
                       <Button size="small" type="primary" onClick={handleShortcutSave}>
@@ -489,7 +492,7 @@ function ShortcutsSettings() {
                     </Space>
                     {conflictKey && (
                       <div style={{ color: 'var(--color-error)', fontSize: 11, marginTop: 2 }}>
-                        ⚠{' '}
+                        {' '}
                         {t('common.confirmWithKey', {
                           key:
                             MENU_SHORTCUTS.find((s) => s.id === conflictKey)?.description ||
@@ -506,12 +509,13 @@ function ShortcutsSettings() {
                         fontFamily: 'monospace',
                         fontSize: 12,
                         padding: '2px 8px',
+                        color: !effectiveShortcuts[shortcut.id] ? 'var(--text-tertiary)' : undefined,
                       }}
                       onClick={() => handleShortcutClick(shortcut.id)}
                     >
                       {getDisplayKeys(shortcut.id)}
                     </Tag>
-                    {shortcuts[shortcut.id] && (
+                    {isCustomized(shortcut.id) && (
                       <Tooltip title={t('common.restoreDefault')}>
                         <Button
                           size="small"

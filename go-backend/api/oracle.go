@@ -104,6 +104,46 @@ func oracleGetTablesCategorized(ctx context.Context, dbConn db.Executor, databas
 	return result, nil
 }
 
+func oracleGetAllColumns(ctx context.Context, dbConn db.Executor, database *string) (models.AllColumnsResult, error) {
+	query := `
+		SELECT c.table_name, c.column_name,
+			c.data_type || CASE 
+				WHEN c.data_type IN ('VARCHAR2', 'NVARCHAR2', 'CHAR', 'NCHAR', 'RAW') THEN '(' || c.data_length || ')'
+				WHEN c.data_type IN ('NUMBER', 'DECIMAL') THEN '(' || c.data_precision || ',' || c.data_scale || ')'
+				ELSE ''
+			END AS data_type,
+			CASE WHEN c.nullable = 'N' THEN 'NO' ELSE 'YES' END AS is_nullable,
+			CASE WHEN c.column_name IN (SELECT column_name FROM user_cons_columns WHERE constraint_name IN (SELECT constraint_name FROM user_constraints WHERE table_name = c.table_name AND constraint_type = 'P')) THEN 'PRI' ELSE '' END AS column_key,
+			COALESCE(c.data_default, '') AS column_default,
+			CASE WHEN c.identity_column = 'YES' THEN 'auto_increment' ELSE '' END AS extra,
+			COALESCE(cc.comments, '') AS comment
+		FROM user_tab_columns c
+		LEFT JOIN user_col_comments cc ON cc.table_name = c.table_name AND cc.column_name = c.column_name
+		ORDER BY c.table_name, c.column_id
+	`
+	rows, err := dbConn.QueryContext(ctx, query)
+	if err != nil {
+		return models.AllColumnsResult{}, err
+	}
+	defer rows.Close()
+
+	result := models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}
+	for rows.Next() {
+		var c models.ColumnInfo
+		var tableName string
+		var key, def, extra, comment string
+		if err := rows.Scan(&tableName, &c.ColumnName, &c.DataType, &c.IsNullable, &key, &def, &extra, &comment); err != nil {
+			continue
+		}
+		c.ColumnKey = strPtr(key)
+		c.ColumnDefault = strPtr(def)
+		c.Extra = strPtr(extra)
+		c.Comment = strPtr(comment)
+		result.Tables[tableName] = append(result.Tables[tableName], c)
+	}
+	return result, rows.Err()
+}
+
 func oracleGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
 	query := `
 		SELECT c.column_name,

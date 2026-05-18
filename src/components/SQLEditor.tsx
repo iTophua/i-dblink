@@ -29,7 +29,6 @@ import {
   FileTextOutlined,
   HistoryOutlined,
   ThunderboltOutlined,
-  ClockCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   WarningOutlined,
@@ -41,7 +40,7 @@ import {
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
-import { getShortcutDisplayText } from '../hooks/useMenuShortcuts';
+import { formatShortcutForDisplay, getEffectiveShortcut } from '../constants/menuShortcuts';
 import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { format as formatSql } from 'sql-formatter';
@@ -60,6 +59,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;
+  totalTime?: number;
 }
 
 declare global {
@@ -106,12 +106,12 @@ export function SQLEditor({
   const { t } = useTranslation();
   const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
-  const dbType =
-    propDbType ||
-    useMemo(() => {
-      const conn = connections.find((c) => c.id === connectionId);
-      return conn?.db_type;
-    }, [connections, connectionId]);
+  const dbTypeFromStore = useMemo(() => {
+    const conn = connections.find((c) => c.id === connectionId);
+    return conn?.db_type;
+  }, [connections, connectionId]);
+
+  const dbType = propDbType || dbTypeFromStore;
   const [sql, setSql] = useState(defaultQuery || '');
   const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
 
@@ -126,6 +126,7 @@ export function SQLEditor({
   const [result, setResult] = useState<QueryResultWithTiming | null>(null);
   const [results, setResults] = useState<QueryResultWithTiming[]>([]);
   const [activeTab, setActiveTab] = useState<'result' | 'messages' | 'explain'>('result');
+  const requestStartTimeRef = useRef(0);
   const [messages, setMessages] = useState<string[]>([]);
   const [explainPlan, setExplainPlan] = useState<any[]>([]);
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
@@ -144,6 +145,8 @@ export function SQLEditor({
   const monacoRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const errorMarkersRef = useRef<any[]>([]);
+  const dbTypeRef = useRef<DatabaseType | undefined>(dbType);
+  const completionProviderRef = useRef<any>(null);
 
   // 错误行号解析
   const parseErrorLine = useCallback((errorMsg: string): number | null => {
@@ -231,9 +234,14 @@ export function SQLEditor({
   // 用于在 handleEditorMount 中引用最新的 handleExecuteQuery，避免闭包陷阱
   const handleExecuteQueryRef = useRef<() => void>(() => {});
 
+  // 同步 dbType 到 ref，供 Monaco 补全使用
+  useEffect(() => {
+    dbTypeRef.current = dbType;
+  }, [dbType]);
+
   const tc = useThemeColors();
 
-  const { executeQuery: executeQueryApi, getTables, getColumns } = useDatabase();
+  const { executeQuery: executeQueryApi, getTables, getColumns, getAllColumns } = useDatabase();
 
   // 监听 tab-action 事件（来自菜单或工具栏的快捷键）
   useEffect(() => {
@@ -259,19 +267,22 @@ export function SQLEditor({
       const tablesMap = new Map<string, string[]>();
       const viewsMap = new Map<string, string[]>();
 
+      // 一次性获取所有表的列信息（后端优化：一次 SQL 查询整个 schema）
+      const allColumnsResult = await getAllColumns(connectionId, database);
+
       for (const table of tables) {
         const tableType = (table.table_type || '').toUpperCase().trim();
         const isView =
           tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
         const targetMap = isView ? viewsMap : tablesMap;
 
-        try {
-          const columns = await getColumns(connectionId, table.table_name, database);
+        const columns = allColumnsResult[table.table_name];
+        if (columns) {
           targetMap.set(
             table.table_name,
             columns.map((c) => c.column_name)
           );
-        } catch {
+        } else {
           targetMap.set(table.table_name, []);
         }
       }
@@ -301,7 +312,7 @@ export function SQLEditor({
       schemaRef.current = null;
       completionCacheRef.current = null;
     }
-  }, [connectionId, database, getTables, getColumns]);
+  }, [connectionId, database, getTables, getAllColumns]);
 
   // 当连接或数据库变化时，重新获取 schema
   useEffect(() => {
@@ -313,28 +324,13 @@ export function SQLEditor({
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    // 预生成基础 suggestions（SQL 关键字和函数），这些不依赖 schema
-    // 根据数据库类型过滤，只显示当前数据库支持的关键字和函数
-    const filteredKeywords = filterKeywordsByDbType(SQL_KEYWORDS, dbType);
-    const filteredFunctions = filterFunctionsByDbType(SQL_FUNCTIONS, dbType);
+    // 注销旧的补全提供者（如果存在）
+    if (completionProviderRef.current) {
+      completionProviderRef.current.dispose();
+      completionProviderRef.current = null;
+    }
 
-    const baseKeywordSuggestions = filteredKeywords.map((kw) => ({
-      label: kw.label,
-      kind: monaco.languages.CompletionItemKind.Keyword,
-      insertText: kw.insertText,
-      insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-      detail: kw.detail || t('common.keyword'),
-    }));
-
-    const baseFunctionSuggestions = filteredFunctions.map((fn) => ({
-      label: fn.label,
-      kind: monaco.languages.CompletionItemKind.Function,
-      insertText: fn.insertText,
-      insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-      detail: fn.detail,
-    }));
-
-    monaco.languages.registerCompletionItemProvider('sql', {
+    completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
       // 去掉 async，减少 Promise 开销
       provideCompletionItems: (model: any, position: any) => {
         const word = model.getWordUntilPosition(position);
@@ -360,6 +356,27 @@ export function SQLEditor({
           endLineNumber: position.lineNumber,
           endColumn: position.column,
         });
+
+        // 根据最新的 dbType 过滤关键字和函数，避免闭包陷阱
+        const currentDbType = dbTypeRef.current;
+        const filteredKeywords = filterKeywordsByDbType(SQL_KEYWORDS, currentDbType);
+        const filteredFunctions = filterFunctionsByDbType(SQL_FUNCTIONS, currentDbType);
+
+        const baseKeywordSuggestions = filteredKeywords.map((kw) => ({
+          label: kw.label,
+          kind: monaco.languages.CompletionItemKind.Keyword,
+          insertText: kw.insertText,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: kw.detail || t('common.keyword'),
+        }));
+
+        const baseFunctionSuggestions = filteredFunctions.map((fn) => ({
+          label: fn.label,
+          kind: monaco.languages.CompletionItemKind.Function,
+          insertText: fn.insertText,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: fn.detail,
+        }));
 
         const suggestions: any[] = [...baseKeywordSuggestions, ...baseFunctionSuggestions];
 
@@ -633,39 +650,40 @@ export function SQLEditor({
       setPendingSql('');
     }
 
-    // 大数据保护：检测无 LIMIT 的 SELECT 查询
-    const sqlUpper = sqlToExecute.trim().toUpperCase();
-    const hasLimit = /\bLIMIT\b/.test(sqlUpper);
-    const hasTop = /\bTOP\s/.test(sqlUpper);
-    const hasRownum = /\bROWNUM\b/.test(sqlUpper);
-    if (
-      (sqlUpper.startsWith('SELECT') || sqlUpper.startsWith('/*')) &&
-      !hasLimit &&
-      !hasTop &&
-      !hasRownum
-    ) {
-      const needConfirm = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
-          title: t('common.largeQueryWarning'),
-          content: t('common.queryWithoutLimitWarning'),
-          okText: t('common.continueExecution'),
-          cancelText: t('common.cancel'),
-          transitionName: '',
-          maskTransitionName: '',
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
-      });
-      if (!needConfirm) {
-        setLoading(false);
-        return;
-      }
-    }
+    // 大数据保护：已禁用
+    // const sqlUpper = sqlToExecute.trim().toUpperCase();
+    // const hasLimit = /\bLIMIT\b/.test(sqlUpper);
+    // const hasTop = /\bTOP\s/.test(sqlUpper);
+    // const hasRownum = /\bROWNUM\b/.test(sqlUpper);
+    // if (
+    //   (sqlUpper.startsWith('SELECT') || sqlUpper.startsWith('/*')) &&
+    //   !hasLimit &&
+    //   !hasTop &&
+    //   !hasRownum
+    // ) {
+    //   const needConfirm = await new Promise<boolean>((resolve) => {
+    //     Modal.confirm({
+    //       title: t('common.largeQueryWarning'),
+    //       content: t('common.queryWithoutLimitWarning'),
+    //       okText: t('common.continueExecution'),
+    //       cancelText: t('common.cancel'),
+    //       transitionName: '',
+    //       maskTransitionName: '',
+    //       onOk: () => resolve(true),
+    //       onCancel: () => resolve(false),
+    //     });
+    //   });
+    //   if (!needConfirm) {
+    //     setLoading(false);
+    //     return;
+    //   }
+    // }
 
+    requestStartTimeRef.current = Date.now();
     try {
       setLoading(true);
       setMessages([]);
-      setResult(null);
+
       setResults([]);
       setExplainPlan([]);
       clearErrorMarkers();
@@ -689,9 +707,8 @@ export function SQLEditor({
             const stmt = statements[i];
             if (abortControllerRef.current?.signal.aborted) break;
 
-            const startTime = Date.now();
             const queryResult = await executeQueryApi(connectionId, stmt, database);
-            const executionTime = Date.now() - startTime;
+            const executionTime = queryResult.execution_time_ms ?? 0;
 
             const truncated = queryResult.rows.length > maxRows;
             if (truncated) {
@@ -772,16 +789,16 @@ export function SQLEditor({
         }
       } else {
         // 单语句执行（原有逻辑）
-        const startTime = Date.now();
         const queryResult = await executeQueryApi(connectionId, sqlToExecute, database);
-        const executionTime = Date.now() - startTime;
+        const executionTime = queryResult.execution_time_ms ?? 0;
+        const totalTime = Date.now() - requestStartTimeRef.current;
 
         if (queryResult.error) {
           setMessages([`✗ ${t('common.error')}: ${queryResult.error}`]);
           setActiveTab('messages');
           message.error(`${t('common.sqlExecutionFailed')}: ${queryResult.error}`);
           highlightError(queryResult.error);
-          setResult({ ...queryResult, executionTime });
+          setResult({ ...queryResult, executionTime, totalTime });
           window.__sqlHistoryApi?.addHistory({
             sql: sqlToExecute,
             success: false,
@@ -794,7 +811,7 @@ export function SQLEditor({
           const rowCount = truncatedRows.length;
           const affectedRows = queryResult.rows_affected || 0;
 
-          setResult({ ...queryResult, rows: truncatedRows, executionTime });
+          setResult({ ...queryResult, rows: truncatedRows, executionTime, totalTime });
 
           clearErrorMarkers();
 
@@ -846,6 +863,16 @@ export function SQLEditor({
   useEffect(() => {
     handleExecuteQueryRef.current = handleExecuteQuery;
   }, [handleExecuteQuery]);
+
+  // 组件卸载时注销 Monaco 补全提供者
+  useEffect(() => {
+    return () => {
+      if (completionProviderRef.current) {
+        completionProviderRef.current.dispose();
+        completionProviderRef.current = null;
+      }
+    };
+  }, []);
 
   const stopQuery = useCallback(() => {
     if (abortControllerRef.current) {
@@ -1034,43 +1061,30 @@ export function SQLEditor({
   // 渲染单结果（用于 result 标签）
   const renderSingleResult = useMemo(
     () => (
-      <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {loading ? (
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              height: '100%',
-            }}
-          >
-            <Spin size="large" tip={t('common.executingLabel')} />
-          </div>
-        ) : !connectionId ? (
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Empty
-              description={t('common.pleaseSelectDatabaseConnection')}
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            />
-          </div>
-        ) : !result ? (
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Empty description={t('common.noQueryResults')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          </div>
+      <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        {!result ? (
+          !connectionId ? (
+            <div
+              style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Empty
+                description={t('common.pleaseSelectDatabaseConnection')}
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            </div>
+          ) : loading ? (
+            <div
+              style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}
+            >
+              <Spin size="large" tip={t('common.executingLabel')} />
+            </div>
+          ) : (
+            <div
+              style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Empty description={t('common.noQueryResults')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            </div>
+          )
         ) : (
           <ResultGrid
             queryResult={result}
@@ -1210,7 +1224,7 @@ export function SQLEditor({
       >
         <Space size="small">
           <Tooltip
-            title={`${t('common.sqlEditor.execute')} (${getShortcutDisplayText('execute-query')})`}
+            title={`${t('common.sqlEditor.execute')} (${formatShortcutForDisplay(getEffectiveShortcut('execute-query', useSettingsStore.getState().settings.shortcuts || {}))})`}
           >
             <Button
               type="primary"
@@ -1434,16 +1448,6 @@ export function SQLEditor({
             </span>
           )}
 
-          {result && !result.error && (
-            <Space size="middle">
-              <Tag color="success" icon={<CheckCircleOutlined />}>
-                {result.rows.length} {t('common.recordsCount')}
-              </Tag>
-              <Tag color="processing" icon={<ClockCircleOutlined />}>
-                {t('common.executionSuccess')}
-              </Tag>
-            </Space>
-          )}
           <Button
             icon={<FullscreenOutlined />}
             type="text"

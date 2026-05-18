@@ -217,6 +217,57 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(columns)
 }
 
+// GetAllColumns 批量获取数据库中所有表的列信息（一次请求，减少 IPC 开销）
+func (h *Handler) GetAllColumns(w http.ResponseWriter, r *http.Request) {
+	var req MetadataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var result models.AllColumnsResult
+	switch dbType {
+	case "mysql":
+		result, err = mysqlGetAllColumns(ctx, exec, req.Database)
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		result, err = postgresGetAllColumns(ctx, exec, req.Database)
+	case "sqlite":
+		result, err = sqliteGetAllColumns(ctx, exec, req.Database)
+	case "dameng":
+		result, err = damengGetAllColumns(ctx, exec, req.Database)
+	case "sqlserver":
+		result, err = sqlserverGetAllColumns(ctx, exec, req.Database)
+	case "oracle":
+		result, err = oracleGetAllColumns(ctx, exec, req.Database)
+	default:
+		err = fmt.Errorf("unsupported db type: %s", dbType)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	if result.Tables == nil {
+		result.Tables = make(map[string][]models.ColumnInfo)
+	}
+	json.NewEncoder(w).Encode(result)
+}
+
 // GetIndexes 获取索引信息
 func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 	var req MetadataRequest

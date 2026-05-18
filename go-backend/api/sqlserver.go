@@ -121,6 +121,75 @@ func sqlserverGetTablesCategorized(ctx context.Context, dbConn db.Executor, data
 	return result, nil
 }
 
+func sqlserverGetAllColumns(ctx context.Context, dbConn db.Executor, database *string) (models.AllColumnsResult, error) {
+	query := `
+		SELECT tbl.name AS table_name, c.name AS column_name,
+			COALESCE(t.name + CASE 
+				WHEN t.name IN ('varchar', 'nvarchar', 'char', 'nchar', 'varbinary') THEN '(' + CAST(c.max_length AS VARCHAR) + ')'
+				WHEN t.name IN ('decimal', 'numeric') THEN '(' + CAST(c.precision AS VARCHAR) + ',' + CAST(c.scale AS VARCHAR) + ')'
+				ELSE ''
+			END, t.name) AS data_type,
+			CASE WHEN c.is_nullable = 1 THEN 'YES' ELSE 'NO' END AS is_nullable,
+			CASE WHEN ic.is_primary_key = 1 THEN 'PRI' WHEN ic.is_unique_constraint = 1 THEN 'UNI' ELSE '' END AS column_key,
+			COALESCE(dc.definition, '') AS column_default,
+			CASE WHEN c.is_identity = 1 THEN 'auto_increment' ELSE '' END AS extra,
+			COALESCE(ep.value, '') AS comment
+		FROM sys.columns c
+		JOIN sys.types t ON c.user_type_id = t.user_type_id
+		JOIN sys.tables tbl ON c.object_id = tbl.object_id
+		LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id AND dc.parent_object_id = tbl.object_id
+		LEFT JOIN sys.index_columns ic ON ic.object_id = tbl.object_id AND ic.column_id = c.column_id
+		LEFT JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+		LEFT JOIN sys.extended_properties ep ON ep.major_id = tbl.object_id AND ep.minor_id = c.column_id AND ep.name = 'MS_Description'
+		ORDER BY tbl.name, c.column_id
+	`
+	if database != nil && *database != "" {
+		query = fmt.Sprintf(`
+			SELECT tbl.name AS table_name, c.name AS column_name,
+				COALESCE(t.name + CASE 
+					WHEN t.name IN ('varchar', 'nvarchar', 'char', 'nchar', 'varbinary') THEN '(' + CAST(c.max_length AS VARCHAR) + ')'
+					WHEN t.name IN ('decimal', 'numeric') THEN '(' + CAST(c.precision AS VARCHAR) + ',' + CAST(c.scale AS VARCHAR) + ')'
+					ELSE ''
+				END, t.name) AS data_type,
+				CASE WHEN c.is_nullable = 1 THEN 'YES' ELSE 'NO' END AS is_nullable,
+				CASE WHEN ic.is_primary_key = 1 THEN 'PRI' WHEN ic.is_unique_constraint = 1 THEN 'UNI' ELSE '' END AS column_key,
+				COALESCE(dc.definition, '') AS column_default,
+				CASE WHEN c.is_identity = 1 THEN 'auto_increment' ELSE '' END AS extra,
+				COALESCE(ep.value, '') AS comment
+			FROM %s.sys.columns c
+			JOIN %s.sys.types t ON c.user_type_id = t.user_type_id
+			JOIN %s.sys.tables tbl ON c.object_id = tbl.object_id
+			LEFT JOIN %s.sys.default_constraints dc ON c.default_object_id = dc.object_id AND dc.parent_object_id = tbl.object_id
+			LEFT JOIN %s.sys.index_columns ic ON ic.object_id = tbl.object_id AND ic.column_id = c.column_id
+			LEFT JOIN %s.sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+			LEFT JOIN %s.sys.extended_properties ep ON ep.major_id = tbl.object_id AND ep.minor_id = c.column_id AND ep.name = 'MS_Description'
+			ORDER BY tbl.name, c.column_id
+		`, *database, *database, *database, *database, *database, *database, *database)
+	}
+
+	rows, err := dbConn.QueryContext(ctx, query)
+	if err != nil {
+		return models.AllColumnsResult{}, err
+	}
+	defer rows.Close()
+
+	result := models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}
+	for rows.Next() {
+		var c models.ColumnInfo
+		var tableName string
+		var key, def, extra, comment string
+		if err := rows.Scan(&tableName, &c.ColumnName, &c.DataType, &c.IsNullable, &key, &def, &extra, &comment); err != nil {
+			continue
+		}
+		c.ColumnKey = strPtr(key)
+		c.ColumnDefault = strPtr(def)
+		c.Extra = strPtr(extra)
+		c.Comment = strPtr(comment)
+		result.Tables[tableName] = append(result.Tables[tableName], c)
+	}
+	return result, rows.Err()
+}
+
 func sqlserverGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
 	query := `
 		SELECT c.name AS column_name,

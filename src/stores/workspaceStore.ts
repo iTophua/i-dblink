@@ -58,7 +58,7 @@ const defaultWorkspace: WorkspaceSnapshot = {
   expandedKeys: [],
 };
 
-const VERSION = 4;
+const VERSION = 5;
 
 function migrate(state: any, version: number | undefined): Partial<WorkspaceState> {
   if (version === undefined) {
@@ -80,6 +80,10 @@ function migrate(state: any, version: number | undefined): Partial<WorkspaceStat
   if (version === 3) {
     // v4: 应用重启后重置连接展开状态
     state.expandedKeys = [];
+  }
+  if (version === 4) {
+    // v5: tab key 格式变更，重置 activeKey 避免找不到对应 tab
+    state.activeKey = 'objects';
   }
   // 确保返回完整的 defaultWorkspace 结构
   return { ...defaultWorkspace, ...state };

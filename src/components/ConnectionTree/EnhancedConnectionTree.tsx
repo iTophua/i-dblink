@@ -189,7 +189,7 @@ const TableNode = React.memo<TableNodeProps>(
         >
           <TableOutlined style={{ color: 'var(--color-success)', fontSize: 11 }} />
           <span style={{ fontSize: 12 }}>{table.table_name}</span>
-          {table.row_count !== undefined && (
+          {table.row_count != null && (
             <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
               ({formatRowCount(table.row_count)})
             </span>
@@ -281,7 +281,7 @@ const ViewNode = React.memo<ViewNodeProps>(
         >
           <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 11 }} />
           <span style={{ fontSize: 12 }}>{view.table_name}</span>
-          {view.row_count !== undefined && (
+          {view.row_count != null && (
             <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
               (
               {view.row_count >= 1_000_000_000

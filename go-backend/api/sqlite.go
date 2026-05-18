@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 
 	"idblink-backend/db"
 	"idblink-backend/models"
@@ -84,6 +85,62 @@ func sqliteGetTablesCategorized(ctx context.Context, dbConn db.Executor, _databa
 		result.Tables = append(result.Tables, t)
 	}
 	return result, rows.Err()
+}
+
+func sqliteGetAllColumns(ctx context.Context, dbConn db.Executor, _database *string) (models.AllColumnsResult, error) {
+	// SQLite 没有 schema 级别的列查询，需要逐个表查 PRAGMA
+	// 先获取所有表名
+	rows, err := dbConn.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+	if err != nil {
+		return models.AllColumnsResult{}, err
+	}
+	defer rows.Close()
+
+	var tableNames []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err == nil {
+			tableNames = append(tableNames, name)
+		}
+	}
+	rows.Close()
+
+	result := models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}
+	// 分批并行查询，每批 10 个
+	const BATCH_SIZE = 10
+	for i := 0; i < len(tableNames); i += BATCH_SIZE {
+		batch := tableNames[i:]
+		if len(batch) > BATCH_SIZE {
+			batch = batch[:BATCH_SIZE]
+		}
+		batchResults := make([]struct {
+			name    string
+			columns []models.ColumnInfo
+		}, len(batch))
+
+		var wg sync.WaitGroup
+		for j, tableName := range batch {
+			wg.Add(1)
+			go func(idx int, tname string) {
+				defer wg.Done()
+				cols, err := sqliteGetColumns(ctx, dbConn, tname, nil)
+				if err == nil {
+					batchResults[idx] = struct {
+						name    string
+						columns []models.ColumnInfo
+					}{name: tname, columns: cols}
+				}
+			}(j, tableName)
+		}
+		wg.Wait()
+
+		for _, br := range batchResults {
+			if br.name != "" {
+				result.Tables[br.name] = br.columns
+			}
+		}
+	}
+	return result, nil
 }
 
 func sqliteGetColumns(ctx context.Context, dbConn db.Executor, tableName string, _database *string) ([]models.ColumnInfo, error) {

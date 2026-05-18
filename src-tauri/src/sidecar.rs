@@ -131,6 +131,11 @@ impl SidecarManager {
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
+            .connect_timeout(Duration::from_secs(5))
+            .pool_idle_timeout(Duration::from_secs(30))
+            .pool_max_idle_per_host(5)
+            .tcp_keepalive(Duration::from_secs(30))
+            .http1_only()
             .build()
             .map_err(|e| e.to_string())?;
 

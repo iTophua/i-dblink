@@ -161,6 +161,17 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const [activeKey, setActiveKey] = useState('objects');
   const isRestoredRef = useRef(false);
 
+  // 生成数据浏览 Tab 的 key（包含 connectionId 避免不同连接冲突）
+  const getDataTabKey = useCallback(
+    (table: { name: string; database?: string; connectionId: string }): string => {
+      const base = table.database
+        ? `${table.name}@${table.database}@${table.connectionId}`
+        : `${table.name}@${table.connectionId}`;
+      return `${base}-data`;
+    },
+    []
+  );
+
   // 从 workspaceStore 恢复工作区
   useEffect(() => {
     if (isRestoredRef.current) return;
@@ -182,17 +193,16 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       // 只有当 activeKey 对应的 tab 存在时才激活，否则默认 objects
       const validKeys = new Set([
         'objects',
-        ...ws.openedTables.map((t) => {
-          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
-          return `${baseKey}-data`;
-        }),
+        ...ws.openedTables.map((t) =>
+          getDataTabKey({ name: t.name, database: t.database, connectionId: t.connectionId })
+        ),
         ...restoredSqlTabs.map((t) => t.key),
         ...ws.openedDesignerTabs.map((t) => t.key),
       ]);
       setActiveKey(validKeys.has(ws.activeKey) ? ws.activeKey : 'objects');
     }
     isRestoredRef.current = true;
-  }, []);
+  }, [getDataTabKey]);
 
   // 保存工作区到 store（debounced）
   useEffect(() => {
@@ -247,12 +257,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     closeConnectionTabs: (connectionId: string) => {
       const tablesToClose = openedTables.filter((t) => t.connectionId === connectionId);
       const sqlTabsToClose = openedSqlTabs.filter((t) => t.connectionId === connectionId);
-      const closedDataKeys = new Set(
-        tablesToClose.map((t) => {
-          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
-          return `${baseKey}-data`;
-        })
-      );
+      const closedDataKeys = new Set(tablesToClose.map((t) => getDataTabKey(t)));
       const closedSqlKeys = new Set(sqlTabsToClose.map((t) => t.key));
       setOpenedTables((prev) => prev.filter((t) => t.connectionId !== connectionId));
       setOpenedSqlTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
@@ -267,12 +272,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       const tablesToClose = openedTables.filter(
         (t) => t.connectionId === connectionId && t.database === database
       );
-      const closedDataKeys = new Set(
-        tablesToClose.map((t) => {
-          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
-          return `${baseKey}-data`;
-        })
-      );
+      const closedDataKeys = new Set(tablesToClose.map((t) => getDataTabKey(t)));
       setOpenedTables((prev) =>
         prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
       );
@@ -297,10 +297,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         return { type: 'objects' as const, title: t('common.objectList') };
       }
       if (activeKey.endsWith('-data')) {
-        const table = openedTables.find((t) => {
-          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
-          return `${baseKey}-data` === activeKey;
-        });
+        const table = openedTables.find((t) => getDataTabKey(t) === activeKey);
         if (table) {
           return {
             type: 'data' as const,
@@ -311,7 +308,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           };
         }
       }
-      if (activeKey.endsWith('-designer')) {
+      if (activeKey.startsWith('designer-') && !activeKey.startsWith('designer-new-')) {
         const designer = openedDesignerTabs.find((t) => t.key === activeKey);
         if (designer) {
           return {
@@ -363,10 +360,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         return { type: 'objects' as const, title: t('common.objectList') };
       }
       if (activeKey.endsWith('-data')) {
-        const table = openedTables.find((t) => {
-          const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
-          return `${baseKey}-data` === activeKey;
-        });
+        const table = openedTables.find((t) => getDataTabKey(t) === activeKey);
         if (table) {
           return {
             type: 'data' as const,
@@ -377,7 +371,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           };
         }
       }
-      if (activeKey.endsWith('-designer')) {
+      if (activeKey.startsWith('designer-') && !activeKey.startsWith('designer-new-')) {
         const designer = openedDesignerTabs.find((t) => t.key === activeKey);
         if (designer) {
           return {
@@ -469,14 +463,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
     if (sourceCat === 'data') {
       setOpenedTables((prev) => {
-        const sourceIndex = prev.findIndex((t) => {
-          const k = t.database ? `${t.name}@${t.database}` : t.name;
-          return `${k}-data` === sourceKey;
-        });
-        const targetIndex = prev.findIndex((t) => {
-          const k = t.database ? `${t.name}@${t.database}` : t.name;
-          return `${k}-data` === targetKey;
-        });
+        const sourceIndex = prev.findIndex((t) => getDataTabKey(t) === sourceKey);
+        const targetIndex = prev.findIndex((t) => getDataTabKey(t) === targetKey);
         if (sourceIndex === -1 || targetIndex === -1) return prev;
         const next = [...prev];
         const [removed] = next.splice(sourceIndex, 1);
@@ -572,8 +560,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     (tableName: string, database?: string, isView?: boolean) => {
       if (!selectedConnectionId) return;
 
-      const baseKey = database ? `${tableName}@${database}` : tableName;
-      const dataTabKey = `${baseKey}-data`;
+      const dataTabKey = getDataTabKey({
+        name: tableName,
+        database,
+        connectionId: selectedConnectionId,
+      });
 
       const exists = openedTables.find(
         (t) =>
@@ -594,7 +585,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       }
       setActiveKey(dataTabKey);
     },
-    [selectedConnectionId, selectedConnectionName, openedTables]
+    [selectedConnectionId, selectedConnectionName, openedTables, getDataTabKey]
   );
 
   // 将 SQL 标签页浮动到独立窗口
@@ -637,11 +628,19 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       if (!selectedConnectionId) return;
 
       const isNewTable = !tableName || tableName === '';
-      const tabKey = isNewTable ? `designer-new-${Date.now()}` : `designer-${tableName}`;
+      const tabKey = isNewTable
+        ? `designer-new-${Date.now()}`
+        : selectedDatabase
+          ? `designer-${tableName}@${selectedDatabase}@${selectedConnectionId}`
+          : `designer-${tableName}@${selectedConnectionId}`;
 
       const exists = openedDesignerTabs.find((t) => {
         if (isNewTable) return t.key === tabKey;
-        return t.tableName === tableName && t.connectionId === selectedConnectionId;
+        return (
+          t.tableName === tableName &&
+          t.connectionId === selectedConnectionId &&
+          t.database === selectedDatabase
+        );
       });
       if (!exists) {
         setOpenedDesignerTabs((prev) => [
@@ -666,10 +665,15 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     (viewName: string) => {
       if (!selectedConnectionId) return;
 
-      const tabKey = `viewdef-${viewName}`;
+      const tabKey = selectedDatabase
+        ? `viewdef-${viewName}@${selectedDatabase}@${selectedConnectionId}`
+        : `viewdef-${viewName}@${selectedConnectionId}`;
 
       const exists = openedViewDefTabs.find(
-        (t) => t.viewName === viewName && t.connectionId === selectedConnectionId
+        (t) =>
+          t.viewName === viewName &&
+          t.connectionId === selectedConnectionId &&
+          t.database === selectedDatabase
       );
       if (!exists) {
         setOpenedViewDefTabs((prev) => [
@@ -696,26 +700,23 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   }, [tableToOpen, selectedConnectionId, openTableTab]);
 
   // 更新 Tab 的 dirty 状态
-  const handleTableDirtyChange = useCallback((tabKey: string, isDirty: boolean) => {
-    const baseKey = tabKey.replace(/-data$/, '');
-    setOpenedTables((prev) =>
-      prev.map((t) => {
-        const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-        return tKey === baseKey ? { ...t, isDirty } : t;
-      })
-    );
-  }, []);
+  const handleTableDirtyChange = useCallback(
+    (tabKey: string, isDirty: boolean) => {
+      setOpenedTables((prev) =>
+        prev.map((t) =>
+          getDataTabKey(t) === tabKey ? { ...t, isDirty } : t
+        )
+      );
+    },
+    [getDataTabKey]
+  );
 
   // 关闭单个 Tab
   const handleCloseTab = useCallback(
     (key: string) => {
       if (key.endsWith('-data')) {
         // 检查 dirty 状态
-        const baseKey = key.replace(/-data$/, '');
-        const table = openedTables.find((t) => {
-          const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-          return tKey === baseKey;
-        });
+        const table = openedTables.find((t) => getDataTabKey(t) === key);
 
         if (table?.isDirty) {
           // 有未保存的更改，显示确认对话框
@@ -729,10 +730,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             maskTransitionName: '',
             onOk: () => {
               setOpenedTables((prev) =>
-                prev.filter((t) => {
-                  const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-                  return tKey !== baseKey;
-                })
+                prev.filter((t) => getDataTabKey(t) !== key)
               );
               if (activeKey === key) {
                 setActiveKey('objects');
@@ -744,10 +742,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
         // 没有未保存的更改，直接关闭
         setOpenedTables((prev) =>
-          prev.filter((t) => {
-            const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-            return tKey !== baseKey;
-          })
+          prev.filter((t) => getDataTabKey(t) !== key)
         );
         if (activeKey === key) {
           setActiveKey('objects');
@@ -816,12 +811,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         case 'closeOthers':
           // 关闭其他所有 Tab
           if (tabKey.endsWith('-data')) {
-            const baseKey = tabKey.replace(/-data$/, '');
             setOpenedTables((prev) =>
-              prev.filter((t) => {
-                const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-                return tKey === baseKey;
-              })
+              prev.filter((t) => getDataTabKey(t) === tabKey)
             );
           } else if (tabKey.startsWith('sql-')) {
             setOpenedSqlTabs((prev) => prev.filter((t) => t.key === tabKey));
@@ -833,19 +824,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         case 'closeRight':
           // 关闭右侧所有 Tab
           if (tabKey.endsWith('-data')) {
-            const allDataKeys = openedTables.map((t) => {
-              const baseKey = t.database ? `${t.name}@${t.database}` : t.name;
-              return `${baseKey}-data`;
-            });
+            const allDataKeys = openedTables.map((t) => getDataTabKey(t));
             const currentIndex = allDataKeys.indexOf(tabKey);
             if (currentIndex >= 0) {
               const keysToClose = allDataKeys.slice(currentIndex + 1);
-              const baseKeysToKeep = keysToClose.map((k) => k.replace(/-data$/, ''));
               setOpenedTables((prev) =>
-                prev.filter((t) => {
-                  const tKey = t.database ? `${t.name}@${t.database}` : t.name;
-                  return !baseKeysToKeep.includes(tKey);
-                })
+                prev.filter((t) => !keysToClose.includes(getDataTabKey(t)))
               );
             }
           } else if (tabKey.startsWith('sql-')) {
@@ -1018,8 +1002,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     },
     // 已打开的数据表 Tab
     ...openedTables.flatMap((table) => {
-      const baseKey = table.database ? `${table.name}@${table.database}` : table.name;
-      const dataTabKey = `${baseKey}-data`;
+      const dataTabKey = getDataTabKey(table);
       const tooltipTitle = table.database
         ? `${table.database} @ ${table.connectionName}`
         : table.connectionName;

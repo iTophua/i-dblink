@@ -187,6 +187,12 @@ pub struct TableStructure {
     pub error: Option<String>,
 }
 
+/// 批量列信息结果（table_name -> columns）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AllColumnsResult {
+    pub tables: std::collections::HashMap<String, Vec<ColumnInfo>>,
+}
+
 /// 存储过程/函数信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutineInfo {
@@ -212,6 +218,8 @@ pub struct QueryResult {
     pub rows: Vec<Vec<serde_json::Value>>,
     pub rows_affected: Option<u64>,
     pub error: Option<String>,
+    #[serde(default)]
+    pub execution_time_ms: Option<i64>,
 }
 
 /// 活跃连接集合（仅记录已连接的 connection_id）
@@ -780,6 +788,39 @@ pub async fn get_columns(
     let resp: Vec<ColumnInfo> = match resp_val {
         serde_json::Value::Null => vec![],
         v => serde_json::from_value(v).map_err(|e| format!("Invalid columns response: {}", e))?,
+    };
+    Ok(resp)
+}
+
+/// 批量获取所有表的列信息（一次请求，减少 IPC 开销）
+#[tauri::command]
+pub async fn get_all_columns(
+    connection_id: String,
+    database: Option<String>,
+    state: State<'_, Mutex<Option<Storage>>>,
+    connections: State<'_, RwLock<ActiveConnections>>,
+    sidecar: State<'_, SidecarState>,
+) -> Result<AllColumnsResult, String> {
+    let sidecar_guard = sidecar.lock().await;
+    let sm = sidecar_guard
+        .as_ref()
+        .ok_or_else(|| "Sidecar not initialized".to_string())?;
+
+    ensure_connected(&connection_id, &state, &connections, sm).await?;
+
+    let req = serde_json::json!({
+        "connection_id": connection_id,
+        "database": database,
+    });
+    let resp_val: serde_json::Value = sm.post("/all-columns", &req).await?;
+    if let Some(err) = resp_val.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Ok(AllColumnsResult { tables: std::collections::HashMap::new() });
+        }
+    }
+    let resp: AllColumnsResult = match resp_val {
+        serde_json::Value::Null => AllColumnsResult { tables: std::collections::HashMap::new() },
+        v => serde_json::from_value(v).map_err(|e| format!("Invalid all-columns response: {}", e))?,
     };
     Ok(resp)
 }

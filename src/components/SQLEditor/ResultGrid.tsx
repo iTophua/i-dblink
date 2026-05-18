@@ -23,6 +23,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;
+  totalTime?: number;
 }
 
 export interface ResultGridProps {
@@ -185,59 +186,7 @@ function escapeMd(val: unknown): string {
   return String(val).replace(/\|/g, '\\|').replace(/\n/g, '<br>');
 }
 
-// === 列统计辅助函数 ===
 
-interface ColumnStats {
-  columnName: string;
-  count: number;
-  sum?: number;
-  avg?: number;
-  min?: number;
-  max?: number;
-  nullCount: number;
-  isNumeric: boolean;
-}
-
-function formatNumber(num: number, decimals?: number): string {
-  if (decimals !== undefined) {
-    return num.toLocaleString(undefined, {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
-  }
-  if (Number.isInteger(num)) {
-    return num.toLocaleString();
-  }
-  return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
-}
-
-function computeColumnStats(columns: string[], rows: unknown[][]): ColumnStats[] {
-  const maxRows = rows.length > 10000 ? 5000 : rows.length;
-  const sampleRows = rows.slice(0, maxRows);
-
-  return columns.map((col, colIdx) => {
-    const values = sampleRows.map((r) => r[colIdx]);
-    const nonNull = values.filter((v) => v !== null && v !== undefined);
-    const numericValues = nonNull.map((v) => Number(v)).filter((n) => !isNaN(n));
-    const isNumeric = numericValues.length > 0 && numericValues.length >= nonNull.length * 0.8;
-
-    const stat: ColumnStats = {
-      columnName: col,
-      count: nonNull.length,
-      nullCount: values.length - nonNull.length,
-      isNumeric,
-    };
-
-    if (isNumeric && numericValues.length > 0) {
-      stat.sum = numericValues.reduce((a, b) => a + b, 0);
-      stat.avg = stat.sum / numericValues.length;
-      stat.min = Math.min(...numericValues);
-      stat.max = Math.max(...numericValues);
-    }
-
-    return stat;
-  });
-}
 
 function exportToMd(columns: string[], rows: unknown[][]): string {
   const headers = columns.map(escapeMd);
@@ -356,23 +305,15 @@ export function ResultGrid({
         sortable: true,
         filter: true,
         resizable: true,
-        wrapText: true,
-        autoHeight: true,
         editable: isEditable,
-        tooltipValueGetter: (p: any) =>
-          p.value === null || p.value === undefined ? 'NULL' : String(p.value),
-        cellRenderer: (params: any) => {
-          if (params.value === null || params.value === undefined) {
-            return <span className="null-cell">NULL</span>;
-          }
-          return String(params.value);
-        },
-        cellClass: (params: any) => {
-          const rowId = params.data?.__id as number | undefined;
-          if (rowId != null && modifiedRows.has(rowId)) {
-            return 'cell-modified';
-          }
-          return '';
+        tooltipValueGetter: (p: any) => (p.value == null ? 'NULL' : String(p.value)),
+        valueFormatter: (p: any) => (p.value == null ? 'NULL' : String(p.value)),
+        cellClassRules: {
+          'null-cell': (p: any) => p.value == null,
+          'cell-modified': (p: any) => {
+            const rowId = p.data?.__id as number | undefined;
+            return rowId != null && modifiedRows.has(rowId);
+          },
         },
       }))
     );
@@ -789,12 +730,6 @@ export function ResultGrid({
 
   const hasChanges = modifiedRows.size > 0 || deletedRowIndices.size > 0;
 
-  // 列统计
-  const columnStats = useMemo(() => {
-    if (queryResult.rows.length === 0) return [];
-    return computeColumnStats(queryResult.columns, queryResult.rows);
-  }, [queryResult.columns, queryResult.rows]);
-
   return (
     <div
       style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}
@@ -826,8 +761,14 @@ export function ResultGrid({
         </span>
         {executionTime !== undefined && (
           <span>
-            {t('common.historyPanel.duration')}{' '}
+            {t('common.executionTime')}{' '}
             <strong style={{ color: 'var(--text-primary)' }}>{executionTime}ms</strong>
+          </span>
+        )}
+        {queryResult.totalTime != null && queryResult.totalTime > 0 && queryResult.totalTime !== executionTime && (
+          <span>
+            {t('common.totalDuration')}{' '}
+            <strong style={{ color: 'var(--text-primary)' }}>{queryResult.totalTime}ms</strong>
           </span>
         )}
         {queryResult.rows_affected !== undefined && queryResult.rows_affected > 0 && (
@@ -991,14 +932,12 @@ export function ResultGrid({
         style={{ flex: 1, overflow: 'hidden' }}
       >
         <AgGridReact
-          key={`result-grid-${queryResult.columns.join('-')}-${queryResult.rows.length}-${isDark ? 'dark' : 'light'}`}
           columnDefs={colDefs}
           rowData={rowData}
           defaultColDef={{
             sortable: true,
             filter: true,
             resizable: true,
-            wrapText: true,
           }}
           pagination={rowData.length > 500}
           paginationPageSize={500}
@@ -1013,51 +952,6 @@ export function ResultGrid({
           onSelectionChanged={onSelectionChanged}
         />
       </div>
-
-      {/* 列统计栏 */}
-      {queryResult.rows.length > 0 && (
-        <div
-          style={{
-            height: 28,
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 12px',
-            background: 'var(--background-toolbar)',
-            borderTop: '1px solid var(--border)',
-            gap: 8,
-            fontSize: 11,
-            color: 'var(--text-secondary)',
-            overflowX: 'auto',
-            flexShrink: 0,
-          }}
-        >
-          <span>
-            {t('common.records')}: {queryResult.rows.length.toLocaleString()}
-          </span>
-          {columnStats.map((stat) => (
-            <Tag
-              key={stat.columnName}
-              style={{
-                margin: 0,
-                fontSize: 10,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {stat.columnName}:
-              {stat.isNumeric ? (
-                <>
-                  {' '}
-                  SUM={formatNumber(stat.sum!)} AVG={formatNumber(stat.avg!, 2)} MIN=
-                  {formatNumber(stat.min!)} MAX={formatNumber(stat.max!)}
-                </>
-              ) : (
-                <> COUNT={stat.count}</>
-              )}
-              {stat.nullCount > 0 && <span style={{ opacity: 0.7 }}> NULL={stat.nullCount}</span>}
-            </Tag>
-          ))}
-        </div>
-      )}
 
       {/* 底部操作 SQL 栏（Navicat 风格） */}
       {isEditable && operationSql && (

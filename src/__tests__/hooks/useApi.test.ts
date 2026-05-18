@@ -209,7 +209,7 @@ describe('useMenuShortcuts logic', () => {
     const shortcuts: Record<string, string> = {
       'new-connection': 'mod+n',
       'execute-query': 'mod+enter',
-      'save-connection': 'mod+s',
+      'save': 'mod+s',
       delete: 'delete',
       refresh: 'f5',
     };

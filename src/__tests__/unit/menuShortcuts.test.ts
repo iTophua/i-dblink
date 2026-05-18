@@ -64,10 +64,10 @@ describe('getShortcutsByCategory', () => {
     expect(getShortcutsByCategory('file').length).toBe(6);
     expect(getShortcutsByCategory('edit').length).toBe(8);
     expect(getShortcutsByCategory('view').length).toBe(5);
-    expect(getShortcutsByCategory('connection').length).toBe(4);
+    expect(getShortcutsByCategory('connection').length).toBe(5);
     expect(getShortcutsByCategory('tools').length).toBe(2);
     expect(getShortcutsByCategory('window').length).toBe(4);
-    expect(getShortcutsByCategory('help').length).toBe(1);
+    expect(getShortcutsByCategory('help').length).toBe(3);
   });
 
   it('returns empty array for non-existent category', () => {

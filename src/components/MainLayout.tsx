@@ -170,8 +170,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const menuActions = useMemo(
     () => ({
       onNewConnection: () => setConnectionDialogOpen(true),
-      onOpenConnection: () => setConnectionDialogOpen(true),
-      onSaveConnection: () => {},
+      onSave: () => {},
       onSaveAs: () => {},
       onImport: () => {},
       onExport: () => {},
@@ -183,7 +182,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       onPaste: () => {},
       onDelete: () => {},
       onSelectAll: () => {},
-      onFindReplace: () => {},
+      onFind: () => {},
       onRefresh: () => {
         if (selectedConnectionId && selectedDatabase) {
           loadDatabaseTables(selectedConnectionId, selectedDatabase, true);
@@ -192,7 +191,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       onZoomIn: () => {},
       onZoomOut: () => {},
       onZoomReset: () => {},
-      onToggleFullscreen: () => {
+      onFullscreen: () => {
         const elem = document.fullscreenElement
           ? document.exitFullscreen()
           : document.documentElement.requestFullscreen();
@@ -218,8 +217,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           new CustomEvent('tab-action', { detail: { action: 'execute-query' } })
         );
       },
-      onSettings: () => setSettingsDialogOpen(true),
-      onGlobalSearch: () => setGlobalSearchOpen(true),
+      onOptions: () => setSettingsDialogOpen(true),
+      onSearch: () => setGlobalSearchOpen(true),
       onNewTab: () => {
         window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } }));
       },
@@ -229,10 +228,10 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       onNextTab: () => {
         window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'next-tab' } }));
       },
-      onPreviousTab: () => {
-        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'previous-tab' } }));
+      onPrevTab: () => {
+        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'prev-tab' } }));
       },
-      onHelp: () => {},
+      onDocumentation: () => {},
     }),
     [selectedConnectionId, selectedDatabase]
   );

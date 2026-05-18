@@ -119,6 +119,7 @@ export interface QueryResult {
   rows: unknown[][];
   rows_affected?: number;
   error?: string;
+  execution_time_ms?: number;
 }
 
 export interface DatabaseObject {

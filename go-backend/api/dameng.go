@@ -137,6 +137,55 @@ func damengGetTablesCategorized(ctx context.Context, dbConn db.Executor, databas
 	return result, nil
 }
 
+func damengGetAllColumns(ctx context.Context, dbConn db.Executor, database *string) (models.AllColumnsResult, error) {
+	schema := "SYSDBA"
+	if database != nil && *database != "" {
+		schema = *database
+	}
+
+	query := `
+		SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE,
+			CASE WHEN NULLABLE = 'N' THEN 'NO' ELSE 'YES' END AS IS_NULLABLE,
+			NULL AS COLUMN_KEY,
+			DATA_DEFAULT AS COLUMN_DEFAULT,
+			NULL AS EXTRA,
+			NULL AS COMMENT
+		FROM SYS.DBA_TAB_COLUMNS
+		WHERE OWNER = ?
+		ORDER BY TABLE_NAME, COLUMN_ID
+	`
+	rows, err := dbConn.QueryContext(ctx, query, schema)
+	if err != nil {
+		query = `
+			SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE,
+				CASE WHEN NULLABLE = 'N' THEN 'NO' ELSE 'YES' END,
+				NULL, DATA_DEFAULT, NULL, NULL
+			FROM SYS.ALL_TAB_COLUMNS
+			WHERE OWNER = ?
+			ORDER BY TABLE_NAME, COLUMN_ID
+		`
+		rows, err = dbConn.QueryContext(ctx, query, schema)
+		if err != nil {
+			return models.AllColumnsResult{}, err
+		}
+	}
+	defer rows.Close()
+
+	result := models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}
+	for rows.Next() {
+		var c models.ColumnInfo
+		var tableName string
+		var key, extra, comment sql.NullString
+		var def sql.NullString
+		if err := rows.Scan(&tableName, &c.ColumnName, &c.DataType, &c.IsNullable, &key, &def, &extra, &comment); err != nil {
+			continue
+		}
+		c.ColumnDefault = nullStrEmpty(def)
+		result.Tables[tableName] = append(result.Tables[tableName], c)
+	}
+	return result, rows.Err()
+}
+
 func damengGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
 	schema := "SYSDBA"
 	if database != nil && *database != "" {

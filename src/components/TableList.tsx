@@ -54,6 +54,12 @@ export interface TableData {
 
 const nextCopyIdRef = { current: 0 };
 
+interface ColumnDef {
+  key: string;
+  width: string;
+  align?: 'left' | 'right' | 'center';
+}
+
 export interface TableListProps {
   connectionId: string;
   database?: string;
@@ -141,26 +147,146 @@ const TableRow = React.memo(
     table,
     selected,
     onClick,
+    columns,
   }: {
     table: TableData;
     selected: boolean;
     onClick: () => void;
+    columns: ColumnDef[];
   }) {
-    const formatSafeDate = (dateStr?: string) => {
-      if (!dateStr) return '-';
-      const d = new Date(dateStr);
-      return isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
+    const cellRenderers: Record<string, (t: TableData) => React.ReactNode> = {
+      table_name: (t) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {t.table_type === 'VIEW' ? (
+            <EyeOutlined style={{ fontSize: 12, color: 'var(--db-color-sqlserver)', flexShrink: 0 }} />
+          ) : (
+            <TableOutlined style={{ color: 'var(--color-success)', flexShrink: 0, fontSize: 12 }} />
+          )}
+          <span
+            title={t.table_name}
+            style={{
+              fontSize: 12,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {t.table_name}
+          </span>
+        </div>
+      ),
+      comment: (t) => (
+        <div style={{ minWidth: 0, paddingRight: 8, overflow: 'hidden' }}>
+          <span
+            title={t.comment}
+            style={{
+              fontSize: 11,
+              color: t.comment ? 'var(--text-tertiary)' : 'var(--text-disabled)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'block',
+            }}
+          >
+            {t.comment || '-'}
+          </span>
+        </div>
+      ),
+      row_count: (t) => {
+        const count = t.row_count != null ? t.row_count.toLocaleString() : '-';
+        return (
+          <div style={{ textAlign: 'right' }}>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--text-tertiary)',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+              }}
+            >
+              {count}
+            </span>
+          </div>
+        );
+      },
+      data_size: (t) => (
+        <div style={{ textAlign: 'right' }}>
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--text-tertiary)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {t.data_size || '-'}
+          </span>
+        </div>
+      ),
+      engine: (t) => (
+        <div style={{ textAlign: 'center' }}>
+          <span
+            style={{
+              fontSize: 10,
+              color: 'var(--text-secondary)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {t.engine || '-'}
+          </span>
+        </div>
+      ),
+      create_time: (t) => {
+        const d = t.create_time ? new Date(t.create_time) : null;
+        const s = d && !isNaN(d.getTime()) ? d.toLocaleDateString() : '-';
+        return (
+          <div>
+            <span
+              title={t.create_time || ''}
+              style={{
+                fontSize: 10,
+                color: 'var(--text-tertiary)',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+              }}
+            >
+              {s}
+            </span>
+          </div>
+        );
+      },
+      update_time: (t) => {
+        const d = t.update_time ? new Date(t.update_time) : null;
+        const s = d && !isNaN(d.getTime()) ? d.toLocaleDateString() : '-';
+        return (
+          <div>
+            <span
+              title={t.update_time || ''}
+              style={{
+                fontSize: 10,
+                color: 'var(--text-tertiary)',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+              }}
+            >
+              {s}
+            </span>
+          </div>
+        );
+      },
     };
-    const rowCount = table.row_count != null ? table.row_count.toLocaleString() : '-';
-    const createTime = formatSafeDate(table.create_time);
-    const updateTime = formatSafeDate(table.update_time);
 
     return (
       <div
         onClick={onClick}
         style={{
           display: 'grid',
-          gridTemplateColumns: '280px 180px 70px 70px 60px 110px 110px',
+          gridTemplateColumns: columns.map((c) => c.width).join(' '),
           padding: '4px 12px',
           alignItems: 'center',
           cursor: 'pointer',
@@ -180,101 +306,12 @@ const TableRow = React.memo(
           }
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <TableOutlined style={{ color: 'var(--color-success)', flexShrink: 0, fontSize: 12 }} />
-          <span
-            title={table.table_name}
-            style={{
-              fontSize: 12,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-            }}
-          >
-            {table.table_name}
-          </span>
-        </div>
-        <div style={{ minWidth: 0, paddingRight: 8, overflow: 'hidden' }}>
-          <span
-            title={table.comment}
-            style={{
-              fontSize: 11,
-              color: table.comment ? 'var(--text-tertiary)' : 'var(--text-disabled)',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              display: 'block',
-            }}
-          >
-            {table.comment || '-'}
-          </span>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--text-tertiary)',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-            }}
-          >
-            {rowCount}
-          </span>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--text-tertiary)',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-            }}
-          >
-            {table.data_size || '-'}
-          </span>
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <span
-            style={{
-              fontSize: 10,
-              color: 'var(--text-secondary)',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-            }}
-          >
-            {table.engine || '-'}
-          </span>
-        </div>
-        <div>
-          <span
-            title={table.create_time}
-            style={{
-              fontSize: 10,
-              color: 'var(--text-tertiary)',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-            }}
-          >
-            {createTime}
-          </span>
-        </div>
-        <div>
-          <span
-            title={table.update_time}
-            style={{
-              fontSize: 10,
-              color: 'var(--text-tertiary)',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-            }}
-          >
-            {updateTime}
-          </span>
-        </div>
+        {columns.map((col) => {
+          const renderer = cellRenderers[col.key];
+          return renderer ? (
+            <React.Fragment key={col.key}>{renderer(table)}</React.Fragment>
+          ) : null;
+        })}
       </div>
     );
   },
@@ -282,7 +319,7 @@ const TableRow = React.memo(
     return (
       prevProps.table === nextProps.table &&
       prevProps.selected === nextProps.selected &&
-      prevProps.onClick === nextProps.onClick
+      prevProps.columns === nextProps.columns
     );
   }
 );
@@ -310,22 +347,30 @@ function formatSortValue(table: TableData, key: SortKey): string | number {
 }
 
 // List header component
-function ListHeader({ sort, onSort }: { sort: SortState; onSort: (key: SortKey) => void }) {
+function ListHeader({
+  sort,
+  onSort,
+  columns,
+}: {
+  sort: SortState;
+  onSort: (key: SortKey) => void;
+  columns: ColumnDef[];
+}) {
   const { t } = useTranslation();
-  const cols: { key: SortKey; label: string; align?: 'left' | 'right' | 'center' }[] = [
-    { key: 'table_name', label: t('common.tableName') },
-    { key: 'comment', label: t('common.comment') },
-    { key: 'row_count', label: t('common.tableList.rowCount'), align: 'right' },
-    { key: 'data_size', label: t('common.dataSize'), align: 'right' },
-    { key: 'engine', label: t('common.engine'), align: 'center' },
-    { key: 'create_time', label: t('common.createTime') },
-    { key: 'update_time', label: t('common.updateTime') },
-  ];
+  const labelMap: Record<string, string> = {
+    table_name: t('common.tableName'),
+    comment: t('common.comment'),
+    row_count: t('common.tableList.rowCount'),
+    data_size: t('common.dataSize'),
+    engine: t('common.engine'),
+    create_time: t('common.createTime'),
+    update_time: t('common.updateTime'),
+  };
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '280px 180px 70px 70px 60px 110px 110px',
+        gridTemplateColumns: columns.map((c) => c.width).join(' '),
         padding: '6px 12px',
         background: 'var(--header-bg)',
         borderBottom: '1px solid var(--border)',
@@ -337,7 +382,7 @@ function ListHeader({ sort, onSort }: { sort: SortState; onSort: (key: SortKey) 
         zIndex: 1,
       }}
     >
-      {cols.map((col) => {
+      {columns.map((col) => {
         const isActive = sort.key === col.key;
         return (
           <span
@@ -356,9 +401,9 @@ function ListHeader({ sort, onSort }: { sort: SortState; onSort: (key: SortKey) 
                     : 'flex-start',
               gap: 2,
             }}
-            onClick={() => onSort(col.key)}
+            onClick={() => onSort(col.key as SortKey)}
           >
-            {col.label}
+            {labelMap[col.key]}
             {isActive && (
               <span style={{ fontSize: 10, color: 'var(--color-primary)' }}>
                 {sort.order === 'asc' ? '▲' : '▼'}
@@ -394,6 +439,36 @@ function TableListComponent({
   const [localLoading, setLocalLoading] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: null, order: 'asc' });
   const tc = useThemeColors();
+  const dbType = useAppStore(
+    (state) => state.connections.find((c) => c.id === connectionId)?.db_type,
+  );
+
+  const columns = useMemo<ColumnDef[]>(() => {
+    const isMySQL = dbType === 'mysql' || dbType === 'mariadb';
+    const hasComment =
+      !dbType ||
+      isMySQL ||
+      ['postgresql', 'kingbase', 'highgo', 'vastbase', 'sqlserver', 'oracle'].includes(
+        dbType || '',
+      );
+    const showDetail = !dbType || isMySQL;
+
+    const cols: ColumnDef[] = [{ key: 'table_name', width: 'minmax(160px, 1.5fr)' }];
+    if (hasComment) {
+      cols.push({ key: 'comment', width: 'minmax(120px, 1fr)' });
+    }
+    if (showDetail) {
+      cols.push(
+        { key: 'row_count', width: '80px', align: 'right' },
+        { key: 'data_size', width: '80px', align: 'right' },
+        { key: 'engine', width: '72px', align: 'center' },
+        { key: 'create_time', width: '120px' },
+        { key: 'update_time', width: '120px' },
+      );
+    }
+    return cols;
+  }, [dbType]);
+
   const { message } = App.useApp();
 
   const tableDataCache = useAppStore((state) => state.tableDataCache);
@@ -564,9 +639,10 @@ function TableListComponent({
           table={table}
           selected={selectedRow === table.table_name}
           onClick={() => handleTableClickRef.current(table.table_name)}
+          columns={columns}
         />
       )),
-    [filteredTables, selectedRow]
+    [filteredTables, selectedRow, columns]
   );
 
   const tableGridItems = useMemo(
@@ -853,7 +929,7 @@ function TableListComponent({
           </div>
         ) : viewMode === 'list' ? (
           <div style={{ background: 'var(--background-card)' }}>
-            <ListHeader sort={sort} onSort={handleSort} />
+            <ListHeader sort={sort} onSort={handleSort} columns={columns} />
             {tableRowItems}
           </div>
         ) : (

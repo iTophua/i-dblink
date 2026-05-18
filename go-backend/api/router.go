@@ -54,6 +54,7 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 	mux.HandleFunc("POST /tables", recoverMiddleware(h.GetTables))
 	mux.HandleFunc("POST /tables-categorized", recoverMiddleware(h.GetTablesCategorized))
 	mux.HandleFunc("POST /columns", recoverMiddleware(h.GetColumns))
+	mux.HandleFunc("POST /all-columns", recoverMiddleware(h.GetAllColumns))
 	mux.HandleFunc("POST /indexes", recoverMiddleware(h.GetIndexes))
 	mux.HandleFunc("POST /foreign-keys", recoverMiddleware(h.GetForeignKeys))
 	mux.HandleFunc("POST /table-structure", recoverMiddleware(h.GetTableStructure))

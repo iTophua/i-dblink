@@ -134,6 +134,39 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, datab
 	return result, rows.Err()
 }
 
+func postgresGetAllColumns(ctx context.Context, dbConn db.Executor, database *string) (models.AllColumnsResult, error) {
+	schema := "public"
+	if database != nil && *database != "" {
+		schema = *database
+	}
+
+	query := `
+		SELECT table_name, column_name, data_type, is_nullable,
+			column_default, '' as extra, '' as comment
+		FROM information_schema.columns
+		WHERE table_schema = $1
+		ORDER BY table_name, ordinal_position
+	`
+	rows, err := dbConn.QueryContext(ctx, query, schema)
+	if err != nil {
+		return models.AllColumnsResult{}, err
+	}
+	defer rows.Close()
+
+	result := models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}
+	for rows.Next() {
+		var c models.ColumnInfo
+		var tableName string
+		var def sql.NullString
+		if err := rows.Scan(&tableName, &c.ColumnName, &c.DataType, &c.IsNullable, &def, &c.Extra, &c.Comment); err != nil {
+			continue
+		}
+		c.ColumnDefault = nullStrEmpty(def)
+		result.Tables[tableName] = append(result.Tables[tableName], c)
+	}
+	return result, rows.Err()
+}
+
 func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
 	query := `
 		SELECT a.attname AS column_name,

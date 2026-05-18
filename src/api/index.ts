@@ -10,10 +10,12 @@ import type {
   QueryResult,
 } from '../types/api';
 
+import { invoke } from '@tauri-apps/api/core';
+
 // Check if running in Tauri environment
 const isTauri =
   typeof window !== 'undefined' &&
-  !!(window as Record<string, unknown>).__TAURI__;
+  !!(window as unknown as Record<string, unknown>).__TAURI__;
 
 // Safe invoke wrapper
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,7 +23,6 @@ async function safeInvoke<T>(command: string, args?: Record<string, any>): Promi
   if (!isTauri) {
     throw new Error(`Tauri API not available: ${command}`);
   }
-  const { invoke } = await import('@tauri-apps/api/core');
   return invoke(command, args);
 }
 
@@ -140,6 +141,13 @@ export const api = {
     database?: string
   ): Promise<ColumnInfo[]> {
     return await safeInvoke('get_columns', { connectionId, tableName, database });
+  },
+
+  async getAllColumns(
+    connectionId: string,
+    database?: string
+  ): Promise<Record<string, ColumnInfo[]>> {
+    return await safeInvoke('get_all_columns', { connectionId, database });
   },
 
   async getIndexes(

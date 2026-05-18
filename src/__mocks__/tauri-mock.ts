@@ -288,7 +288,7 @@ let connectionCounter = mockConnections.length;
 let currentConnections = [...mockConnections];
 let currentGroups = [...mockGroups];
 let currentSnippets = [...mockSnippets];
-let transactionState: { [key: string]: boolean } = {};
+const transactionState: { [key: string]: boolean } = {};
 
 const responseMap: Record<string, (args?: any) => any> = {
   test_connection: () => true,
