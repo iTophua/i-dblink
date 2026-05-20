@@ -77,7 +77,7 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_snippets_category ON snippets(category)`,
 		`CREATE INDEX IF NOT EXISTS idx_snippets_db_type ON snippets(db_type)`,
 		`INSERT OR IGNORE INTO connection_groups (id, name, icon, color, parent_id, sort_order, created_at, updated_at)
-		 VALUES ('default', '未分组', '📁', '#6d6d6d', NULL, 0, datetime('now'), datetime('now'))`,
+		 VALUES ('default', '未分组', '📁', '#6d6d6d', NULL, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
 	}
 
 	for i, migration := range migrations {

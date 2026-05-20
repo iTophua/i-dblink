@@ -71,8 +71,7 @@ func (r *ConnectionRepository) Save(conn *DbConnection) error {
 
 	existing, err := r.GetByID(conn.ID)
 	if err != nil {
-		conn.CreatedAt = now
-		return r.insert(conn)
+		return err
 	}
 	if existing == nil {
 		conn.CreatedAt = now
@@ -409,8 +408,14 @@ func scanConnection(scanner interface {
 		return nil, fmt.Errorf("failed to scan connection: %w", err)
 	}
 
-	conn.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
-	conn.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	conn.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created_at: %w", err)
+	}
+	conn.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse updated_at: %w", err)
+	}
 
 	return &conn, nil
 }
@@ -434,8 +439,14 @@ func scanGroup(scanner interface {
 		return nil, fmt.Errorf("failed to scan group: %w", err)
 	}
 
-	group.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
-	group.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	group.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created_at: %w", err)
+	}
+	group.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse updated_at: %w", err)
+	}
 
 	return &group, nil
 }
@@ -459,8 +470,14 @@ func scanSnippet(scanner interface {
 		return nil, fmt.Errorf("failed to scan snippet: %w", err)
 	}
 
-	snippet.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
-	snippet.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	snippet.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created_at: %w", err)
+	}
+	snippet.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse updated_at: %w", err)
+	}
 
 	return &snippet, nil
 }
