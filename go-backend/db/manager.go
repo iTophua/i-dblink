@@ -148,6 +148,20 @@ func (m *Manager) Get(connectionID string) (*sql.DB, error) {
 	return info.db, nil
 }
 
+// DBPool 数据库连接池结构体
+type DBPool struct {
+	db      *sql.DB
+	DbType  string
+	pool    *sql.DB // 连接池引用
+	maxPool int     // 最大连接数
+	minPool int     // 最小连接数
+}
+
+// DB 返回底层 *sql.DB
+func (p *DBPool) DB() *sql.DB {
+	return p.db
+}
+
 // GetPool 获取连接池及其类型信息
 func (m *Manager) GetPool(connectionID string) (*DBPool, error) {
 	m.mu.RLock()
@@ -158,7 +172,14 @@ func (m *Manager) GetPool(connectionID string) (*DBPool, error) {
 		return nil, fmt.Errorf("connection %s not found", connectionID)
 	}
 
-	return &DBPool{db: info.db, DbType: info.dbType}, nil
+	// 返回增强的连接池信息
+	return &DBPool{
+		db:      info.db,
+		DbType:  info.dbType,
+		pool:    info.db,
+		maxPool: 10,  // 默认最大连接数
+		minPool: 2,   // 默认最小连接数
+	}, nil
 }
 
 // GetDBType 获取连接的数据库类型

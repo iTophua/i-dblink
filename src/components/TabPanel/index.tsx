@@ -862,7 +862,15 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       if (action === 'add') {
         // 点击 + 号新增 SQL 查询 Tab
         const newSqlKey = `sql-${Date.now()}`;
-        setOpenedSqlTabs((prev) => [...prev, { key: newSqlKey, title: t('common.sqlQuery') }]);
+        setOpenedSqlTabs((prev) => [
+          ...prev,
+          {
+            key: newSqlKey,
+            title: t('common.sqlQuery'),
+            connectionId: selectedConnectionId ?? undefined,
+            database: selectedDatabase ?? undefined,
+          },
+        ]);
         setActiveKey(newSqlKey);
       } else if (action === 'remove') {
         const key = typeof targetKey === 'string' ? targetKey : '';
@@ -1094,27 +1102,27 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           {sqlTab.title || `SQL ${index + 1}`}
         </span>
       ),
-      children: (
-        <div style={{ height: '100%' }} data-testid={`sql-tab-${sqlTab.key}`}>
-          <SQLEditor
-            connectionId={selectedConnectionId}
-            database={sqlTab.database || selectedDatabase}
-            defaultQuery={sqlTab.defaultQuery}
-            dbType={getDbType(selectedConnectionId)}
-            availableDatabases={
-              selectedConnectionId && connectionDatabases?.[selectedConnectionId]
-                ? connectionDatabases[selectedConnectionId].map((db) => db.database)
-                : []
-            }
-            onDatabaseChange={(database) => {
-              setOpenedSqlTabs((prev) =>
-                prev.map((t) => (t.key === sqlTab.key ? { ...t, database } : t))
-              );
-            }}
-            onQueryStatusChange={onQueryStatusChange}
-          />
-        </div>
-      ),
+children: (
+          <div style={{ height: '100%' }} data-testid={`sql-tab-${sqlTab.key}`}>
+            <SQLEditor
+              connectionId={sqlTab.connectionId || selectedConnectionId}
+              database={sqlTab.database}
+              defaultQuery={sqlTab.defaultQuery}
+              dbType={getDbType(sqlTab.connectionId || selectedConnectionId)}
+              availableDatabases={
+                (sqlTab.connectionId || selectedConnectionId) && connectionDatabases?.[sqlTab.connectionId || selectedConnectionId || '']
+                  ? connectionDatabases[sqlTab.connectionId || selectedConnectionId || ''].map((db) => db.database)
+                  : []
+              }
+              onDatabaseChange={(database) => {
+                setOpenedSqlTabs((prev) =>
+                  prev.map((t) => (t.key === sqlTab.key ? { ...t, database } : t))
+                );
+              }}
+              onQueryStatusChange={onQueryStatusChange}
+            />
+          </div>
+        ),
       closable: true,
     })),
     // 表设计器 Tab

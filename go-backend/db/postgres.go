@@ -17,36 +17,42 @@ func openPostgres(args ConnectArgs) (*sql.DB, error) {
 		dbName = "postgres"
 	}
 
+	// 使用参数化连接字符串构建
+	dsn := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(args.Username, args.Password),
+		Host:   fmt.Sprintf("%s:%d", args.Host, args.Port),
+		Path:   dbName,
+		RawQuery: url.Values{
+			"sslmode": {sslMode},
+		}.Encode(),
+	}
+
 	// SSL/TLS 配置
 	if args.SSL.Enabled {
 		if args.SSL.SkipVerify {
-			sslMode = "require"
+			dsn.RawQuery = url.Values{
+				"sslmode": {"require"},
+			}.Encode()
 		} else {
-			sslMode = "verify-ca"
+			dsn.RawQuery = url.Values{
+				"sslmode": {"verify-ca"},
+			}.Encode()
 		}
-	}
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		args.Username,
-		url.QueryEscape(args.Password),
-		args.Host,
-		args.Port,
-		dbName,
-		sslMode,
-	)
-
-	// 添加 SSL 证书参数
-	if args.SSL.Enabled {
+		// 添加 SSL 证书参数
+		query := dsn.Query()
 		if args.SSL.CAPath != "" {
-			dsn += fmt.Sprintf("&sslrootcert=%s", url.QueryEscape(args.SSL.CAPath))
+			query.Set("sslrootcert", args.SSL.CAPath)
 		}
 		if args.SSL.CertPath != "" {
-			dsn += fmt.Sprintf("&sslcert=%s", url.QueryEscape(args.SSL.CertPath))
+			query.Set("sslcert", args.SSL.CertPath)
 		}
 		if args.SSL.KeyPath != "" {
-			dsn += fmt.Sprintf("&sslkey=%s", url.QueryEscape(args.SSL.KeyPath))
+			query.Set("sslkey", args.SSL.KeyPath)
 		}
+		dsn.RawQuery = query.Encode()
 	}
 
-	return sql.Open("postgres", dsn)
+	return sql.Open("postgres", dsn.String())
 }

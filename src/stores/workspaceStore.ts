@@ -46,6 +46,7 @@ export interface WorkspaceSnapshot {
 interface WorkspaceState extends WorkspaceSnapshot {
   updateWorkspace: (updates: Partial<WorkspaceSnapshot>) => void;
   clearWorkspace: () => void;
+  batchUpdate: (updates: Partial<WorkspaceSnapshot>) => void;
 }
 
 const defaultWorkspace: WorkspaceSnapshot = {
@@ -94,10 +95,70 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     (set) => ({
       ...defaultWorkspace,
       updateWorkspace: (updates) =>
-        set((state) => ({
-          ...state,
-          ...updates,
-        })),
+        set((state) => {
+          // 深度合并以避免不必要的更新
+          const newState = { ...state };
+          let hasChanges = false;
+          
+          for (const key in updates) {
+            const updateValue = (updates as any)[key];
+            if (Array.isArray(updateValue)) {
+              // 对于数组，检查是否需要更新
+              if (JSON.stringify((newState as any)[key]) !== JSON.stringify(updateValue)) {
+                (newState as any)[key] = [...updateValue];
+                hasChanges = true;
+              }
+            } else if (typeof updateValue === 'object' && updateValue !== null) {
+              // 对于对象，深度合并
+              const current = (newState as any)[key] || {};
+              const updated = { ...current, ...updateValue };
+              if (JSON.stringify(current) !== JSON.stringify(updated)) {
+                (newState as any)[key] = updated;
+                hasChanges = true;
+              }
+            } else {
+              // 对于基本类型，直接赋值
+              if ((newState as any)[key] !== updateValue) {
+                (newState as any)[key] = updateValue;
+                hasChanges = true;
+              }
+            }
+          }
+          
+          return hasChanges ? newState : state;
+        }),
+        
+        // 批量更新方法，减少多次状态更新的开销
+        batchUpdate: (updates) => {
+          set((state) => {
+            const newState = { ...state };
+            let hasChanges = false;
+            
+            for (const key in updates) {
+              const updateValue = (updates as any)[key];
+              if (Array.isArray(updateValue)) {
+                if (JSON.stringify((newState as any)[key]) !== JSON.stringify(updateValue)) {
+                  (newState as any)[key] = [...updateValue];
+                  hasChanges = true;
+                }
+              } else if (typeof updateValue === 'object' && updateValue !== null) {
+                const current = (newState as any)[key] || {};
+                const updated = { ...current, ...updateValue };
+                if (JSON.stringify(current) !== JSON.stringify(updated)) {
+                  (newState as any)[key] = updated;
+                  hasChanges = true;
+                }
+              } else {
+                if ((newState as any)[key] !== updateValue) {
+                  (newState as any)[key] = updateValue;
+                  hasChanges = true;
+                }
+              }
+            }
+            
+            return hasChanges ? newState : state;
+          });
+        },
       clearWorkspace: () => set(defaultWorkspace),
     }),
     {

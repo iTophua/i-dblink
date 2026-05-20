@@ -49,6 +49,7 @@ type QueryResult struct {
 	RowsAffected    *uint64         `json:"rows_affected,omitempty"`
 	Error           string          `json:"error,omitempty"`
 	ExecutionTimeMs int64           `json:"execution_time_ms,omitempty"`
+	Streaming       bool            `json:"streaming,omitempty"` // 是否为流式传输
 }
 
 // TablesResult 分类表和视图
@@ -121,9 +122,10 @@ type GenericResponse struct {
 
 // QueryRequest 查询请求
 type QueryRequest struct {
-	ConnectionID string `json:"connection_id"`
-	Database     string `json:"database,omitempty"`
-	SQL          string `json:"sql"`
+	ConnectionID   string `json:"connection_id"`
+	Database       string `json:"database,omitempty"`
+	SQL            string `json:"sql"`
+	StreamResults  bool   `json:"stream_results,omitempty"`
 }
 
 // MetadataRequest 元数据请求

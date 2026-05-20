@@ -1,4 +1,5 @@
 import { useHotkeys, Options as HotkeysOptions } from 'react-hotkeys-hook';
+import { useCallback, useEffect, useRef } from 'react';
 import { MENU_SHORTCUTS, isMacOS } from '../constants/menuShortcuts';
 import { useSettingsStore } from '../stores/settingsStore';
 
@@ -64,10 +65,54 @@ function getShortcutKeys(shortcutId: string, isMac: boolean): string {
   return shortcut.keys;
 }
 
-export function useMenuShortcuts(actions: MenuActions) {
+export function useMenuShortcuts(actions?: MenuActions) {
   const isMac = isMacOS();
+  const safeActions = actions ?? {};
 
-  // 辅助函数：注册快捷键，空字符串时禁用
+  // 通用的 registerShortcut 函数，使用原生事件监听（避免 Hook 规则问题）
+  const activeShortcutsRef = useRef<Set<string>>(new Set());
+  
+  const registerShortcut = useCallback(
+    (id: string, callback: () => void, options: HotkeysOptions = defaultOptions) => {
+      const keys = getShortcutKeys(id, isMac);
+      if (!keys) return () => {}; // 返回空清理函数
+      
+      const handler = (e: KeyboardEvent) => {
+        // 解析快捷键字符串（简化版，支持 mod+key 格式）
+        const parts = keys.toLowerCase().split('+');
+        const key = parts[parts.length - 1];
+        const needsMod = parts.includes('mod');
+        const needsShift = parts.includes('shift');
+        const needsAlt = parts.includes('alt');
+        
+        const isMod = isMac ? e.metaKey : e.ctrlKey;
+        
+        if (
+          e.key.toLowerCase() === key &&
+          (!needsMod || isMod) &&
+          (!needsShift || e.shiftKey) &&
+          (!needsAlt || e.altKey)
+        ) {
+          if (options.preventDefault !== false) {
+            e.preventDefault();
+          }
+          callback();
+        }
+      };
+      
+      document.addEventListener('keydown', handler);
+      activeShortcutsRef.current.add(id);
+      
+      // 返回清理函数
+      return () => {
+        document.removeEventListener('keydown', handler);
+        activeShortcutsRef.current.delete(id);
+      };
+    },
+    [isMac]
+  );
+
+  // 辅助函数：注册标准菜单快捷键
   const register = (
     id: string,
     callback: () => void,
@@ -84,14 +129,14 @@ export function useMenuShortcuts(actions: MenuActions) {
   };
 
   // 文件操作
-  register('new-connection', () => actions.onNewConnection?.(), defaultOptions, [
-    actions.onNewConnection,
+  register('new-connection', () => safeActions.onNewConnection?.(), defaultOptions, [
+    safeActions.onNewConnection,
   ]);
-  register('save', () => actions.onSave?.(), defaultOptions, [actions.onSave]);
-  register('save-as', () => actions.onSaveAs?.(), defaultOptions, [actions.onSaveAs]);
-  register('import', () => actions.onImport?.(), defaultOptions, [actions.onImport]);
-  register('export', () => actions.onExport?.(), defaultOptions, [actions.onExport]);
-  register('exit', () => actions.onQuit?.(), defaultOptions, [actions.onQuit]);
+  register('save', () => safeActions.onSave?.(), defaultOptions, [safeActions.onSave]);
+  register('save-as', () => safeActions.onSaveAs?.(), defaultOptions, [safeActions.onSaveAs]);
+  register('import', () => safeActions.onImport?.(), defaultOptions, [safeActions.onImport]);
+  register('export', () => safeActions.onExport?.(), defaultOptions, [safeActions.onExport]);
+  register('exit', () => safeActions.onQuit?.(), defaultOptions, [safeActions.onQuit]);
 
   // 编辑操作 - 这些由浏览器/输入框默认处理，不拦截默认行为
   // 只在非表单元素上触发自定义回调，表单元素上让浏览器原生处理
@@ -100,46 +145,46 @@ export function useMenuShortcuts(actions: MenuActions) {
     preventDefault: false,
     enabled: true,
   };
-  register('undo', () => actions.onUndo?.(), editOptions, [actions.onUndo]);
-  register('redo', () => actions.onRedo?.(), editOptions, [actions.onRedo]);
-  register('cut', () => actions.onCut?.(), editOptions, [actions.onCut]);
-  register('copy', () => actions.onCopy?.(), editOptions, [actions.onCopy]);
-  register('paste', () => actions.onPaste?.(), editOptions, [actions.onPaste]);
-  register('delete', () => actions.onDelete?.(), editOptions, [actions.onDelete]);
-  register('select-all', () => actions.onSelectAll?.(), editOptions, [actions.onSelectAll]);
-  register('find', () => actions.onFind?.(), editOptions, [actions.onFind]);
+  register('undo', () => safeActions.onUndo?.(), editOptions, [safeActions.onUndo]);
+  register('redo', () => safeActions.onRedo?.(), editOptions, [safeActions.onRedo]);
+  register('cut', () => safeActions.onCut?.(), editOptions, [safeActions.onCut]);
+  register('copy', () => safeActions.onCopy?.(), editOptions, [safeActions.onCopy]);
+  register('paste', () => safeActions.onPaste?.(), editOptions, [safeActions.onPaste]);
+  register('delete', () => safeActions.onDelete?.(), editOptions, [safeActions.onDelete]);
+  register('select-all', () => safeActions.onSelectAll?.(), editOptions, [safeActions.onSelectAll]);
+  register('find', () => safeActions.onFind?.(), editOptions, [safeActions.onFind]);
 
   // 查看操作
-  register('refresh', () => actions.onRefresh?.(), defaultOptions, [actions.onRefresh]);
-  register('zoom-in', () => actions.onZoomIn?.(), defaultOptions, [actions.onZoomIn]);
-  register('zoom-out', () => actions.onZoomOut?.(), defaultOptions, [actions.onZoomOut]);
-  register('zoom-reset', () => actions.onZoomReset?.(), defaultOptions, [actions.onZoomReset]);
-  register('fullscreen', () => actions.onFullscreen?.(), defaultOptions, [actions.onFullscreen]);
+  register('refresh', () => safeActions.onRefresh?.(), defaultOptions, [safeActions.onRefresh]);
+  register('zoom-in', () => safeActions.onZoomIn?.(), defaultOptions, [safeActions.onZoomIn]);
+  register('zoom-out', () => safeActions.onZoomOut?.(), defaultOptions, [safeActions.onZoomOut]);
+  register('zoom-reset', () => safeActions.onZoomReset?.(), defaultOptions, [safeActions.onZoomReset]);
+  register('fullscreen', () => safeActions.onFullscreen?.(), defaultOptions, [safeActions.onFullscreen]);
 
   // 连接操作
-  register('connect-selected', () => actions.onConnectSelected?.(), defaultOptions, [
-    actions.onConnectSelected,
+  register('connect-selected', () => safeActions.onConnectSelected?.(), defaultOptions, [
+    safeActions.onConnectSelected,
   ]);
-  register('disconnect', () => actions.onDisconnect?.(), defaultOptions, [actions.onDisconnect]);
-  register('new-query', () => actions.onNewQuery?.(), defaultOptions, [actions.onNewQuery]);
-  register('execute-query', () => actions.onExecuteQuery?.(), defaultOptions, [
-    actions.onExecuteQuery,
+  register('disconnect', () => safeActions.onDisconnect?.(), defaultOptions, [safeActions.onDisconnect]);
+  register('new-query', () => safeActions.onNewQuery?.(), defaultOptions, [safeActions.onNewQuery]);
+  register('execute-query', () => safeActions.onExecuteQuery?.(), defaultOptions, [
+    safeActions.onExecuteQuery,
   ]);
   register('close-all', () => {}, defaultOptions, []);
 
   // 工具操作
-  register('options', () => actions.onOptions?.(), defaultOptions, [actions.onOptions]);
-  register('search', () => actions.onSearch?.(), defaultOptions, [actions.onSearch]);
+  register('options', () => safeActions.onOptions?.(), defaultOptions, [safeActions.onOptions]);
+  register('search', () => safeActions.onSearch?.(), defaultOptions, [safeActions.onSearch]);
 
   // 窗口操作
-  register('new-tab', () => actions.onNewTab?.(), defaultOptions, [actions.onNewTab]);
-  register('close-tab', () => actions.onCloseTab?.(), defaultOptions, [actions.onCloseTab]);
-  register('next-tab', () => actions.onNextTab?.(), defaultOptions, [actions.onNextTab]);
-  register('prev-tab', () => actions.onPrevTab?.(), defaultOptions, [actions.onPrevTab]);
+  register('new-tab', () => safeActions.onNewTab?.(), defaultOptions, [safeActions.onNewTab]);
+  register('close-tab', () => safeActions.onCloseTab?.(), defaultOptions, [safeActions.onCloseTab]);
+  register('next-tab', () => safeActions.onNextTab?.(), defaultOptions, [safeActions.onNextTab]);
+  register('prev-tab', () => safeActions.onPrevTab?.(), defaultOptions, [safeActions.onPrevTab]);
 
   // 帮助操作
-  register('documentation', () => actions.onDocumentation?.(), defaultOptions, [
-    actions.onDocumentation,
+  register('documentation', () => safeActions.onDocumentation?.(), defaultOptions, [
+    safeActions.onDocumentation,
   ]);
 
   // macOS 特定快捷键
@@ -174,4 +219,6 @@ export function useMenuShortcuts(actions: MenuActions) {
       []
     );
   }
+
+  return { registerShortcut };
 }

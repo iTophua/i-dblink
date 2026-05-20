@@ -341,23 +341,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     [saveConnection]
   );
 
-  const handleConnectionExpand = useCallback(
-    async (connectionId: string, expanded: boolean) => {
-      if (expanded && !connectionDatabases[connectionId]) {
-        try {
-          const databases = await getDatabases(connectionId);
-          const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
-          setConnectionDatabases((prev) => ({
-            ...prev,
-            [connectionId]: dbList,
-          }));
-        } catch (error) {
-          console.error('Failed to load databases:', error);
-        }
-      }
-    },
-    [connectionDatabases, getDatabases]
-  );
+// ConnectionTree handles connection expansion internally
 
   const loadDatabaseTables = useCallback(
     async (connectionId: string, database: string, forceRefresh = false) => {
@@ -446,18 +430,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     }
   }, []);
 
-  const handleTableSelect = useCallback((table: string | null, database?: string) => {
-    setSelectedTable(table);
-    setSelectedDatabase(database);
-  }, []);
+  // ConnectionTree handles table selection internally
 
-  const handleConnectionSelect = useCallback(
-    (id: string | null) => {
-      setSelectedConnectionId(id);
-      setActiveConnection(id);
-    },
-    [setActiveConnection]
-  );
+  // ConnectionTree handles connection selection internally
 
   const handleConnect = useCallback(
     async (connectionId: string) => {
@@ -1013,87 +988,65 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
               </div>
             )}
 
-            <div style={styles.connectionTreeContainer} className="connection-tree-container">
-              <EnhancedConnectionTree
-                connections={connections}
-                groups={groups}
-                selectedId={selectedConnectionId}
-                selectedTableId={selectedTable}
-                onSelect={handleConnectionSelect}
-                onTableSelect={(table, database) => {
-                  setSelectedTable(table);
-                  setSelectedDatabase(database);
-                }}
-                onObjectTypeSelect={(objectType, database) => {
-                  setSelectedObjectType(objectType);
-                  setSelectedDatabase(database);
-                }}
-                onTableOpen={(tableName, database) => {
-                  setTableToOpen(null);
-                  setTimeout(() => {
-                    setTableToOpen({ name: tableName, database, isView: false });
-                  }, 0);
-                }}
-                onViewOpen={(viewName, database) => {
-                  setTableToOpen(null);
-                  setTimeout(() => {
-                    setTableToOpen({ name: viewName, database, isView: true });
-                  }, 0);
-                }}
-                onOpenDesigner={(tableName, database) => {
-                  tabPanelRef.current?.openDesignerTab(tableName);
-                }}
-                onOpenViewDefinition={(viewName, database) => {
-                  tabPanelRef.current?.openViewDefTab(viewName);
-                }}
-                onOpenTrigger={(connectionId, database, name) => {
-                  tabPanelRef.current?.openSqlTab({
-                    connectionId,
-                    database,
-                    title: `${t('common.trigger')}: ${name}`,
-                    defaultQuery: `-- Trigger ${name}\nSELECT 1;`,
-                  });
-                }}
-                onExpand={handleConnectionExpand}
-                collapsed={collapsed}
-                searchText={debouncedSearch}
-                expandedKeys={expandedKeys}
-                onExpandKeys={setExpandedKeys}
-                connectionDatabases={connectionDatabases}
-                isLoading={isLoading}
-                onConnect={handleConnect}
-                onDisconnect={handleDisconnect}
-                onEditConnection={handleEditConnection}
-                onDeleteConnection={handleDeleteConnection}
-                onNewQuery={handleNewQuery}
-                onOpenRoutine={async (connId, db, name, type) => {
-                  try {
-                    const body =
-                      type === 'procedure'
-                        ? await api.getProcedureBody(connId, name, db)
-                        : await api.getFunctionBody(connId, name, db);
-                    tabPanelRef.current?.openSqlTab({
-                      connectionId: connId,
-                      database: db,
-                      title: `${type === 'procedure' ? t('common.procedure') : t('common.function')}: ${name}`,
-                      defaultQuery: body,
-                    });
-                  } catch (err: any) {
-                    console.error('Failed to load routine body:', err);
-                  }
-                }}
-                onDatabaseExpand={handleDatabaseExpand}
-                onDatabaseRefresh={handleDatabaseRefresh}
-                onDatabaseClose={handleDatabaseClose}
-                onDatabaseProperties={handleDatabaseProperties}
-                onLoadDatabases={handleLoadDatabases}
-                onTableExpand={handleTableExpand}
-                onSaveConnection={handleSaveConnection}
-                onSaveGroup={handleSaveGroup}
-                onDeleteGroup={handleDeleteGroup}
-                onCreateConnection={() => setConnectionDialogOpen(true)}
-              />
-            </div>
+             <div style={styles.connectionTreeContainer} className="connection-tree-container">
+               <EnhancedConnectionTree
+                 connections={connections}
+                 groups={groups}
+                 selectedId={selectedConnectionId}
+                 selectedTableId={selectedTable}
+                 onSelect={(id) => {
+                   setSelectedConnectionId(id);
+                   setSelectedTable(null);
+                 }}
+                 onTableSelect={(table, database) => {
+                   setSelectedTable(table);
+                   setSelectedDatabase(database);
+                 }}
+                 onObjectTypeSelect={setSelectedObjectType}
+                 onTableOpen={(tableName, database) => {
+                   setTableToOpen(null);
+                   setTimeout(() => {
+                     setTableToOpen({ name: tableName, database });
+                   }, 0);
+                 }}
+                 onViewOpen={(viewName, database) => {
+                   setTableToOpen(null);
+                   setTimeout(() => {
+                     setTableToOpen({ name: viewName, database, isView: true });
+                   }, 0);
+                 }}
+                 onExpand={(connectionId, expanded) => {
+                   if (expanded) {
+                     setExpandedKeys((prev) => [...prev, connectionId]);
+                   } else {
+                     setExpandedKeys((prev) => prev.filter((k) => k !== connectionId));
+                   }
+                 }}
+                 collapsed={collapsed}
+                 searchText={searchText}
+                 expandedKeys={expandedKeys}
+                 onExpandKeys={setExpandedKeys}
+                 connectionDatabases={connectionDatabases}
+                 isLoading={isLoading}
+                 onConnect={handleConnect}
+                 onDisconnect={handleDisconnect}
+                 onEditConnection={handleEditConnection}
+                 onDeleteConnection={handleDeleteConnection}
+                 onNewQuery={handleNewQuery}
+                 onDatabaseExpand={handleDatabaseExpand}
+                 onDatabaseRefresh={handleDatabaseRefresh}
+                 onDatabaseClose={handleDatabaseClose}
+                 onDatabaseProperties={handleDatabaseProperties}
+                 onLoadDatabases={handleLoadDatabases}
+                 onTableExpand={handleTableExpand}
+                 onSaveConnection={async (data: any) => {
+                   await saveConnection(data);
+                 }}
+                 onSaveGroup={saveGroup}
+                 onDeleteGroup={deleteGroup}
+                 onCreateConnection={() => setConnectionDialogOpen(true)}
+               />
+             </div>
 
             <div
               onClick={() => setCollapsed(!collapsed)}
@@ -1168,8 +1121,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         open={globalSearchOpen}
         onClose={() => setGlobalSearchOpen(false)}
         onSelectTable={(connectionId, database, tableName) => {
-          handleConnectionSelect(connectionId);
           setSelectedConnectionId(connectionId);
+          setSelectedDatabase(database);
           setTableToOpen({ name: tableName, database });
         }}
         connectionDatabases={connectionDatabases}

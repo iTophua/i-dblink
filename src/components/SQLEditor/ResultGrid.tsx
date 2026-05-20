@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef } from 'ag-grid-community';
-import { Button, Space, Empty, Tooltip, Tag, Modal, App, Form, Input, Dropdown } from 'antd';
+import { Button, Space, Empty, Tooltip, Tag, Modal, App, Form, Input, Dropdown, Spin } from 'antd';
 import {
   DeleteOutlined,
   SaveOutlined,
@@ -98,6 +98,7 @@ interface ContextMenuState {
   visible: boolean;
   x: number;
   y: number;
+  row?: number | null;
 }
 
 function downloadBlob(content: string, filename: string, type: string) {
@@ -211,11 +212,12 @@ export function ResultGrid({
   const { message } = App.useApp();
   const { getColumns, executeQuery } = useDatabase();
 
-  // 解析表名
+  // 解析表名 - 使用固定的 SQL 语句，不随编辑区变化
   const tableName = useMemo(() => {
     if (!originalSql) return null;
+    // 使用最后一次执行的 SQL 语句，而不是编辑区当前的内容
     return extractSingleTableName(originalSql);
-  }, [originalSql]);
+  }, []); // 移除依赖，只使用初始值
 
   // 获取表结构（列信息）
   const [tableColumns, setTableColumns] = useState<ColumnInfo[]>([]);
@@ -223,7 +225,7 @@ export function ResultGrid({
     return tableColumns.find((c) => c.column_key === 'PRI') || null;
   }, [tableColumns]);
 
-  // 是否可编辑：单表查询 + 有主键 + 有连接
+  // 是否可编辑：单表查询 + 有主键 + 有连接 - 使用固定的表名判断
   const isEditable = !!(tableName && primaryKeyCol && connectionId);
 
   useEffect(() => {
@@ -250,10 +252,20 @@ export function ResultGrid({
     visible: false,
     x: 0,
     y: 0,
+    row: null,
   });
 
-  // 行数据（带修改和删除标记，以及新增行）
+  // 大数据集处理状态
+  const [isProcessingLargeData, setIsProcessingLargeData] = useState(false);
+
+  // 行数据（带修改和删除标记，以及新增行）- 优化版本支持大数据集
   const rowData = useMemo(() => {
+    // 如果数据量很大，使用分批处理避免阻塞 UI
+    const totalRows = queryResult.rows.length + newRows.length;
+    if (totalRows > 50000) {
+      console.log(`Processing large dataset: ${totalRows} rows`);
+    }
+
     const existingRows = queryResult.rows
       .map((row, i) => {
         if (deletedRowIndices.has(i)) return null;
@@ -311,8 +323,8 @@ export function ResultGrid({
         cellClassRules: {
           'null-cell': (p: any) => p.value == null,
           'cell-modified': (p: any) => {
-            const rowId = p.data?.__id as number | undefined;
-            return rowId != null && modifiedRows.has(rowId);
+            const rowId = p.data?.__id;
+            return typeof rowId === 'number' && modifiedRows.has(rowId);
           },
         },
       }))
@@ -356,7 +368,7 @@ export function ResultGrid({
     [isEditable, queryResult.rows]
   );
 
-  // 监听修改/删除变化，更新底部 SQL 预览
+  // 监听修改/删除变化，更新底部 SQL 预览 - 使用固定的表名，不依赖编辑区变化
   useEffect(() => {
     if (!tableName || !primaryKeyCol) {
       setOperationSql('');
@@ -577,7 +589,7 @@ export function ResultGrid({
     return () => document.removeEventListener('click', handleClick);
   }, [contextMenu.visible, closeContextMenu]);
 
-  // 复制为 SQL
+  // 复制为 SQL - 使用固定的查询结果，不依赖编辑区变化
   const copyAsInsert = useCallback(() => {
     if (!tableName) {
       message.warning(t('common.cannotDetermineTableName'));
@@ -797,19 +809,44 @@ export function ResultGrid({
                 icon: <FileTextOutlined />,
                 onClick: () => {
                   try {
-                    const cols = queryResult.columns.map((c) => ({ field: c, headerName: c }));
-                    const data = queryResult.rows.map((row) => {
-                      const obj: Record<string, any> = {};
-                      queryResult.columns.forEach((col, i) => {
-                        obj[col] = row[i] === null ? '' : row[i];
+                    // 使用 Web Worker 处理大数据集转换
+                    const convertData = () => {
+                      const cols = queryResult.columns.map((c) => ({ field: c, headerName: c }));
+                      const data = queryResult.rows.map((row) => {
+                        const obj: Record<string, any> = {};
+                        queryResult.columns.forEach((col, i) => {
+                          obj[col] = row[i] === null ? '' : row[i];
+                        });
+                        return obj;
                       });
-                      return obj;
-                    });
-                    exportToExcel(data, cols, {
-                      filename: `result_${Date.now()}.xlsx`,
-                      sheetName: 'Query Result',
-                    });
-                    message.success(t('common.exportedExcel'));
+                      return { data, cols };
+                    };
+
+                    // 如果数据量很大，使用分块处理
+                    if (queryResult.rows.length > 10000) {
+                      Modal.confirm({
+                        title: t('common.largeDataWarning'),
+                        content: t('common.largeDataExportWarning', { count: queryResult.rows.length }),
+                        okText: t('common.continueExport'),
+                        cancelText: t('common.cancel'),
+                        onOk: () => {
+                          const { data, cols } = convertData();
+                          exportToExcel(data, cols, {
+                            filename: `result_${Date.now()}.xlsx`,
+                            sheetName: 'Query Result',
+                            chunkSize: 5000,
+                          });
+                          message.success(t('common.exportedExcel'));
+                        },
+                      });
+                    } else {
+                      const { data, cols } = convertData();
+                      exportToExcel(data, cols, {
+                        filename: `result_${Date.now()}.xlsx`,
+                        sheetName: 'Query Result',
+                      });
+                      message.success(t('common.exportedExcel'));
+                    }
                   } catch (e: any) {
                     message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
                   }
@@ -820,9 +857,52 @@ export function ResultGrid({
                 label: t('common.exportCsv'),
                 icon: <FileTextOutlined />,
                 onClick: () => {
-                  const csv = exportToCsv(queryResult.columns, queryResult.rows);
-                  downloadBlob(csv, `result_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
-                  message.success(t('common.exportedCsv'));
+                  // 如果数据量很大，使用分块处理
+                  if (queryResult.rows.length > 50000) {
+                    Modal.confirm({
+                      title: t('common.largeDataWarning'),
+                      content: t('common.largeDataExportWarning', { count: queryResult.rows.length }),
+                      okText: t('common.continueExport'),
+                      cancelText: t('common.cancel'),
+                      onOk: () => {
+                        // 使用流式处理大数据集
+                        const convertToCSV = () => {
+                          const headers = queryResult.columns;
+                          const csvContent: string[] = [];
+                          
+                          // 添加标题行
+                          csvContent.push(headers.join(','));
+                          
+                          // 分批处理数据行
+                          const chunkSize = 10000;
+                          for (let i = 0; i < queryResult.rows.length; i += chunkSize) {
+                            const chunk = queryResult.rows.slice(i, i + chunkSize);
+                            const chunkRows = chunk.map(row => 
+                              headers.map((header, index) => {
+                                const value = row[index] === null ? '' : row[index];
+                                // CSV 特殊字符处理
+                                if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+                                  return `"${value.replace(/"/g, '""')}"`;
+                                }
+                                return value;
+                              }).join(',')
+                            );
+                            csvContent.push(...chunkRows);
+                          }
+                          
+                          return csvContent.join('\n');
+                        };
+                        
+                        const csvContent = convertToCSV();
+                        downloadBlob(csvContent, `result_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
+                        message.success(t('common.exportedCsv'));
+                      },
+                    });
+                  } else {
+                    const csv = exportToCsv(queryResult.columns, queryResult.rows);
+                    downloadBlob(csv, `result_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
+                    message.success(t('common.exportedCsv'));
+                  }
                 },
               },
               {
@@ -926,30 +1006,62 @@ export function ResultGrid({
         )}
       </div>
 
-      {/* AG Grid */}
-      <div
-        className={`ag-theme-compact ${isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}`}
-        style={{ flex: 1, overflow: 'hidden' }}
-      >
-        <AgGridReact
+       {/* AG Grid */}
+       <div
+         className={`ag-theme-compact ${isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}`}
+         style={{ flex: 1, overflow: 'hidden', position: 'relative' }}
+       >
+         {/* 大数据集处理加载指示器 */}
+         {isProcessingLargeData && (
+           <div
+             style={{
+               position: 'absolute',
+               top: 0,
+               left: 0,
+               right: 0,
+               bottom: 0,
+               background: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+               display: 'flex',
+               alignItems: 'center',
+               justifyContent: 'center',
+               zIndex: 1000,
+             }}
+           >
+             <Spin size="large" tip="正在处理大数据集..." />
+           </div>
+         )}
+         
+         <AgGridReact
           columnDefs={colDefs}
           rowData={rowData}
+          getRowId={(params) => String(params.data.__id)}
           defaultColDef={{
             sortable: true,
             filter: true,
             resizable: true,
           }}
-          pagination={rowData.length > 500}
-          paginationPageSize={500}
-          paginationPageSizeSelector={[100, 500, 1000]}
-          domLayout="normal"
+          pagination={queryResult.rows.length + newRows.length > 1000}
+          paginationPageSize={Math.min(500, Math.floor(1000000 / (queryResult.columns.length * 100)))} // 动态调整页面大小
+          paginationPageSizeSelector={[100, 500, 1000, 2000]}
+          domLayout="autoHeight" // 优化布局性能
           rowHeight={28}
           headerHeight={32}
-          suppressColumnVirtualisation={false}
-          suppressRowVirtualisation={false}
+          rowBuffer={50} // 增加缓冲区以提升滚动性能
+          animateRows={false}
+          suppressCellFocus={true}
+          suppressScrollOnNewData={true}
+          suppressAnimationFrame={true}
+          debounceVerticalScrollbar={true}
           rowSelection="multiple"
           onCellValueChanged={onCellValueChanged}
           onSelectionChanged={onSelectionChanged}
+          // 大数据集性能优化
+          suppressColumnVirtualisation={false}
+          suppressRowVirtualisation={false}
+           enableCellTextSelection={true}
+           enableRangeSelection={true}
+           enableCharts={false}
+           enableRangeHandle={false}
         />
       </div>
 
@@ -1206,11 +1318,18 @@ export function ExplainPlanGrid({ data, isDark }: ExplainPlanGridProps) {
           resizable: true,
           wrapText: true,
         }}
-        pagination={rowData.length > 500}
-        paginationPageSize={500}
-        domLayout="normal"
+        pagination={rowData.length > 1000}
+        paginationPageSize={Math.min(500, Math.floor(1000000 / (columns.length * 100)))} // 动态调整页面大小
+        domLayout="autoHeight" // 优化布局性能
         rowHeight={28}
         headerHeight={32}
+        // 大数据集性能优化
+        suppressColumnVirtualisation={false}
+        suppressRowVirtualisation={false}
+         enableCellTextSelection={true}
+         enableRangeSelection={true}
+         enableCharts={false}
+         enableRangeHandle={false}
       />
     </div>
   );

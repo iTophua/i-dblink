@@ -117,9 +117,12 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	var tunnel *SSHTunnel
+	var tunnelErr error
+
 	// 如果有 SSH 配置，先建立临时 SSH 隧道
 	if req.SSHEnabled && req.SSHHost != "" {
-		tunnel, err := h.tunnel.StartTunnel(
+		tunnel, tunnelErr = h.tunnel.StartTunnel(
 			"test-"+req.ConnectionID,
 			req.SSHHost,
 			req.SSHPort,
@@ -131,13 +134,18 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 			req.Host,
 			req.Port,
 		)
-		if err != nil {
-			resp := models.GenericResponse{Error: fmt.Sprintf("SSH tunnel failed: %v", err)}
+		if tunnelErr != nil {
+			resp := models.GenericResponse{Error: fmt.Sprintf("SSH tunnel failed: %v", tunnelErr)}
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(resp)
 			return
 		}
-		defer h.tunnel.StopTunnel("test-" + req.ConnectionID)
+		// 确保隧道会被清理
+		defer func() {
+			if stopErr := h.tunnel.StopTunnel("test-" + req.ConnectionID); stopErr != nil {
+				debugLog("Failed to stop SSH tunnel: %v", stopErr)
+			}
+		}()
 		// 修改连接参数，使用本地隧道端口
 		connectArgs.Host = "127.0.0.1"
 		connectArgs.Port = tunnel.LocalPort()
@@ -145,7 +153,11 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 
 	// 使用临时 manager 测试连接
 	tmpMgr := db.NewManager()
-	defer tmpMgr.Disconnect("test-" + req.ConnectionID)
+	defer func() {
+		if disconnectErr := tmpMgr.Disconnect("test-" + req.ConnectionID); disconnectErr != nil {
+			debugLog("Failed to disconnect: %v", disconnectErr)
+		}
+	}()
 	err := tmpMgr.Connect("test-"+req.ConnectionID, connectArgs)
 
 	resp := models.GenericResponse{}

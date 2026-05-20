@@ -17,13 +17,91 @@ const isTauri =
   typeof window !== 'undefined' &&
   !!(window as unknown as Record<string, unknown>).__TAURI__;
 
-// Safe invoke wrapper
+// API配置
+const API_CONFIG = {
+  maxRetries: 3,
+  retryDelay: 1000, // 1秒
+  timeout: 30000,   // 30秒
+  circuitBreakerThreshold: 5, // 连续5次失败后熔断
+  circuitBreakerTimeout: 60000 // 熔断1分钟
+};
+
+// 熔断器状态
+const circuitBreakers: Record<string, {
+  failures: number;
+  lastFailure: number;
+  timeout: number;
+}> = {};
+
+// Safe invoke wrapper with retry and circuit breaker
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function safeInvoke<T>(command: string, args?: Record<string, any>): Promise<T> {
   if (!isTauri) {
     throw new Error(`Tauri API not available: ${command}`);
   }
-  return invoke(command, args);
+
+  // 检查熔断器状态
+  const breakerKey = `${command}:${JSON.stringify(args)}`;
+  const breaker = circuitBreakers[breakerKey];
+  
+  if (breaker && breaker.failures >= API_CONFIG.circuitBreakerThreshold) {
+    const now = Date.now();
+    if (now - breaker.lastFailure < breaker.timeout) {
+      throw new Error(`Circuit breaker tripped for ${command}`);
+    }
+    // 熔断超时，重置状态
+    breaker.failures = 0;
+  }
+
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < API_CONFIG.maxRetries; attempt++) {
+    try {
+      const startTime = Date.now();
+      
+      // 设置超时
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+      
+      const result = await Promise.race([
+        invoke(command, { ...args, signal: controller.signal }),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('API timeout')), API_CONFIG.timeout);
+        })
+      ]);
+      
+      clearTimeout(timeoutId);
+      
+      // 成功，重置熔断器
+      if (circuitBreakers[breakerKey]) {
+        circuitBreakers[breakerKey].failures = 0;
+      }
+      
+      return result as T;
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`Attempt ${attempt + 1} failed for ${command}:`, error);
+      
+      if (attempt < API_CONFIG.maxRetries - 1) {
+        // 等待重试延迟
+        await new Promise(resolve => setTimeout(resolve, API_CONFIG.retryDelay * (attempt + 1)));
+      }
+    }
+  }
+
+  // 所有重试都失败，更新熔断器状态
+  if (!circuitBreakers[breakerKey]) {
+    circuitBreakers[breakerKey] = {
+      failures: 1,
+      lastFailure: Date.now(),
+      timeout: API_CONFIG.circuitBreakerTimeout
+    };
+  } else {
+    circuitBreakers[breakerKey].failures++;
+    circuitBreakers[breakerKey].lastFailure = Date.now();
+  }
+
+  throw lastError || new Error(`All ${API_CONFIG.maxRetries} retries failed for ${command}`);
 }
 
 export interface TablesResult {
@@ -190,9 +268,14 @@ export const api = {
     return await safeInvoke('get_function_body', { connectionId, functionName, database });
   },
 
-  async executeQuery(connectionId: string, sql: string, database?: string): Promise<QueryResult> {
-    return await safeInvoke('execute_query', { connectionId, sql, database });
-  },
+async executeQuery(connectionId: string, sql: string, database?: string, options?: { stream?: boolean }): Promise<QueryResult> {
+    return await safeInvoke('execute_query', { 
+        connectionId, 
+        sql, 
+        database,
+        stream: options?.stream || false 
+    });
+},
 
   async executeDDL(connectionId: string, sql: string, database?: string): Promise<void> {
     return await safeInvoke('execute_ddl', { connectionId, sql, database });

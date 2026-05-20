@@ -13,7 +13,7 @@ import './App.css';
 // Check if running in Tauri environment
 const isTauri =
   typeof window !== 'undefined' &&
-  !!(window as Record<string, unknown>).__TAURI__;
+  !!((window as unknown as Record<string, unknown>).__TAURI__);
 
 // Lazy load Tauri APIs to avoid errors in browser
 const loadTauriAPI = async () => {

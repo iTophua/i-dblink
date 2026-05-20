@@ -42,20 +42,126 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := executeSQL(ctx, exec, req.SQL)
+	// 检查是否需要流式传输（大数据集）
+	streamEnabled := r.URL.Query().Get("stream") == "true" || req.StreamResults
 
-	executionTimeMs := time.Since(startTime).Milliseconds()
+	if streamEnabled {
+		// 流式传输模式
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Transfer-Encoding", "chunked")
+		
+		// 发送初始响应
+		initialResp := models.QueryResult{
+			Streaming: true,
+			Columns:   []string{},
+			Rows:      nil,
+			Error:     "",
+		}
+		if err := json.NewEncoder(w).Encode(initialResp); err != nil {
+			writeJSONError(w, "failed to send initial response")
+			return
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err != nil {
-		json.NewEncoder(w).Encode(models.QueryResult{
-			Error:           err.Error(),
+		// 执行查询并流式传输结果
+		if err := streamQueryResults(w, ctx, exec, req.SQL); err != nil {
+			// 发送错误响应
+			errorResp := models.QueryResult{
+				Streaming: true,
+				Error:     err.Error(),
+			}
+			json.NewEncoder(w).Encode(errorResp)
+			return
+		}
+
+		executionTimeMs := time.Since(startTime).Milliseconds()
+		// 发送执行时间
+		timeResp := models.QueryResult{
+			Streaming:      true,
 			ExecutionTimeMs: executionTimeMs,
-		})
-		return
+		}
+		json.NewEncoder(w).Encode(timeResp)
+	} else {
+		// 传统模式 - 一次性加载所有数据
+		result, err := executeSQL(ctx, exec, req.SQL)
+
+		executionTimeMs := time.Since(startTime).Milliseconds()
+
+		w.Header().Set("Content-Type", "application/json")
+		if err != nil {
+			json.NewEncoder(w).Encode(models.QueryResult{
+				Error:           err.Error(),
+				ExecutionTimeMs: executionTimeMs,
+			})
+			return
+		}
+		result.ExecutionTimeMs = executionTimeMs
+		json.NewEncoder(w).Encode(result)
 	}
-	result.ExecutionTimeMs = executionTimeMs
-	json.NewEncoder(w).Encode(result)
+}
+
+// streamQueryResults 流式传输查询结果
+func streamQueryResults(w http.ResponseWriter, ctx context.Context, exec db.Executor, sqlStr string) error {
+	rows, err := exec.QueryContext(ctx, sqlStr)
+	if err != nil {
+		return fmt.Errorf("query execution failed: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			debugLog("rows.Close error: %v", closeErr)
+		}
+	}()
+
+	// 获取列信息
+	columns, err := rows.Columns()
+	if err != nil {
+		return fmt.Errorf("failed to get columns: %w", err)
+	}
+
+	// 发送列信息
+	columnsResp := models.QueryResult{
+		Streaming: true,
+		Columns:   columns,
+	}
+	if err := json.NewEncoder(w).Encode(columnsResp); err != nil {
+		return fmt.Errorf("failed to send columns: %w", err)
+	}
+
+	// 发送行数据
+	rowCount := 0
+	for rows.Next() {
+		row := make([]interface{}, len(columns))
+		rowPtrs := make([]interface{}, len(columns))
+		for i := range row {
+			rowPtrs[i] = &row[i]
+		}
+
+		if err := rows.Scan(rowPtrs...); err != nil {
+			return fmt.Errorf("row scan failed at row %d: %w", rowCount, err)
+		}
+
+		// 转换值为 JSON 友好类型
+		jsonRow := make([]interface{}, len(columns))
+		for i, v := range row {
+			jsonRow[i] = convertValue(v)
+		}
+
+		// 发送行数据
+		rowResp := models.QueryResult{
+			Streaming: true,
+			Rows:      [][]interface{}{jsonRow},
+		}
+		if err := json.NewEncoder(w).Encode(rowResp); err != nil {
+			return fmt.Errorf("failed to send row %d: %w", rowCount, err)
+		}
+
+		rowCount++
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return nil
 }
 
 func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.QueryResult, error) {
@@ -66,7 +172,14 @@ func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.Q
 		debugLog("QueryContext error: %v", err)
 		return nil, err
 	}
-	defer rows.Close()
+	// 确保rows在关闭前不为nil
+	if rows != nil {
+		defer func() {
+			if closeErr := rows.Close(); closeErr != nil {
+				debugLog("rows.Close error: %v", closeErr)
+			}
+		}()
+	}
 	debugLog("QueryContext success")
 
 	columns, err := rows.Columns()

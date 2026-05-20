@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import type { ConnectionOutput, GroupOutput, TableInfo } from '../types/api';
 
 export interface Connection extends ConnectionOutput {
-  tables?: string[];
-  views?: string[];
+  databases?: string[];
+  tables?: Record<string, string[]>;
+  views?: Record<string, string[]>;
   procedures?: string[];
 }
 
 export interface ConnectionGroup extends GroupOutput {
+  connections?: string[];
   children?: ConnectionGroup[];
 }
 

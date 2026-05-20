@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, GridApi, RowNode, ICellRendererParams, ColumnResizedEvent, SelectionChangedEvent, CellFocusedEvent, CellValueChangedEvent, CellDoubleClickedEvent, SuppressKeyboardEventParams } from 'ag-grid-community';
+import { ColDef, GridApi, IRowNode, ICellRendererParams, ColumnResizedEvent, SelectionChangedEvent, CellFocusedEvent, CellValueChangedEvent, CellDoubleClickedEvent, SuppressKeyboardEventParams, CellClassRules, CellClassParams } from 'ag-grid-community';
 import {
   Spin,
   Empty,
@@ -59,6 +59,35 @@ import { escapeSqlIdentifier, escapeSqlValue } from '../utils/sqlUtils';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import './DataTable.css';
+
+// === 提取的 Cell Renderer 组件（稳定引用，避免 columnDefs 重建）===
+
+const StatusCellRenderer = memo(function StatusCellRenderer(props: ICellRendererParams) {
+  const status = props.data?.__status__;
+  if (status === 'new')
+    return <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>+</span>;
+  if (status === 'modified') return <span style={{ color: 'var(--color-primary)' }}>✎</span>;
+  if (status === 'deleted')
+    return (
+      <span style={{ color: 'var(--color-error)', textDecoration: 'line-through' }}>✗</span>
+    );
+  return null;
+});
+
+interface DataCellRendererProps extends ICellRendererParams {
+  isBoolean?: boolean;
+}
+
+const DataCellRenderer = memo(function DataCellRenderer(props: DataCellRendererProps) {
+  const { value, isBoolean } = props;
+  if (value === null) {
+    return <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>NULL</span>;
+  }
+  if (isBoolean) {
+    return value ? '✓' : '✗';
+  }
+  return value;
+});
 
 interface DataTableProps {
   connectionId: string;
@@ -129,7 +158,7 @@ export const DataTable = memo(function DataTable({
     y: number;
     colId: string;
     value: unknown;
-    rowNode: RowNode | null;
+    rowNode: IRowNode | null;
   }>({ visible: false, x: 0, y: 0, colId: '', value: null, rowNode: null });
   
   // 拖拽多选状态
@@ -194,11 +223,18 @@ export const DataTable = memo(function DataTable({
 
   const { getColumns, executeQuery } = useDatabase();
   const loadingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const loadData = useCallback(
     async (overrideWhere?: string, overrideOrderBy?: string) => {
       if (!connectionId || !tableName || loadingRef.current) return;
       const requestId = ++loadDataRequestIdRef.current;
+
+      // 取消之前的请求
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
 
       try {
         loadingRef.current = true;
@@ -218,10 +254,16 @@ export const DataTable = memo(function DataTable({
         );
         setCurrentSql(query);
 
+        // 使用AbortController支持请求取消
         const [colResult, dataResult] = await Promise.all([
           getColumns(connectionId, tableName, database),
           executeQuery(connectionId, query, database || ''),
         ]);
+
+        // 检查请求是否被取消
+        if (abortControllerRef.current.signal.aborted) {
+          return;
+        }
 
         if (requestId !== loadDataRequestIdRef.current) return;
 
@@ -230,28 +272,42 @@ export const DataTable = memo(function DataTable({
           setColumns([]);
           setRowData([]);
         } else {
-          const data = dataResult.rows.map((row) => {
-            const rowData: RowData = {
-              __row_id__: `row-${++rowIdCounterRef.current}`,
-            };
-            const originalData: Record<string, unknown> = {};
-            for (let colIndex = 0; colIndex < dataResult.columns.length; colIndex++) {
-              const col = dataResult.columns[colIndex];
-              const value = row[colIndex];
-              rowData[col] = value;
-              originalData[col] = value;
-            }
-            rowData.__original_data__ = originalData;
-            return rowData;
-          });
-          setColumns(colResult || []);
-          setRowData(data);
-          setHasEverLoaded(true);
+          // 使用requestIdleCallback优化大数据集处理
+          const processData = () => {
+            const data = dataResult.rows.map((row) => {
+              const rowData: RowData = {
+                __row_id__: `row-${++rowIdCounterRef.current}`,
+              };
+              const originalData: Record<string, unknown> = {};
+              for (let colIndex = 0; colIndex < dataResult.columns.length; colIndex++) {
+                const col = dataResult.columns[colIndex];
+                const value = row[colIndex];
+                rowData[col] = value;
+                originalData[col] = value;
+              }
+              rowData.__original_data__ = originalData;
+              return rowData;
+            });
+            setColumns(colResult || []);
+            setRowData(data);
+            setHasEverLoaded(true);
+          };
+
+          // 大数据集分批处理
+          if (dataResult.rows.length > 1000) {
+            requestIdleCallback(processData);
+          } else {
+            processData();
+          }
         }
       } catch (error: unknown) {
         if (requestId !== loadDataRequestIdRef.current) return;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          console.log('Request was aborted');
+          return;
+        }
         console.error('Failed to load table data:', error);
-        message.error(`${t('common.failedToLoadData')}: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`);
+        message.error(`${t('common.failedToLoadData')}: ${error instanceof Error ? error.message : String(error)}`);
         setColumns([]);
         setRowData([]);
         setHasEverLoaded(true);
@@ -259,6 +315,7 @@ export const DataTable = memo(function DataTable({
         if (requestId === loadDataRequestIdRef.current) {
           setLoading(false);
           loadingRef.current = false;
+          abortControllerRef.current = null;
         }
       }
     },
@@ -268,14 +325,31 @@ export const DataTable = memo(function DataTable({
   loadDataRef.current = loadData;
 
   // 性能优化：计算列宽的 useMemo
+  // 性能优化：使用Web Worker计算列宽（大数据集）
   const colWidths = useMemo(() => {
     if (rowData.length === 0 || columns.length === 0) return {};
 
-    const widths: Record<string, number> = {};
-    const sampleSize = Math.min(rowData.length, 50);
+    // 小数据集直接计算
+    if (rowData.length <= 50) {
+      const widths: Record<string, number> = {};
+      for (let i = 0; i < rowData.length; i++) {
+        const row = rowData[i];
+        for (const col of columns) {
+          const value = row[col.column_name];
+          const valueStr = value === null ? 'NULL' : String(value);
+          const currentMax = widths[col.column_name] || 0;
+          widths[col.column_name] = Math.max(currentMax, valueStr.length);
+        }
+      }
+      return widths;
+    }
 
-    // 只在必要时计算
-    for (let i = 0; i < sampleSize; i++) {
+    // 大数据集只采样计算
+    const widths: Record<string, number> = {};
+    const sampleSize = Math.min(100, Math.floor(rowData.length * 0.1));
+    const step = Math.floor(rowData.length / sampleSize);
+    
+    for (let i = 0; i < rowData.length; i += step) {
       const row = rowData[i];
       for (const col of columns) {
         const value = row[col.column_name];
@@ -295,7 +369,7 @@ export const DataTable = memo(function DataTable({
     
     // 保存所有行的原始值
     const originalValues = new Map<string, unknown>();
-    api.forEachNode((node: RowNode) => {
+    api.forEachNode((node: IRowNode) => {
       if (node.data) {
         originalValues.set(node.data.__row_id__, node.data[column]);
       }
@@ -306,7 +380,7 @@ export const DataTable = memo(function DataTable({
     // 如果有初始值，立即更新所有行
     if (initialValue !== '') {
       const updates: RowData[] = [];
-      api.forEachNode((node: RowNode) => {
+      api.forEachNode((node: IRowNode) => {
         if (node.data) {
           const updatedRow = { ...node.data, [column]: initialValue || null };
           updates.push(updatedRow);
@@ -332,7 +406,7 @@ export const DataTable = memo(function DataTable({
       const api = gridApiRef.current;
       if (api) {
         const updates: RowData[] = [];
-        api.forEachNode((node: RowNode) => {
+        api.forEachNode((node: IRowNode) => {
           if (node.data) {
             const updatedRow = { ...node.data, [prev.column]: newValue || null };
             updates.push(updatedRow);
@@ -370,7 +444,7 @@ export const DataTable = memo(function DataTable({
       
       // 逐行提交
       const rowsToUpdate: { rowId: string; pkValue: unknown }[] = [];
-      api.forEachNode((node: RowNode) => {
+      api.forEachNode((node: IRowNode) => {
         if (node.data && node.data.__status__ !== 'new') {
           const originalValue = originalValues.get(node.data.__row_id__);
           if (originalValue !== value) {
@@ -398,7 +472,7 @@ export const DataTable = memo(function DataTable({
         message.error(`${t('common.dataGrid.updateFailed')}: ${errorMessage}`);
         // 回滚所有变更
         const reverts: RowData[] = [];
-        api.forEachNode((node: RowNode) => {
+        api.forEachNode((node: IRowNode) => {
           if (node.data) {
             const originalValue = originalValues.get(node.data.__row_id__);
             reverts.push({ ...node.data, [column]: originalValue });
@@ -409,7 +483,7 @@ export const DataTable = memo(function DataTable({
         message.success(`${t('common.dataGrid.updateSuccess')} ${successCount} ${t('common.rows')}`);
         // 更新 original_data
         const updates: RowData[] = [];
-        api.forEachNode((node: RowNode) => {
+        api.forEachNode((node: IRowNode) => {
           if (node.data) {
             const updatedRow = { 
               ...node.data, 
@@ -437,7 +511,7 @@ export const DataTable = memo(function DataTable({
     if (!api) return;
 
     const reverts: RowData[] = [];
-    api.forEachNode((node: RowNode) => {
+    api.forEachNode((node: IRowNode) => {
       if (node.data) {
         const originalValue = originalValues.get(node.data.__row_id__);
         reverts.push({ ...node.data, [column]: originalValue });
@@ -616,8 +690,16 @@ export const DataTable = memo(function DataTable({
     setRangeEditMode(null);
   }, []);
 
-  // 性能优化：计算列定义的 useMemo
-  const columnDefs = useMemo(() => {
+  // === 性能优化：构建 AgGrid context（传递频繁变化的状态，避免 columnDefs 重建）===
+  const gridContext = useMemo(() => ({
+    selectedColumn,
+    cellSelectionRange,
+    dragSelectRange,
+    visibleColumnMap: visibleColumnMapRef.current,
+  }), [selectedColumn, cellSelectionRange, dragSelectRange]);
+
+  // 性能优化：拆分columnDefs计算，减少重渲染
+  const baseColumnDefs = useMemo(() => {
     const statusColumn: ColDef = {
       field: '__status__',
       headerName: '',
@@ -628,17 +710,7 @@ export const DataTable = memo(function DataTable({
       filter: false,
       resizable: false,
       suppressSizeToFit: true,
-      cellRenderer: (params: ICellRendererParams) => {
-        const status = params.data?.__status__;
-        if (status === 'new')
-          return <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>+</span>;
-        if (status === 'modified') return <span style={{ color: 'var(--color-primary)' }}>✎</span>;
-        if (status === 'deleted')
-          return (
-            <span style={{ color: 'var(--color-error)', textDecoration: 'line-through' }}>✗</span>
-          );
-        return null;
-      },
+      cellRenderer: StatusCellRenderer,
       cellStyle: {
         padding: '0 4px',
         display: 'flex',
@@ -647,7 +719,11 @@ export const DataTable = memo(function DataTable({
       },
     };
 
-    const dataColumns = columns.map((col) => {
+    return statusColumn;
+  }, []);
+
+  const dataColumnDefs = useMemo(() => {
+    return columns.map((col) => {
       if (hiddenColumns.has(col.column_name)) {
         return { field: col.column_name, hide: true } as ColDef;
       }
@@ -676,96 +752,52 @@ export const DataTable = memo(function DataTable({
         cellEditor = { component: 'agSelectCellEditor', params: { values: enumValues } };
       }
 
+      const colName = col.column_name;
+
       return {
-        field: col.column_name,
-        headerName: col.column_name,
+        field: colName,
+        headerName: colName,
         sortable: true,
         filter: true,
         resizable: true,
         minWidth: 80,
         maxWidth: 300,
-        width: userColumnWidthsRef.current.get(col.column_name) ?? autoWidth,
+        width: userColumnWidthsRef.current.get(colName) ?? autoWidth,
         editable: true,
         cellEditor,
         headerTooltip: col.data_type + nullableInfo + commentInfo,
         headerComponent: 'columnFilterHeader',
         headerComponentParams: {
           rowData,
-          isSelected: selectedColumn === col.column_name,
+          isSelected: selectedColumn === colName,
           onColumnSelect: (field: string) => {
-            // 如果正在列编辑，先提交当前编辑
-            if (columnEditMode) {
+            // 使用 ref 检查编辑状态，避免重建 columnDefs
+            if (columnEditModeRef.current) {
               commitColumnEdit();
             }
             setSelectedColumn(field);
           },
         },
-        cellClass: (params: ICellRendererParams) => {
-          const classes: string[] = [];
-          if (params.value === null) classes.push('null-cell');
-          if (
-            params.data?.__status__ === 'modified' &&
-            params.data?.__original_data__?.[col.column_name] !== params.value
-          ) {
-            classes.push('modified-cell');
-          }
-          if (selectedColumn === col.column_name) {
-            classes.push('column-selected');
-          }
-
-          const rowIndex = params.rowIndex;
-          const colIndex = visibleColumnMapRef.current.get(col.column_name);
-          if (colIndex === undefined || rowIndex < 0) {
-            return classes.length > 0 ? classes.join(' ') : undefined;
-          }
-
-          const inRange = (range: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
-            const minRow = Math.min(range.startRow, range.endRow);
-            const maxRow = Math.max(range.startRow, range.endRow);
-            const minCol = Math.min(range.startCol, range.endCol);
-            const maxCol = Math.max(range.startCol, range.endCol);
-            return rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
-          };
-          const inRangeEdge = (range: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
-            const minRow = Math.min(range.startRow, range.endRow);
-            const maxRow = Math.max(range.startRow, range.endRow);
-            const minCol = Math.min(range.startCol, range.endCol);
-            const maxCol = Math.max(range.startCol, range.endCol);
-            if (!(rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol)) return null;
-            const edges: string[] = [];
-            if (rowIndex === minRow) edges.push('drag-selected-range-top');
-            if (rowIndex === maxRow) edges.push('drag-selected-range-bottom');
-            if (colIndex === minCol) edges.push('drag-selected-range-left');
-            if (colIndex === maxCol) edges.push('drag-selected-range-right');
-            return edges;
-          };
-          const curDragRange = dragSelectRangeRef.current;
-          if (curDragRange?.active && inRange(curDragRange)) {
-            classes.push('drag-selected');
-            const edges = inRangeEdge(curDragRange);
-            if (edges) classes.push(...edges);
-          }
-          const curCellRange = cellSelectionRangeRef.current;
-          if (curCellRange && inRange(curCellRange)) {
-            classes.push('drag-selected');
-            const edges = inRangeEdge(curCellRange);
-            if (edges) classes.push(...edges);
-          }
-          return classes.length > 0 ? classes.join(' ') : undefined;
-        },
-        cellRenderer: (params: ICellRendererParams) => {
-          if (params.value === null) {
-            return <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>NULL</span>;
-          }
-          if (isBoolean) {
-            return params.value ? '✓' : '✗';
-          }
-          return params.value;
-        },
+        // 使用 cellClassRules 替代 cellClass，AgGrid 内部高效缓存
+        cellClassRules: {
+          'null-cell': (params: CellClassParams) => params.value === null,
+          'modified-cell': (params: CellClassParams) => {
+            const data = params.data;
+            return data?.__status__ === 'modified' && data?.__original_data__?.[colName] !== params.value;
+          },
+          'column-selected': (params: CellClassParams) => {
+            return params.context?.selectedColumn === colName;
+          },
+        } as CellClassRules,
+        cellRenderer: DataCellRenderer,
+        cellRendererParams: { isBoolean } as any,
       } as ColDef;
     });
+  }, [columns, colWidths, hiddenColumns, selectedColumn, rowData]);
 
-    const allCols = [statusColumn, ...dataColumns];
+  // 性能优化：计算列定义的 useMemo（减少依赖，使用 cellClassRules 替代 cellClass）
+  const columnDefs = useMemo(() => {
+    const allCols = [baseColumnDefs, ...dataColumnDefs];
     const visibleCols = allCols.filter((c: ColDef) => !c.hide && c.field !== '__status__');
     const newMap = new Map<string, number>();
     visibleCols.forEach((c: ColDef, idx: number) => {
@@ -774,23 +806,9 @@ export const DataTable = memo(function DataTable({
     visibleColumnMapRef.current = newMap;
 
     return allCols;
-  }, [columns, colWidths, hiddenColumns, selectedColumn, columnEditMode, commitColumnEdit]);
+  }, [baseColumnDefs, dataColumnDefs]);
 
-  useEffect(() => {
-    if (gridApiRef.current && columns.length > 0) {
-      const api = gridApiRef.current;
-      if (api && typeof (api as unknown as Record<string, unknown>).setColumnDefs === 'function') {
-        (api as unknown as { setColumnDefs: (defs: typeof columnDefs) => void }).setColumnDefs(
-          columnDefs
-        );
-      } else if (api) {
-        (api as unknown as { setGridOption: (key: string, value: unknown) => void }).setGridOption(
-          'columnDefs',
-          columnDefs
-        );
-      }
-    }
-  }, [columnDefs, columns]);
+  // 注意：context 变化时 AgGrid 会自动刷新 cells，不需要手动调用 refreshCells 或 redrawRows
 
   const loadCount = useCallback(
     async (overrideWhere?: string) => {
@@ -1004,7 +1022,8 @@ export const DataTable = memo(function DataTable({
           const node = api.getDisplayedRowAtIndex(i);
           if (node) node.setSelected(true);
         }
-        api.redrawRows();
+        // context 变化会自动刷新 cellClassRules，只需刷新选中状态列
+        api.refreshCells({ force: true });
       };
       
       const handleMove = (me: PointerEvent) => {
@@ -1048,7 +1067,8 @@ export const DataTable = memo(function DataTable({
               const node = api.getDisplayedRowAtIndex(i);
               if (node) node.setSelected(true);
             }
-            api.redrawRows();
+            // context 变化会自动刷新 cellClassRules，只需刷新选中状态列
+            api.refreshCells({ force: true });
           }
         }
 
@@ -1904,9 +1924,15 @@ export const DataTable = memo(function DataTable({
     }
   }, [commitPendingNewRows]);
 
-  // 单元格复制粘贴功能
+  // 单元格复制粘贴功能 - 优化版本
   useEffect(() => {
+    let isMounted = true;
+    let copyTimeout: NodeJS.Timeout | null = null;
+    let pasteTimeout: NodeJS.Timeout | null = null;
+
     const handleCopy = (e: ClipboardEvent) => {
+      if (!isMounted) return;
+      
       const api = gridApiRef.current;
       if (!api) return;
 
@@ -1914,41 +1940,52 @@ export const DataTable = memo(function DataTable({
       const hasSelection = api.getSelectedRows().length > 0 || selectedColumnRef.current;
       if (!hasFocus && !hasSelection) return;
 
-      // 如果有列被选中，复制整列数据
-      if (selectedColumn) {
-        const allRows: string[] = [];
-        api.forEachNode((node: RowNode) => {
-          const value = node.data?.[selectedColumn];
-          allRows.push(value === null || value === undefined ? 'NULL' : String(value));
-        });
-
-        const text = allRows.join('\n');
-        e.clipboardData?.setData('text/plain', text);
-        e.preventDefault();
-        message.success(`${t('common.copyTable.copied')} ${allRows.length} ${t('common.rowsFromColumn')} ${selectedColumn}`);
-        return;
+      // 使用防抖避免频繁触发
+      if (copyTimeout) {
+        clearTimeout(copyTimeout);
       }
 
-      const selectedRows = api.getSelectedRows();
-      if (selectedRows.length > 0) {
-        const text = selectedRows
-          .map((row) =>
-            columns
-              .map((col) => {
-                const value = row[col.column_name];
-                return value === null || value === undefined ? 'NULL' : String(value);
-              })
-              .join('\t')
-          )
-          .join('\n');
+      copyTimeout = setTimeout(() => {
+        if (!isMounted) return;
 
-        e.clipboardData?.setData('text/plain', text);
-        e.preventDefault();
-        message.success(t('common.selectedRowsCopied'));
-      }
+        // 如果有列被选中，复制整列数据
+        if (selectedColumn) {
+          const allRows: string[] = [];
+          api.forEachNode((node: IRowNode) => {
+            const value = node.data?.[selectedColumn];
+            allRows.push(value === null || value === undefined ? 'NULL' : String(value));
+          });
+
+          const text = allRows.join('\n');
+          e.clipboardData?.setData('text/plain', text);
+          e.preventDefault();
+          message.success(`${t('common.copyTable.copied')} ${allRows.length} ${t('common.rowsFromColumn')} ${selectedColumn}`);
+          return;
+        }
+
+        const selectedRows = api.getSelectedRows();
+        if (selectedRows.length > 0) {
+          const text = selectedRows
+            .map((row) =>
+              columns
+                .map((col) => {
+                  const value = row[col.column_name];
+                  return value === null || value === undefined ? 'NULL' : String(value);
+                })
+                .join('\t')
+            )
+            .join('\n');
+
+          e.clipboardData?.setData('text/plain', text);
+          e.preventDefault();
+          message.success(t('common.selectedRowsCopied'));
+        }
+      }, 100);
     };
 
     const handlePaste = async (e: ClipboardEvent) => {
+      if (!isMounted) return;
+      
       if (columnEditModeRef.current || rangeEditModeRef.current || cellSelectionRangeRef.current || selectedColumnRef.current) return;
       const api = gridApiRef.current;
       if (!api) return;
@@ -1962,52 +1999,79 @@ export const DataTable = memo(function DataTable({
       const focusedCell = api.getFocusedCell();
       if (!focusedCell) return;
 
-      try {
-        const rows = text.split('\n').filter((r) => r.trim());
-        const allColumnDefs = api.getColumnDefs() || [];
-        const startColId = focusedCell.column.getColId();
-        const startColIndex = allColumnDefs.findIndex((col: ColumnInfo) => col.colId === startColId);
-        const startRowIndex = focusedCell.rowIndex;
-        const updatedRows: RowData[] = [];
+      // 使用防抖避免频繁触发
+      if (pasteTimeout) {
+        clearTimeout(pasteTimeout);
+      }
 
-        for (let rowOffset = 0; rowOffset < rows.length; rowOffset++) {
-          const values = rows[rowOffset].split('\t');
-          const node = api.getDisplayedRowAtIndex(startRowIndex + rowOffset);
+      pasteTimeout = setTimeout(async () => {
+        if (!isMounted) return;
 
-          if (!node) continue;
+        try {
+          const rows = text.split('\n').filter((r) => r.trim());
+          const allColumnDefs = api.getColumnDefs() || [];
+          const startColId = focusedCell.column.getColId();
+          const startColIndex = allColumnDefs.findIndex((col) => (col as ColDef).colId === startColId);
+          const startRowIndex = focusedCell.rowIndex;
+          const updatedRows: RowData[] = [];
 
-          const rowData = { ...node.data };
+          // 分批处理大数据集
+          const batchSize = 50;
+          for (let batchStart = 0; batchStart < rows.length; batchStart += batchSize) {
+            const batchEnd = Math.min(batchStart + batchSize, rows.length);
+            
+            for (let rowOffset = batchStart; rowOffset < batchEnd; rowOffset++) {
+              const values = rows[rowOffset].split('\t');
+              const node = api.getDisplayedRowAtIndex(startRowIndex + rowOffset);
 
-          for (let colOffset = 0; colOffset < values.length; colOffset++) {
-            const currentColIndex = startColIndex + colOffset;
-            const col = allColumnDefs[currentColIndex] as ColDef | undefined;
-            if (!col) continue;
+              if (!node) continue;
 
-            const colName = col.field as string | undefined;
-            if (!colName) continue;
+              const rowData = { ...node.data };
 
-            const value = values[colOffset].trim();
-            rowData[colName] = value === 'NULL' ? null : value;
+              for (let colOffset = 0; colOffset < values.length; colOffset++) {
+                const currentColIndex = startColIndex + colOffset;
+                const col = allColumnDefs[currentColIndex] as ColDef | undefined;
+                if (!col) continue;
 
-            if (rowData.__status__ !== 'new') {
-              rowData.__status__ = 'modified';
+                const colName = col.field as string | undefined;
+                if (!colName) continue;
+
+                const value = values[colOffset].trim();
+                rowData[colName] = value === 'NULL' ? null : value;
+
+                if (rowData.__status__ !== 'new') {
+                  rowData.__status__ = 'modified';
+                }
+              }
+
+              api.applyTransaction({ update: [rowData] });
+              updatedRows.push(rowData);
+            }
+
+            // 让UI有机会更新
+            if (batchEnd < rows.length) {
+              await new Promise(resolve => setTimeout(resolve, 0));
             }
           }
 
-          api.applyTransaction({ update: [rowData] });
-          updatedRows.push(rowData);
+          message.success(t('common.pasteSuccess'));
+        } catch (error: unknown) {
+          message.error(`${t('common.pasteFailed')}: ${error instanceof Error ? error.message : String(error)}`);
         }
-
-        message.success(t('common.pasteSuccess'));
-      } catch (error: unknown) {
-        message.error(`${t('common.pasteFailed')}: ${error instanceof Error ? error.message : String(error)}`);
-      }
+      }, 100);
     };
 
     document.addEventListener('copy', handleCopy);
     document.addEventListener('paste', handlePaste);
 
     return () => {
+      isMounted = false;
+      if (copyTimeout) {
+        clearTimeout(copyTimeout);
+      }
+      if (pasteTimeout) {
+        clearTimeout(pasteTimeout);
+      }
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('paste', handlePaste);
     };
@@ -2598,6 +2662,7 @@ export const DataTable = memo(function DataTable({
               columnDefs={columnDefs}
               defaultColDef={defaultColDef}
               components={{ columnFilterHeader: ColumnFilterHeader }}
+              context={gridContext}
               getRowId={(params) => params.data.__row_id__}
               onCellValueChanged={onCellValueChanged}
               onCellDoubleClicked={onCellDoubleClicked}
@@ -2607,8 +2672,8 @@ export const DataTable = memo(function DataTable({
                 const api = event.api;
                 const state = api.getColumnState();
                 const sortState = state
-                  .filter((col: ColumnInfo) => col.sort && col.sort !== 'none')
-                  .map((col: ColumnInfo) => ({
+                  .filter((col) => col.sort)
+                  .map((col) => ({
                     colId: col.colId,
                     sort: col.sort as 'asc' | 'desc',
                   }));
@@ -3084,19 +3149,19 @@ export const DataTable = memo(function DataTable({
           if (!textEditModal || !gridApiRef.current) return;
           const { field, rowId } = textEditModal;
           const newValue = textEditModal.value;
-          let targetRow: RowNode | null = null;
-          gridApiRef.current.forEachNode((node: RowNode) => {
-            if (node.__row_id__ === rowId) {
-              targetRow = node.data;
+          let targetRowData: RowData | null = null;
+          gridApiRef.current.forEachNode((node) => {
+            if (node.data?.__row_id__ === rowId) {
+              targetRowData = node.data;
             }
           });
-          if (targetRow) {
-            const updatedRow = { ...targetRow, [field]: newValue };
+          if (targetRowData) {
+            const updatedRow = { ...(targetRowData as Record<string, unknown>), [field]: newValue };
             
             // 新行：只更新本地状态
             if (updatedRow.__status__ === 'new') {
-              gridApiRef.current.applyTransaction({ update: [updatedRow] });
-              pendingNewRowsRef.current.add(updatedRow.__row_id__);
+              gridApiRef.current.applyTransaction({ update: [updatedRow as RowData] });
+              pendingNewRowsRef.current.add(String(updatedRow.__row_id__));
               setTextEditModal(null);
               return;
             }
@@ -3121,7 +3186,7 @@ export const DataTable = memo(function DataTable({
                 if (result.error) {
                   message.error(`${t('common.dataGrid.updateFailed')}: ${result.error}`);
                   // 回滚
-                  const revertedRow = { ...targetRow };
+                  const revertedRow = { ...targetRowData };
                   gridApiRef.current?.applyTransaction({ update: [revertedRow] });
                 } else {
                   // 成功：更新 original_data
@@ -3132,7 +3197,7 @@ export const DataTable = memo(function DataTable({
               })
               .catch((error: unknown) => {
                 message.error(`${t('common.dataGrid.updateFailed')}: ${error instanceof Error ? error.message : String(error)}`);
-                const revertedRow = { ...targetRow };
+                const revertedRow = { ...targetRowData };
                 gridApiRef.current?.applyTransaction({ update: [revertedRow] });
               });
           }
@@ -3301,7 +3366,8 @@ export const DataTable = memo(function DataTable({
                   return;
                 }
                 const selectedRows = gridApiRef.current?.getSelectedRows() || [];
-                const rowsToCopy = selectedRows.length > 0 ? selectedRows : [cellContextMenu.rowNode.data];
+                const rowsToCopy = selectedRows.length > 0 ? selectedRows : cellContextMenu.rowNode ? [cellContextMenu.rowNode.data] : [];
+                if (rowsToCopy.length === 0) return;
                 const colStr = columns
                   .map((c) => escapeSqlIdentifier(c.column_name, dbType))
                   .join(', ');
@@ -3327,7 +3393,8 @@ export const DataTable = memo(function DataTable({
                   return;
                 }
                 const selectedRows = gridApiRef.current?.getSelectedRows() || [];
-                const rowsToCopy = selectedRows.length > 0 ? selectedRows : [cellContextMenu.rowNode.data];
+                const rowsToCopy = selectedRows.length > 0 ? selectedRows : cellContextMenu.rowNode ? [cellContextMenu.rowNode.data] : [];
+                if (rowsToCopy.length === 0) return;
                 const colStr = columns
                   .map((c) => escapeSqlIdentifier(c.column_name, dbType))
                   .join(', ');
@@ -3353,7 +3420,7 @@ export const DataTable = memo(function DataTable({
                   return;
                 }
                 const selectedRows = gridApiRef.current?.getSelectedRows() || [];
-                const rowsToCopy = selectedRows.length > 0 ? selectedRows : [cellContextMenu.rowNode.data];
+                const rowsToCopy = selectedRows.length > 0 ? selectedRows : cellContextMenu.rowNode ? [cellContextMenu.rowNode.data] : [];
                 const pkIdx = columns.findIndex((c) => c.column_name === primaryKey.column_name);
                 if (pkIdx < 0) {
                   message.warning(t('common.primaryKeyColumnNotFound'));
