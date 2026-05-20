@@ -106,4 +106,9 @@ e2e/screenshots/
 .env.test
 .gitnexus
 
+# Wails
+build/bin/
+frontend/dist/
+frontend/wailsjs/
+
 
