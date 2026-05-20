@@ -30,6 +30,10 @@ func NewPool(dbPath string) (*Pool, error) {
 		return nil, fmt.Errorf("failed to ping sqlite: %w", err)
 	}
 
+	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
 	return &Pool{db: db}, nil
 }
 

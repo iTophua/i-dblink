@@ -273,19 +273,23 @@ func (r *GroupRepository) Delete(id string) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
 
 	_, err = tx.Exec("UPDATE connections SET group_id = 'default' WHERE group_id = ?", id)
 	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to move connections to default group: %w", err)
 	}
 
 	_, err = tx.Exec("DELETE FROM connection_groups WHERE id = ?", id)
 	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to delete group: %w", err)
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
 }
 
 // SnippetRepository 代码片段仓库
