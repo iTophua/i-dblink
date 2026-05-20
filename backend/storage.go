@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"idblink-backend/localdb"
+	"idblink/backend/localdb"
 )
 
 // Storage 统一存储服务
