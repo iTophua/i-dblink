@@ -11,7 +11,7 @@ import path from "path";
  * - 生产模式：跳过（由 package.json 脚本负责构建到 sidecars/）
  */
 function buildSidecarPlugin(): Plugin {
-  const goDir = path.resolve("go-backend");
+  const goDir = path.resolve(__dirname, "..", "go-backend");
   const binary = path.join(goDir, "go-backend");
 
   function getGoFiles(dir: string = goDir): string[] {
