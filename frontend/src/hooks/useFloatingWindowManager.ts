@@ -1,5 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { Window } from '@tauri-apps/api/window';
+import { useState, useCallback } from 'react';
 
 interface FloatingWindowInfo {
   windowId: string;
@@ -13,65 +12,19 @@ export function useFloatingWindowManager() {
   const [floatingWindows, setFloatingWindows] = useState<Map<string, FloatingWindowInfo>>(
     new Map()
   );
-  const windowRefs = useRef<Map<string, Window>>(new Map());
 
-  // 创建浮动窗口
+  // 创建浮动窗口（Wails 暂不支持多窗口，保留接口供后续实现）
   const createFloatingWindow = useCallback(
-    async (sqlTabKey: string, connectionId?: string, database?: string, defaultQuery?: string) => {
-      const windowId = `floating-sql-${sqlTabKey}`;
-
-      try {
-        // 创建新窗口
-        const window = new Window(windowId, {
-          title: `SQL 查询 - ${sqlTabKey}`,
-          width: 1000,
-          height: 700,
-        });
-
-        windowRefs.current.set(windowId, window);
-
-        const newInfo: FloatingWindowInfo = {
-          windowId,
-          sqlTabKey,
-          connectionId,
-          database,
-          defaultQuery,
-        };
-
-        setFloatingWindows((prev) => {
-          const next = new Map(prev);
-          next.set(sqlTabKey, newInfo);
-          return next;
-        });
-
-        return windowId;
-      } catch (error) {
-        console.error('Failed to create floating window:', error);
-        return null;
-      }
+    async (sqlTabKey: string, _connectionId?: string, _database?: string, _defaultQuery?: string) => {
+      console.warn('Floating windows not supported in Wails v2 yet:', sqlTabKey);
+      return null;
     },
     []
   );
 
   // 关闭浮动窗口
-  const closeFloatingWindow = useCallback(async (sqlTabKey: string) => {
-    const windowId = `floating-sql-${sqlTabKey}`;
-    const window = windowRefs.current.get(windowId);
-
-    if (window) {
-      try {
-        await window.close();
-      } catch (error) {
-        console.error('Failed to close floating window:', error);
-      }
-      windowRefs.current.delete(windowId);
-    }
-
-    setFloatingWindows((prev) => {
-      const next = new Map(prev);
-      next.delete(sqlTabKey);
-      return next;
-    });
+  const closeFloatingWindow = useCallback(async (_sqlTabKey: string) => {
+    // No-op for now
   }, []);
 
   // 更新浮动窗口内容

@@ -1,15 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}));
-
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(),
-  emit: vi.fn(),
-}));
-
 vi.mock('antd', () => ({
   App: {
     useApp: () => ({

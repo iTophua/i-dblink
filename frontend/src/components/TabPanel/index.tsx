@@ -28,7 +28,6 @@ import type { TableInfo, DatabaseType } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAppStore } from '../../stores/appStore';
 import { api } from '../../api';
-import { useFloatingWindowManager } from '../../hooks/useFloatingWindowManager';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
@@ -595,25 +594,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       if (!sqlTab) return;
 
       try {
-        // 创建新的 Tauri 窗口并加载应用 URL
-        const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-
-        const windowId = `floating-sql-${sqlTabKey}`;
-        const appWindow = new WebviewWindow(windowId, {
-          url: `/?floating=true&tabKey=${encodeURIComponent(sqlTabKey)}`,
-          title: `${t('common.sqlQuery')} - ${sqlTab.title}`,
-          width: 1000,
-          height: 700,
-        });
-
-        // 更新状态，标记这个标签页已浮动
-        setOpenedSqlTabs((prev) =>
-          prev.map((t) =>
-            t.key === sqlTabKey ? { ...t, isFloating: true, floatingWindowId: windowId } : t
-          )
-        );
-
-        message.success(t('common.openedInNewWindow'));
+        message.info(t('common.floatingWindowNotSupported'));
+        console.log('Float window requested for:', sqlTabKey, sqlTab.title);
       } catch (error) {
         console.error('Failed to create floating window:', error);
         message.error(t('common.createFloatingWindowFailed'));

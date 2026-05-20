@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "wails dev",
     "build": "wails build",
+    "dev:frontend": "cd frontend && pnpm dev",
+    "dev:backend": "wails dev",
     "test": "cd frontend && pnpm test",
     "test:go": "cd go-backend && go test ./...",
     "lint": "cd frontend && pnpm lint",

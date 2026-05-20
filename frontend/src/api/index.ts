@@ -1,5 +1,65 @@
+import { EventsOn } from '../../wailsjs/runtime/runtime';
+import {
+  BackupDatabase,
+  BatchImport,
+  BeginTransaction,
+  CheckBackupTool,
+  CommitTransaction,
+  CompareSchema,
+  ConnectDatabase,
+  CreateUser,
+  DeleteConnection,
+  DeleteGroup,
+  DeleteSnippet,
+  DisconnectDatabase,
+  DropTable,
+  DropUser,
+  DropView,
+  ExecuteDDL,
+  ExecuteQuery,
+  GetAllColumns,
+  GetColumns,
+  GetConnections,
+  GetDatabases,
+  GetEvents,
+  GetForeignKeys,
+  GetFunctionBody,
+  GetFunctions,
+  GetGroups,
+  GetIndexes,
+  GetProcedureBody,
+  GetProcedures,
+  GetRoutines,
+  GetServerInfo,
+  GetSnippets,
+  GetTableDDL,
+  GetTablePrivileges,
+  GetTables,
+  GetTablesCategorized,
+  GetTableStructure,
+  GetTransactionStatus,
+  GetTriggers,
+  GetUserPrivileges,
+  GetUsers,
+  GrantPrivilege,
+  MaintainTable,
+  QuitApp,
+  RenameTable,
+  RestoreDatabase,
+  RevokePrivilege,
+  RollbackTransaction,
+  SaveConnection,
+  SaveGroup,
+  SaveSnippet,
+  StreamExportTable,
+  TestConnection,
+  TruncateTable,
+  UpdateConnectionPassword,
+} from '../../wailsjs/go/backend/App';
+import { backend } from '../../wailsjs/go/models';
+const ConnectionInput = backend.ConnectionInput;
+
 import type {
-  ConnectionInput,
   ConnectionOutput,
   GroupInput,
   GroupOutput,
@@ -10,99 +70,8 @@ import type {
   QueryResult,
 } from '../types/api';
 
-import { invoke } from '@tauri-apps/api/core';
-
-// Check if running in Tauri environment
-const isTauri =
-  typeof window !== 'undefined' &&
-  !!(window as unknown as Record<string, unknown>).__TAURI__;
-
-// API配置
-const API_CONFIG = {
-  maxRetries: 3,
-  retryDelay: 1000, // 1秒
-  timeout: 30000,   // 30秒
-  circuitBreakerThreshold: 5, // 连续5次失败后熔断
-  circuitBreakerTimeout: 60000 // 熔断1分钟
-};
-
-// 熔断器状态
-const circuitBreakers: Record<string, {
-  failures: number;
-  lastFailure: number;
-  timeout: number;
-}> = {};
-
-// Safe invoke wrapper with retry and circuit breaker
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function safeInvoke<T>(command: string, args?: Record<string, any>): Promise<T> {
-  if (!isTauri) {
-    throw new Error(`Tauri API not available: ${command}`);
-  }
-
-  // 检查熔断器状态
-  const breakerKey = `${command}:${JSON.stringify(args)}`;
-  const breaker = circuitBreakers[breakerKey];
-  
-  if (breaker && breaker.failures >= API_CONFIG.circuitBreakerThreshold) {
-    const now = Date.now();
-    if (now - breaker.lastFailure < breaker.timeout) {
-      throw new Error(`Circuit breaker tripped for ${command}`);
-    }
-    // 熔断超时，重置状态
-    breaker.failures = 0;
-  }
-
-  let lastError: Error | null = null;
-  
-  for (let attempt = 0; attempt < API_CONFIG.maxRetries; attempt++) {
-    try {
-      const startTime = Date.now();
-      
-      // 设置超时
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
-      
-      const result = await Promise.race([
-        invoke(command, { ...args, signal: controller.signal }),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('API timeout')), API_CONFIG.timeout);
-        })
-      ]);
-      
-      clearTimeout(timeoutId);
-      
-      // 成功，重置熔断器
-      if (circuitBreakers[breakerKey]) {
-        circuitBreakers[breakerKey].failures = 0;
-      }
-      
-      return result as T;
-    } catch (error) {
-      lastError = error as Error;
-      console.warn(`Attempt ${attempt + 1} failed for ${command}:`, error);
-      
-      if (attempt < API_CONFIG.maxRetries - 1) {
-        // 等待重试延迟
-        await new Promise(resolve => setTimeout(resolve, API_CONFIG.retryDelay * (attempt + 1)));
-      }
-    }
-  }
-
-  // 所有重试都失败，更新熔断器状态
-  if (!circuitBreakers[breakerKey]) {
-    circuitBreakers[breakerKey] = {
-      failures: 1,
-      lastFailure: Date.now(),
-      timeout: API_CONFIG.circuitBreakerTimeout
-    };
-  } else {
-    circuitBreakers[breakerKey].failures++;
-    circuitBreakers[breakerKey].lastFailure = Date.now();
-  }
-
-  throw lastError || new Error(`All ${API_CONFIG.maxRetries} retries failed for ${command}`);
-}
+export { EventsOn };
+export { ConnectDatabase, DisconnectDatabase, UpdateConnectionPassword };
 
 export interface TablesResult {
   tables: TableInfo[];
@@ -140,61 +109,130 @@ export const api = {
       ssl_key_path?: string;
       ssl_skip_verify?: boolean;
     }
-  ): Promise<boolean> {
-    return await safeInvoke('test_connection', {
-      dbType,
+  ): Promise<void> {
+    const input = new ConnectionInput({
+      db_type: dbType,
       host,
       port,
       username,
       password,
       database,
-      ...sshConfig,
-      ...sslConfig,
+      ssh_enabled: sshConfig?.ssh_enabled || false,
+      ssh_host: sshConfig?.ssh_host,
+      ssh_port: sshConfig?.ssh_port,
+      ssh_username: sshConfig?.ssh_username,
+      ssh_auth_method: sshConfig?.ssh_auth_method,
+      ssh_password: sshConfig?.ssh_password,
+      ssh_private_key_path: sshConfig?.ssh_private_key_path,
+      ssh_passphrase: sshConfig?.ssh_passphrase,
+      ssl_enabled: sslConfig?.ssl_enabled || false,
+      ssl_ca_path: sslConfig?.ssl_ca_path,
+      ssl_cert_path: sslConfig?.ssl_cert_path,
+      ssl_key_path: sslConfig?.ssl_key_path,
+      ssl_skip_verify: sslConfig?.ssl_skip_verify || false,
     });
+    await TestConnection(input);
   },
 
-  async connectConnection(connectionId: string): Promise<boolean> {
-    return await safeInvoke('connect_database', { connectionId });
+  async connectConnection(connectionId: string): Promise<void> {
+    await ConnectDatabase(connectionId);
   },
 
-  async disconnectConnection(connectionId: string): Promise<boolean> {
-    return await safeInvoke('disconnect_database', { connectionId });
+  async disconnectConnection(connectionId: string): Promise<void> {
+    await DisconnectDatabase(connectionId);
   },
 
   async getConnections(): Promise<ConnectionOutput[]> {
-    return await safeInvoke('get_connections');
+    const result = await GetConnections();
+    return result as unknown as ConnectionOutput[];
   },
 
-  async saveConnection(input: ConnectionInput): Promise<ConnectionOutput> {
-    return await safeInvoke('save_connection', { input });
+  async saveConnection(input: {
+    id?: string;
+    name: string;
+    db_type: string;
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    database?: string;
+    group_id?: string;
+    color?: string;
+    ssh_enabled?: boolean;
+    ssh_host?: string;
+    ssh_port?: number;
+    ssh_username?: string;
+    ssh_auth_method?: string;
+    ssh_password?: string;
+    ssh_private_key_path?: string;
+    ssh_passphrase?: string;
+    ssl_enabled?: boolean;
+    ssl_ca_path?: string;
+    ssl_cert_path?: string;
+    ssl_key_path?: string;
+    ssl_skip_verify?: boolean;
+  }): Promise<ConnectionOutput> {
+    const connInput = new ConnectionInput({
+      id: input.id,
+      name: input.name,
+      db_type: input.db_type,
+      host: input.host,
+      port: input.port,
+      username: input.username,
+      password: input.password,
+      database: input.database,
+      group_id: input.group_id,
+      color: input.color,
+      ssh_enabled: input.ssh_enabled || false,
+      ssh_host: input.ssh_host,
+      ssh_port: input.ssh_port,
+      ssh_username: input.ssh_username,
+      ssh_auth_method: input.ssh_auth_method,
+      ssh_password: input.ssh_password,
+      ssh_private_key_path: input.ssh_private_key_path,
+      ssh_passphrase: input.ssh_passphrase,
+      ssl_enabled: input.ssl_enabled || false,
+      ssl_ca_path: input.ssl_ca_path,
+      ssl_cert_path: input.ssl_cert_path,
+      ssl_key_path: input.ssl_key_path,
+      ssl_skip_verify: input.ssl_skip_verify || false,
+    });
+    const result = await SaveConnection(connInput);
+    return result as unknown as ConnectionOutput;
   },
 
   async updateConnectionPassword(connectionId: string, password: string): Promise<void> {
-    return await safeInvoke('update_connection_password', { connectionId, password });
+    await UpdateConnectionPassword(connectionId, password);
   },
 
   async deleteConnection(id: string): Promise<void> {
-    return await safeInvoke('delete_connection', { id });
+    await DeleteConnection(id);
   },
 
   async getGroups(): Promise<GroupOutput[]> {
-    return await safeInvoke('get_groups');
+    const result = await GetGroups();
+    return result as unknown as GroupOutput[];
   },
 
   async saveGroup(input: GroupInput): Promise<GroupOutput> {
-    return await safeInvoke('save_group', { input });
+    const result = await SaveGroup(input as any);
+    return result as unknown as GroupOutput;
   },
 
   async deleteGroup(id: string): Promise<void> {
-    return await safeInvoke('delete_group', { id });
+    await DeleteGroup(id);
   },
 
   async getDatabases(connectionId: string): Promise<string[]> {
-    return await safeInvoke('get_databases', { connectionId });
+    return await GetDatabases(connectionId);
   },
 
-  async getTables(connectionId: string, database?: string): Promise<TableInfo[]> {
-    return await safeInvoke('get_tables', { connectionId, database });
+  async getTables(
+    connectionId: string,
+    database?: string
+  ): Promise<TableInfo[]> {
+    const result = await GetTables(connectionId, database ?? null);
+    return result as unknown as TableInfo[];
   },
 
   async getTablesCategorized(
@@ -202,7 +240,12 @@ export const api = {
     database?: string,
     search?: string
   ): Promise<TablesResult> {
-    return await safeInvoke('get_tables_categorized', { connectionId, database, search });
+    const result = await GetTablesCategorized(
+      connectionId,
+      database ?? null,
+      search ?? null
+    );
+    return result as unknown as TablesResult;
   },
 
   async getTableStructure(
@@ -210,7 +253,12 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<TableStructure> {
-    return await safeInvoke('get_table_structure', { connectionId, tableName, database });
+    const result = await GetTableStructure(
+      connectionId,
+      tableName,
+      database ?? null
+    );
+    return result as unknown as TableStructure;
   },
 
   async getColumns(
@@ -218,14 +266,20 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<ColumnInfo[]> {
-    return await safeInvoke('get_columns', { connectionId, tableName, database });
+    const result = await GetColumns(
+      connectionId,
+      tableName,
+      database ?? null
+    );
+    return result as unknown as ColumnInfo[];
   },
 
   async getAllColumns(
     connectionId: string,
     database?: string
   ): Promise<Record<string, ColumnInfo[]>> {
-    return await safeInvoke('get_all_columns', { connectionId, database });
+    const result = await GetAllColumns(connectionId, database ?? null);
+    return result.tables as unknown as Record<string, ColumnInfo[]>;
   },
 
   async getIndexes(
@@ -233,7 +287,12 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<IndexInfo[]> {
-    return await safeInvoke('get_indexes', { connectionId, tableName, database });
+    const result = await GetIndexes(
+      connectionId,
+      tableName,
+      database ?? null
+    );
+    return result as unknown as IndexInfo[];
   },
 
   async getForeignKeys(
@@ -241,15 +300,20 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<ForeignKeyInfo[]> {
-    return await safeInvoke('get_foreign_keys', { connectionId, tableName, database });
+    const result = await GetForeignKeys(
+      connectionId,
+      tableName,
+      database ?? null
+    );
+    return result as unknown as ForeignKeyInfo[];
   },
 
   async getProcedures(connectionId: string, database?: string): Promise<string[]> {
-    return await safeInvoke('get_procedures', { connectionId, database });
+    return await GetProcedures(connectionId, database ?? null);
   },
 
   async getFunctions(connectionId: string, database?: string): Promise<string[]> {
-    return await safeInvoke('get_functions', { connectionId, database });
+    return await GetFunctions(connectionId, database ?? null);
   },
 
   async getProcedureBody(
@@ -257,7 +321,11 @@ export const api = {
     procedureName: string,
     database?: string
   ): Promise<string> {
-    return await safeInvoke('get_procedure_body', { connectionId, procedureName, database });
+    return await GetProcedureBody(
+      connectionId,
+      procedureName,
+      database ?? null
+    );
   },
 
   async getFunctionBody(
@@ -265,32 +333,52 @@ export const api = {
     functionName: string,
     database?: string
   ): Promise<string> {
-    return await safeInvoke('get_function_body', { connectionId, functionName, database });
+    return await GetFunctionBody(
+      connectionId,
+      functionName,
+      database ?? null
+    );
   },
 
-async executeQuery(connectionId: string, sql: string, database?: string, options?: { stream?: boolean }): Promise<QueryResult> {
-    return await safeInvoke('execute_query', { 
-        connectionId, 
-        sql, 
-        database,
-        stream: options?.stream || false 
-    });
-},
-
-  async executeDDL(connectionId: string, sql: string, database?: string): Promise<void> {
-    return await safeInvoke('execute_ddl', { connectionId, sql, database });
+  async executeQuery(
+    connectionId: string,
+    sql: string,
+    database?: string
+  ): Promise<QueryResult> {
+    const result = await ExecuteQuery(connectionId, sql, database ?? null);
+    return result as unknown as QueryResult;
   },
 
-  async truncateTable(connectionId: string, tableName: string, database?: string): Promise<void> {
-    return await safeInvoke('truncate_table', { connectionId, tableName, database });
+  async executeDDL(
+    connectionId: string,
+    sql: string,
+    database?: string
+  ): Promise<void> {
+    await ExecuteDDL(connectionId, sql, database ?? null);
   },
 
-  async dropTable(connectionId: string, tableName: string, database?: string): Promise<void> {
-    return await safeInvoke('drop_table', { connectionId, tableName, database });
+  async truncateTable(
+    connectionId: string,
+    tableName: string,
+    database?: string
+  ): Promise<void> {
+    await TruncateTable(connectionId, tableName, database ?? null);
   },
 
-  async dropView(connectionId: string, viewName: string, database?: string): Promise<void> {
-    return await safeInvoke('drop_view', { connectionId, viewName, database });
+  async dropTable(
+    connectionId: string,
+    tableName: string,
+    database?: string
+  ): Promise<void> {
+    await DropTable(connectionId, tableName, database ?? null);
+  },
+
+  async dropView(
+    connectionId: string,
+    viewName: string,
+    database?: string
+  ): Promise<void> {
+    await DropView(connectionId, viewName, database ?? null);
   },
 
   async renameTable(
@@ -299,7 +387,7 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     newName: string,
     database?: string
   ): Promise<void> {
-    return await safeInvoke('rename_table', { connectionId, oldName, newName, database });
+    await RenameTable(connectionId, oldName, newName, database ?? null);
   },
 
   async maintainTable(
@@ -308,23 +396,23 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     operation: string,
     database?: string
   ): Promise<void> {
-    return await safeInvoke('maintain_table', { connectionId, tableName, operation, database });
+    await MaintainTable(connectionId, tableName, operation, database ?? null);
   },
 
   async beginTransaction(connectionId: string): Promise<void> {
-    return await safeInvoke('begin_transaction', { connectionId });
+    await BeginTransaction(connectionId);
   },
 
   async commitTransaction(connectionId: string): Promise<void> {
-    return await safeInvoke('commit_transaction', { connectionId });
+    await CommitTransaction(connectionId);
   },
 
   async rollbackTransaction(connectionId: string): Promise<void> {
-    return await safeInvoke('rollback_transaction', { connectionId });
+    await RollbackTransaction(connectionId);
   },
 
   async getTransactionStatus(connectionId: string): Promise<boolean> {
-    return await safeInvoke('get_transaction_status', { connectionId });
+    return await GetTransactionStatus(connectionId);
   },
 
   async getServerInfo(
@@ -338,19 +426,39 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     uptime?: string;
     max_connections?: number;
   }> {
-    return await safeInvoke('get_server_info', { connectionId, database });
+    const result = await GetServerInfo(connectionId, database ?? null);
+    return result as unknown as {
+      version?: string;
+      server_type?: string;
+      character_set?: string;
+      collation?: string;
+      uptime?: string;
+      max_connections?: number;
+    };
   },
 
-  async getTableDDL(connectionId: string, tableName: string, database?: string): Promise<string[]> {
-    return await safeInvoke('get_table_ddl', { connectionId, table_name: tableName, database });
+  async getTableDDL(
+    connectionId: string,
+    tableName: string,
+    database?: string
+  ): Promise<string[]> {
+    return await GetTableDDL(connectionId, tableName, database ?? null);
   },
 
-  async getTriggers(connectionId: string, database?: string): Promise<any[]> {
-    return await safeInvoke('get_triggers', { connectionId, database });
+  async getTriggers(
+    connectionId: string,
+    database?: string
+  ): Promise<any[]> {
+    const result = await GetTriggers(connectionId, database ?? null);
+    return result as any[];
   },
 
-  async getEvents(connectionId: string, database?: string): Promise<any[]> {
-    return await safeInvoke('get_events', { connectionId, database });
+  async getEvents(
+    connectionId: string,
+    database?: string
+  ): Promise<any[]> {
+    const result = await GetEvents(connectionId, database ?? null);
+    return result as any[];
   },
 
   async saveSnippet(params: {
@@ -362,23 +470,24 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     tags?: string;
     is_private?: boolean;
   }): Promise<string> {
-    return await safeInvoke('save_snippet', {
-      id: params.id,
-      name: params.name,
-      sql_text: params.sql_text,
-      db_type: params.db_type,
-      category: params.category,
-      tags: params.tags,
-      is_private: params.is_private || false,
-    });
+    return await SaveSnippet(
+      params.id ?? null,
+      params.name,
+      params.sql_text,
+      params.db_type ?? null,
+      params.category ?? null,
+      params.tags ?? null,
+      params.is_private || false
+    );
   },
 
   async getSnippets(): Promise<any[]> {
-    return await safeInvoke('get_snippets');
+    const result = await GetSnippets();
+    return result as any[];
   },
 
   async deleteSnippet(id: string): Promise<void> {
-    return await safeInvoke('delete_snippet', { id });
+    await DeleteSnippet(id);
   },
 
   async streamExportTable(
@@ -387,19 +496,19 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     database?: string,
     batchSize?: number
   ): Promise<any> {
-    const result = await safeInvoke('stream_export_table', {
+    return await StreamExportTable(
       connectionId,
       tableName,
-      database,
-      batchSize: batchSize || 1000,
-    });
-    return result;
+      database ?? null,
+      batchSize ?? null
+    );
   },
 
   async checkBackupTool(
     dbType: string
   ): Promise<{ available: boolean; path?: string; error?: string }> {
-    return await safeInvoke('check_backup_tool', { dbType });
+    const result = await CheckBackupTool(dbType);
+    return result as unknown as { available: boolean; path?: string; error?: string };
   },
 
   async backup(params: {
@@ -410,7 +519,15 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     includeData: boolean;
     filePath: string;
   }): Promise<{ file_path?: string; error?: string }> {
-    return await safeInvoke('backup_database', params);
+    const result = await BackupDatabase(
+      params.connectionId,
+      params.database,
+      params.tables || [],
+      params.includeStructure,
+      params.includeData,
+      params.filePath
+    );
+    return result as unknown as { file_path?: string; error?: string };
   },
 
   async restore(params: {
@@ -418,11 +535,16 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     database: string;
     filePath: string;
   }): Promise<{ error?: string }> {
-    return await safeInvoke('restore_database', params);
+    const result = await RestoreDatabase(
+      params.connectionId,
+      params.database,
+      params.filePath
+    );
+    return result as unknown as { error?: string };
   },
 
   async getUsers(connectionId: string, database?: string): Promise<any> {
-    return await safeInvoke('get_users', { connectionId, database });
+    return await GetUsers(connectionId, database ?? null);
   },
 
   async getUserPrivileges(
@@ -431,12 +553,12 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     host: string,
     database?: string
   ): Promise<any> {
-    return await safeInvoke('get_user_privileges', {
+    return await GetUserPrivileges(
       connectionId,
       username,
       host,
-      database,
-    });
+      database ?? null
+    );
   },
 
   async getTablePrivileges(
@@ -445,12 +567,13 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     host: string,
     database?: string
   ): Promise<any[]> {
-    return await safeInvoke('get_table_privileges', {
+    const result = await GetTablePrivileges(
       connectionId,
       username,
       host,
-      database,
-    });
+      database ?? null
+    );
+    return result as any[];
   },
 
   async createUser(params: {
@@ -460,7 +583,13 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     host: string;
     database?: string;
   }): Promise<void> {
-    return await safeInvoke('create_user', params);
+    await CreateUser(
+      params.connectionId,
+      params.username,
+      params.password,
+      params.host,
+      params.database ?? null
+    );
   },
 
   async dropUser(params: {
@@ -469,7 +598,12 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     host: string;
     database?: string;
   }): Promise<void> {
-    return await safeInvoke('drop_user', params);
+    await DropUser(
+      params.connectionId,
+      params.username,
+      params.host,
+      params.database ?? null
+    );
   },
 
   async grantPrivilege(params: {
@@ -481,7 +615,15 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     database?: string;
     table?: string;
   }): Promise<void> {
-    return await safeInvoke('grant_privilege', params);
+    await GrantPrivilege(
+      params.connectionId,
+      params.username,
+      params.host,
+      params.privileges,
+      params.databaseAll,
+      params.database ?? null,
+      params.table ?? null
+    );
   },
 
   async revokePrivilege(params: {
@@ -493,7 +635,15 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     database?: string;
     table?: string;
   }): Promise<void> {
-    return await safeInvoke('revoke_privilege', params);
+    await RevokePrivilege(
+      params.connectionId,
+      params.username,
+      params.host,
+      params.privileges,
+      params.databaseAll,
+      params.database ?? null,
+      params.table ?? null
+    );
   },
 
   async compareSchema(params: {
@@ -503,14 +653,20 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     targetDatabase: string;
     tableName?: string;
   }): Promise<any> {
-    return await safeInvoke('compare_schema', params);
+    return await CompareSchema(
+      params.sourceConnectionId,
+      params.sourceDatabase,
+      params.targetConnectionId,
+      params.targetDatabase,
+      params.tableName ?? null
+    );
   },
 
   async batchImport(params: {
     connectionId: string;
     database?: string;
     tableName: string;
-    mode: 'append' | 'replace' | 'update';
+    mode: string;
     primaryKey?: string;
     rows: Record<string, any>[];
   }): Promise<{
@@ -519,10 +675,23 @@ async executeQuery(connectionId: string, sql: string, database?: string, options
     total_count: number;
     last_error?: string;
   }> {
-    return await safeInvoke('batch_import', params);
+    const result = await BatchImport(
+      params.connectionId,
+      params.database ?? null,
+      params.tableName,
+      params.mode,
+      params.primaryKey ?? null,
+      params.rows
+    );
+    return result as unknown as {
+      success_count: number;
+      failed_count: number;
+      total_count: number;
+      last_error?: string;
+    };
   },
 
   async quitApp(): Promise<void> {
-    return await safeInvoke('quit_app');
+    await QuitApp();
   },
 };

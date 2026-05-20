@@ -77,7 +77,18 @@ export function useMenuShortcuts(actions?: MenuActions) {
       const keys = getShortcutKeys(id, isMac);
       if (!keys) return () => {}; // 返回空清理函数
       
+      const isFormElement = (el: EventTarget | null): boolean => {
+        if (!el || !(el instanceof Element)) return false;
+        const tag = el.tagName.toLowerCase();
+        return tag === 'input' || tag === 'textarea' || tag === 'select' ||
+          el.getAttribute('contenteditable') === 'true' ||
+          el.closest('.monaco-editor') !== null;
+      };
+
       const handler = (e: KeyboardEvent) => {
+        // 跳过表单元素中的快捷键拦截，让浏览器原生处理
+        if (!options.enableOnFormTags && isFormElement(e.target)) return;
+
         // 解析快捷键字符串（简化版，支持 mod+key 格式）
         const parts = keys.toLowerCase().split('+');
         const key = parts[parts.length - 1];
@@ -112,6 +123,10 @@ export function useMenuShortcuts(actions?: MenuActions) {
     [isMac]
   );
 
+  // 编辑操作的快捷键由浏览器原生处理（input/textarea 中的 Ctrl+C/V），
+  // 不注册 useHotkeys 以避免干扰原生剪贴板行为
+  const editIds = new Set(['undo', 'redo', 'cut', 'copy', 'paste', 'delete', 'select-all', 'find']);
+
   // 辅助函数：注册标准菜单快捷键
   const register = (
     id: string,
@@ -119,6 +134,8 @@ export function useMenuShortcuts(actions?: MenuActions) {
     options: HotkeysOptions = defaultOptions,
     deps: unknown[] = []
   ) => {
+    // 编辑操作跳过 useHotkeys 注册，交给浏览器原生处理
+    if (editIds.has(id)) return;
     const keys = getShortcutKeys(id, isMac);
     useHotkeys(
       keys || 'void',
@@ -138,21 +155,8 @@ export function useMenuShortcuts(actions?: MenuActions) {
   register('export', () => safeActions.onExport?.(), defaultOptions, [safeActions.onExport]);
   register('exit', () => safeActions.onQuit?.(), defaultOptions, [safeActions.onQuit]);
 
-  // 编辑操作 - 这些由浏览器/输入框默认处理，不拦截默认行为
-  // 只在非表单元素上触发自定义回调，表单元素上让浏览器原生处理
-  const editOptions: HotkeysOptions = {
-    enableOnFormTags: false,
-    preventDefault: false,
-    enabled: true,
-  };
-  register('undo', () => safeActions.onUndo?.(), editOptions, [safeActions.onUndo]);
-  register('redo', () => safeActions.onRedo?.(), editOptions, [safeActions.onRedo]);
-  register('cut', () => safeActions.onCut?.(), editOptions, [safeActions.onCut]);
-  register('copy', () => safeActions.onCopy?.(), editOptions, [safeActions.onCopy]);
-  register('paste', () => safeActions.onPaste?.(), editOptions, [safeActions.onPaste]);
-  register('delete', () => safeActions.onDelete?.(), editOptions, [safeActions.onDelete]);
-  register('select-all', () => safeActions.onSelectAll?.(), editOptions, [safeActions.onSelectAll]);
-  register('find', () => safeActions.onFind?.(), editOptions, [safeActions.onFind]);
+  // 编辑操作（剪切/复制/粘贴等）由浏览器原生处理，不注册 useHotkeys
+  // 以避免干扰 input/textarea 中的 Ctrl+C/V 等原生快捷操作
 
   // 查看操作
   register('refresh', () => safeActions.onRefresh?.(), defaultOptions, [safeActions.onRefresh]);
@@ -187,12 +191,15 @@ export function useMenuShortcuts(actions?: MenuActions) {
     safeActions.onDocumentation,
   ]);
 
+  // 开发者工具由 Go 菜单处理（F12 / Cmd+Shift+F12），不在前端注册 useHotkeys
+  // 避免与系统菜单快捷键冲突
+
   // macOS 特定快捷键
   if (isMac) {
     useHotkeys(
       'mod+h',
       () => {
-        import('@tauri-apps/api/app').then(({ hide }) => hide());
+        import('../../wailsjs/runtime/runtime').then(({ Hide }) => Hide());
       },
       defaultOptions,
       []
@@ -201,7 +208,6 @@ export function useMenuShortcuts(actions?: MenuActions) {
     useHotkeys(
       'mod+alt+h',
       () => {
-        // hideOthers API may not be available in all Tauri versions
         console.log('Hide other applications');
       },
       defaultOptions,
@@ -211,9 +217,7 @@ export function useMenuShortcuts(actions?: MenuActions) {
     useHotkeys(
       'mod+m',
       () => {
-        import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
-          getCurrentWindow().minimize();
-        });
+        import('../../wailsjs/runtime/runtime').then(({ WindowMinimise }) => WindowMinimise());
       },
       defaultOptions,
       []

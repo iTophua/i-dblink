@@ -25,11 +25,11 @@ import {
   SettingOutlined,
   FolderOutlined,
 } from '@ant-design/icons';
-import { invoke } from '@tauri-apps/api/core';
 import { GlobalInput, GlobalInputPassword } from './GlobalInput';
 import { DatabaseIcon } from './DatabaseIcon';
 import { DB_TYPE_COLORS } from '../styles/theme';
 import type { FormInstance } from 'antd';
+import { api } from '../api';
 import i18n from '../i18n';
 
 interface FileInputConfig {
@@ -218,33 +218,39 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       testCancelledRef.current = false;
 
       const isSqlite = values.db_type === 'sqlite';
-      const result = await invoke<boolean>('test_connection', {
-        dbType: values.db_type,
-        host: isSqlite ? '' : values.host,
-        port: isSqlite ? 0 : values.port,
-        username: isSqlite ? '' : values.username,
-        password: values.password || '',
-        database: isSqlite ? values.host : values.database,
-        sshEnabled: values.use_ssh || false,
-        sshHost: values.ssh_host,
-        sshPort: values.ssh_port,
-        sshUsername: values.ssh_username,
-        sshAuthMethod: values.ssh_auth_method || 'password',
-        sshPassword: values.ssh_password,
-        sshPrivateKeyPath: values.ssh_key_path,
-        sshPassphrase: values.ssh_passphrase,
-        sslEnabled: values.use_ssl || false,
-        sslCaPath: values.ssl_ca_cert,
-        sslCertPath: values.ssl_client_cert,
-        sslKeyPath: values.ssl_client_key,
-        sslSkipVerify: false,
-      });
+      await api.testConnection(
+        values.db_type,
+        isSqlite ? '' : values.host,
+        isSqlite ? 0 : values.port,
+        isSqlite ? '' : values.username,
+        values.password || '',
+        isSqlite ? values.host : values.database,
+        values.use_ssh
+          ? {
+              ssh_enabled: true,
+              ssh_host: values.ssh_host,
+              ssh_port: values.ssh_port,
+              ssh_username: values.ssh_username,
+              ssh_auth_method: values.ssh_auth_method || 'password',
+              ssh_password: values.ssh_password,
+              ssh_private_key_path: values.ssh_key_path,
+              ssh_passphrase: values.ssh_passphrase,
+            }
+          : undefined,
+        values.use_ssl
+          ? {
+              ssl_enabled: true,
+              ssl_ca_path: values.ssl_ca_cert,
+              ssl_cert_path: values.ssl_client_cert,
+              ssl_key_path: values.ssl_client_key,
+              ssl_skip_verify: false,
+            }
+          : undefined,
+      );
 
       if (testCancelledRef.current) return;
 
-      if (result) {
-        message.success(t('common.connectionTestSuccess'));
-      }
+      message.success(t('common.connectionTestSuccess'));
     } catch (error: any) {
       if (testCancelledRef.current) return;
       if (error.errorFields) return;

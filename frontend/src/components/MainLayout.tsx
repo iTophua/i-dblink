@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { WindowSetTitle } from '../../wailsjs/runtime/runtime';
 import { Layout, theme, Modal, Form, Input } from 'antd';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
 import { useMenuShortcuts } from '../hooks/useMenuShortcuts';
 import { Toolbar } from './Toolbar';
+
 import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
 import { DatabaseProperties } from './DatabaseProperties';
 import { TabPanel, type TabPanelRef, type ActiveTabInfo } from './TabPanel';
@@ -129,11 +130,13 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     const title = parts.length > 0 ? `${parts.join(' > ')} - iDBLink` : 'iDBLink';
     document.title = title;
 
-    // Tauri 窗口标题
-    if (typeof window !== 'undefined' && (window as any).__TAURI__) {
-      import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
-        getCurrentWindow().setTitle(title).catch(() => {});
-      }).catch(() => {});
+    // Wails 窗口标题
+    if (typeof window !== 'undefined' && (window as any).__wails__) {
+      try {
+        WindowSetTitle(title);
+      } catch {
+        // fallback silently
+      }
     }
   }, [selectedConnectionId, connections, activeTabInfo]);
 
@@ -861,25 +864,15 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'export' } }));
           break;
         case 'undo':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'undo' } }));
-          break;
         case 'redo':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'redo' } }));
-          break;
         case 'cut':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'cut' } }));
-          break;
         case 'copy':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'copy' } }));
-          break;
         case 'paste':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'paste' } }));
-          break;
         case 'delete':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'delete' } }));
-          break;
         case 'select-all':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'select-all' } }));
+          // 编辑操作（撤销/重做/剪切/复制/粘贴/全选）由浏览器原生处理
+          // Go 菜单未绑定系统快捷键，因此 WebView 会收到原生 keydown 事件
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action } }));
           break;
         case 'find':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'find' } }));

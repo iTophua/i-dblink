@@ -1,16 +1,20 @@
 import { vi } from 'vitest';
 
 /**
- * Mock Tauri invoke for testing
+ * Mock Wails binding for testing
  */
-export function mockTauriInvoke() {
-  const invoke = vi.fn();
-
-  vi.mock('@tauri-apps/api/core', () => ({
-    invoke,
-  }));
-
-  return invoke;
+export function mockWailsBinding() {
+  const fn = vi.fn();
+  vi.mock('../../wailsjs/go/backend/App', () => {
+    const handler = () => fn();
+    return {
+      TestConnection: handler,
+      ConnectDatabase: handler,
+      DisconnectDatabase: handler,
+      ExecuteQuery: vi.fn().mockResolvedValue({ columns: [], rows: [] }),
+    };
+  });
+  return fn;
 }
 
 /**

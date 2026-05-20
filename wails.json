@@ -9,6 +9,7 @@
     "dev": "pnpm dev",
     "package": "package.json"
   },
+  "frontend:dev:serverUrl": "http://localhost:5100",
   "author": {
     "name": "iDBLink Team",
     "email": ""

@@ -84,9 +84,13 @@ export function getShortcutsByCategory(category: ShortcutMapping['category']): S
 
 /**
  * 检查是否为 macOS 平台
+ * 同时检测 navigator.platform 和 navigator.userAgent，增加可靠性
  */
 export function isMacOS(): boolean {
-  return typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
+  if (typeof navigator === 'undefined') return false;
+  const platform = navigator.platform?.toLowerCase() || '';
+  const userAgent = navigator.userAgent?.toLowerCase() || '';
+  return platform.includes('mac') || userAgent.includes('mac');
 }
 
 /**

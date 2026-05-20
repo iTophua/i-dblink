@@ -801,6 +801,30 @@ tbody tr:hover {
   text-shadow: var(--glow-primary);
 }
 
+/* ==================== Wails macOS TitleBarHiddenInset ==================== */
+.wails .toolbar-enhanced {
+  --wails-draggable: drag;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.wails .toolbar-enhanced .ant-btn,
+.wails .toolbar-enhanced button {
+  --wails-draggable: no-drag;
+  -webkit-app-region: no-drag;
+  user-select: auto;
+}
+
+.wails #root {
+  /* macOS 系统会自动处理窗口圆角，不需要手动设置 */
+}
+
+.wails body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 /* ==================== 主题过渡效果 ==================== */
 [data-theme],
 [data-theme-preset] {

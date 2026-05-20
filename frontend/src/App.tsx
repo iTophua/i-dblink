@@ -9,24 +9,12 @@ import { SplashScreen } from './components/SplashScreen';
 import i18n from './i18n';
 import './style.css';
 import './App.css';
+import { EventsOn } from './api';
 
-// Check if running in Tauri environment
-const isTauri =
+// Check if running in Wails environment
+const isWails =
   typeof window !== 'undefined' &&
-  !!((window as unknown as Record<string, unknown>).__TAURI__);
-
-// Lazy load Tauri APIs to avoid errors in browser
-const loadTauriAPI = async () => {
-  if (!isTauri) return null;
-  try {
-    const { listen } = await import('@tauri-apps/api/event');
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    return { listen, getCurrentWindow };
-  } catch (e) {
-    console.warn('Failed to load Tauri APIs:', e);
-    return null;
-  }
-};
+  !!(window as unknown as Record<string, unknown>).__wails__;
 
 function App() {
   const { settings, updateSettings } = useSettingsStore();
@@ -66,26 +54,28 @@ function App() {
   );
 
   useEffect(() => {
-    if (!isTauri) return;
-    
-    let cleanup: (() => void) | undefined;
-    
-    loadTauriAPI().then((api) => {
-      if (!api) return;
-      api.listen<string>('menu-action', (event) => {
-        console.log('Menu action received:', event.payload);
-        window.dispatchEvent(
-          new CustomEvent('menu-action', {
-            detail: { action: event.payload },
-          })
-        );
-      }).then((unlistenFn) => {
-        cleanup = unlistenFn;
-      });
+    if (isWails) {
+      document.documentElement.classList.add('wails');
+    }
+    return () => {
+      document.documentElement.classList.remove('wails');
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isWails) return;
+
+    const cleanup = EventsOn('menu-action', (action: string) => {
+      console.log('Menu action received:', action);
+      window.dispatchEvent(
+        new CustomEvent('menu-action', {
+          detail: { action },
+        })
+      );
     });
 
     return () => {
-      if (cleanup) cleanup();
+      cleanup();
     };
   }, []);
 
@@ -156,18 +146,6 @@ function App() {
 
     requestAnimationFrame(() => {
       applyVars();
-
-      if (isTauri) {
-        loadTauriAPI().then((api) => {
-          if (!api) return;
-          try {
-            const appWindow = api.getCurrentWindow();
-            appWindow.setTheme(effectiveMode === 'dark' ? 'dark' : 'light');
-          } catch (e) {
-            console.error('Failed to set window theme:', e);
-          }
-        });
-      }
     });
   }, [themePreset, effectiveMode, isHydrated]);
 

@@ -9,30 +9,11 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAppStore, Connection } from '../stores/appStore';
-import type { DatabaseType, ConnectionStatus } from '../types/api';
-import { invoke } from '@tauri-apps/api/core';
+import type { GroupOutput } from '../types/api';
 import { ConnectionDialog, ConnectionFormData } from './ConnectionDialog';
+import { api } from '../api';
 
-const { Title, Text } = Typography;
-
-interface BackendConnection {
-  id: string;
-  name: string;
-  db_type: string;
-  host: string;
-  port: number;
-  username: string;
-  database?: string;
-  group_id?: string;
-  status: string;
-}
-
-interface BackendGroup {
-  id: string;
-  name: string;
-  icon: string;
-  color: string;
-}
+const { Title } = Typography;
 
 export function Welcome() {
   const { t } = useTranslation();
@@ -47,26 +28,10 @@ export function Welcome() {
   const setConnections = useAppStore((state) => state.setConnections);
   const addGroup = useAppStore((state) => state.addGroup);
 
-  // 加载保存的连接和分组
-  useEffect(() => {
-    loadConnections();
-    loadGroups();
-  }, []);
-
   const loadConnections = async () => {
     try {
-      const backendConnections = await invoke<BackendConnection[]>('get_connections');
-      const appConnections = backendConnections.map((c: BackendConnection) => ({
-        id: c.id,
-        name: c.name,
-        db_type: c.db_type as DatabaseType,
-        host: c.host,
-        port: c.port,
-        username: c.username,
-        status: c.status as ConnectionStatus,
-        group_id: c.group_id,
-      }));
-      setConnections(appConnections);
+      const backendConnections = await api.getConnections();
+      setConnections(backendConnections as Connection[]);
     } catch (error) {
       console.error('Failed to load connections:', error);
     }
@@ -74,8 +39,8 @@ export function Welcome() {
 
   const loadGroups = async () => {
     try {
-      const backendGroups = await invoke<BackendGroup[]>('get_groups');
-      backendGroups.forEach((g: BackendGroup) => {
+      const backendGroups = await api.getGroups();
+      backendGroups.forEach((g: GroupOutput) => {
         const exists = groups.find((grp) => grp.id === g.id);
         if (!exists) {
           addGroup({
@@ -90,6 +55,11 @@ export function Welcome() {
       console.error('Failed to load groups:', error);
     }
   };
+
+  useEffect(() => {
+    loadConnections();
+    loadGroups();
+  }, []);
 
   const handleNewConnection = () => {
     setEditingData(undefined);
@@ -111,7 +81,7 @@ export function Welcome() {
 
   const handleDeleteConnection = async (id: string) => {
     try {
-      await invoke('delete_connection', { id });
+      await api.deleteConnection(id);
       deleteConnection(id);
     } catch (error) {
       console.error('Failed to delete connection:', error);
@@ -119,31 +89,22 @@ export function Welcome() {
   };
 
   const handleSaveConnection = async (data: ConnectionFormData) => {
-    const inputData = {
-      id: data.id || null,
+    const inputData: Parameters<typeof api.saveConnection>[0] = {
+      ...(data.id ? { id: data.id } : {}),
       name: data.name,
       db_type: data.dbType,
       host: data.host,
       port: data.port,
       username: data.username,
       password: data.password || '',
-      database: data.database || null,
-      group_id: data.group_id || null,
+      ...(data.database ? { database: data.database } : {}),
+      ...(data.group_id ? { group_id: data.group_id } : {}),
     };
 
-    const savedConnection = await invoke<BackendConnection>('save_connection', {
-      input: inputData,
-    });
+    const savedConnection = await api.saveConnection(inputData);
 
     const appConnection: Connection = {
-      id: savedConnection.id,
-      name: savedConnection.name,
-      db_type: savedConnection.db_type as DatabaseType,
-      host: savedConnection.host,
-      port: savedConnection.port,
-      username: savedConnection.username,
-      status: savedConnection.status as ConnectionStatus,
-      group_id: savedConnection.group_id,
+      ...savedConnection,
     };
 
     if (data.id) {
