@@ -179,3 +179,16 @@
 .ag-theme-alpine-dark .ag-cell.drag-selected-range-right {
   border-right: 2px solid rgba(24, 144, 255, 0.7) !important;
 }
+
+/* === 矩形选区高亮样式 === */
+.ag-theme-compact .ag-cell.cell-selection {
+  background: rgba(24, 144, 255, 0.12) !important;
+  outline: 1px solid rgba(24, 144, 255, 0.35);
+  outline-offset: -1px;
+}
+
+.ag-theme-compact.ag-theme-alpine-dark .ag-cell.cell-selection {
+  background: rgba(24, 144, 255, 0.2) !important;
+  outline: 1px solid rgba(24, 144, 255, 0.45);
+  outline-offset: -1px;
+}

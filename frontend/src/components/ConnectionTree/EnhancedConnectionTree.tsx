@@ -2144,8 +2144,20 @@ export function EnhancedConnectionTree({
   }
 
   return (
-    <div>
-      <Spin spinning={isLoading} size="small">
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        .connection-tree-spin-wrapper,
+        .connection-tree-spin-wrapper > .ant-spin-container {
+          height: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+        .connection-tree-spin-wrapper > .ant-spin-container > .ant-tree {
+          flex: 1;
+          min-height: 0;
+        }
+      `}</style>
+      <Spin spinning={isLoading} size="small" wrapperClassName="connection-tree-spin-wrapper">
         {connections.length === 0 && !isLoading ? (
           <EnhancedEmptyState
             icon={<DatabaseOutlined />}
@@ -2204,6 +2216,7 @@ export function EnhancedConnectionTree({
               padding: '0 4px 8px',
               fontSize: 12,
               userSelect: 'none',
+              height: '100%',
             }}
             className="connection-tree"
             blockNode

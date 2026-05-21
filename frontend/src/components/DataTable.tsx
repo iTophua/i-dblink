@@ -167,6 +167,8 @@ export const DataTable = memo(function DataTable({
     endRow: number;
     startCol: number;
     endCol: number;
+    startColId: string;
+    endColId: string;
     active: boolean;
   } | null>(null);
   const isDraggingRef = useRef(false);
@@ -178,6 +180,8 @@ export const DataTable = memo(function DataTable({
     endRow: number;
     startCol: number;
     endCol: number;
+    startColId: string;
+    endColId: string;
   } | null>(null);
   const [rangeEditMode, setRangeEditMode] = useState<{
     column: string;
@@ -274,7 +278,8 @@ export const DataTable = memo(function DataTable({
         } else {
           // 使用requestIdleCallback优化大数据集处理
           const processData = () => {
-            const data = dataResult.rows.map((row) => {
+            const rows = dataResult.rows || [];
+            const data = rows.map((row) => {
               const rowData: RowData = {
                 __row_id__: `row-${++rowIdCounterRef.current}`,
               };
@@ -294,7 +299,7 @@ export const DataTable = memo(function DataTable({
           };
 
           // 大数据集分批处理
-          if (dataResult.rows.length > 1000) {
+          if ((dataResult.rows || []).length > 1000) {
             requestIdleCallback(processData);
           } else {
             processData();
@@ -788,6 +793,42 @@ export const DataTable = memo(function DataTable({
           'column-selected': (params: CellClassParams) => {
             return params.context?.selectedColumn === colName;
           },
+          'drag-selected': (params: CellClassParams) => {
+            const range = params.context?.dragSelectRange;
+            if (!range?.active) return false;
+            const rowIndex = params.node?.rowIndex ?? -1;
+            if (rowIndex < 0) return false;
+            const colId = params.column?.getColId();
+            if (!colId || colId === '__status__') return false;
+            const colIndex = params.context?.visibleColumnMap?.get(colId);
+            if (colIndex === undefined) return false;
+            const minRow = Math.min(range.startRow, range.endRow);
+            const maxRow = Math.max(range.startRow, range.endRow);
+            const startIdx = params.context?.visibleColumnMap?.get(range.startColId);
+            const endIdx = params.context?.visibleColumnMap?.get(range.endColId);
+            if (startIdx === undefined || endIdx === undefined) return false;
+            const minCol = Math.min(startIdx, endIdx);
+            const maxCol = Math.max(startIdx, endIdx);
+            return rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
+          },
+          'cell-selection': (params: CellClassParams) => {
+            const range = params.context?.cellSelectionRange;
+            if (!range) return false;
+            const rowIndex = params.node?.rowIndex ?? -1;
+            if (rowIndex < 0) return false;
+            const colId = params.column?.getColId();
+            if (!colId || colId === '__status__') return false;
+            const colIndex = params.context?.visibleColumnMap?.get(colId);
+            if (colIndex === undefined) return false;
+            const minRow = Math.min(range.startRow, range.endRow);
+            const maxRow = Math.max(range.startRow, range.endRow);
+            const startIdx = params.context?.visibleColumnMap?.get(range.startColId);
+            const endIdx = params.context?.visibleColumnMap?.get(range.endColId);
+            if (startIdx === undefined || endIdx === undefined) return false;
+            const minCol = Math.min(startIdx, endIdx);
+            const maxCol = Math.max(startIdx, endIdx);
+            return rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
+          },
         } as CellClassRules,
         cellRenderer: DataCellRenderer,
         cellRendererParams: { isBoolean } as any,
@@ -933,9 +974,18 @@ export const DataTable = memo(function DataTable({
 
       const api = gridApiRef.current;
       if (api) {
-        api.deselectAll();
-        const node = api.getDisplayedRowAtIndex(rowIndex);
-        if (node) node.setSelected(true);
+        const nodesToSelect: IRowNode[] = [];
+        api.forEachNode((node: IRowNode) => {
+          if (node.rowIndex === rowIndex) {
+            nodesToSelect.push(node);
+          }
+        });
+        if (nodesToSelect.length > 0) {
+          api.deselectAll();
+          api.setNodesSelected({ nodes: nodesToSelect, newValue: true });
+        } else {
+          api.deselectAll();
+        }
       }
 
       let rafId = 0;
@@ -998,6 +1048,8 @@ export const DataTable = memo(function DataTable({
           endRow,
           startCol,
           endCol,
+          startColId: (visCols[startCol] as ColDef)?.field || '',
+          endColId: (visCols[endCol] as ColDef)?.field || '',
           active: true,
         };
         
@@ -1017,15 +1069,23 @@ export const DataTable = memo(function DataTable({
 
         const minRow = Math.min(startInfo.rowIndex, endRow);
         const maxRow = Math.max(startInfo.rowIndex, endRow);
-        api.deselectAll();
-        for (let i = minRow; i <= maxRow; i++) {
-          const node = api.getDisplayedRowAtIndex(i);
-          if (node) node.setSelected(true);
+
+        const nodesToSelect: IRowNode[] = [];
+        api.forEachNode((node: IRowNode) => {
+          if (node.rowIndex !== null && node.rowIndex >= minRow && node.rowIndex <= maxRow) {
+            nodesToSelect.push(node);
+          }
+        });
+        if (nodesToSelect.length > 0) {
+          api.deselectAll();
+          api.setNodesSelected({ nodes: nodesToSelect, newValue: true });
         }
         // context 变化会自动刷新 cellClassRules，只需刷新选中状态列
         api.refreshCells({ force: true });
       };
       
+      let hasMoved = false;
+
       const handleMove = (me: PointerEvent) => {
         if (!startInfo) return;
         const dx = Math.abs(me.clientX - startInfo.startX);
@@ -1033,12 +1093,13 @@ export const DataTable = memo(function DataTable({
         if (!isDraggingRef.current && dx <= DRAG_THRESHOLD && dy <= DRAG_THRESHOLD) return;
         
         pendingMove = me;
+        hasMoved = true;
         if (!rafId) {
           rafId = requestAnimationFrame(processMove);
         }
       };
 
-      const handleUp = () => {
+      const handleUp = (e: PointerEvent) => {
         cleanupDragListeners();
         if (rafId) {
           cancelAnimationFrame(rafId);
@@ -1052,6 +1113,8 @@ export const DataTable = memo(function DataTable({
           const range = {
             startRow: lastDragRange.startRow,
             endRow: lastDragRange.endRow,
+            startColId: lastDragRange.startColId,
+            endColId: lastDragRange.endColId,
             startCol: lastDragRange.startCol,
             endCol: lastDragRange.endCol,
           };
@@ -1062,12 +1125,68 @@ export const DataTable = memo(function DataTable({
           const maxRow = Math.max(range.startRow, range.endRow);
           const api = gridApiRef.current;
           if (api) {
-            api.deselectAll();
-            for (let i = minRow; i <= maxRow; i++) {
-              const node = api.getDisplayedRowAtIndex(i);
-              if (node) node.setSelected(true);
+            const nodesToSelect: IRowNode[] = [];
+            api.forEachNode((node: IRowNode) => {
+              if (node.rowIndex !== null && node.rowIndex >= minRow && node.rowIndex <= maxRow) {
+                nodesToSelect.push(node);
+              }
+            });
+            if (nodesToSelect.length > 0) {
+              api.deselectAll();
+              api.setNodesSelected({ nodes: nodesToSelect, newValue: true });
             }
             // context 变化会自动刷新 cellClassRules，只需刷新选中状态列
+            api.refreshCells({ force: true });
+          }
+        }
+        // 快速拖拽（单帧内完成）：rAF 未执行，isDraggingRef 为 false，直接计算最终范围
+        else if (hasMoved) {
+          const api = gridApiRef.current;
+          if (api) {
+            const visCols = getVisibleCols();
+            const maxColIndex = Math.max(0, visCols.length - 1);
+            const maxRowIndex = Math.max(0, api.getDisplayedRowCount() - 1);
+
+            const { cell: curCell, row: curRow } = resolveCell(e.clientX, e.clientY);
+            let curRowIndex = curRow ? parseInt(curRow.getAttribute('row-index') || '-1', 10) : -1;
+            if (curRowIndex < 0) curRowIndex = startInfo.rowIndex;
+            curRowIndex = Math.max(0, Math.min(maxRowIndex, curRowIndex));
+
+            let curColIndex = startInfo.colIndex;
+            if (curCell) {
+              const colId = curCell.getAttribute('col-id');
+              if (colId !== '__status__') {
+                const idx = visCols.findIndex((c: ColDef) => c.field === colId || c.colId === colId);
+                if (idx >= 0) curColIndex = idx;
+              }
+            }
+
+            const isRowSelect = startInfo.isStatusColumn || startInfo.colIndex === -1;
+            const sc = isRowSelect ? 0 : Math.max(0, startInfo.colIndex);
+            const ec = isRowSelect ? maxColIndex : Math.max(0, curColIndex);
+            const range = {
+              startRow: startInfo.rowIndex,
+              endRow: curRowIndex,
+              startCol: sc,
+              endCol: ec,
+              startColId: (visCols[sc] as ColDef)?.field || '',
+              endColId: (visCols[ec] as ColDef)?.field || '',
+            };
+            cellSelectionRangeRef.current = range;
+            setCellSelectionRange(range);
+
+            const minRow = Math.min(range.startRow, range.endRow);
+            const maxRow = Math.max(range.startRow, range.endRow);
+            const nodesToSelect: IRowNode[] = [];
+            api.forEachNode((node: IRowNode) => {
+              if (node.rowIndex !== null && node.rowIndex >= minRow && node.rowIndex <= maxRow) {
+                nodesToSelect.push(node);
+              }
+            });
+            if (nodesToSelect.length > 0) {
+              api.deselectAll();
+              api.setNodesSelected({ nodes: nodesToSelect, newValue: true });
+            }
             api.refreshCells({ force: true });
           }
         }
@@ -1078,6 +1197,7 @@ export const DataTable = memo(function DataTable({
         dragSelectRangeRef.current = null;
         setDragSelectRange(null);
         lastDragRange = null;
+        hasMoved = false;
       };
 
       const handleCancel = () => {
@@ -1093,6 +1213,7 @@ export const DataTable = memo(function DataTable({
         lastDragRange = null;
         dragSelectRangeRef.current = null;
         setDragSelectRange(null);
+        hasMoved = false;
       };
 
       moveHandler = handleMove;
@@ -1104,10 +1225,22 @@ export const DataTable = memo(function DataTable({
       document.addEventListener('pointercancel', handleCancel);
     };
 
-    gridContainer.addEventListener('pointerdown', handlePointerDown);
+    // Wait for grid API to be ready before adding listeners
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const addListeners = () => {
+      if (!gridApiRef.current) {
+        timeoutId = setTimeout(addListeners, 100);
+        return;
+      }
+      gridContainer.addEventListener('pointerdown', handlePointerDown, true);
+    };
+
+    addListeners();
 
     return () => {
-      gridContainer.removeEventListener('pointerdown', handlePointerDown);
+      if (timeoutId) clearTimeout(timeoutId);
+      gridContainer.removeEventListener('pointerdown', handlePointerDown, true);
       cleanupDragListeners();
     };
   }, [hasEverLoaded]);
@@ -1650,13 +1783,15 @@ export const DataTable = memo(function DataTable({
   }, [columns, rowData.length]);
 
   const handleDeleteRows = useCallback(async () => {
-    if (selectedRows.length === 0) {
+    const api = gridApiRef.current;
+    const rowsToDelete = api?.getSelectedRows() || [];
+    if (rowsToDelete.length === 0) {
       message.warning(t('common.pleaseSelectRowsToDelete'));
       return;
     }
 
     const pkCol = columns.find((col) => col.column_key === 'PRI');
-    if (!pkCol && selectedRows.some((row) => row.__status__ !== 'new')) {
+    if (!pkCol && rowsToDelete.some((row: RowData) => row.__status__ !== 'new')) {
       message.warning(t('common.tableHasNoPrimaryKeyCannotDelete'));
       return;
     }
@@ -1666,9 +1801,8 @@ export const DataTable = memo(function DataTable({
       let successCount = 0;
       let errorMessage = '';
 
-      for (const row of selectedRows) {
+      for (const row of rowsToDelete) {
         if (row.__status__ === 'new') {
-          // 新行直接从本地移除
           pendingNewRowsRef.current.delete(row.__row_id__ || '');
           setRowData((prev) => prev.filter((r) => r.__row_id__ !== row.__row_id__));
           successCount++;
@@ -1701,7 +1835,7 @@ export const DataTable = memo(function DataTable({
     } finally {
       setLoading(false);
     }
-  }, [selectedRows, columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, whereClause]);
+  }, [columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, whereClause]);
 
   const exportToCSV = useCallback(() => {
     if (rowData.length === 0) {

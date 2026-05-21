@@ -4,6 +4,7 @@ export const getMainLayoutStyles = () => ({
   sider: {
     background: 'var(--background-card)',
     borderRight: '1px solid var(--border-color)',
+    height: '100%',
   },
   siderContent: { display: 'flex' as const, flexDirection: 'column' as const, height: '100%' },
   searchContainer: { padding: '8px 8px 4px', flexShrink: 0 },
