@@ -171,6 +171,9 @@ export const DataTable = memo(function DataTable({
     if (!pkCol) { message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate')); return; }
     const targetRow = rowData[row];
     if (!targetRow) return;
+    const origVal = targetRow.__original_data__?.[colId];
+    const normalizedOrig = origVal == null ? 'NULL' : String(origVal);
+    if (normalizedOrig === (newValue === '' || newValue === 'NULL' ? 'NULL' : newValue)) return;
     const pkValue = targetRow[pkCol.column_name];
     const vs = newValue === '' || newValue === 'NULL' ? 'NULL' : escapeSqlValue(newValue, dbType);
     const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = ${vs} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
@@ -186,6 +189,37 @@ export const DataTable = memo(function DataTable({
         message.success(t('common.dataGrid.updateSuccess'));
       }
     } catch (err) { message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`); }
+  }, [columns, columnOrder, queryColumns, rowData, tableName, dbType, connectionId, database, executeQuery, t]);
+
+  // ── Edit (range) ──
+  const handleCellsEdited = useCallback(async (edits: Array<{ col: number; row: number; value: string }>) => {
+    for (const edit of edits) {
+      const colId = (() => {
+        let cols = queryColumns;
+        if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => queryColumns.includes(n)), ...queryColumns.filter((n) => !s.has(n))]; }
+        return cols;
+      })()[edit.col];
+      if (!colId) continue;
+      const pkCol = columns.find((c) => c.column_key === 'PRI');
+      if (!pkCol) { message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate')); return; }
+      const targetRow = rowData[edit.row];
+      if (!targetRow) continue;
+      const origVal = targetRow.__original_data__?.[colId];
+      const normalizedOrig = origVal == null ? 'NULL' : String(origVal);
+      if (normalizedOrig === (edit.value === '' || edit.value === 'NULL' ? 'NULL' : edit.value)) continue;
+      const vs = edit.value === '' || edit.value === 'NULL' ? 'NULL' : escapeSqlValue(edit.value, dbType);
+      const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = ${vs} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(targetRow[pkCol.column_name], dbType)}`;
+      setLastDmlSql(sql);
+      try {
+        const res = await executeQuery(connectionId, sql, database || '');
+        if (res.error) { message.error(`${t('common.dataGrid.updateFailed')}: ${res.error}`); return; }
+        setRowData((prev) => prev.map((r) => {
+          if (r.__row_id__ !== targetRow.__row_id__) return r;
+          return { ...r, [colId]: edit.value === 'NULL' ? null : edit.value, __status__: undefined };
+        }));
+      } catch (err) { message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`); return; }
+    }
+    message.success(t('common.dataGrid.updateSuccess'));
   }, [columns, columnOrder, queryColumns, rowData, tableName, dbType, connectionId, database, executeQuery, t]);
 
   // ── Add Row ──
@@ -405,7 +439,8 @@ export const DataTable = memo(function DataTable({
             }}
             onColumnResized={onColumnResized}
             onCellEdited={handleCellEdited}
-            onCellContextMenu={(col, row, bounds) => setCtx({ v: true, x: bounds.left, y: bounds.top, rowIdx: row, colIdx: col })}
+            onCellsEdited={handleCellsEdited}
+            onCellContextMenu={(col, row, bounds) => setCtx({ v: true, x: bounds.x, y: bounds.y, rowIdx: row, colIdx: col })}
             headerHeight={36} rowHeight={24} editable={true}
           />
         ) : (
