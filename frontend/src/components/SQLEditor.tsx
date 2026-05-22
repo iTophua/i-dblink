@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
-import { AgGridReact } from 'ag-grid-react';
 
 import {
   Button,
@@ -54,8 +53,6 @@ import { SQL_KEYWORDS, filterKeywordsByDbType } from '../constants/sqlKeywords';
 import { SQL_FUNCTIONS, filterFunctionsByDbType } from '../constants/sqlFunctions';
 import { api } from '../api';
 import type { QueryResult, DatabaseType } from '../types/api';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;

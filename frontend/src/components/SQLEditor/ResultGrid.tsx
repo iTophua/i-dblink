@@ -1,1336 +1,401 @@
+/**
+ * ResultGrid — SQL 查询结果展示组件（Glide Data Grid 版）
+ *
+ * 完整功能：拖拽多选、内联编辑、新增行Modal、右键菜单(INSERT/UPDATE/DELETE)、
+ * 多格式导出(CSV/JSON/Excel/TXT/XML/MD)、底部SQL预览、提交/撤销。
+ */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { AgGridReact } from 'ag-grid-react';
-import { ColDef } from 'ag-grid-community';
-import { Button, Space, Empty, Tooltip, Tag, Modal, App, Form, Input, Dropdown, Spin } from 'antd';
+import { Button, Space, Empty, Tag, App, Modal, Form, Input, Dropdown, Spin } from 'antd';
 import {
-  DeleteOutlined,
-  SaveOutlined,
-  UndoOutlined,
-  CodeOutlined,
+  DeleteOutlined, SaveOutlined, UndoOutlined, CodeOutlined,
+  CopyOutlined, PlusOutlined, DownloadOutlined, FileTextOutlined,
   ExclamationCircleOutlined,
-  CopyOutlined,
-  PlusOutlined,
-  DownloadOutlined,
-  FileTextOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../hooks/useApi';
 import type { QueryResult, DatabaseType, ColumnInfo } from '../../types/api';
 import { exportToExcel } from '../../utils/exportUtils';
 import { escapeSqlValue, escapeSqlIdentifier } from '../../utils/sqlUtils';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-alpine.css';
+import DataEditor from '@glideapps/glide-data-grid';
+import { GlideDataTable, type GlideRow } from '../DataTable/GlideDataTable';
+import { namesToGlideColumns, rowsToGlideRows, createResultCellModified } from '../DataTable/adapters/resultAdapter';
 
-interface QueryResultWithTiming extends QueryResult {
+// ── Types ──
+interface ResultGridProps {
+  queryResult: QueryResult & { executionTime?: number; totalTime?: number };
   executionTime?: number;
-  totalTime?: number;
-}
-
-export interface ResultGridProps {
-  queryResult: QueryResultWithTiming;
   isDark: boolean;
-  executionTime?: number;
   connectionId?: string;
   database?: string;
   originalSql?: string;
   dbType?: DatabaseType;
 }
 
-/** 从简单 SELECT 语句中提取单表名，遇到 JOIN/UNION/子查询返回 null */
-function extractSingleTableName(sql: string): string | null {
-  const clean = sql
-    .replace(/\/\*[\s\S]*?\*\//g, '') // 块注释
-    .replace(/--.*$/gm, '') // 行注释
-    .trim();
+interface CtxState { v: boolean; x: number; y: number; }
 
-  // 排除复杂查询
-  if (/\bJOIN\b|\bUNION\b|\bINTO\b|(?:\()\s*SELECT\b/i.test(clean)) {
-    return null;
-  }
-
-  const match = clean.match(
-    /\bFROM\s+(?:[`"']?(\w+)[`"']?\.)?[`"']?(\w+)[`"']?(?:\s+(?:AS\s+)?\w+)?(?:\s*$|\s+(?:WHERE|ORDER|GROUP|HAVING|LIMIT|OFFSET)\b)/i
-  );
-  if (!match) return null;
-  return match[2] || match[1] || null;
+// ── SQL 解析 ──
+function extractTable(sql: string): string | null {
+  const clean = sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '').trim();
+  if (/\bJOIN\b|\bUNION\b|\bINTO\b|(?:\()\s*SELECT\b/i.test(clean)) return null;
+  const match = clean.match(/\bFROM\s+(?:[`"']?(\w+)[`"']?\.)?[`"']?(\w+)[`"']?(?:\s+(?:AS\s+)?\w+)?(?:\s*$|\s+(?:WHERE|ORDER|GROUP|HAVING|LIMIT|OFFSET)\b)/i);
+  return match ? (match[2] || match[1] || null) : null;
 }
 
-function generateInsertSql(
-  tableName: string,
-  columns: string[],
-  rows: unknown[][],
-  dbType?: DatabaseType
-): string {
-  const tableRef = escapeSqlIdentifier(tableName, dbType);
-  const colStr = columns.map((c) => escapeSqlIdentifier(c, dbType)).join(', ');
-  const values = rows.map((row) => `(${row.map((v) => escapeSqlValue(v, dbType)).join(', ')})`).join(',\n');
-  return `INSERT INTO ${tableRef} (${colStr})\nVALUES\n${values};`;
+// ── SQL 生成 ──
+function generateInsertSql(tableName: string, cols: string[], rows: unknown[][], dbType?: DatabaseType): string {
+  const tr = escapeSqlIdentifier(tableName, dbType);
+  const cs = cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ');
+  const vals = rows.map((r) => `(${r.map((v) => escapeSqlValue(v, dbType)).join(', ')})`).join(',\n');
+  return `INSERT INTO ${tr} (${cs})\nVALUES\n${vals};`;
+}
+function generateUpdateSql(tableName: string, cols: string[], row: unknown[], pkCol: string, pkIdx: number, dbType?: DatabaseType): string {
+  const tr = escapeSqlIdentifier(tableName, dbType);
+  const ss = cols.map((c, i) => `${escapeSqlIdentifier(c, dbType)} = ${escapeSqlValue(row[i], dbType)}`).filter((_, i) => i !== pkIdx).join(', ');
+  return `UPDATE ${tr} SET ${ss} WHERE ${escapeSqlIdentifier(pkCol, dbType)} = ${escapeSqlValue(row[pkIdx], dbType)}`;
+}
+function generateDeleteSql(tableName: string, pkCol: string, pkValues: unknown[], dbType?: DatabaseType): string {
+  const tr = escapeSqlIdentifier(tableName, dbType);
+  return `DELETE FROM ${tr} WHERE ${escapeSqlIdentifier(pkCol, dbType)} IN (${pkValues.map((v) => escapeSqlValue(v, dbType)).join(', ')});`;
 }
 
-function generateUpdateSql(
-  tableName: string,
-  columns: string[],
-  row: unknown[],
-  pkCol: string,
-  pkIdx: number,
-  dbType?: DatabaseType
-): string {
-  const tableRef = escapeSqlIdentifier(tableName, dbType);
-  const setters = columns
-    .map((col, i) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(row[i], dbType)}`)
-    .filter((_, i) => i !== pkIdx)
-    .join(', ');
-  return `UPDATE ${tableRef} SET ${setters} WHERE ${escapeSqlIdentifier(pkCol, dbType)} = ${escapeSqlValue(row[pkIdx], dbType)}`;
+// ── 导出工具 ──
+function downloadBlob(content: string, name: string, type: string) {
+  const blob = new Blob([content], { type }); const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+}
+function exportToCsv(cols: string[], rows: unknown[][]): string {
+  const esc = (v: unknown) => { const s = v == null ? '' : String(v); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+  return cols.map(esc).join(',') + '\n' + rows.map((r) => r.map(esc).join(',')).join('\n');
+}
+function exportToJson(cols: string[], rows: unknown[][]): string {
+  return JSON.stringify(rows.map((r) => { const o: Record<string, unknown> = {}; cols.forEach((c, i) => { o[c] = r[i]; }); return o; }), null, 2);
+}
+function exportToTxt(cols: string[], rows: unknown[][]): string {
+  const esc = (v: unknown) => { const s = String(v ?? ''); return s.includes('\t') || s.includes('\n') ? s.replace(/\t/g, ' ').replace(/\n/g, '\\n') : s; };
+  return '\uFEFF' + cols.map(esc).join('\t') + '\n' + rows.map((r) => r.map(esc).join('\t')).join('\n');
+}
+function exportToXml(cols: string[], rows: unknown[][]): string {
+  const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_\u4e00-\u9fff.-]/g, '_');
+  const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<data>'];
+  for (const row of rows) { lines.push('  <row>'); cols.forEach((c, i) => lines.push(`    <${sanitize(c)}>${esc(row[i])}</${sanitize(c)}>`)); lines.push('  </row>'); }
+  lines.push('</data>'); return lines.join('\n');
+}
+function exportToMd(cols: string[], rows: unknown[][]): string {
+  const esc = (v: unknown) => String(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+  const h = '| ' + cols.map(esc).join(' | ') + ' |';
+  return '\uFEFF' + h + '\n| ' + cols.map(() => '---').join(' | ') + ' |\n' + rows.map((r) => '| ' + r.map(esc).join(' | ') + ' |').join('\n');
 }
 
-function generateDeleteSql(
-  tableName: string,
-  pkCol: string,
-  pkValues: unknown[],
-  dbType?: DatabaseType
-): string {
-  const tableRef = escapeSqlIdentifier(tableName, dbType);
-  const values = pkValues.map((v) => escapeSqlValue(v, dbType)).join(', ');
-  return `DELETE FROM ${tableRef} WHERE ${escapeSqlIdentifier(pkCol, dbType)} IN (${values});`;
-}
-
-interface ContextMenuState {
-  visible: boolean;
-  x: number;
-  y: number;
-  row?: number | null;
-}
-
-function downloadBlob(content: string, filename: string, type: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function exportToCsv(columns: string[], rows: unknown[][]): string {
-  const escape = (val: unknown) => {
-    if (val === null || val === undefined) return '';
-    const str = String(val);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  };
-  const header = columns.map(escape).join(',');
-  const body = rows.map((row) => row.map(escape).join(',')).join('\n');
-  return `${header}\n${body}`;
-}
-
-function exportToJson(columns: string[], rows: unknown[][]): string {
-  const objs = rows.map((row) => {
-    const obj: Record<string, unknown> = {};
-    columns.forEach((col, i) => {
-      obj[col] = row[i];
-    });
-    return obj;
-  });
-  return JSON.stringify(objs, null, 2);
-}
-
-function escapeTxt(val: unknown): string {
-  if (val === null || val === undefined) return '';
-  const str = String(val);
-  if (str.includes('\t') || str.includes('\n') || str.includes('\r')) {
-    return str.replace(/\t/g, ' ').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
-  }
-  return str;
-}
-
-function exportToTxt(columns: string[], rows: unknown[][]): string {
-  const header = columns.map(escapeTxt).join('\t');
-  const body = rows.map((row) => row.map(escapeTxt).join('\t')).join('\n');
-  return '\uFEFF' + header + '\n' + body;
-}
-
-function escapeXml(val: unknown): string {
-  if (val === null || val === undefined) return '';
-  return String(val)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function sanitizeXmlTag(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_\u4e00-\u9fff.-]/g, '_');
-}
-
-function exportToXml(columns: string[], rows: unknown[][]): string {
-  const lines: string[] = ['<?xml version="1.0" encoding="UTF-8"?>', '<data>'];
-  for (const row of rows) {
-    lines.push('  <row>');
-    columns.forEach((col, i) => {
-      const tag = sanitizeXmlTag(col);
-      const val = escapeXml(row[i] ?? '');
-      lines.push(`    <${tag}>${val}</${tag}>`);
-    });
-    lines.push('  </row>');
-  }
-  lines.push('</data>');
-  return lines.join('\n');
-}
-
-function escapeMd(val: unknown): string {
-  if (val === null || val === undefined) return '';
-  return String(val).replace(/\|/g, '\\|').replace(/\n/g, '<br>');
-}
-
-
-
-function exportToMd(columns: string[], rows: unknown[][]): string {
-  const headers = columns.map(escapeMd);
-  const headerLine = '| ' + headers.join(' | ') + ' |';
-  const separatorLine = '| ' + headers.map(() => '---').join(' | ') + ' |';
-  const bodyLines = rows.map((row) => '| ' + row.map((v) => escapeMd(v)).join(' | ') + ' |');
-  return '\uFEFF' + [headerLine, separatorLine, ...bodyLines].join('\n');
-}
-
-// === ResultGrid 主组件 ===
-
+// ── Component ──
 export function ResultGrid({
-  queryResult,
-  isDark,
-  executionTime,
-  connectionId,
-  database,
-  originalSql,
-  dbType,
+  queryResult, executionTime, isDark: _isDark, connectionId, database, originalSql, dbType,
 }: ResultGridProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const { getColumns, executeQuery } = useDatabase();
 
-  // 解析表名 - 使用固定的 SQL 语句，不随编辑区变化
-  const tableName = useMemo(() => {
-    if (!originalSql) return null;
-    // 使用最后一次执行的 SQL 语句，而不是编辑区当前的内容
-    return extractSingleTableName(originalSql);
-  }, []); // 移除依赖，只使用初始值
-
-  // 获取表结构（列信息）
+  const tableName = useMemo(() => (originalSql ? extractTable(originalSql) : null), [originalSql]);
   const [tableColumns, setTableColumns] = useState<ColumnInfo[]>([]);
-  const primaryKeyCol = useMemo(() => {
-    return tableColumns.find((c) => c.column_key === 'PRI') || null;
-  }, [tableColumns]);
-
-  // 是否可编辑：单表查询 + 有主键 + 有连接 - 使用固定的表名判断
+  const primaryKeyCol = useMemo(() => tableColumns.find((c) => c.column_key === 'PRI') || null, [tableColumns]);
   const isEditable = !!(tableName && primaryKeyCol && connectionId);
 
   useEffect(() => {
-    if (!connectionId || !tableName) {
-      setTableColumns([]);
-      return;
-    }
-    getColumns(connectionId, tableName, database)
-      .then((cols) => setTableColumns(cols))
-      .catch(() => setTableColumns([]));
+    if (!connectionId || !tableName) { setTableColumns([]); return; }
+    getColumns(connectionId, tableName, database).then(setTableColumns).catch(() => setTableColumns([]));
   }, [connectionId, tableName, database, getColumns]);
 
   // 编辑状态
   const [modifiedRows, setModifiedRows] = useState<Map<number, unknown[]>>(new Map());
-  const [deletedRowIndices, setDeletedRowIndices] = useState<Set<number>>(new Set());
-  const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
-  const [operationSql, setOperationSql] = useState<string>('');
+  const [deletedIndices, setDeletedIndices] = useState<Set<number>>(new Set());
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [newRows, setNewRows] = useState<unknown[][]>([]);
+  const [operationSql, setOperationSql] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addForm] = Form.useForm();
+  const [contextMenu, setCtx] = useState<CtxState>({ v: false, x: 0, y: 0 });
 
-  // 右键菜单
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
-    visible: false,
-    x: 0,
-    y: 0,
-    row: null,
-  });
-
-  // 大数据集处理状态
-  const [isProcessingLargeData, setIsProcessingLargeData] = useState(false);
-
-  // 行数据（带修改和删除标记，以及新增行）- 优化版本支持大数据集
-  const rowData = useMemo(() => {
-    // 如果数据量很大，使用分批处理避免阻塞 UI
-    const totalRows = queryResult.rows.length + newRows.length;
-    if (totalRows > 50000) {
-      console.log(`Processing large dataset: ${totalRows} rows`);
-    }
-
-    const existingRows = queryResult.rows
-      .map((row, i) => {
-        if (deletedRowIndices.has(i)) return null;
-        const displayRow = modifiedRows.has(i) ? modifiedRows.get(i)! : row;
-        const obj: Record<string, unknown> = { __id: i, __isNew: false };
-        displayRow.forEach((cell, j) => {
-          obj[String(j)] = cell;
-        });
-        return obj;
-      })
-      .filter(Boolean) as Record<string, unknown>[];
-
-    const newRowsData = newRows.map((row, i) => {
+  // 行数据
+  const allRows = useMemo(() => {
+    const existing = queryResult.rows.map((row, i) => {
+      if (deletedIndices.has(i)) return null;
+      const r = modifiedRows.has(i) ? modifiedRows.get(i)! : row;
+      const obj: Record<string, unknown> = { __id: i, __isNew: false };
+      r.forEach((cell, j) => { obj[String(j)] = cell; });
+      return obj;
+    }).filter(Boolean) as Record<string, unknown>[];
+    const newOnes = newRows.map((row, i) => {
       const obj: Record<string, unknown> = { __id: `new-${i}`, __isNew: true };
-      row.forEach((cell, j) => {
-        obj[String(j)] = cell;
-      });
+      row.forEach((cell, j) => { obj[String(j)] = cell; });
       return obj;
     });
+    return [...existing, ...newOnes];
+  }, [queryResult.rows, modifiedRows, deletedIndices, newRows]);
 
-    return [...existingRows, ...newRowsData];
-  }, [queryResult.rows, modifiedRows, deletedRowIndices, newRows]);
+  // 行状态回调
+  const rowStatus = useCallback((row: GlideRow, _idx: number) => {
+    const id = row.__id as number;
+    if (deletedIndices.has(id)) return 'deleted' as const;
+    if (modifiedRows.has(id)) return 'modified' as const;
+    return undefined;
+  }, [deletedIndices, modifiedRows]);
 
-  const colDefs = useMemo<ColDef[]>(() => {
-    const cols: ColDef[] = [
-      {
-        headerName: '#',
-        valueGetter: (params: any) =>
-          params.node?.rowIndex != null ? params.node.rowIndex + 1 : '',
-        width: 60,
-        minWidth: 60,
-        maxWidth: 60,
-        pinned: 'left',
-        sortable: false,
-        filter: false,
-        resizable: false,
-        cellStyle: { textAlign: 'right', color: 'var(--text-tertiary)' },
-        checkboxSelection: isEditable,
-        headerCheckboxSelection: isEditable,
-      },
-    ];
-    cols.push(
-      ...queryResult.columns.map((col, i) => ({
-        field: String(i),
-        headerName: col,
-        flex: 1,
-        minWidth: 80,
-        maxWidth: 400,
-        sortable: true,
-        filter: true,
-        resizable: true,
-        editable: isEditable,
-        tooltipValueGetter: (p: any) => (p.value == null ? 'NULL' : String(p.value)),
-        valueFormatter: (p: any) => (p.value == null ? 'NULL' : String(p.value)),
-        cellClassRules: {
-          'null-cell': (p: any) => p.value == null,
-          'cell-modified': (p: any) => {
-            const rowId = p.data?.__id;
-            return typeof rowId === 'number' && modifiedRows.has(rowId);
-          },
-        },
-      }))
-    );
-    return cols;
-  }, [queryResult.columns, isEditable, modifiedRows]);
+  const isCellModified = useMemo(() => createResultCellModified(modifiedRows, queryResult.columns), [modifiedRows, queryResult.columns]);
 
-  // 单元格值变化
-  const onCellValueChanged = useCallback(
-    (event: any) => {
-      if (!isEditable) return;
-      const rowId = event.data.__id;
-      const colId = parseInt(event.colDef.field, 10);
-      const newValue = event.newValue;
+  const glideColumns = useMemo(() => namesToGlideColumns(queryResult.columns), [queryResult.columns]);
+  const glideRows = useMemo(() => allRows as GlideRow[], [allRows]);
 
-      if (typeof rowId === 'string' && rowId.startsWith('new-')) {
-        const newRowIndex = parseInt(rowId.split('-')[1], 10);
-        setNewRows((prev) => {
-          const updated = [...prev];
-          const existingRow = updated[newRowIndex]
-            ? [...updated[newRowIndex]]
-            : [...queryResult.columns.map(() => null)];
-          existingRow[colId] = newValue;
-          updated[newRowIndex] = existingRow;
-          return updated;
-        });
-        return;
-      }
-
-      setModifiedRows((prev) => {
-        const newMap = new Map(prev);
-        const originalRow = queryResult.rows[rowId as number];
-        const currentRow = newMap.has(rowId as number)
-          ? newMap.get(rowId as number)!
-          : [...originalRow];
-        currentRow[colId] = newValue;
-        newMap.set(rowId as number, currentRow);
-        return newMap;
-      });
-    },
-    [isEditable, queryResult.rows]
-  );
-
-  // 监听修改/删除变化，更新底部 SQL 预览 - 使用固定的表名，不依赖编辑区变化
-  useEffect(() => {
-    if (!tableName || !primaryKeyCol) {
-      setOperationSql('');
-      return;
-    }
-    const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
-    if (pkIdx < 0) {
-      setOperationSql('');
-      return;
-    }
-
-    const lines: string[] = [];
-    for (const [rowId, row] of modifiedRows) {
-      if (deletedRowIndices.has(rowId)) continue;
-      const originalRow = queryResult.rows[rowId];
-      const changedCols: string[] = [];
-      const changedValues: unknown[] = [];
-      for (let i = 0; i < row.length; i++) {
-        if (row[i] !== originalRow[i]) {
-          changedCols.push(queryResult.columns[i]);
-          changedValues.push(row[i]);
-        }
-      }
-      if (changedCols.length === 0) continue;
-      const setters = changedCols
-        .map(
-          (col, idx) =>
-            `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[idx], dbType)}`
-        )
-        .join(', ');
-      lines.push(
-        `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx], dbType)};`
-      );
-    }
-    for (const rowId of deletedRowIndices) {
-      const originalRow = queryResult.rows[rowId];
-      lines.push(
-        `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx], dbType)};`
-      );
-    }
-    setOperationSql(lines.join('\n'));
-  }, [modifiedRows, deletedRowIndices, tableName, primaryKeyCol, queryResult, dbType]);
-
-  // 选中行变化
-  const onSelectionChanged = useCallback((event: any) => {
-    const selected = event.api.getSelectedRows() as Array<{ __id: number }>;
-    setSelectedRowIndices(new Set(selected.map((r) => r.__id)));
+  // 选中
+  const handleSelectionChange = useCallback((rows: GlideRow[]) => {
+    setSelectedIndices(new Set(rows.map((r) => r.__id as number).filter((i) => typeof i === 'number' && i >= 0)));
   }, []);
 
-  // 提交更改
+  // 内联编辑
+  const handleCellEdited = useCallback((col: number, row: number, newValue: string) => {
+    if (!isEditable) return;
+    const colName = queryResult.columns[col];
+    if (!colName) return;
+    const rowId = row;
+    if (rowId >= queryResult.rows.length) { /* new row */ return; }
+    setModifiedRows((prev) => {
+      const next = new Map(prev);
+      const current = next.get(rowId) ? [...next.get(rowId)!] : [...queryResult.rows[rowId]];
+      const idx = queryResult.columns.indexOf(colName);
+      current[idx] = newValue === 'NULL' ? null : newValue;
+      next.set(rowId, current);
+      return next;
+    });
+  }, [isEditable, queryResult]);
+
+  // 生成操作SQL
+  useEffect(() => {
+    if (!tableName || !primaryKeyCol) { setOperationSql(''); return; }
+    const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
+    if (pkIdx < 0) { setOperationSql(''); return; }
+    const lines: string[] = [];
+    for (const [rowId, row] of modifiedRows) {
+      if (deletedIndices.has(rowId)) continue;
+      const ss = queryResult.columns.map((c, i) => `${escapeSqlIdentifier(c, dbType)} = ${escapeSqlValue(row[i], dbType)}`).join(', ');
+      lines.push(`UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${ss} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)};`);
+    }
+    for (const rowId of deletedIndices) {
+      lines.push(`DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)};`);
+    }
+    setOperationSql(lines.join('\n'));
+  }, [modifiedRows, deletedIndices, tableName, primaryKeyCol, queryResult, dbType]);
+
+  // 提交
   const handleCommit = useCallback(async () => {
     if (!connectionId || !tableName || !primaryKeyCol) return;
     const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
     if (pkIdx < 0) return;
-
     try {
-      let successCount = 0;
-      let errorMsg = '';
-
-      // 执行 INSERT（新增行）
-      if (newRows.length > 0) {
-        for (const row of newRows) {
-          const cols: string[] = [];
-          const vals: unknown[] = [];
-          row.forEach((v, i) => {
-            if (v !== null) {
-              cols.push(queryResult.columns[i]);
-              vals.push(v);
-            }
-          });
-          if (cols.length === 0) continue;
-          const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')}) VALUES (${vals.map((v) => escapeSqlValue(v, dbType)).join(', ')})`;
-          const res = await executeQuery(connectionId, sql, database);
-          if (res.error) {
-            errorMsg = res.error;
-            break;
-          }
-          successCount++;
-        }
-      }
-
-      // 执行 UPDATE
-      if (errorMsg) {
-        message.error(`${t('common.submitFailed')}: ${errorMsg}`);
-        return;
-      }
-      for (const [rowId, row] of modifiedRows) {
-        if (deletedRowIndices.has(rowId)) continue;
-        const originalRow = queryResult.rows[rowId];
-        const changedCols: string[] = [];
-        const changedValues: unknown[] = [];
-        for (let i = 0; i < row.length; i++) {
-          if (row[i] !== originalRow[i]) {
-            changedCols.push(queryResult.columns[i]);
-            changedValues.push(row[i]);
-          }
-        }
-        if (changedCols.length === 0) continue;
-
-        const setters = changedCols
-          .map(
-            (col, i) => `${escapeSqlIdentifier(col, dbType)} = ${escapeSqlValue(changedValues[i], dbType)}`
-          )
-          .join(', ');
-        const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx], dbType)}`;
-
+      let success = 0, errMsg = '';
+      for (const row of newRows) {
+        const cols: string[] = []; const vals: unknown[] = [];
+        row.forEach((v, i) => { if (v !== null) { cols.push(queryResult.columns[i]); vals.push(v); } });
+        if (cols.length === 0) continue;
+        const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')}) VALUES (${vals.map((v) => escapeSqlValue(v, dbType)).join(', ')})`;
         const res = await executeQuery(connectionId, sql, database);
-        if (res.error) {
-          errorMsg = res.error;
-          break;
-        }
-        successCount++;
+        if (res.error) { errMsg = res.error; break; } success++;
       }
-
-      // 执行 DELETE
-      if (!errorMsg) {
-        for (const rowId of deletedRowIndices) {
-          const originalRow = queryResult.rows[rowId];
-          const sql = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(originalRow[pkIdx], dbType)}`;
+      if (!errMsg) {
+        for (const [rowId, row] of modifiedRows) {
+          if (deletedIndices.has(rowId)) continue;
+          const ss = queryResult.columns.map((c, i) => `${escapeSqlIdentifier(c, dbType)} = ${escapeSqlValue(row[i], dbType)}`).join(', ');
+          const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${ss} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)}`;
           const res = await executeQuery(connectionId, sql, database);
-          if (res.error) {
-            errorMsg = res.error;
-            break;
-          }
-          successCount++;
+          if (res.error) { errMsg = res.error; break; } success++;
         }
       }
-
-      if (errorMsg) {
-        message.error(`${t('common.submitFailed')}: ${errorMsg}`);
-      } else {
-        message.success(
-          `${t('common.submittedSuccessfully')} ${successCount} ${t('common.changes')}`
-        );
-        setModifiedRows(new Map());
-        setDeletedRowIndices(new Set());
-        setNewRows([]);
+      if (!errMsg) {
+        for (const rowId of deletedIndices) {
+          const sql = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)}`;
+          const res = await executeQuery(connectionId, sql, database);
+          if (res.error) { errMsg = res.error; break; } success++;
+        }
       }
-    } catch (err: any) {
-      message.error(`${t('common.submitFailed')}: ${err.message || err}`);
-    }
-  }, [
-    connectionId,
-    tableName,
-    primaryKeyCol,
-    queryResult,
-    newRows,
-    modifiedRows,
-    deletedRowIndices,
-    dbType,
-    database,
-    executeQuery,
-    message,
-  ]);
+      if (errMsg) message.error(`${t('common.submitFailed')}: ${errMsg}`);
+      else { message.success(`${t('common.submittedSuccessfully')} ${success}`); setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); }
+    } catch (err: any) { message.error(`${t('common.submitFailed')}: ${err.message || err}`); }
+  }, [connectionId, tableName, primaryKeyCol, modifiedRows, deletedIndices, newRows, queryResult, dbType, database, executeQuery, message, t]);
 
-  // 撤销更改
+  // 撤销
   const handleUndo = useCallback(() => {
-    Modal.confirm({
-      title: t('common.undoModifications'),
-      content: t('common.confirmDiscardAllChanges'),
-      transitionName: '',
-      maskTransitionName: '',
-      onOk: () => {
-        setModifiedRows(new Map());
-        setDeletedRowIndices(new Set());
-        setNewRows([]);
-        message.info(t('common.allChangesRevoked'));
-      },
+    Modal.confirm({ title: t('common.undoModifications'), content: t('common.confirmDiscardAllChanges'), transitionName: '', maskTransitionName: '',
+      onOk: () => { setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); message.info(t('common.allChangesRevoked')); },
     });
-  }, [message]);
+  }, [message, t]);
 
-  // 删除选中行
+  // 删除选中
   const handleDeleteSelected = useCallback(() => {
-    if (!isEditable) {
-      message.warning(t('common.currentResultSetNotEditable'));
-      return;
-    }
-    if (selectedRowIndices.size === 0) {
-      message.warning(t('common.pleaseSelectRowsToDelete'));
-      return;
-    }
-    Modal.confirm({
-      title: t('common.confirmDelete'),
-      content: t('common.confirmMarkRowsForDeletion', { count: selectedRowIndices.size }),
-      okText: t('common.markForDeletion'),
-      okType: 'danger',
-      cancelText: t('common.cancel'),
-      transitionName: '',
-      maskTransitionName: '',
-      onOk: () => {
-        setDeletedRowIndices((prev) => {
-          const next = new Set(prev);
-          selectedRowIndices.forEach((i) => next.add(i));
-          return next;
-        });
-        message.success(
-          `${t('common.markedForDeletion')} ${selectedRowIndices.size} ${t('common.rows')}`
-        );
-      },
+    if (!isEditable) { message.warning(t('common.currentResultSetNotEditable')); return; }
+    if (selectedIndices.size === 0) { message.warning(t('common.pleaseSelectRowsToDelete')); return; }
+    Modal.confirm({ title: t('common.confirmDelete'), content: t('common.confirmMarkRowsForDeletion', { count: selectedIndices.size }), okText: t('common.markForDeletion'), okType: 'danger', transitionName: '', maskTransitionName: '',
+      onOk: () => { setDeletedIndices((prev) => { const n = new Set(prev); selectedIndices.forEach((i) => n.add(i)); return n; }); message.success(`${t('common.markedForDeletion')} ${selectedIndices.size}`); },
     });
-  }, [isEditable, selectedRowIndices, message]);
+  }, [isEditable, selectedIndices, message, t]);
 
-  // 右键菜单事件
-  const handleContextMenu = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    setContextMenu({ visible: true, x: event.clientX - rect.left, y: event.clientY - rect.top });
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu((prev) => ({ ...prev, visible: false }));
-  }, []);
-
-  useEffect(() => {
-    if (!contextMenu.visible) return;
-    const handleClick = () => closeContextMenu();
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [contextMenu.visible, closeContextMenu]);
-
-  // 复制为 SQL - 使用固定的查询结果，不依赖编辑区变化
+  // 右键菜单
+  const closeCtx = useCallback(() => setCtx((p) => ({ ...p, v: false })), []);
   const copyAsInsert = useCallback(() => {
-    if (!tableName) {
-      message.warning(t('common.cannotDetermineTableName'));
-      return;
-    }
-    const indices = Array.from(selectedRowIndices);
-    if (indices.length === 0) {
-      message.warning(t('common.pleaseSelectRows'));
-      return;
-    }
+    if (!tableName) { message.warning(t('common.cannotDetermineTableName')); return; }
+    const indices = Array.from(selectedIndices).filter((i) => i < queryResult.rows.length);
+    if (indices.length === 0) { message.warning(t('common.pleaseSelectRows')); return; }
     const rows = indices.map((i) => queryResult.rows[i]);
-    const sql = generateInsertSql(tableName, queryResult.columns, rows, dbType);
-    navigator.clipboard.writeText(sql);
-    message.success(
-      `${t('common.copyTable.copied')} ${indices.length} ${t('common.rows')} INSERT ${t('common.statements')}`
-    );
-    closeContextMenu();
-  }, [tableName, selectedRowIndices, queryResult, dbType, message, closeContextMenu]);
-
+    navigator.clipboard.writeText(generateInsertSql(tableName, queryResult.columns, rows, dbType));
+    message.success(`${t('common.copyTable.copied')} ${indices.length} INSERT`); closeCtx();
+  }, [tableName, selectedIndices, queryResult, dbType, message, t, closeCtx]);
   const copyAsUpdate = useCallback(() => {
-    if (!tableName || !primaryKeyCol) {
-      message.warning(t('common.currentResultSetCannotGenerateUpdate'));
-      return;
-    }
+    if (!tableName || !primaryKeyCol) { message.warning(t('common.currentResultSetCannotGenerateUpdate')); return; }
     const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
-    if (pkIdx < 0) {
-      message.warning(t('common.primaryKeyColumnNotFound'));
-      return;
-    }
-    const indices = Array.from(selectedRowIndices);
-    if (indices.length === 0) {
-      message.warning(t('common.pleaseSelectRows'));
-      return;
-    }
-    const sqls = indices.map((i) =>
-      generateUpdateSql(
-        tableName,
-        queryResult.columns,
-        queryResult.rows[i],
-        primaryKeyCol.column_name,
-        pkIdx,
-        dbType
-      )
-    );
+    if (pkIdx < 0) { message.warning(t('common.primaryKeyColumnNotFound')); return; }
+    const indices = Array.from(selectedIndices).filter((i) => i < queryResult.rows.length);
+    if (indices.length === 0) { message.warning(t('common.pleaseSelectRows')); return; }
+    const sqls = indices.map((i) => generateUpdateSql(tableName, queryResult.columns, queryResult.rows[i], primaryKeyCol.column_name, pkIdx, dbType));
     navigator.clipboard.writeText(sqls.join('\n'));
-    message.success(
-      `${t('common.copyTable.copied')} ${indices.length} ${t('common.rows')} UPDATE ${t('common.statements')}`
-    );
-    closeContextMenu();
-  }, [tableName, primaryKeyCol, queryResult, dbType, message, closeContextMenu]);
-
+    message.success(`${t('common.copyTable.copied')} ${indices.length} UPDATE`); closeCtx();
+  }, [tableName, primaryKeyCol, selectedIndices, queryResult, dbType, message, t, closeCtx]);
   const copyAsDelete = useCallback(() => {
-    if (!tableName || !primaryKeyCol) {
-      message.warning(t('common.currentResultSetCannotGenerateDelete'));
-      return;
-    }
+    if (!tableName || !primaryKeyCol) { message.warning(t('common.currentResultSetCannotGenerateDelete')); return; }
     const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
-    if (pkIdx < 0) {
-      message.warning(t('common.primaryKeyColumnNotFound'));
-      return;
+    if (pkIdx < 0) { message.warning(t('common.primaryKeyColumnNotFound')); return; }
+    const indices = Array.from(selectedIndices).filter((i) => i < queryResult.rows.length);
+    if (indices.length === 0) { message.warning(t('common.pleaseSelectRows')); return; }
+    const sql = generateDeleteSql(tableName, primaryKeyCol.column_name, indices.map((i) => queryResult.rows[i][pkIdx]), dbType);
+    navigator.clipboard.writeText(sql); message.success(`${t('common.copyTable.copied')} ${indices.length} DELETE`); closeCtx();
+  }, [tableName, primaryKeyCol, selectedIndices, queryResult, dbType, message, t, closeCtx]);
+
+  // 导出
+  const handleExport = useCallback((format: string) => {
+    const cols = queryResult.columns; const rows = queryResult.rows;
+    if (format === 'csv') { downloadBlob(exportToCsv(cols, rows), 'result.csv', 'text/csv'); message.success(t('common.exportedCsv')); }
+    else if (format === 'json') { downloadBlob(exportToJson(cols, rows), 'result.json', 'application/json'); message.success(t('common.exportedJson')); }
+    else if (format === 'txt') { downloadBlob(exportToTxt(cols, rows), 'result.txt', 'text/plain'); message.success(t('common.exportedTxt')); }
+    else if (format === 'xml') { downloadBlob(exportToXml(cols, rows), 'result.xml', 'application/xml'); message.success(t('common.exportedXml')); }
+    else if (format === 'md') { downloadBlob(exportToMd(cols, rows), 'result.md', 'text/markdown'); message.success(t('common.exportedMarkdown')); }
+    else if (format === 'xlsx') {
+      const data = rows.map((r) => { const o: Record<string, any> = {}; cols.forEach((c, i) => { o[c] = r[i]; }); return o; });
+      const cdefs = cols.map((c) => ({ field: c, headerName: c }));
+      exportToExcel(data, cdefs, { filename: 'result.xlsx', sheetName: 'Query Result' }); message.success(t('common.exportedExcel'));
     }
-    const indices = Array.from(selectedRowIndices);
-    if (indices.length === 0) {
-      message.warning(t('common.pleaseSelectRows'));
-      return;
-    }
-    const pkValues = indices.map((i) => queryResult.rows[i][pkIdx]);
-    const sql = generateDeleteSql(tableName, primaryKeyCol.column_name, pkValues, dbType);
-    navigator.clipboard.writeText(sql);
-    message.success(
-      `${t('common.copyTable.copied')} ${indices.length} ${t('common.rows')} DELETE ${t('common.statements')}`
-    );
-    closeContextMenu();
-  }, [tableName, primaryKeyCol, queryResult, dbType, message, closeContextMenu]);
+  }, [queryResult, message, t]);
 
-  // 显示操作 SQL 弹窗
-  const showOperationSql = useCallback(() => {
-    if (!operationSql) {
-      message.info(t('common.noOperationSql'));
-      return;
-    }
-    Modal.info({
-      title: t('common.operationSqlPreview'),
-      width: 800,
-      transitionName: '',
-      maskTransitionName: '',
-      content: (
-        <pre
-          style={{
-            maxHeight: 400,
-            overflow: 'auto',
-            background: 'var(--background-toolbar)',
-            padding: 12,
-            borderRadius: 4,
-            fontSize: 12,
-            fontFamily: 'monospace',
-          }}
-        >
-          {operationSql}
-        </pre>
-      ),
-    });
-  }, [operationSql, message]);
+  // 错误/空
+  if (queryResult.error) return <Empty description={<span style={{ color: 'var(--color-error)' }}>{queryResult.error}</span>} />;
+  if (queryResult.rows.length === 0) return <Empty description={originalSql ? t('common.noDataReturned') : undefined} />;
 
-  // 错误/空结果处理
-  if (queryResult.error) {
-    return (
-      <div
-        style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      >
-        <Empty
-          description={
-            <div style={{ color: 'var(--color-error)' }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>
-                {t('common.queryExecutionFailed')}
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.85, maxWidth: 400, wordBreak: 'break-all' }}>
-                {queryResult.error}
-              </div>
-            </div>
-          }
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      </div>
-    );
-  }
-
-  if (queryResult.rows.length === 0) {
-    return (
-      <div
-        style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      >
-        <Empty
-          description={
-            <div>
-              <div style={{ fontWeight: 500, marginBottom: 4 }}>{t('common.querySuccess')}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {executionTime !== undefined
-                  ? `${t('common.executionTime')} ${executionTime}ms · `
-                  : ''}
-                {t('common.noDataReturned')}
-              </div>
-            </div>
-          }
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      </div>
-    );
-  }
-
-  const hasChanges = modifiedRows.size > 0 || deletedRowIndices.size > 0;
+  const hasChanges = modifiedRows.size > 0 || deletedIndices.size > 0;
 
   return (
-    <div
-      style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}
-      onContextMenu={handleContextMenu}
-    >
-      {/* 顶部元信息栏 */}
-      <div
-        style={{
-          padding: '4px 12px',
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--background-toolbar)',
-          display: 'flex',
-          gap: 16,
-          fontSize: 12,
-          color: 'var(--text-secondary)',
-          alignItems: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <span>
-          <strong style={{ color: 'var(--text-primary)' }}>
-            {queryResult.rows.length.toLocaleString()}
-          </strong>{' '}
-          {t('common.rows')}
-        </span>
-        <span>
-          <strong style={{ color: 'var(--text-primary)' }}>{queryResult.columns.length}</strong>{' '}
-          {t('common.tableStructure.columns')}
-        </span>
-        {executionTime !== undefined && (
-          <span>
-            {t('common.executionTime')}{' '}
-            <strong style={{ color: 'var(--text-primary)' }}>{executionTime}ms</strong>
-          </span>
-        )}
-        {queryResult.totalTime != null && queryResult.totalTime > 0 && queryResult.totalTime !== executionTime && (
-          <span>
-            {t('common.totalDuration')}{' '}
-            <strong style={{ color: 'var(--text-primary)' }}>{queryResult.totalTime}ms</strong>
-          </span>
-        )}
-        {queryResult.rows_affected !== undefined && queryResult.rows_affected > 0 && (
-          <span>{t('common.affectedRows', { count: queryResult.rows_affected })}</span>
-        )}
-        {isEditable && (
-          <Tag color="blue" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>
-            {t('common.editable')}
-          </Tag>
-        )}
-        {tableName && !isEditable && (
-          <Tooltip title={t('common.cannotEdit')}>
-            <Tag color="default" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>
-              <ExclamationCircleOutlined style={{ marginRight: 4 }} />
-              {t('common.readOnly')}
-            </Tag>
-          </Tooltip>
-        )}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Toolbar */}
+      <div style={{ padding: '4px 12px', borderBottom: '1px solid var(--border)', background: 'var(--background-toolbar)', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+        <span style={{ fontSize: 12 }}><strong>{queryResult.rows.length.toLocaleString()}</strong> {t('common.rows')}</span>
+        <span style={{ fontSize: 12 }}><strong>{queryResult.columns.length}</strong> {t('common.tableStructure.columns')}</span>
+        {executionTime != null && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{executionTime}ms</span>}
+        {isEditable && <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>{t('common.editable')}</Tag>}
+        {tableName && !isEditable && <Tag color="default" style={{ margin: 0, fontSize: 11 }}><ExclamationCircleOutlined /> {t('common.readOnly')}</Tag>}
         <div style={{ flex: 1 }} />
-        <Dropdown
-          menu={{
-            items: [
-              {
-                key: 'excel',
-                label: t('common.importExport.exportExcel'),
-                icon: <FileTextOutlined />,
-                onClick: () => {
-                  try {
-                    // 使用 Web Worker 处理大数据集转换
-                    const convertData = () => {
-                      const cols = queryResult.columns.map((c) => ({ field: c, headerName: c }));
-                      const data = queryResult.rows.map((row) => {
-                        const obj: Record<string, any> = {};
-                        queryResult.columns.forEach((col, i) => {
-                          obj[col] = row[i] === null ? '' : row[i];
-                        });
-                        return obj;
-                      });
-                      return { data, cols };
-                    };
-
-                    // 如果数据量很大，使用分块处理
-                    if (queryResult.rows.length > 10000) {
-                      Modal.confirm({
-                        title: t('common.largeDataWarning'),
-                        content: t('common.largeDataExportWarning', { count: queryResult.rows.length }),
-                        okText: t('common.continueExport'),
-                        cancelText: t('common.cancel'),
-                        onOk: () => {
-                          const { data, cols } = convertData();
-                          exportToExcel(data, cols, {
-                            filename: `result_${Date.now()}.xlsx`,
-                            sheetName: 'Query Result',
-                            chunkSize: 5000,
-                          });
-                          message.success(t('common.exportedExcel'));
-                        },
-                      });
-                    } else {
-                      const { data, cols } = convertData();
-                      exportToExcel(data, cols, {
-                        filename: `result_${Date.now()}.xlsx`,
-                        sheetName: 'Query Result',
-                      });
-                      message.success(t('common.exportedExcel'));
-                    }
-                  } catch (e: any) {
-                    message.error(`${t('common.importExport.exportFailed')}: ${e.message}`);
-                  }
-                },
-              },
-              {
-                key: 'csv',
-                label: t('common.exportCsv'),
-                icon: <FileTextOutlined />,
-                onClick: () => {
-                  // 如果数据量很大，使用分块处理
-                  if (queryResult.rows.length > 50000) {
-                    Modal.confirm({
-                      title: t('common.largeDataWarning'),
-                      content: t('common.largeDataExportWarning', { count: queryResult.rows.length }),
-                      okText: t('common.continueExport'),
-                      cancelText: t('common.cancel'),
-                      onOk: () => {
-                        // 使用流式处理大数据集
-                        const convertToCSV = () => {
-                          const headers = queryResult.columns;
-                          const csvContent: string[] = [];
-                          
-                          // 添加标题行
-                          csvContent.push(headers.join(','));
-                          
-                          // 分批处理数据行
-                          const chunkSize = 10000;
-                          for (let i = 0; i < queryResult.rows.length; i += chunkSize) {
-                            const chunk = queryResult.rows.slice(i, i + chunkSize);
-                            const chunkRows = chunk.map(row => 
-                              headers.map((header, index) => {
-                                const value = row[index] === null ? '' : row[index];
-                                // CSV 特殊字符处理
-                                if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
-                                  return `"${value.replace(/"/g, '""')}"`;
-                                }
-                                return value;
-                              }).join(',')
-                            );
-                            csvContent.push(...chunkRows);
-                          }
-                          
-                          return csvContent.join('\n');
-                        };
-                        
-                        const csvContent = convertToCSV();
-                        downloadBlob(csvContent, `result_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
-                        message.success(t('common.exportedCsv'));
-                      },
-                    });
-                  } else {
-                    const csv = exportToCsv(queryResult.columns, queryResult.rows);
-                    downloadBlob(csv, `result_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
-                    message.success(t('common.exportedCsv'));
-                  }
-                },
-              },
-              {
-                key: 'json',
-                label: t('common.exportJson'),
-                icon: <FileTextOutlined />,
-                onClick: () => {
-                  const json = exportToJson(queryResult.columns, queryResult.rows);
-                  downloadBlob(json, `result_${Date.now()}.json`, 'application/json');
-                  message.success(t('common.exportedJson'));
-                },
-              },
-              { type: 'divider' as const },
-              {
-                key: 'txt',
-                label: t('common.exportTxt'),
-                icon: <FileTextOutlined />,
-                onClick: () => {
-                  const txt = exportToTxt(queryResult.columns, queryResult.rows);
-                  downloadBlob(txt, `result_${Date.now()}.txt`, 'text/plain;charset=utf-8;');
-                  message.success(t('common.exportedTxt'));
-                },
-              },
-              {
-                key: 'xml',
-                label: t('common.exportXml'),
-                icon: <FileTextOutlined />,
-                onClick: () => {
-                  const xml = exportToXml(queryResult.columns, queryResult.rows);
-                  downloadBlob(xml, `result_${Date.now()}.xml`, 'application/xml;charset=utf-8;');
-                  message.success(t('common.exportedXml'));
-                },
-              },
-              {
-                key: 'markdown',
-                label: t('common.exportMarkdown'),
-                icon: <FileTextOutlined />,
-                onClick: () => {
-                  const md = exportToMd(queryResult.columns, queryResult.rows);
-                  downloadBlob(md, `result_${Date.now()}.md`, 'text/markdown;charset=utf-8;');
-                  message.success(t('common.exportedMarkdown'));
-                },
-              },
-            ],
-          }}
-        >
-          <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 11, height: 22 }}>
-            {t('common.export')}
-          </Button>
+        <Dropdown menu={{ items: [
+          { key: 'csv', label: t('common.exportedCsv'), onClick: () => handleExport('csv') },
+          { key: 'json', label: t('common.exportedJson'), onClick: () => handleExport('json') },
+          { key: 'xlsx', label: t('common.exportedExcel'), onClick: () => handleExport('xlsx') },
+          { type: 'divider' as const },
+          { key: 'txt', label: t('common.exportedTxt'), onClick: () => handleExport('txt') },
+          { key: 'xml', label: t('common.exportedXml'), onClick: () => handleExport('xml') },
+          { key: 'md', label: t('common.exportedMarkdown'), onClick: () => handleExport('md') },
+        ]}}>
+          <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 11, height: 22 }}>{t('common.export')}</Button>
         </Dropdown>
         {isEditable && hasChanges && (
           <Space size={4}>
-            <Button
-              type="primary"
-              size="small"
-              icon={<SaveOutlined />}
-              onClick={handleCommit}
-              style={{ fontSize: 11, height: 22 }}
-            >
-              {t('common.submit')}
-            </Button>
-            <Button
-              size="small"
-              icon={<UndoOutlined />}
-              onClick={handleUndo}
-              style={{ fontSize: 11, height: 22 }}
-            >
-              {t('common.undo')}
-            </Button>
-            <Button
-              size="small"
-              icon={<CodeOutlined />}
-              onClick={showOperationSql}
-              style={{ fontSize: 11, height: 22 }}
-            >
-              SQL
-            </Button>
+            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 11, height: 22 }}>{t('common.submit')}</Button>
+            <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 11, height: 22 }}>{t('common.undo')}</Button>
+            <Button size="small" icon={<CodeOutlined />} onClick={() => Modal.info({ title: t('common.operationSqlPreview'), width: 800, content: <pre style={{ maxHeight: 400, overflow: 'auto', background: 'var(--background-toolbar)', padding: 12, borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }}>{operationSql}</pre>, transitionName: '', maskTransitionName: '' })} style={{ fontSize: 11, height: 22 }}>{t('common.sqlQuery')}</Button>
           </Space>
         )}
-        {isEditable && (
-          <Button
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => setAddModalOpen(true)}
-            style={{ fontSize: 11, height: 22 }}
-          >
-            {t('common.addNewRow')}
-          </Button>
-        )}
-        {isEditable && (
-          <Button
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={handleDeleteSelected}
-            disabled={selectedRowIndices.size === 0}
-            style={{ fontSize: 11, height: 22 }}
-          >
-            {t('common.dataGrid.deleteRow')}
-          </Button>
-        )}
+        {isEditable && <Button size="small" icon={<PlusOutlined />} onClick={() => setAddModalOpen(true)} style={{ fontSize: 11, height: 22 }}>{t('common.addNewRow')}</Button>}
+        {isEditable && <Button size="small" danger icon={<DeleteOutlined />} onClick={handleDeleteSelected} disabled={selectedIndices.size === 0} style={{ fontSize: 11, height: 22 }}>{t('common.dataGrid.deleteRow')}</Button>}
       </div>
 
-       {/* AG Grid */}
-       <div
-         className={`ag-theme-compact ${isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}`}
-         style={{ flex: 1, overflow: 'hidden', position: 'relative' }}
-       >
-         {/* 大数据集处理加载指示器 */}
-         {isProcessingLargeData && (
-           <div
-             style={{
-               position: 'absolute',
-               top: 0,
-               left: 0,
-               right: 0,
-               bottom: 0,
-               background: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-               display: 'flex',
-               alignItems: 'center',
-               justifyContent: 'center',
-               zIndex: 1000,
-             }}
-           >
-             <Spin size="large" tip="正在处理大数据集..." />
-           </div>
-         )}
-         
-         <AgGridReact
-          columnDefs={colDefs}
-          rowData={rowData}
-          getRowId={(params) => String(params.data.__id)}
-          defaultColDef={{
-            sortable: true,
-            filter: true,
-            resizable: true,
-          }}
-          pagination={queryResult.rows.length + newRows.length > 1000}
-          paginationPageSize={Math.min(500, Math.floor(1000000 / (queryResult.columns.length * 100)))} // 动态调整页面大小
-          paginationPageSizeSelector={[100, 500, 1000, 2000]}
-          domLayout="autoHeight" // 优化布局性能
-          rowHeight={28}
-          headerHeight={32}
-          rowBuffer={50} // 增加缓冲区以提升滚动性能
-          animateRows={false}
-          suppressCellFocus={true}
-          suppressScrollOnNewData={true}
-          suppressAnimationFrame={true}
-          debounceVerticalScrollbar={true}
-          rowSelection="multiple"
-          onCellValueChanged={onCellValueChanged}
-          onSelectionChanged={onSelectionChanged}
-          // 大数据集性能优化
-          suppressColumnVirtualisation={false}
-          suppressRowVirtualisation={false}
-           enableCellTextSelection={true}
-           enableRangeSelection={true}
-           enableCharts={false}
-           enableRangeHandle={false}
+      {/* Grid */}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <GlideDataTable
+          columns={glideColumns}
+          rows={glideRows}
+          rowStatus={rowStatus}
+          isCellModified={isCellModified}
+          onSelectionChange={handleSelectionChange}
+          onCellEdited={handleCellEdited}
+          onCellContextMenu={(col, row, bounds) => setCtx({ v: true, x: bounds.left, y: bounds.top })}
+          editable={isEditable}
         />
       </div>
 
-      {/* 底部操作 SQL 栏（Navicat 风格） */}
-      {isEditable && operationSql && (
-        <div
-          style={{
-            padding: '4px 12px',
-            borderTop: '1px solid var(--border)',
-            background: 'var(--background-toolbar)',
-            fontSize: 11,
-            fontFamily: 'monospace',
-            color: 'var(--text-secondary)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-            maxHeight: 60,
-            overflow: 'auto',
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ color: 'var(--color-primary)', marginRight: 8 }}>SQL ▶</span>
-          {operationSql}
-        </div>
+      {/* Context Menu */}
+      {contextMenu.v && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1999 }} onClick={closeCtx} />
+          <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 2000, background: 'var(--background-card)', border: '1px solid var(--border)', borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', padding: '4px 0', minWidth: 180 }} onClick={closeCtx}>
+            {tableName && <CtxItem icon={<CopyOutlined />} label={t('common.dataGrid.copyAsInsert')} onClick={copyAsInsert} />}
+            {tableName && primaryKeyCol && <CtxItem icon={<CopyOutlined />} label={t('common.dataGrid.copyAsUpdate')} onClick={copyAsUpdate} />}
+            {tableName && primaryKeyCol && <CtxItem icon={<DeleteOutlined />} label={t('common.copyAsDelete')} onClick={copyAsDelete} />}
+            {isEditable && <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />}
+            {isEditable && <CtxItem icon={<DeleteOutlined />} label={t('common.deleteSelectedRows')} onClick={() => { closeCtx(); handleDeleteSelected(); }} danger />}
+          </div>
+        </>
       )}
 
-      {/* 右键菜单 */}
-      {contextMenu.visible && (
-        <div
-          style={{
-            position: 'absolute',
-            top: contextMenu.y,
-            left: contextMenu.x,
-            zIndex: 1000,
-            background: 'var(--background-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            padding: '4px 0',
-            minWidth: 160,
-          }}
-        >
-          {tableName && (
-            <div
-              style={{
-                padding: '6px 12px',
-                fontSize: 12,
-                cursor: 'pointer',
-                color: 'var(--text-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-              onClick={copyAsInsert}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = 'var(--background-hover)';
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-              }}
-            >
-              <CopyOutlined />
-              {t('common.dataGrid.copyAsInsert')}
-            </div>
-          )}
-          {tableName && primaryKeyCol && (
-            <>
-              <div
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  color: 'var(--text-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-                onClick={copyAsUpdate}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'var(--background-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                }}
-              >
-                <CopyOutlined />
-                {t('common.dataGrid.copyAsUpdate')}
-              </div>
-              <div
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  color: 'var(--text-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-                onClick={copyAsDelete}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'var(--background-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                }}
-              >
-                <DeleteOutlined />
-                {t('common.copyAsDelete')}
-              </div>
-            </>
-          )}
-          {isEditable && (
-            <>
-              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-              <div
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  color: 'var(--color-error)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-                onClick={() => {
-                  closeContextMenu();
-                  handleDeleteSelected();
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'var(--background-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                }}
-              >
-                <DeleteOutlined />
-                {t('common.deleteSelectedRows')}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* 新增行 Modal */}
-      <Modal
-        title={t('common.addRowTitle')}
-        open={addModalOpen}
-        onCancel={() => {
-          setAddModalOpen(false);
-          addForm.resetFields();
-        }}
+      {/* Add Row Modal */}
+      <Modal title={t('common.addRowTitle')} open={addModalOpen} onCancel={() => { setAddModalOpen(false); addForm.resetFields(); }}
         onOk={async () => {
-          try {
-            const values = await addForm.validateFields();
-            const newRow = queryResult.columns.map((_, i) => {
-              const colName = queryResult.columns[i];
-              return values[colName] ?? null;
-            });
-            setNewRows((prev) => [...prev, newRow]);
-            setAddModalOpen(false);
-            addForm.resetFields();
-            message.success(
-              `${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`
-            );
-          } catch (err) {
-            // 表单验证失败，不做处理
-          }
+          try { const values = await addForm.validateFields();
+            const nr = queryResult.columns.map((_, i) => { const cn = queryResult.columns[i]; return values[cn] ?? null; });
+            setNewRows((prev) => [...prev, nr]); setAddModalOpen(false); addForm.resetFields();
+            message.success(`${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`);
+          } catch (e) { /* validation failed */ }
         }}
-        okText={t('common.add')}
-        cancelText={t('common.cancel')}
-        destroyOnClose
-        transitionName=""
-        maskTransitionName=""
-      >
+        okText={t('common.add')} cancelText={t('common.cancel')} destroyOnClose transitionName="" maskTransitionName="">
         <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
           {tableColumns.map((col) => (
-            <Form.Item
-              key={col.column_name}
-              label={
-                <span>
-                  {col.column_name}
-                  {col.is_nullable !== 'YES' && (
-                    <span style={{ color: 'var(--color-error)' }}> *</span>
-                  )}
-                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>
-                    {col.data_type}
-                  </span>
-                </span>
-              }
+            <Form.Item key={col.column_name} label={<span>{col.column_name}{col.is_nullable !== 'YES' && <span style={{ color: 'var(--color-error)' }}> *</span>}<span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>{col.data_type}</span></span>}
               name={col.column_name}
-              rules={[
-                {
-                  required: col.is_nullable !== 'YES',
-                  message: t('common.pleaseEnterColumnValue', { column: col.column_name }),
-                },
-              ]}
-            >
+              rules={[{ required: col.is_nullable !== 'YES', message: t('common.pleaseEnterColumnValue', { column: col.column_name }) }]}>
               <Input placeholder={col.comment || col.data_type} />
             </Form.Item>
           ))}
         </Form>
       </Modal>
+
+      {/* SQL Preview */}
+      {isEditable && operationSql && (
+        <div style={{ padding: '4px 12px', borderTop: '1px solid var(--border)', background: 'var(--background-toolbar)', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 60, overflow: 'auto', flexShrink: 0 }}>
+          <span style={{ color: 'var(--color-primary)', marginRight: 8 }}>SQL ▶</span>{operationSql}
+        </div>
+      )}
     </div>
   );
 }
 
-// === 执行计划表格 ===
-
-interface ExplainPlanGridProps {
-  data: any[];
-  isDark: boolean;
+function CtxItem({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+  return <div style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: danger ? 'var(--color-error)' : 'var(--text-primary)' }}
+    onClick={(e) => { e.stopPropagation(); onClick(); }}
+    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--background-hover)')}
+    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>{icon}{label}</div>;
 }
 
-export function ExplainPlanGrid({ data, isDark }: ExplainPlanGridProps) {
+// ── ExplainPlanGrid ──
+export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean }) {
   const { t } = useTranslation();
-  if (!data || data.length === 0) {
-    return (
-      <div
-        style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      >
-        <Empty description={t('common.noExplainPlanData')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      </div>
-    );
-  }
-
-  const columns = Object.keys(data[0]);
-  const colDefs = useMemo<ColDef[]>(() => {
-    return columns.map((col) => ({
-      field: col,
-      headerName: col,
-      flex: 1,
-      minWidth: 100,
-      sortable: true,
-      filter: true,
-      resizable: true,
-      wrapText: true,
-      autoHeight: true,
-    }));
-  }, [columns]);
-
-  const rowData = useMemo(() => data, [data]);
-
-  return (
-    <div
-      className={`ag-theme-compact ${isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}`}
-      style={{ height: '100%' }}
-    >
-      <AgGridReact
-        key={`explain-plan-${data.length}-${isDark ? 'dark' : 'light'}`}
-        columnDefs={colDefs}
-        rowData={rowData}
-        defaultColDef={{
-          sortable: true,
-          filter: true,
-          resizable: true,
-          wrapText: true,
-        }}
-        pagination={rowData.length > 1000}
-        paginationPageSize={Math.min(500, Math.floor(1000000 / (columns.length * 100)))} // 动态调整页面大小
-        domLayout="autoHeight" // 优化布局性能
-        rowHeight={28}
-        headerHeight={32}
-        // 大数据集性能优化
-        suppressColumnVirtualisation={false}
-        suppressRowVirtualisation={false}
-         enableCellTextSelection={true}
-         enableRangeSelection={true}
-         enableCharts={false}
-         enableRangeHandle={false}
-      />
-    </div>
-  );
+  if (!data || data.length === 0) return <Empty description={t('common.noExplainPlanData')} />;
+  const colNames = Object.keys(data[0]);
+  const columns = colNames.map((n) => ({ id: n, title: n, width: 150, grow: 1 }));
+  const rows = data.map((r) => { const o: Record<string, unknown> = {}; colNames.forEach((c) => { o[c] = r[c]; }); return o; });
+  const getCellContent = ([col, row]: readonly [number, number]) => ({
+    kind: 'text' as 'text', data: rows[row]?.[colNames[col]] == null ? '' : String(rows[row]?.[colNames[col]]),
+    displayData: rows[row]?.[colNames[col]] == null ? 'NULL' : String(rows[row]?.[colNames[col]]),
+    allowOverlay: false, readonly: true,
+  } as any);
+  return <DataEditor columns={columns} rows={rows.length} getCellContent={getCellContent} headerHeight={32} rowHeight={28} rowMarkers="number" smoothScrollX smoothScrollY width="100%" height="100%" />;
 }

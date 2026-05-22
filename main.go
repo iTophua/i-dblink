@@ -153,12 +153,12 @@ func createMenu(app *backend.App) *menu.Menu {
 func main() {
 	app := backend.NewApp()
 
-	err := wails.Run(&options.App{
+		err := wails.Run(&options.App{
 		Title:     "iDBLink",
-		Width:     1200,
-		Height:    800,
-		MinWidth:  800,
-		MinHeight: 600,
+		Width:     1400,
+		Height:    900,
+		MinWidth:  1000,
+		MinHeight: 700,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
