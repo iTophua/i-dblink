@@ -6,7 +6,7 @@
  */
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
-  Spin, Empty, Button, Space, message, Tag, Select,
+  Modal, Spin, Empty, Button, Space, message, Tag, Select,
   Tooltip, Input, Divider, DatePicker, Checkbox, Popover, Dropdown, AutoComplete,
 } from 'antd';
 import {
@@ -25,6 +25,8 @@ import { escapeSqlIdentifier, escapeSqlValue } from '../utils/sqlUtils';
 import { exportToExcel } from '../utils/exportUtils';
 import { GlideDataTable, type GlideRow, type GlideColumn } from './DataTable/GlideDataTable';
 import { rowsToGlideRows, tableRowStatus, tableCellModified } from './DataTable/adapters/tableAdapter';
+import { useContextMenu } from './ContextMenu';
+import { DataTableContextMenu } from './DataTable/DataTableContextMenu';
 
 interface DataTableProps {
   connectionId: string;
@@ -63,9 +65,8 @@ export const DataTable = memo(function DataTable({
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [showColVisibility, setShowColVisibility] = useState(false);
   const [currentSql, setCurrentSql] = useState('');
-  const [lastDmlSql, setLastDmlSql] = useState('');
   const [hasLoaded, setHasLoaded] = useState(false);
-  const [contextMenu, setCtx] = useState<{ v: boolean; x: number; y: number; rowIdx: number; colIdx: number }>({ v: false, x: 0, y: 0, rowIdx: -1, colIdx: -1 });
+  const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
 
   // ── Range Edit ──
   // ── Filter Panel ──
@@ -158,14 +159,18 @@ export const DataTable = memo(function DataTable({
     });
   }, [rowData, quickFilter, columns]);
 
+  // ── 获取可见列名列表（与 GlideDataTable 同步，过滤隐藏列）──
+  const getVisibleColumns = useCallback(() => {
+    let cols = queryColumns;
+    if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => queryColumns.includes(n)), ...queryColumns.filter((n) => !s.has(n))]; }
+    if (hiddenColumns.size > 0) cols = cols.filter((n) => !hiddenColumns.has(n));
+    return cols;
+  }, [queryColumns, columnOrder, hiddenColumns]);
+
   // ── Edit (inline) ──
-  const handleCellEdited = useCallback(async (col: number, row: number, newValue: string) => {
-    const glideCols = (() => {
-      let cols = queryColumns;
-      if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => queryColumns.includes(n)), ...queryColumns.filter((n) => !s.has(n))]; }
-      return cols;
-    })();
-    const colId = glideCols[col];
+  const handleCellEdited = useCallback((col: number, row: number, newValue: string) => {
+    const visibleCols = getVisibleColumns();
+    const colId = visibleCols[col];
     if (!colId) return;
     const pkCol = columns.find((c) => c.column_key === 'PRI');
     if (!pkCol) { message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate')); return; }
@@ -173,54 +178,78 @@ export const DataTable = memo(function DataTable({
     if (!targetRow) return;
     const origVal = targetRow.__original_data__?.[colId];
     const normalizedOrig = origVal == null ? 'NULL' : String(origVal);
-    if (normalizedOrig === (newValue === '' || newValue === 'NULL' ? 'NULL' : newValue)) return;
+    const normalizedNew = newValue == null || newValue === '' || newValue === 'NULL' ? 'NULL' : String(newValue);
+    if (normalizedOrig === normalizedNew) return;
     const pkValue = targetRow[pkCol.column_name];
     const vs = newValue === '' || newValue === 'NULL' ? 'NULL' : escapeSqlValue(newValue, dbType);
     const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = ${vs} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
-    setLastDmlSql(sql);
-    try {
-      const res = await executeQuery(connectionId, sql, database || '');
-      if (res.error) { message.error(`${t('common.dataGrid.updateFailed')}: ${res.error}`); }
-      else {
-        setRowData((prev) => prev.map((r) => {
-          if (r.__row_id__ !== targetRow.__row_id__) return r;
-          return { ...r, [colId]: newValue === 'NULL' ? null : newValue, __status__: undefined };
-        }));
-        message.success(t('common.dataGrid.updateSuccess'));
-      }
-    } catch (err) { message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`); }
-  }, [columns, columnOrder, queryColumns, rowData, tableName, dbType, connectionId, database, executeQuery, t]);
+    Modal.confirm({
+      title: t('common.dataGrid.updateConfirm'),
+      content: <pre style={{ fontSize: 11, maxHeight: 160, overflow: 'auto', margin: 0, padding: 8, background: 'var(--bg-code, #f5f5f5)', borderRadius: 4, wordBreak: 'break-all' }}>{sql}</pre>,
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      zIndex: 2000,
+      onOk: async () => {
+        setCurrentSql(sql);
+        try {
+          const res = await executeQuery(connectionId, sql, database || '');
+          if (res.error) { message.error(`${t('common.dataGrid.updateFailed')}: ${res.error}`); }
+          else {
+            setRowData((prev) => prev.map((r) => {
+              if (r.__row_id__ !== targetRow.__row_id__) return r;
+              return { ...r, [colId]: newValue === 'NULL' ? null : newValue, __status__: undefined };
+            }));
+            message.success(t('common.dataGrid.updateSuccess'));
+          }
+        } catch (err) { message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`); }
+      },
+    });
+  }, [columns, getVisibleColumns, rowData, tableName, dbType, connectionId, database, executeQuery, t]);
 
   // ── Edit (range) ──
-  const handleCellsEdited = useCallback(async (edits: Array<{ col: number; row: number; value: string }>) => {
+  const handleCellsEdited = useCallback((edits: Array<{ col: number; row: number; value: string }>) => {
+    const pkCol = columns.find((c) => c.column_key === 'PRI');
+    if (!pkCol) { message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate')); return; }
+    const visibleCols = getVisibleColumns();
+    const actualEdits: Array<{ colId: string; row: number; value: string; sql: string }> = [];
     for (const edit of edits) {
-      const colId = (() => {
-        let cols = queryColumns;
-        if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => queryColumns.includes(n)), ...queryColumns.filter((n) => !s.has(n))]; }
-        return cols;
-      })()[edit.col];
+      const colId = visibleCols[edit.col];
       if (!colId) continue;
-      const pkCol = columns.find((c) => c.column_key === 'PRI');
-      if (!pkCol) { message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate')); return; }
       const targetRow = rowData[edit.row];
       if (!targetRow) continue;
       const origVal = targetRow.__original_data__?.[colId];
       const normalizedOrig = origVal == null ? 'NULL' : String(origVal);
-      if (normalizedOrig === (edit.value === '' || edit.value === 'NULL' ? 'NULL' : edit.value)) continue;
+      const normalizedNew = edit.value == null || edit.value === '' || edit.value === 'NULL' ? 'NULL' : String(edit.value);
+      if (normalizedOrig === normalizedNew) continue;
       const vs = edit.value === '' || edit.value === 'NULL' ? 'NULL' : escapeSqlValue(edit.value, dbType);
       const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = ${vs} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(targetRow[pkCol.column_name], dbType)}`;
-      setLastDmlSql(sql);
-      try {
-        const res = await executeQuery(connectionId, sql, database || '');
-        if (res.error) { message.error(`${t('common.dataGrid.updateFailed')}: ${res.error}`); return; }
-        setRowData((prev) => prev.map((r) => {
-          if (r.__row_id__ !== targetRow.__row_id__) return r;
-          return { ...r, [colId]: edit.value === 'NULL' ? null : edit.value, __status__: undefined };
-        }));
-      } catch (err) { message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`); return; }
+      actualEdits.push({ colId, row: edit.row, value: edit.value, sql });
     }
-    message.success(t('common.dataGrid.updateSuccess'));
-  }, [columns, columnOrder, queryColumns, rowData, tableName, dbType, connectionId, database, executeQuery, t]);
+    if (actualEdits.length === 0) return;
+    Modal.confirm({
+      title: t('common.dataGrid.updateConfirm'),
+      content: t('common.dataGrid.updateConfirmContent', { count: actualEdits.length }),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      zIndex: 2000,
+      onOk: async () => {
+        for (const edit of actualEdits) {
+          const targetRow = rowData[edit.row];
+          if (!targetRow) continue;
+          setCurrentSql(edit.sql);
+          try {
+            const res = await executeQuery(connectionId, edit.sql, database || '');
+            if (res.error) { message.error(`${t('common.dataGrid.updateFailed')}: ${res.error}`); return; }
+            setRowData((prev) => prev.map((r) => {
+              if (r.__row_id__ !== targetRow.__row_id__) return r;
+              return { ...r, [edit.colId]: edit.value === 'NULL' ? null : edit.value, __status__: undefined };
+            }));
+          } catch (err) { message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`); return; }
+        }
+        message.success(t('common.dataGrid.updateSuccess'));
+      },
+    });
+  }, [columns, getVisibleColumns, rowData, tableName, dbType, connectionId, database, executeQuery, t]);
 
   // ── Add Row ──
   const handleAddRow = useCallback(() => {
@@ -230,25 +259,37 @@ export const DataTable = memo(function DataTable({
   }, [columns]);
 
   // ── Delete ──
-  const handleDeleteRows = useCallback(async () => {
+  const handleDeleteRows = useCallback(() => {
     if (selectedRows.length === 0) { message.warning(t('common.pleaseSelectRowsToDelete')); return; }
     const pkCol = columns.find((c) => c.column_key === 'PRI');
     if (!pkCol && selectedRows.some((r) => r.__status__ !== 'new')) { message.warning(t('common.tableHasNoPrimaryKeyCannotDelete')); return; }
-    try {
-      setLoading(true);
-      let success = 0, errMsg = '';
-      for (const row of selectedRows) {
-        if (row.__status__ === 'new') { setRowData((prev) => prev.filter((r) => r.__row_id__ !== row.__row_id__)); success++; continue; }
-        const sql = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(row[pkCol!.column_name], dbType)}`;
-        setLastDmlSql(sql);
-        const res = await executeQuery(connectionId, sql, database || '');
-        if (res.error) { errMsg = res.error; break; }
-        success++;
-      }
-      if (errMsg) message.error(`${t('common.dataGrid.deleteFailed')}: ${errMsg}`);
-      else { message.success(`${t('common.dataGrid.deleteSuccess')} ${success} ${t('common.rows')}`); setSelectedRows([]); loadData(); loadCount(); }
-    } catch (err) { message.error(`${t('common.dataGrid.deleteFailed')}: ${err instanceof Error ? err.message : String(err)}`); }
-    finally { setLoading(false); }
+    Modal.confirm({
+      title: selectedRows.length > 1
+        ? t('common.confirmDeleteSelectedRows', { count: selectedRows.length })
+        : t('common.confirmDeleteSelectedRow'),
+      content: t('common.dataGrid.deleteConfirm'),
+      okType: 'danger',
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      zIndex: 2000,
+      onOk: async () => {
+        try {
+          setLoading(true);
+          let success = 0, errMsg = '';
+          for (const row of selectedRows) {
+            if (row.__status__ === 'new') { setRowData((prev) => prev.filter((r) => r.__row_id__ !== row.__row_id__)); success++; continue; }
+            const sql = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(row[pkCol!.column_name], dbType)}`;
+            setCurrentSql(sql);
+            const res = await executeQuery(connectionId, sql, database || '');
+            if (res.error) { errMsg = res.error; break; }
+            success++;
+          }
+          if (errMsg) message.error(`${t('common.dataGrid.deleteFailed')}: ${errMsg}`);
+          else { message.success(`${t('common.dataGrid.deleteSuccess')} ${success} ${t('common.rows')}`); setSelectedRows([]); loadData(); loadCount(); }
+        } catch (err) { message.error(`${t('common.dataGrid.deleteFailed')}: ${err instanceof Error ? err.message : String(err)}`); }
+        finally { setLoading(false); }
+      },
+    });
   }, [selectedRows, columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, t]);
 
   // ── Selection ──
@@ -257,29 +298,23 @@ export const DataTable = memo(function DataTable({
   }, []);
 
   // ── Context Menu ──
-  const closeCtx = useCallback(() => setCtx((p) => ({ ...p, v: false })), []);
-  const ctxCopyInsert = useCallback(() => {
-    if (!tableName || selectedRows.length === 0) return;
-    const cols = queryColumns.filter((c) => !hiddenColumns.has(c));
-    const vals = selectedRows.map((r) => `(${cols.map((c) => escapeSqlValue(r[c], dbType)).join(', ')})`);
-    const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')})\nVALUES\n${vals.join(',\n')};`;
-    navigator.clipboard.writeText(sql);
-    message.success(t('common.copyTable.copied'));
-    closeCtx();
-  }, [tableName, selectedRows, queryColumns, hiddenColumns, dbType, t, closeCtx]);
-
-  const ctxCopyUpdate = useCallback(() => {
-    if (!tableName || selectedRows.length === 0) return;
-    const pkCol = columns.find((c) => c.column_key === 'PRI');
-    if (!pkCol) { message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate')); return; }
-    const sqls = selectedRows.map((r) => {
-      const setters = queryColumns.filter((c) => c !== pkCol.column_name && !hiddenColumns.has(c)).map((c) => `${escapeSqlIdentifier(c, dbType)} = ${escapeSqlValue(r[c], dbType)}`).join(', ');
-      return `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(r[pkCol.column_name], dbType)}`;
+  const handleCellContextMenu = useCallback((col: number, row: number, bounds: { x: number; y: number }) => {
+    if (row >= 0 && filteredRows[row]) {
+      const clickedRow = filteredRows[row];
+      const isInSelection = selectedRows.some((r) => r.__row_id__ === clickedRow.__row_id__);
+      if (!isInSelection) {
+        setSelectedRows([clickedRow]);
+      }
+    }
+    const colId = getVisibleColumns()[col];
+    openMenu(bounds.x, bounds.y, {
+      row,
+      col,
+      cellValue: row >= 0 && colId ? filteredRows[row]?.[colId] : undefined,
+      colName: colId,
+      rowData: row >= 0 ? filteredRows[row] : undefined,
     });
-    navigator.clipboard.writeText(sqls.join('\n'));
-    message.success(`${t('common.copyTable.copied')} ${selectedRows.length} ${t('common.rows')}`);
-    closeCtx();
-  }, [tableName, selectedRows, columns, queryColumns, hiddenColumns, dbType, t, closeCtx]);
+  }, [filteredRows, selectedRows, getVisibleColumns, openMenu]);
 
   // ── Export ──
   const exportColNames = useMemo(() => columns.filter((c) => !hiddenColumns.has(c.column_name)).map((c) => c.column_name), [columns, hiddenColumns]);
@@ -440,7 +475,7 @@ export const DataTable = memo(function DataTable({
             onColumnResized={onColumnResized}
             onCellEdited={handleCellEdited}
             onCellsEdited={handleCellsEdited}
-            onCellContextMenu={(col, row, bounds) => setCtx({ v: true, x: bounds.x, y: bounds.y, rowIdx: row, colIdx: col })}
+            onCellContextMenu={handleCellContextMenu}
             headerHeight={36} rowHeight={24} editable={true}
           />
         ) : (
@@ -451,17 +486,23 @@ export const DataTable = memo(function DataTable({
       </div>
 
       {/* ═══ Context Menu ═══ */}
-      {contextMenu.v && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1999 }} onClick={closeCtx} />
-          <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 2000, background: 'var(--background-card)', border: '1px solid var(--border)', borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', padding: '4px 0', minWidth: 180 }} onClick={closeCtx}>
-            <MenuItem icon={<CopyOutlined />} label={t('common.dataGrid.copyAsInsert')} onClick={ctxCopyInsert} />
-            <MenuItem icon={<CopyOutlined />} label={t('common.dataGrid.copyAsUpdate')} onClick={ctxCopyUpdate} />
-            <Divider style={{ margin: '4px 0' }} />
-            <MenuItem icon={<DeleteOutlined />} label={t('common.dataGrid.deleteRow')} onClick={() => handleDeleteRows()} danger />
-          </div>
-        </>
-      )}
+      <DataTableContextMenu
+        menuState={menuState}
+        menuTarget={menuTarget}
+        selectedRows={selectedRows}
+        context={{
+          dbType,
+          tableName,
+          columns,
+          queryColumns: getVisibleColumns(),
+          hiddenColumns,
+          isEditable: true,
+          onCopyToClipboard: (text) => navigator.clipboard.writeText(text),
+          onSetWhereClause: (where) => { setWhereClause(where); setCurrentPage(1); loadData(); },
+          onCellEdited: handleCellEdited,
+        }}
+        onClose={closeMenu}
+      />
 
       {/* ═══ Status Bar ═══ */}
       <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-toolbar)', padding: '1px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, minHeight: 22 }}>
@@ -470,7 +511,7 @@ export const DataTable = memo(function DataTable({
           <Button icon={<ImportOutlined />} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.import')}</Button>
         </Space>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
-          <code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: lastDmlSql ? 'var(--color-primary)' : 'var(--text-secondary)', fontFamily: 'monospace', padding: '2px 6px', background: 'var(--background-toolbar)', borderRadius: 3, border: '1px solid var(--border-color)', maxWidth: 700 }}>{currentSql}</code>
+          <code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontFamily: 'monospace', padding: '2px 6px', background: 'var(--background-toolbar)', borderRadius: 3, border: '1px solid var(--border-color)', maxWidth: 700 }}>{currentSql}</code>
           <Tooltip title={t('common.copySql')}>
             <Button icon={<CopyOutlined />} type="text" onClick={copySql} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} />
           </Tooltip>
@@ -492,17 +533,5 @@ export const DataTable = memo(function DataTable({
     </div>
   );
 });
-
-/** 右键菜单项子组件 */
-function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
-  return (
-    <div style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: danger ? 'var(--color-error)' : 'var(--text-primary)' }}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--background-hover)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-      {icon}{label}
-    </div>
-  );
-}
 
 export default DataTable;
