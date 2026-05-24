@@ -35,7 +35,7 @@ interface ResultGridProps {
 
 // ── SQL 解析 ──
 function extractTable(sql: string): string | null {
-  const clean = sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '').trim();
+  const clean = sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '').replace(/;\s*$/, '').trim();
   if (/\bJOIN\b|\bUNION\b|\bINTO\b|(?:\()\s*SELECT\b/i.test(clean)) return null;
   const match = clean.match(/\bFROM\s+(?:[`"']?(\w+)[`"']?\.)?[`"']?(\w+)[`"']?(?:\s+(?:AS\s+)?\w+)?(?:\s*$|\s+(?:WHERE|ORDER|GROUP|HAVING|LIMIT|OFFSET)\b)/i);
   return match ? (match[2] || match[1] || null) : null;
@@ -105,12 +105,22 @@ export function ResultGrid({
     getColumns(connectionId, tableName, database).then(setTableColumns).catch(() => setTableColumns([]));
   }, [connectionId, tableName, database, getColumns]);
 
+  // 重新执行 SQL 时清除编辑状态
+  useEffect(() => {
+    setModifiedRows(new Map());
+    setDeletedIndices(new Set());
+    setNewRows([]);
+    setSelectedIndices(new Set());
+    setOperationSql('');
+  }, [queryResult]);
+
   // 编辑状态
   const [modifiedRows, setModifiedRows] = useState<Map<number, unknown[]>>(new Map());
   const [deletedIndices, setDeletedIndices] = useState<Set<number>>(new Set());
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [newRows, setNewRows] = useState<unknown[][]>([]);
   const [operationSql, setOperationSql] = useState('');
+  const [scrollToRowIndex, setScrollToRowIndex] = useState<number | undefined>(undefined);
   const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
 
   // 行数据
@@ -143,10 +153,21 @@ export function ResultGrid({
   const glideColumns = useMemo(() => namesToGlideColumns(queryResult.columns), [queryResult.columns]);
   const glideRows = useMemo(() => allRows as GlideRow[], [allRows]);
 
-  // 选中
+  // 选中（存储 allRows 中的索引；已有行 __id=数字=原始索引，新增行 = qLen + k）
+  const qLen = queryResult.rows.length;
   const handleSelectionChange = useCallback((rows: GlideRow[]) => {
-    setSelectedIndices(new Set(rows.map((r) => r.__id as number).filter((i) => typeof i === 'number' && i >= 0)));
-  }, []);
+    const indices = new Set<number>();
+    for (const r of rows) {
+      const id = r.__id;
+      if (typeof id === 'number' && id >= 0) {
+        indices.add(id);
+      } else if (typeof id === 'string' && id.startsWith('new-')) {
+        const k = parseInt(id.slice(4), 10);
+        if (!isNaN(k)) indices.add(qLen + k);
+      }
+    }
+    setSelectedIndices(indices);
+  }, [qLen]);
 
   // 内联编辑
   const handleCellEdited = useCallback((col: number, row: number, newValue: string) => {
@@ -154,7 +175,18 @@ export function ResultGrid({
     const colName = queryResult.columns[col];
     if (!colName) return;
     const rowId = row;
-    if (rowId >= queryResult.rows.length) { /* new row */ return; }
+
+    // 新增行：更新 newRows state
+    if (rowId >= queryResult.rows.length) {
+      const newRowIndex = rowId - queryResult.rows.length;
+      setNewRows((prev) => prev.map((r, i) => {
+        if (i !== newRowIndex) return r;
+        const updated = [...r];
+        updated[col] = newValue === 'NULL' ? null : newValue;
+        return updated;
+      }));
+      return;
+    }
 
     const originalVal = queryResult.rows[rowId][col];
     const originalStr = originalVal === null ? 'NULL' : String(originalVal);
@@ -189,6 +221,12 @@ export function ResultGrid({
     const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
     if (pkIdx < 0) { setOperationSql(''); return; }
     const lines: string[] = [];
+    for (const row of newRows) {
+      const cols: string[] = []; const vals: unknown[] = [];
+      row.forEach((v, i) => { if (v !== null) { cols.push(queryResult.columns[i]); vals.push(v); } });
+      if (cols.length === 0) continue;
+      lines.push(`INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')}) VALUES (${vals.map((v) => escapeSqlValue(v, dbType)).join(', ')});`);
+    }
     for (const [rowId, row] of modifiedRows) {
       if (deletedIndices.has(rowId)) continue;
       const ss = queryResult.columns.map((c, i) => `${escapeSqlIdentifier(c, dbType)} = ${escapeSqlValue(row[i], dbType)}`).join(', ');
@@ -198,7 +236,7 @@ export function ResultGrid({
       lines.push(`DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)};`);
     }
     setOperationSql(lines.join('\n'));
-  }, [modifiedRows, deletedIndices, tableName, primaryKeyCol, queryResult, dbType]);
+  }, [modifiedRows, deletedIndices, newRows, tableName, primaryKeyCol, queryResult, dbType]);
 
   // 提交
   const handleCommit = useCallback(async () => {
@@ -243,14 +281,47 @@ export function ResultGrid({
     });
   }, [message, t]);
 
-  // 删除选中
+  // 删除选中（已有行 → 标记删除，新增行 → 直接从 newRows 移除）
   const handleDeleteSelected = useCallback(() => {
     if (!isEditable) { message.warning(t('common.currentResultSetNotEditable')); return; }
     if (selectedIndices.size === 0) { message.warning(t('common.pleaseSelectRowsToDelete')); return; }
-    Modal.confirm({ title: t('common.confirmDelete'), content: t('common.confirmMarkRowsForDeletion', { count: selectedIndices.size }), okText: t('common.markForDeletion'), okType: 'danger', transitionName: '', maskTransitionName: '',
-      onOk: () => { setDeletedIndices((prev) => { const n = new Set(prev); selectedIndices.forEach((i) => n.add(i)); return n; }); message.success(`${t('common.markedForDeletion')} ${selectedIndices.size}`); },
+
+    const selected = Array.from(selectedIndices)
+      .filter((i) => i < allRows.length)
+      .map((i) => allRows[i]);
+
+    const newRowKs: number[] = []; // newRows 中的索引
+    const existingIds: number[] = [];
+
+    for (const row of selected) {
+      if (row.__isNew) {
+        const k = parseInt((row.__id as string).slice(4), 10);
+        if (!isNaN(k)) newRowKs.push(k);
+      } else {
+        existingIds.push(row.__id as number);
+      }
+    }
+
+    const count = newRowKs.length + existingIds.length;
+    if (count === 0) return;
+
+    Modal.confirm({
+      title: t('common.confirmDelete'),
+      content: t('common.confirmMarkRowsForDeletion', { count }),
+      okText: existingIds.length > 0 ? t('common.markForDeletion') : t('common.delete'),
+      okType: 'danger', transitionName: '', maskTransitionName: '',
+      onOk: () => {
+        if (newRowKs.length > 0) {
+          setNewRows((prev) => prev.filter((_, i) => !newRowKs.includes(i)));
+        }
+        if (existingIds.length > 0) {
+          setDeletedIndices((prev) => { const n = new Set(prev); existingIds.forEach((i) => n.add(i)); return n; });
+        }
+        setSelectedIndices(new Set());
+        if (count > 0) message.success(`${t('common.markedForDeletion')} ${count}`);
+      },
     });
-  }, [isEditable, selectedIndices, message, t]);
+  }, [isEditable, selectedIndices, allRows, message, t]);
 
   // 导出
   const handleExport = useCallback((format: string) => {
@@ -271,7 +342,7 @@ export function ResultGrid({
   if (queryResult.error) return <Empty description={<span style={{ color: 'var(--color-error)' }}>{queryResult.error}</span>} />;
   if (queryResult.rows.length === 0) return <Empty description={originalSql ? t('common.noDataReturned') : undefined} />;
 
-  const hasChanges = modifiedRows.size > 0 || deletedIndices.size > 0;
+  const hasChanges = modifiedRows.size > 0 || deletedIndices.size > 0 || newRows.length > 0;
 
   const selectedRows = useMemo(() => {
     return Array.from(selectedIndices)
@@ -316,8 +387,11 @@ export function ResultGrid({
             icon={<PlusOutlined />}
             onClick={() => {
               const newRow = queryResult.columns.map(() => null);
-              setNewRows((prev) => [...prev, newRow]);
-              message.success(`${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`);
+              setNewRows((prev) => {
+                const next = [...prev, newRow];
+                setScrollToRowIndex(queryResult.rows.length + next.length - 1);
+                return next;
+              });
             }}
             style={{ fontSize: 11, height: 22 }}
           >
@@ -334,6 +408,7 @@ export function ResultGrid({
           rows={glideRows}
           rowStatus={rowStatus}
           isCellModified={isCellModified}
+          scrollToRowIndex={scrollToRowIndex}
           onSelectionChange={handleSelectionChange}
           onCellEdited={handleCellEdited}
           onCellContextMenu={(col, row, bounds) => {
@@ -367,8 +442,11 @@ export function ResultGrid({
         onClose={closeMenu}
         onAddRow={() => {
           const newRow = queryResult.columns.map(() => null);
-          setNewRows((prev) => [...prev, newRow]);
-          message.success(`${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`);
+          setNewRows((prev) => {
+            const next = [...prev, newRow];
+            setScrollToRowIndex(queryResult.rows.length + next.length - 1);
+            return next;
+          });
         }}
       />
 

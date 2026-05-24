@@ -15,6 +15,8 @@ import {
   Drawer,
   Select,
   Modal,
+  Menu,
+  Divider,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -82,6 +84,239 @@ interface SQLEditorProps {
   onQueryStatusChange?: (isQuerying: boolean) => void;
 }
 
+// ========== SQL 智能补全上下文分析器 ==========
+
+/**
+ * 提取当前 SQL 语句（从上一个 ; 到光标位置）
+ */
+function getCurrentStatement(text: string, cursorOffset: number): string {
+  const beforeCursor = text.slice(0, cursorOffset);
+  const lastSemicolon = beforeCursor.lastIndexOf(';');
+  return beforeCursor.slice(lastSemicolon + 1);
+}
+
+/**
+ * 检查位置是否在字符串或注释中（简化版）
+ */
+function isInStringOrComment(text: string, offset: number): boolean {
+  let inString: string | null = null;
+  let inComment = false;
+  let i = 0;
+  while (i < offset) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (inComment) {
+      if (ch === '\n') inComment = false;
+      i++;
+      continue;
+    }
+    if (inString) {
+      if (ch === '\\') { i += 2; continue; }
+      if (ch === inString) inString = null;
+      i++;
+      continue;
+    }
+    if (ch === '-' && next === '-') { inComment = true; i += 2; continue; }
+    if (ch === '/' && next === '*') {
+      const end = text.indexOf('*/', i + 2);
+      if (end !== -1 && end < offset) { i = end + 2; continue; }
+      return true;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') inString = ch;
+    i++;
+  }
+  return inString !== null || inComment;
+}
+
+/** 语句类型 */
+type SqlStmtType = 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'CREATE' | 'ALTER' | 'DROP' | 'UNKNOWN';
+
+function detectStatementType(stmt: string): SqlStmtType {
+  const trimmed = stmt.trim().toUpperCase();
+  if (trimmed.startsWith('SELECT')) return 'SELECT';
+  if (trimmed.startsWith('INSERT')) return 'INSERT';
+  if (trimmed.startsWith('UPDATE')) return 'UPDATE';
+  if (trimmed.startsWith('DELETE')) return 'DELETE';
+  if (trimmed.startsWith('CREATE')) return 'CREATE';
+  if (trimmed.startsWith('ALTER')) return 'ALTER';
+  if (trimmed.startsWith('DROP')) return 'DROP';
+  return 'UNKNOWN';
+}
+
+/** 当前光标所在的关键字上下文 */
+interface SqlContext {
+  stmtType: SqlStmtType;
+  isAfterFrom: boolean;
+  isAfterJoin: boolean;
+  isAfterSelect: boolean;
+  isAfterWhere: boolean;
+  isAfterOrderBy: boolean;
+  isAfterGroupBy: boolean;
+  isAfterHaving: boolean;
+  isAfterSet: boolean;
+  isAfterInsertInto: boolean;
+  isAfterValues: boolean;
+  isAfterUpdateTable: boolean;
+  isAfterDeleteFrom: boolean;
+  isAfterCreateTable: boolean;
+  isAfterAlterTable: boolean;
+  isAfterDrop: boolean;
+  lastKeyword: string | null;
+  tableRefs: string[]; // 当前语句中引用的表名（简单提取）
+}
+
+function analyzeSqlContext(textBeforeCursor: string): SqlContext {
+  const upper = textBeforeCursor.toUpperCase();
+  const ctx: SqlContext = {
+    stmtType: detectStatementType(textBeforeCursor),
+    isAfterFrom: false,
+    isAfterJoin: false,
+    isAfterSelect: false,
+    isAfterWhere: false,
+    isAfterOrderBy: false,
+    isAfterGroupBy: false,
+    isAfterHaving: false,
+    isAfterSet: false,
+    isAfterInsertInto: false,
+    isAfterValues: false,
+    isAfterUpdateTable: false,
+    isAfterDeleteFrom: false,
+    isAfterCreateTable: false,
+    isAfterAlterTable: false,
+    isAfterDrop: false,
+    lastKeyword: null,
+    tableRefs: [],
+  };
+
+  // 提取最后的关键字位置（使用反向搜索，避免子查询干扰）
+  const keywords = [
+    'FROM', 'JOIN', 'SELECT', 'WHERE', 'ORDER BY', 'GROUP BY', 'HAVING',
+    'SET', 'INSERT INTO', 'VALUES', 'UPDATE', 'DELETE FROM',
+    'CREATE TABLE', 'ALTER TABLE', 'DROP',
+  ];
+
+  let lastPos = -1;
+  for (const kw of keywords) {
+    const pos = upper.lastIndexOf(kw);
+    if (pos > lastPos) {
+      lastPos = pos;
+      ctx.lastKeyword = kw;
+    }
+  }
+
+  // 简单提取表引用（FROM 和 JOIN 后的表名）
+  const fromMatches = textBeforeCursor.match(/\bFROM\s+(\w+)/gi);
+  if (fromMatches) {
+    fromMatches.forEach(m => {
+      const table = m.replace(/\bFROM\s+/i, '');
+      if (!ctx.tableRefs.includes(table)) ctx.tableRefs.push(table);
+    });
+  }
+  const joinMatches = textBeforeCursor.match(/\bJOIN\s+(\w+)/gi);
+  if (joinMatches) {
+    joinMatches.forEach(m => {
+      const table = m.replace(/\bJOIN\s+/i, '');
+      if (!ctx.tableRefs.includes(table)) ctx.tableRefs.push(table);
+    });
+  }
+
+  // 判断上下文（基于最后关键字）
+  switch (ctx.lastKeyword) {
+    case 'FROM': ctx.isAfterFrom = true; break;
+    case 'JOIN': ctx.isAfterJoin = true; break;
+    case 'SELECT': ctx.isAfterSelect = true; break;
+    case 'WHERE': ctx.isAfterWhere = true; break;
+    case 'ORDER BY': ctx.isAfterOrderBy = true; break;
+    case 'GROUP BY': ctx.isAfterGroupBy = true; break;
+    case 'HAVING': ctx.isAfterHaving = true; break;
+    case 'SET': ctx.isAfterSet = true; break;
+    case 'INSERT INTO': ctx.isAfterInsertInto = true; break;
+    case 'VALUES': ctx.isAfterValues = true; break;
+    case 'UPDATE': ctx.isAfterUpdateTable = true; break;
+    case 'DELETE FROM': ctx.isAfterDeleteFrom = true; break;
+    case 'CREATE TABLE': ctx.isAfterCreateTable = true; break;
+    case 'ALTER TABLE': ctx.isAfterAlterTable = true; break;
+    case 'DROP': ctx.isAfterDrop = true; break;
+  }
+
+  return ctx;
+}
+
+/**
+ * 判断是否需要列名建议
+ */
+function shouldSuggestColumns(ctx: SqlContext): boolean {
+  return ctx.isAfterSelect || ctx.isAfterWhere || ctx.isAfterOrderBy ||
+         ctx.isAfterGroupBy || ctx.isAfterHaving || ctx.isAfterSet ||
+         ctx.isAfterInsertInto || ctx.isAfterUpdateTable || ctx.isAfterDeleteFrom;
+}
+
+/**
+ * 判断是否需要表名建议
+ */
+function shouldSuggestTables(ctx: SqlContext): boolean {
+  return ctx.isAfterFrom || ctx.isAfterJoin || ctx.isAfterInsertInto ||
+         ctx.isAfterUpdateTable || ctx.isAfterDeleteFrom || ctx.isAfterAlterTable ||
+         ctx.isAfterDrop;
+}
+
+/**
+ * 获取数据库特定的数据类型建议
+ */
+function getDbSpecificDataTypes(dbType: string | undefined): string[] {
+  if (!dbType) return ['INT', 'VARCHAR(255)', 'TEXT', 'DECIMAL(10,2)', 'DATETIME', 'BOOLEAN'];
+
+  switch (dbType) {
+    case 'mysql':
+    case 'mariadb':
+      return [
+        'INT', 'BIGINT', 'SMALLINT', 'TINYINT',
+        'VARCHAR(255)', 'TEXT', 'LONGTEXT',
+        'DECIMAL(10,2)', 'FLOAT', 'DOUBLE',
+        'DATETIME', 'TIMESTAMP', 'DATE', 'TIME',
+        'BOOLEAN', 'JSON',
+        'CHAR(1)', 'BINARY(16)', 'BLOB',
+      ];
+    case 'postgresql':
+    case 'kingbase':
+    case 'highgo':
+    case 'vastbase':
+      return [
+        'INTEGER', 'BIGINT', 'SMALLINT', 'SERIAL', 'BIGSERIAL',
+        'VARCHAR(255)', 'TEXT', 'CHAR(1)',
+        'NUMERIC(10,2)', 'REAL', 'DOUBLE PRECISION',
+        'TIMESTAMP', 'TIMESTAMPTZ', 'DATE', 'TIME',
+        'BOOLEAN', 'JSON', 'JSONB', 'UUID',
+        'BYTEA', 'ARRAY', 'INTERVAL',
+      ];
+    case 'sqlite':
+      return [
+        'INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC',
+        'BOOLEAN', 'DATETIME', 'DATE', 'TIME',
+      ];
+    case 'sqlserver':
+      return [
+        'INT', 'BIGINT', 'SMALLINT', 'TINYINT',
+        'VARCHAR(255)', 'NVARCHAR(255)', 'TEXT', 'NTEXT',
+        'DECIMAL(10,2)', 'FLOAT', 'REAL', 'MONEY',
+        'DATETIME', 'DATETIME2', 'DATE', 'TIME',
+        'BIT', 'UNIQUEIDENTIFIER', 'VARBINARY(MAX)',
+        'XML', 'GEOGRAPHY',
+      ];
+    case 'oracle':
+    case 'dameng':
+      return [
+        'NUMBER(10,2)', 'INTEGER', 'BINARY_INTEGER',
+        'VARCHAR2(255)', 'NVARCHAR2(255)', 'CLOB', 'NCLOB',
+        'DATE', 'TIMESTAMP', 'TIMESTAMP WITH TIME ZONE',
+        'BLOB', 'RAW(2000)', 'LONG RAW',
+        'BOOLEAN', 'XMLTYPE',
+      ];
+    default:
+      return ['INT', 'VARCHAR(255)', 'TEXT', 'DECIMAL(10,2)', 'DATETIME', 'BOOLEAN'];
+  }
+}
+
 // 预编译的正则表达式（避免每次触发重新编译）
 const REGEX_PATTERNS = {
   fromOrJoin: /\b(FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s*$/i,
@@ -111,6 +346,11 @@ export function SQLEditor({
   const dbType = propDbType || dbTypeFromStore;
   const [sql, setSql] = useState(defaultQuery || '');
   const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
+
+  // 自定义右键菜单状态
+  const [contextMenuVisible, setContextMenuVisible] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
   useEffect(() => {
@@ -418,40 +658,85 @@ export function SQLEditor({
       lineNumbers: 'on',
       renderLineHighlight: 'all',
       selectOnLineNumbers: true,
-      matchBrackets: 'always',
-      autoIndent: 'advanced',
-      formatOnPaste: true,
-      formatOnType: true,
+      matchBrackets: 'near',
+      autoIndent: 'keep',
+      formatOnPaste: false,
+      formatOnType: false,
       suggestOnTriggerCharacters: true,
       quickSuggestions: {
         other: true,
         comments: false,
-        strings: true,
+        strings: false,
       },
       parameterHints: {
-        enabled: true,
-        cycle: true,
+        enabled: false,
       },
-      wordBasedSuggestions: 'allDocuments',
-      autoClosingBrackets: 'languageDefined',
-      autoClosingQuotes: 'languageDefined',
+      wordBasedSuggestions: 'off',
+      autoClosingBrackets: 'never',
+      autoClosingQuotes: 'never',
       folding: true,
       foldingStrategy: 'indentation',
       showFoldingControls: 'always',
       renderWhitespace: 'selection',
       cursorBlinking: 'blink',
-      mouseWheelZoom: true,
+      mouseWheelZoom: false,
       multiCursorModifier: 'ctrlCmd',
       accessibilitySupport: 'auto',
       lineDecorationsWidth: 10,
       lineNumbersMinChars: 3,
       glyphMargin: false,
+      contextmenu: false,
+      acceptSuggestionOnEnter: 'on',
       // 性能优化配置
       suggestSelection: 'first',
       stickyScroll: { enabled: false },
       bracketPairColorization: { enabled: false },
       inlineSuggest: { enabled: false },
     });
+
+    // 禁用双击选择单词
+    editor.onMouseDown((e: any) => {
+      if (e.event.detail === 2) {
+        e.event.preventDefault();
+        e.event.stopPropagation();
+        if (e.target.position) {
+          queueMicrotask(() => {
+            editor.setPosition(e.target.position);
+            editor.setSelection(
+              new monaco.Selection(
+                e.target.position.lineNumber,
+                e.target.position.column,
+                e.target.position.lineNumber,
+                e.target.position.column
+              )
+            );
+          });
+        }
+      }
+    });
+
+    // 自定义右键菜单
+    editor.onContextMenu((e: any) => {
+      e.event.preventDefault();
+      e.event.stopPropagation();
+      const editorDom = editor.getDomNode();
+      if (!editorDom) return;
+      const rect = editorDom.getBoundingClientRect();
+      setContextMenuPos({
+        x: e.event.posx - rect.left,
+        y: e.event.posy - rect.top,
+      });
+      setContextMenuVisible(true);
+    });
+
+    // 点击其他地方关闭右键菜单
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenuVisible(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    cleanupDisposablesRef.current.push({ dispose: () => document.removeEventListener('mousedown', handleClickOutside) });
 
     // 添加自定义主题（延迟加载以减少启动时间）
     monaco.editor.defineTheme('custom-dark', {
@@ -570,10 +855,23 @@ export function SQLEditor({
       completionProviderRef.current = null;
     }
 
-    // 初始化补全提供者（优化版本）
+    // 初始化补全提供者（智能上下文版本）
     completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
-      triggerCharacters: ['.', ' ', '(', '[', '{', ',', ';', '\n'],
+      triggerCharacters: ['.', ' ', '(', '[', '{', ',', '\n'],
       provideCompletionItems: (model: any, position: any) => {
+        // 获取光标前当前行的文本
+        const textBeforeCursor = model.getValueInRange({
+          startLineNumber: position.lineNumber,
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        });
+
+        // 如果当前行以分号结尾（允许尾部空格），表示 SQL 语句已结束，不提供建议
+        if (/;\s*$/.test(textBeforeCursor)) {
+          return { suggestions: [] };
+        }
+
         const word = model.getWordUntilPosition(position);
         const range = {
           startLineNumber: position.lineNumber,
@@ -582,90 +880,48 @@ export function SQLEditor({
           endColumn: word.endColumn,
         };
 
-        // 获取光标前当前行的文本（用于上下文分析）
-        const textBeforeCursor = model.getValueInRange({
-          startLineNumber: position.lineNumber,
-          startColumn: 1,
-          endLineNumber: position.lineNumber,
-          endColumn: position.column,
-        });
+        // 获取当前语句的完整文本（从上一个 ; 到光标）
+        const fullText = model.getValue();
+        const cursorOffset = model.getOffsetAt(position);
+        const currentStatement = getCurrentStatement(fullText, cursorOffset);
 
-        // 获取当前语句类型的上下文
-        const textBeforeCurrentLine = model.getValueInRange({
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: position.lineNumber,
-          endColumn: position.column,
-        });
+        // 检查是否在字符串或注释中
+        if (isInStringOrComment(fullText, cursorOffset)) {
+          return { suggestions: [] };
+        }
 
-        // 根据最新的 dbType 过滤关键字和函数，避免闭包陷阱
+        // 使用新的上下文分析器
+        const ctx = analyzeSqlContext(currentStatement);
         const currentDbType = dbTypeRef.current;
+
+        // 根据最新的 dbType 过滤关键字和函数
         const filteredKeywords = filterKeywordsByDbType(SQL_KEYWORDS, currentDbType);
         const filteredFunctions = filterFunctionsByDbType(SQL_FUNCTIONS, currentDbType);
 
-        const baseKeywordSuggestions = filteredKeywords.map((kw) => ({
-          label: kw.label,
-          kind: monaco.languages.CompletionItemKind.Keyword,
-          insertText: kw.insertText,
-          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-          detail: kw.detail || t('common.keyword'),
-        }));
-
-        const baseFunctionSuggestions = filteredFunctions.map((fn) => ({
-          label: fn.label,
-          kind: monaco.languages.CompletionItemKind.Function,
-          insertText: fn.insertText,
-          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-          detail: fn.detail,
-        }));
-
-        const suggestions: any[] = [...baseKeywordSuggestions, ...baseFunctionSuggestions];
-
-        // 上下文分析
-        const isAfterFromOrJoin = REGEX_PATTERNS.fromOrJoin.test(textBeforeCursor);
-        const isAfterSelect = REGEX_PATTERNS.select.test(textBeforeCursor);
-        const isAfterWhere = REGEX_PATTERNS.where.test(textBeforeCursor);
-        const isAfterTableRef = REGEX_PATTERNS.afterTableRef.test(textBeforeCursor);
-        const hasTableAliasMatch = textBeforeCursor.match(REGEX_PATTERNS.hasTableAlias);
-
-        // 判断语句类型（更智能的上下文）
-        const upperText = textBeforeCurrentLine.toUpperCase();
-        const isInSelectContext = upperText.includes('SELECT') && !upperText.includes('FROM');
-        const isInFromContext =
-          upperText.includes('FROM') &&
-          !upperText.includes('WHERE') &&
-          !upperText.includes('ORDER') &&
-          !upperText.includes('GROUP');
-        const isInWhereContext =
-          upperText.includes('WHERE') &&
-          !upperText.includes('ORDER') &&
-          !upperText.includes('GROUP') &&
-          !upperText.includes('LIMIT');
-        const isInOrderByContext = upperText.includes('ORDER BY');
-        const isInGroupByContext = upperText.includes('GROUP BY');
-        const isInSetContext = upperText.includes('SET') && upperText.includes('UPDATE');
-        const isInInsertContext = upperText.includes('INSERT INTO');
+        const suggestions: any[] = [];
 
         const cache = completionCacheRef.current;
         const schema = schemaRef.current;
 
-        if (schema && cache) {
-          // 智能排序：根据上下文调整 suggestion 优先级
+        // 根据上下文决定建议内容
+        const needColumns = shouldSuggestColumns(ctx);
+        const needTables = shouldSuggestTables(ctx);
 
-          // 1. 在 FROM / JOIN / INTO / UPDATE 之后 -> 优先表名和视图名
-          if (isAfterFromOrJoin || isInFromContext) {
+        if (schema && cache) {
+          // 1. 需要表名建议（FROM/JOIN/UPDATE/INSERT INTO/ALTER TABLE/DROP）
+          if (needTables) {
             for (const [tableName, columns] of schema.tables) {
-              suggestions.unshift({
+              suggestions.push({
                 label: tableName,
                 kind: monaco.languages.CompletionItemKind.Class,
                 insertText: tableName,
                 range,
                 detail: t('common.tableDetail', { count: columns.length }),
-                sortText: '0', // 优先排序
+                sortText: '0',
               });
             }
             for (const [viewName, columns] of schema.views) {
-              suggestions.unshift({
+              suggestions.push({
                 label: viewName,
                 kind: monaco.languages.CompletionItemKind.Class,
                 insertText: viewName,
@@ -676,105 +932,169 @@ export function SQLEditor({
             }
           }
 
-          // 2. 在 SELECT 后或 WHERE 后 -> 优先列名和函数
-          if (
-            isAfterSelect ||
-            isInSelectContext ||
-            isAfterWhere ||
-            isInWhereContext ||
-            isInOrderByContext ||
-            isInGroupByContext
-          ) {
-            // 添加所有列名（不带表前缀，方便使用）
+          // 2. 需要列名建议
+          if (needColumns) {
             const addedColumns = new Set<string>();
-            for (const [tableName, columns] of schema.tables) {
-              for (const column of columns) {
-                if (!addedColumns.has(column)) {
-                  suggestions.unshift({
-                    label: column,
-                    kind: monaco.languages.CompletionItemKind.Field,
-                    insertText: column,
-                    range,
-                    detail: t('common.tableColumns', { table: tableName }),
-                    sortText: '0',
-                  });
-                  addedColumns.add(column);
-                }
-              }
-            }
 
-            // 添加表名.列名的格式（当有多个表时帮助区分）
-            for (const [tableName, columns] of schema.tables) {
-              for (const column of columns) {
-                suggestions.push({
-                  label: `${tableName}.${column}`,
-                  kind: monaco.languages.CompletionItemKind.Field,
-                  insertText: `${tableName}.${column}`,
-                  range,
-                  detail: t('common.tableColumns', { table: tableName }),
-                  sortText: '1',
-                });
-              }
-            }
-
-            // 添加数据库名.表名.列名的格式（支持跨数据库引用）
-            if (schema.databases && schema.databases.size > 0) {
-              for (const db of schema.databases) {
-                for (const [tableName, columns] of schema.tables) {
+            // 2a. INSERT INTO 特定表 -> 只提供该表列名
+            if (ctx.isAfterInsertInto && ctx.stmtType === 'INSERT') {
+              const match = currentStatement.match(/INSERT\s+INTO\s+["\`\[]?(\w+)["\`\]]?/i);
+              if (match && match[1]) {
+                const tableName = match[1];
+                const columns = schema.tables.get(tableName);
+                if (columns) {
                   for (const column of columns) {
                     suggestions.push({
-                      label: `${db}.${tableName}.${column}`,
+                      label: column,
                       kind: monaco.languages.CompletionItemKind.Field,
-                      insertText: `${db}.${tableName}.${column}`,
+                      insertText: column,
                       range,
-                      detail: t('common.tableColumns', { table: `${db}.${tableName}` }),
-                      sortText: '1',
+                      detail: t('common.tableColumns', { table: tableName }),
+                      sortText: '0',
                     });
                   }
                 }
               }
             }
-          }
-
-          // 3. 在 SET 后（UPDATE 语句）-> 只提供列名
-          if (isInSetContext) {
-            const addedColumns = new Set<string>();
-            for (const [tableName, columns] of schema.tables) {
-              for (const column of columns) {
-                if (!addedColumns.has(column)) {
-                  suggestions.unshift({
-                    label: column,
-                    kind: monaco.languages.CompletionItemKind.Field,
-                    insertText: column,
-                    range,
-                    detail: t('common.tableColumns', { table: tableName }),
-                    sortText: '0',
-                  });
-                  addedColumns.add(column);
+            // 2b. UPDATE table SET -> 只提供 UPDATE 表的列名
+            else if (ctx.isAfterSet && ctx.stmtType === 'UPDATE') {
+              const match = currentStatement.match(/UPDATE\s+["\`\[]?(\w+)["\`\]]?/i);
+              if (match && match[1]) {
+                const tableName = match[1];
+                const columns = schema.tables.get(tableName);
+                if (columns) {
+                  for (const column of columns) {
+                    suggestions.push({
+                      label: column,
+                      kind: monaco.languages.CompletionItemKind.Field,
+                      insertText: column,
+                      range,
+                      detail: t('common.tableColumns', { table: tableName }),
+                      sortText: '0',
+                    });
+                  }
                 }
               }
             }
-          }
+            // 2c. 其他情况（SELECT/WHERE/ORDER BY/GROUP BY/HAVING）-> 提供已引用表的列名优先
+            else {
+              // 如果有已引用的表，优先提供这些表的列名
+              const targetTables = ctx.tableRefs.length > 0 ? ctx.tableRefs : Array.from(schema.tables.keys());
 
-          // 4. 在 INSERT INTO 之后 -> 优先列名
-          if (isInInsertContext) {
-            const match = textBeforeCursor.match(/INSERT\s+INTO\s+(\w+)/i);
-            if (match && match[1]) {
-              const tableName = match[1];
-              const columns = schema.tables.get(tableName);
-              if (columns) {
+              for (const tableName of targetTables) {
+                const columns = schema.tables.get(tableName);
+                if (columns) {
+                  for (const column of columns) {
+                    if (!addedColumns.has(column)) {
+                      suggestions.push({
+                        label: column,
+                        kind: monaco.languages.CompletionItemKind.Field,
+                        insertText: column,
+                        range,
+                        detail: t('common.tableColumns', { table: tableName }),
+                        sortText: '0',
+                      });
+                      addedColumns.add(column);
+                    }
+                  }
+                }
+              }
+
+              // 添加表名.列名格式（帮助多表查询时区分）
+              for (const [tableName, columns] of schema.tables) {
                 for (const column of columns) {
-                  suggestions.unshift({
-                    label: column,
+                  suggestions.push({
+                    label: `${tableName}.${column}`,
                     kind: monaco.languages.CompletionItemKind.Field,
-                    insertText: column,
+                    insertText: `${tableName}.${column}`,
                     range,
                     detail: t('common.tableColumns', { table: tableName }),
-                    sortText: '0',
+                    sortText: '1',
                   });
                 }
               }
+
+              // 跨数据库引用
+              if (schema.databases && schema.databases.size > 0) {
+                for (const db of schema.databases) {
+                  for (const [tableName, columns] of schema.tables) {
+                    for (const column of columns) {
+                      suggestions.push({
+                        label: `${db}.${tableName}.${column}`,
+                        kind: monaco.languages.CompletionItemKind.Field,
+                        insertText: `${db}.${tableName}.${column}`,
+                        range,
+                        detail: t('common.tableColumns', { table: `${db}.${tableName}` }),
+                        sortText: '1',
+                      });
+                    }
+                  }
+                }
+              }
             }
+          }
+        }
+
+        // 3. 添加关键字和函数建议（根据上下文选择性添加）
+        // 如果光标后有内容，优先添加关键字和函数
+        const shouldAddKeywords = !needTables || suggestions.length === 0;
+        if (shouldAddKeywords) {
+          // 关键字排序：与当前上下文相关的优先
+          const keywordSortMap: Record<string, number> = {
+            'SELECT': ctx.stmtType === 'UNKNOWN' ? 0 : 10,
+            'INSERT INTO': ctx.stmtType === 'UNKNOWN' ? 0 : 10,
+            'UPDATE': ctx.stmtType === 'UNKNOWN' ? 0 : 10,
+            'DELETE FROM': ctx.stmtType === 'UNKNOWN' ? 0 : 10,
+            'FROM': ctx.isAfterSelect ? 0 : 10,
+            'WHERE': ['SELECT', 'UPDATE', 'DELETE'].includes(ctx.stmtType) ? 1 : 10,
+            'JOIN': ctx.isAfterFrom ? 1 : 10,
+            'LEFT JOIN': ctx.isAfterFrom ? 1 : 10,
+            'INNER JOIN': ctx.isAfterFrom ? 1 : 10,
+            'GROUP BY': ctx.isAfterWhere || ctx.isAfterFrom ? 2 : 10,
+            'ORDER BY': ctx.isAfterWhere || ctx.isAfterFrom ? 2 : 10,
+            'HAVING': ctx.isAfterGroupBy ? 1 : 10,
+            'LIMIT': ctx.isAfterWhere || ctx.isAfterOrderBy ? 2 : 10,
+            'VALUES': ctx.isAfterInsertInto ? 0 : 10,
+            'SET': ctx.stmtType === 'UPDATE' ? 0 : 10,
+          };
+
+          for (const kw of filteredKeywords) {
+            const sortPriority = keywordSortMap[kw.label] ?? 5;
+            suggestions.push({
+              label: kw.label,
+              kind: monaco.languages.CompletionItemKind.Keyword,
+              insertText: kw.insertText,
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              detail: kw.detail || t('common.keyword'),
+              sortText: String(sortPriority),
+            });
+          }
+
+          // 函数建议
+          for (const fn of filteredFunctions) {
+            suggestions.push({
+              label: fn.label,
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: fn.insertText,
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              detail: fn.detail,
+              sortText: '3',
+            });
+          }
+        }
+
+        // 4. CREATE TABLE / ALTER TABLE 上下文 -> 提供数据类型建议
+        if ((ctx.isAfterCreateTable || ctx.isAfterAlterTable) && currentDbType) {
+          const dataTypes = getDbSpecificDataTypes(currentDbType);
+          for (const dt of dataTypes) {
+            suggestions.push({
+              label: dt,
+              kind: monaco.languages.CompletionItemKind.TypeParameter,
+              insertText: dt,
+              range,
+              detail: t('common.dataType'),
+              sortText: '0',
+            });
           }
         }
 
@@ -868,6 +1188,9 @@ export function SQLEditor({
   }, [onSave, onFormat, onStop, setCursorPosition, setSelectedText]);
 
   const handleExecuteQuery = useCallback(async () => {
+    // 收起建议列表
+    editorRef.current?.getAction('editor.action.hideSuggestWidget')?.run();
+
     // 获取选中的 SQL，如果没有选中则使用整个 SQL
     const selectedSql = editorRef.current
       ?.getModel()
@@ -1808,7 +2131,7 @@ export function SQLEditor({
           onMount={handleEditorMount}
           options={{
             minimap: { enabled: false },
-            fontSize: 13,
+            fontSize: 14,
             lineNumbers: 'on',
             roundedSelection: false,
             scrollBeyondLastLine: false,
@@ -1819,15 +2142,283 @@ export function SQLEditor({
             renderLineHighlight: 'all',
             selectOnLineNumbers: true,
             cursorStyle: 'line',
-            cursorBlinking: 'smooth',
-            contextmenu: true,
-            quickSuggestions: true,
+            cursorBlinking: 'blink',
+            contextmenu: false,
+            quickSuggestions: {
+              other: true,
+              comments: false,
+              strings: false,
+            },
             suggestOnTriggerCharacters: true,
-            acceptSuggestionOnEnter: 'on',
-            formatOnPaste: true,
-            formatOnType: true,
+      acceptSuggestionOnEnter: 'on',
+            formatOnPaste: false,
+            formatOnType: false,
+            matchBrackets: 'near',
+            autoIndent: 'keep',
+            parameterHints: { enabled: false },
+            wordBasedSuggestions: 'off',
+            autoClosingBrackets: 'never',
+            autoClosingQuotes: 'never',
+            mouseWheelZoom: false,
           }}
         />
+
+        {/* 自定义右键菜单 */}
+        {contextMenuVisible && (
+          <div
+            ref={contextMenuRef}
+            style={{
+              position: 'absolute',
+              left: contextMenuPos.x,
+              top: contextMenuPos.y,
+              zIndex: 1000,
+              background: tc.isDark ? '#252526' : '#FFFFFF',
+              border: `1px solid ${tc.isDark ? '#404040' : '#E8E8E8'}`,
+              borderRadius: 4,
+              boxShadow: tc.isDark
+                ? '0 4px 12px rgba(0,0,0,0.5)'
+                : '0 4px 12px rgba(0,0,0,0.15)',
+              minWidth: 180,
+              padding: '4px 0',
+            }}
+          >
+            <Menu
+              mode="vertical"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                boxShadow: 'none',
+              }}
+              selectable={false}
+              items={[
+                {
+                  key: 'execute',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <PlayCircleOutlined style={{ color: 'var(--color-primary)' }} />
+                      {t('common.executeButton')}
+                    </span>
+                  ),
+                  disabled: !connectionId || loading,
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    handleExecuteQuery();
+                  },
+                },
+                {
+                  key: 'execute-selected',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <PlayCircleOutlined style={{ color: 'var(--color-primary)' }} />
+                      {t('common.executeSelected')}
+                    </span>
+                  ),
+                  disabled: !connectionId || loading,
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    handleExecuteQuery();
+                  },
+                },
+                {
+                  key: 'format',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FormatPainterOutlined />
+                      {t('common.formatButton')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    formatSQL();
+                  },
+                },
+                {
+                  key: 'explain',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <LineChartOutlined />
+                      {t('common.explainPlanButton')}
+                    </span>
+                  ),
+                  disabled: !connectionId,
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    showExplainPlan();
+                  },
+                },
+                {
+                  key: 'divider-1',
+                  type: 'divider',
+                },
+                {
+                  key: 'cut',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12 }}>✂️</span>
+                      {t('common.cut')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    editorRef.current?.getAction('editor.action.clipboardCutAction')?.run();
+                  },
+                },
+                {
+                  key: 'copy',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <CopyOutlined />
+                      {t('common.copy')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    editorRef.current?.getAction('editor.action.clipboardCopyAction')?.run();
+                  },
+                },
+                {
+                  key: 'paste',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12 }}>📋</span>
+                      {t('common.paste')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    editorRef.current?.getAction('editor.action.clipboardPasteAction')?.run();
+                  },
+                },
+                {
+                  key: 'select-all',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12 }}>☐</span>
+                      {t('common.selectAll')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    const currentEditor = editorRef.current;
+                    const currentMonaco = monacoRef.current;
+                    if (!currentEditor || !currentMonaco) return;
+                    const model = currentEditor.getModel();
+                    if (!model) return;
+                    const lineCount = model.getLineCount();
+                    const lastColumn = model.getLineMaxColumn(lineCount);
+                    currentEditor.setSelection(
+                      new currentMonaco.Selection(1, 1, lineCount, lastColumn)
+                    );
+                  },
+                },
+                {
+                  key: 'divider-2',
+                  type: 'divider',
+                },
+                {
+                  key: 'comment',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FileTextOutlined />
+                      {t('common.commentButton')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    editorRef.current?.getAction('editor.action.commentLine')?.run();
+                  },
+                },
+                {
+                  key: 'uppercase',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FormatPainterOutlined />
+                      {t('common.uppercase')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    const currentEditor = editorRef.current;
+                    if (!currentEditor) return;
+                    const model = currentEditor.getModel();
+                    const selection = currentEditor.getSelection();
+                    if (!model || !selection) return;
+                    const selectedText = model.getValueInRange(selection);
+                    if (!selectedText) return;
+                    currentEditor.executeEdits('case-transform', [
+                      { range: selection, text: selectedText.toUpperCase(), forceMoveMarkers: true },
+                    ]);
+                  },
+                },
+                {
+                  key: 'lowercase',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FormatPainterOutlined />
+                      {t('common.lowercase')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    const currentEditor = editorRef.current;
+                    if (!currentEditor) return;
+                    const model = currentEditor.getModel();
+                    const selection = currentEditor.getSelection();
+                    if (!model || !selection) return;
+                    const selectedText = model.getValueInRange(selection);
+                    if (!selectedText) return;
+                    currentEditor.executeEdits('case-transform', [
+                      { range: selection, text: selectedText.toLowerCase(), forceMoveMarkers: true },
+                    ]);
+                  },
+                },
+                {
+                  key: 'divider-3',
+                  type: 'divider',
+                },
+                {
+                  key: 'clear',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <ClearOutlined />
+                      {t('common.clearEditor')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    clearEditor();
+                  },
+                },
+                {
+                  key: 'save',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <SaveOutlined />
+                      {t('common.saveSql')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    saveSQL();
+                  },
+                },
+                {
+                  key: 'copy-sql',
+                  label: (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <CopyOutlined />
+                      {t('common.copySqlMenu')}
+                    </span>
+                  ),
+                  onClick: () => {
+                    setContextMenuVisible(false);
+                    copySQL();
+                  },
+                },
+              ]}
+            />
+          </div>
+        )}
       </div>
 
       {/* 拖拽调整条 — 仅在有结果时显示 */}

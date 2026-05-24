@@ -29,6 +29,31 @@ console.error = (...args: any[]) => {
   originalConsoleError.apply(console, args);
 };
 
+// 全局禁用输入框拼音/拼写检查
+function disableInputSpellcheck(root: HTMLElement | Document = document) {
+  const selector = 'input:not([type="password"]), textarea, [contenteditable="true"]'
+  root.querySelectorAll(selector).forEach((el) => {
+    el.setAttribute('autocapitalize', 'off')
+    el.setAttribute('autocomplete', 'off')
+    el.setAttribute('autocorrect', 'off')
+    el.setAttribute('spellcheck', 'false')
+  })
+}
+
+const observer = new MutationObserver((mutations) => {
+  mutations.forEach((m) => {
+    m.addedNodes.forEach((node) => {
+      if (node instanceof HTMLElement) {
+        disableInputSpellcheck(node)
+      }
+    })
+  })
+})
+
+// 初始 + 后续动态节点
+disableInputSpellcheck()
+observer.observe(document.body, { childList: true, subtree: true })
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
     <App />

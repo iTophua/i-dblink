@@ -1,7 +1,7 @@
 /**
  * GlideDataTable — 基于 Glide Data Grid 的通用数据表格组件
  */
-import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
+import { useMemo, useCallback, useState, useEffect, useRef, useLayoutEffect } from 'react';
 import DataEditor, {
   GridCellKind,
   CompactSelection,
@@ -14,6 +14,7 @@ import DataEditor, {
   type EditableGridCell,
   type ProvideEditorCallback,
   type ProvideEditorComponent,
+  type DataEditorRef,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -40,6 +41,8 @@ export interface GlideDataTableProps {
   onCellContextMenu?: (col: number, row: number, bounds: { x: number; y: number }) => void;
   onHeaderClicked?: (colIndex: number) => void;
   onColumnResized?: (col: GridColumn, newWidth: number, colIndex: number) => void;
+  /** 设置后自动滚动到该行（索引基于可见行，不含 rowMarker） */
+  scrollToRowIndex?: number;
   rowHeight?: number;
   headerHeight?: number;
   editable?: boolean;
@@ -48,19 +51,13 @@ export interface GlideDataTableProps {
 const FILLER_COL_ID = '__filler__';
 
 export function buildGridColumns(columns: GlideColumn[], hiddenColumns: Set<string>): GridColumn[] {
-  const visible: GridColumn[] = columns
+  return columns
     .filter((col) => !hiddenColumns.has(col.id))
     .map((col) => ({
       id: col.id,
       title: col.title,
       width: col.width ?? 130,
     }));
-  visible.push({
-    id: FILLER_COL_ID,
-    title: '',
-    grow: 1,
-  });
-  return visible;
 }
 
 export function valueToGridCell(value: unknown, editable: boolean): GridCell {
@@ -94,25 +91,49 @@ export function valueToGridCell(value: unknown, editable: boolean): GridCell {
 const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
   const ref = useRef<HTMLInputElement>(null);
   const cancelledRef = useRef(false);
+  const committedRef = useRef(false);
+  const hasFocusedRef = useRef(false);
   const tc = useThemeColors();
   const cellData = (p.value as any).data;
   const [val, setVal] = useState(p.initialValue ?? String(cellData ?? ''));
+  const valRef = useRef(val);
+  valRef.current = val;
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (ref.current) {
         ref.current.focus();
+        hasFocusedRef.current = true;
       }
     }, 0);
     return () => clearTimeout(timer);
   }, []);
 
   const commit = useCallback((v: string) => {
-    if (cancelledRef.current) return;
+    if (committedRef.current || cancelledRef.current) return;
+    committedRef.current = true;
     const kind = p.value.kind;
-    const data = kind === GridCellKind.Number ? (v === '' ? undefined : Number(v)) : v;
-    p.onFinishedEditing({ ...(p.value as any), data } as any);
+    let data: any;
+    let displayData: string;
+    if (kind === GridCellKind.Number) {
+      data = v === '' ? undefined : Number(v);
+      displayData = data == null ? 'NULL' : String(data);
+    } else {
+      data = v;
+      displayData = v == null || v === '' ? 'NULL' : String(v);
+    }
+    p.onFinishedEditing({ ...(p.value as any), data, displayData } as any);
   }, [p]);
+
+  // 组件卸载时自动提交（兜底：onBlur 在卸载时可能不触发）
+  // hasFocusedRef 用于区分 StrictMode 模拟卸载和真实卸载
+  useLayoutEffect(() => {
+    return () => {
+      if (hasFocusedRef.current && !committedRef.current && !cancelledRef.current) {
+        commit(valRef.current);
+      }
+    };
+  }, []);
 
   return (
     <input
@@ -125,6 +146,10 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
         if (e.key === 'Tab') { e.preventDefault(); commit(val); }
       }}
       onBlur={() => commit(val)}
+      autoComplete="off"
+      autoCorrect="off"
+      autoCapitalize="off"
+      spellCheck={false}
       style={{
         position: 'absolute',
         left: 0, top: 0,
@@ -159,6 +184,7 @@ export function GlideDataTable({
   onCellContextMenu,
   onHeaderClicked,
   onColumnResized,
+  scrollToRowIndex,
   rowHeight = 24,
   headerHeight = 28,
   editable = false,
@@ -207,6 +233,17 @@ export function GlideDataTable({
   const emptyClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentSelectionRef = useRef(gridSelection);
   currentSelectionRef.current = gridSelection;
+  const gridRef = useRef<DataEditorRef>(null);
+
+  // 自动滚动到指定行
+  useEffect(() => {
+    if (scrollToRowIndex != null && scrollToRowIndex >= 0 && gridRef.current) {
+      // rowMarkerOffset=1：列 0 是行号，数据列从 1 开始
+      requestAnimationFrame(() => {
+        gridRef.current?.scrollTo(1, scrollToRowIndex, 'both', 0, 0);
+      });
+    }
+  }, [scrollToRowIndex]);
 
   // ===== getCellContent =====
   const getCellContent = useCallback(
@@ -396,25 +433,55 @@ export function GlideDataTable({
   }, [onSelectionChange]);
 
   // ===== 编辑 =====
+  // 注意：正常编辑流程由 handleCellsEdited 处理（Glide Data Grid 协议要求）。
+  // 此回调仅在 Glide Data Grid 绕过 handleCellsEdited 直接调用时生效。
   const handleCellEdited = useCallback(
     ([col, row]: Item, newValue: EditableGridCell) => {
       if (!onCellEdited || !editable) return;
       const gridCol = gridColumns[col];
       if (gridCol?.id === FILLER_COL_ID) return;
-      const val = typeof newValue === 'object' && newValue !== null ? (newValue as any).data ?? '' : String(newValue ?? '');
+      const rawVal = typeof newValue === 'object' && newValue !== null ? (newValue as any).data : undefined;
+      const hasVal = rawVal !== undefined && rawVal !== null;
+      const val = hasVal ? String(rawVal) : (typeof newValue === 'object' && newValue !== null ? '' : String(newValue ?? ''));
       onCellEdited(col, row, String(val));
+
+      const numCols = gridColumns.length;
+      const cells: { cell: Item }[] = [];
+      for (let c = 0; c < numCols; c++) {
+        cells.push({ cell: [c, row] });
+      }
+      requestAnimationFrame(() => {
+        gridRef.current?.updateCells(cells);
+      });
     },
     [onCellEdited, editable, gridColumns]
   );
 
   // ===== 范围编辑 =====
+  // Glide Data Grid 内部协议：先调 onCellsEdited，若返回 true 则不再调 onCellEdited。
+  // 因此单 cell 编辑必须在此主动调用 onCellEdited（更新 React state），
+  // 然后返回 true 阻止 Glide Data Grid 重复调用。
   const handleCellsEdited = useCallback(
     (newValues: readonly { location: Item; value: EditableGridCell }[]) => {
       if (!onCellsEdited || !editable) return false;
-      // DataEditor 在 Ctrl+Enter 等快捷键时会同时触发
-      // onCellEdited + onCellsEdited（仅1个 cell），
-      // 跳过以阻止父组件弹两次确认。
-      if (onCellEdited && newValues.length <= 1) return true;
+
+      if (onCellEdited && newValues.length <= 1) {
+        const [{ location: [col, row], value }] = newValues;
+        if (gridColumns[col]?.id === FILLER_COL_ID) return false;
+        const v = typeof value === 'object' && value !== null ? (value as any).data ?? '' : String(value ?? '');
+        onCellEdited(col, row, String(v));
+
+        // 标记整行为脏（rAF 延迟：等待 React setRowData 批处理完成）
+        const numCols = gridColumns.length;
+        const cells: { cell: Item }[] = [];
+        for (let c = 0; c < numCols; c++) {
+          cells.push({ cell: [c, row] });
+        }
+        requestAnimationFrame(() => {
+          gridRef.current?.updateCells(cells);
+        });
+        return true;
+      }
       const edits = newValues
         .map(({ location: [col, row], value }) => {
           if (gridColumns[col]?.id === FILLER_COL_ID) return null;
@@ -424,6 +491,24 @@ export function GlideDataTable({
         .filter(Boolean) as Array<{ col: number; row: number; value: string }>;
       if (edits.length === 0) return false;
       onCellsEdited(edits);
+
+      // 批量标记受影响的行（去重）为脏，确保同行其他列也刷新，
+      // 必须用 rAF 延迟：等待 React 批处理状态更新完成。
+      const damagedRows = new Set<number>();
+      const cells: { cell: Item }[] = [];
+      const numCols = gridColumns.length;
+      for (const edit of edits) {
+        if (!damagedRows.has(edit.row)) {
+          damagedRows.add(edit.row);
+          for (let c = 0; c < numCols; c++) {
+            cells.push({ cell: [c, edit.row] });
+          }
+        }
+      }
+      requestAnimationFrame(() => {
+        gridRef.current?.updateCells(cells);
+      });
+
       return true;
     },
     [onCellsEdited, editable, gridColumns]
@@ -455,6 +540,8 @@ export function GlideDataTable({
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }} onPointerDown={handleWrapperPointerDown}>
       <DataEditor
+        ref={gridRef}
+        width="100%"
         columns={gridColumns}
         rows={rows.length}
         getCellContent={getCellContent}

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ContextMenu } from '../ContextMenu';
 import type { MenuConfigItem, MenuContext } from '../ContextMenu';
 import {
@@ -8,6 +9,7 @@ import {
   createSetDefaultItem,
   createQuickFilterItems,
   createCopyAsInsertItem,
+  createCopyAsSingleInsertItem,
   createCopyAsUpdateItem,
   createCopyAsDeleteItem,
   createCopyRowAsJsonItem,
@@ -28,6 +30,8 @@ export function DataTableContextMenu({
   context,
   onClose,
 }: DataTableContextMenuProps) {
+  const { t } = useTranslation();
+
   const items = useMemo<MenuConfigItem[]>(() => {
     const ctx: MenuContext = {
       ...context,
@@ -38,21 +42,22 @@ export function DataTableContextMenu({
     };
 
     return [
-      createCopyCellValueItem(ctx),
-      createCopyCellAsSqlLiteralItem(ctx),
+      createCopyCellValueItem(ctx, t, onClose),
+      createCopyCellAsSqlLiteralItem(ctx, t, onClose),
       { type: 'divider' },
-      createSetNullItem(ctx),
-      createSetDefaultItem(ctx),
+      createSetNullItem(ctx, t, onClose),
+      createSetDefaultItem(ctx, t, onClose),
       { type: 'divider' },
-      createQuickFilterItems(ctx),
+      createQuickFilterItems(ctx, t, onClose),
       { type: 'divider' },
-      createCopyAsInsertItem(ctx),
-      createCopyAsUpdateItem(ctx),
-      createCopyAsDeleteItem(ctx),
+      createCopyAsInsertItem(ctx, t, onClose),
+      createCopyAsSingleInsertItem(ctx, t, onClose),
+      createCopyAsUpdateItem(ctx, t, onClose),
+      createCopyAsDeleteItem(ctx, t, onClose),
       { type: 'divider' },
-      createCopyRowAsJsonItem(ctx),
+      createCopyRowAsJsonItem(ctx, t, onClose),
     ];
-  }, [menuTarget, selectedRows, context]);
+  }, [menuTarget, selectedRows, context, onClose, t]);
 
   return (
     <ContextMenu

@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import { PlusOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+import { App } from 'antd';
 import { ContextMenu } from '../ContextMenu';
 import type { MenuConfigItem, MenuContext, MenuItemConfig } from '../ContextMenu';
 import {
@@ -9,6 +11,7 @@ import {
   createSetDefaultItem,
   createQuickFilterItems,
   createCopyAsInsertItem,
+  createCopyAsSingleInsertItem,
   createCopyAsUpdateItem,
   createCopyAsDeleteItem,
   createCopyRowAsJsonItem,
@@ -31,29 +34,47 @@ export function ResultGridContextMenu({
   onClose,
   onAddRow,
 }: ResultGridContextMenuProps) {
+  const { t } = useTranslation();
+  const { message } = App.useApp();
+
   const items = useMemo<MenuConfigItem[]>(() => {
+    // 如果没有选中行但右键点击了某个单元格，使用当前行作为选中行
+    const effectiveSelectedRows = selectedRows.length > 0
+      ? selectedRows
+      : menuTarget.rowData
+        ? [menuTarget.rowData]
+        : [];
+
     const ctx: MenuContext = {
       ...context,
       cellValue: menuTarget.cellValue,
       colName: menuTarget.colName,
       rowData: menuTarget.rowData,
-      selectedRows,
+      selectedRows: effectiveSelectedRows,
+    };
+
+    const handleCloseWithMessage = (msg?: string) => {
+      onClose();
+      if (msg) {
+        message.success(msg);
+      }
     };
 
     const result: MenuConfigItem[] = [
-      createCopyCellValueItem(ctx),
-      createCopyCellAsSqlLiteralItem(ctx),
+      createCopyCellValueItem(ctx, t, () => handleCloseWithMessage(t('common.copied'))),
+      createCopyCellAsSqlLiteralItem(ctx, t, () => handleCloseWithMessage(t('common.copied'))),
       { type: 'divider' },
-      createSetNullItem(ctx),
-      createSetDefaultItem(ctx),
+      createSetNullItem(ctx, t, onClose),
+      createSetDefaultItem(ctx, t, onClose),
       { type: 'divider' },
-      createQuickFilterItems(ctx),
+      createQuickFilterItems(ctx, t, onClose),
       { type: 'divider' },
-      createCopyAsInsertItem(ctx),
-      createCopyAsUpdateItem(ctx),
-      createCopyAsDeleteItem(ctx),
+      createCopyAsInsertItem(ctx, t, () => handleCloseWithMessage(t('common.contextMenu.copyAsInsert') + ' ' + t('common.copied'))),
+      createCopyAsSingleInsertItem(ctx, t, () => handleCloseWithMessage(t('common.contextMenu.copyAsSingleInsert') + ' ' + t('common.copied'))),
+      createCopyAsUpdateItem(ctx, t, () => handleCloseWithMessage(t('common.contextMenu.copyAsUpdate') + ' ' + t('common.copied'))),
+      createCopyAsDeleteItem(ctx, t, () => handleCloseWithMessage(t('common.contextMenu.copyAsDelete') + ' ' + t('common.copied'))),
       { type: 'divider' },
-      createCopyRowAsJsonItem(ctx),
+      createCopyRowAsJsonItem(ctx, t, () => handleCloseWithMessage(t('common.contextMenu.copyAsJson') + ' ' + t('common.copied'))),
     ];
 
     // ResultGrid 私有项：Add Row
@@ -61,7 +82,7 @@ export function ResultGridContextMenu({
       const addRowItem: MenuItemConfig = {
         key: 'add-row',
         icon: <PlusOutlined />,
-        label: 'Add New Row',
+        label: t('common.contextMenu.addNewRow'),
         onClick: () => {
           onAddRow();
           onClose();
@@ -72,7 +93,7 @@ export function ResultGridContextMenu({
     }
 
     return result;
-  }, [menuTarget, selectedRows, context, onAddRow, onClose]);
+  }, [menuTarget, selectedRows, context, onAddRow, onClose, t, message]);
 
   return (
     <ContextMenu

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useRef, useLayoutEffect, useState, useEffect } from 'react';
 import type { MenuConfigItem, MenuItemConfig } from './types';
 
 interface ContextMenuProps {
@@ -40,6 +40,44 @@ function MenuItem({ item }: { item: MenuItemConfig }) {
 }
 
 export function ContextMenu({ items, visible, x, y, onClose }: ContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [adjustedPos, setAdjustedPos] = useState<{ x: number; y: number } | null>(null);
+
+  // 边界检测：确保菜单不超出视口
+  useLayoutEffect(() => {
+    if (!visible || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let newX = x;
+    let newY = y;
+
+    // 水平边界
+    if (x + rect.width > vw) {
+      newX = Math.max(0, vw - rect.width - 8);
+    }
+    // 垂直边界：底部超出则向上展开
+    if (y + rect.height > vh) {
+      newY = Math.max(0, y - rect.height);
+    }
+    // 确保不超出顶部
+    if (newY < 0) {
+      newY = 8;
+    }
+
+    if (newX !== x || newY !== y) {
+      setAdjustedPos({ x: newX, y: newY });
+    }
+  }, [x, y, visible]);
+
+  // Reset adjusted position when menu is hidden
+  useEffect(() => {
+    if (!visible) {
+      setAdjustedPos(null);
+    }
+  }, [visible]);
+
   if (!visible) return null;
 
   // Filter hidden items and empty groups
@@ -49,16 +87,20 @@ export function ContextMenu({ items, visible, x, y, onClose }: ContextMenuProps)
     return true; // divider
   });
 
+  const finalX = adjustedPos?.x ?? x;
+  const finalY = adjustedPos?.y ?? y;
+
   return (
     <>
       {/* Click overlay to close */}
       <div style={{ position: 'fixed', inset: 0, zIndex: 1999 }} onClick={onClose} />
       {/* Menu */}
       <div
+        ref={menuRef}
         style={{
           position: 'fixed',
-          top: y,
-          left: x,
+          top: finalY,
+          left: finalX,
           zIndex: 2000,
           background: 'var(--background-card)',
           border: '1px solid var(--border)',
@@ -66,6 +108,8 @@ export function ContextMenu({ items, visible, x, y, onClose }: ContextMenuProps)
           boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
           padding: '4px 0',
           minWidth: 180,
+          maxHeight: 'calc(100vh - 16px)',
+          overflowY: 'auto',
         }}
         onClick={(e) => e.stopPropagation()}
       >
