@@ -5,10 +5,10 @@
  * 多格式导出(CSV/JSON/Excel/TXT/XML/MD)、底部SQL预览、提交/撤销。
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Button, Space, Empty, Tag, App, Modal, Dropdown, Spin } from 'antd';
+import { Button, Space, Empty, Tag, App, Modal, Dropdown } from 'antd';
 import {
   DeleteOutlined, SaveOutlined, UndoOutlined, CodeOutlined,
-  CopyOutlined, PlusOutlined, DownloadOutlined, FileTextOutlined,
+  PlusOutlined, DownloadOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -18,7 +18,9 @@ import { exportToExcel } from '../../utils/exportUtils';
 import { escapeSqlValue, escapeSqlIdentifier } from '../../utils/sqlUtils';
 import DataEditor from '@glideapps/glide-data-grid';
 import { GlideDataTable, type GlideRow } from '../DataTable/GlideDataTable';
-import { namesToGlideColumns, rowsToGlideRows, createResultCellModified } from '../DataTable/adapters/resultAdapter';
+import { namesToGlideColumns, createResultCellModified } from '../DataTable/adapters/resultAdapter';
+import { useContextMenu } from '../ContextMenu';
+import { ResultGridContextMenu } from './ResultGridContextMenu';
 
 // ── Types ──
 interface ResultGridProps {
@@ -30,8 +32,6 @@ interface ResultGridProps {
   originalSql?: string;
   dbType?: DatabaseType;
 }
-
-interface CtxState { v: boolean; x: number; y: number; }
 
 // ── SQL 解析 ──
 function extractTable(sql: string): string | null {
@@ -111,7 +111,7 @@ export function ResultGrid({
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [newRows, setNewRows] = useState<unknown[][]>([]);
   const [operationSql, setOperationSql] = useState('');
-  const [contextMenu, setCtx] = useState<CtxState>({ v: false, x: 0, y: 0 });
+  const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
 
   // 行数据
   const allRows = useMemo(() => {
@@ -252,36 +252,6 @@ export function ResultGrid({
     });
   }, [isEditable, selectedIndices, message, t]);
 
-  // 右键菜单
-  const closeCtx = useCallback(() => setCtx((p) => ({ ...p, v: false })), []);
-  const copyAsInsert = useCallback(() => {
-    if (!tableName) { message.warning(t('common.cannotDetermineTableName')); return; }
-    const indices = Array.from(selectedIndices).filter((i) => i < queryResult.rows.length);
-    if (indices.length === 0) { message.warning(t('common.pleaseSelectRows')); return; }
-    const rows = indices.map((i) => queryResult.rows[i]);
-    navigator.clipboard.writeText(generateInsertSql(tableName, queryResult.columns, rows, dbType));
-    message.success(`${t('common.copyTable.copied')} ${indices.length} INSERT`); closeCtx();
-  }, [tableName, selectedIndices, queryResult, dbType, message, t, closeCtx]);
-  const copyAsUpdate = useCallback(() => {
-    if (!tableName || !primaryKeyCol) { message.warning(t('common.currentResultSetCannotGenerateUpdate')); return; }
-    const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
-    if (pkIdx < 0) { message.warning(t('common.primaryKeyColumnNotFound')); return; }
-    const indices = Array.from(selectedIndices).filter((i) => i < queryResult.rows.length);
-    if (indices.length === 0) { message.warning(t('common.pleaseSelectRows')); return; }
-    const sqls = indices.map((i) => generateUpdateSql(tableName, queryResult.columns, queryResult.rows[i], primaryKeyCol.column_name, pkIdx, dbType));
-    navigator.clipboard.writeText(sqls.join('\n'));
-    message.success(`${t('common.copyTable.copied')} ${indices.length} UPDATE`); closeCtx();
-  }, [tableName, primaryKeyCol, selectedIndices, queryResult, dbType, message, t, closeCtx]);
-  const copyAsDelete = useCallback(() => {
-    if (!tableName || !primaryKeyCol) { message.warning(t('common.currentResultSetCannotGenerateDelete')); return; }
-    const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
-    if (pkIdx < 0) { message.warning(t('common.primaryKeyColumnNotFound')); return; }
-    const indices = Array.from(selectedIndices).filter((i) => i < queryResult.rows.length);
-    if (indices.length === 0) { message.warning(t('common.pleaseSelectRows')); return; }
-    const sql = generateDeleteSql(tableName, primaryKeyCol.column_name, indices.map((i) => queryResult.rows[i][pkIdx]), dbType);
-    navigator.clipboard.writeText(sql); message.success(`${t('common.copyTable.copied')} ${indices.length} DELETE`); closeCtx();
-  }, [tableName, primaryKeyCol, selectedIndices, queryResult, dbType, message, t, closeCtx]);
-
   // 导出
   const handleExport = useCallback((format: string) => {
     const cols = queryResult.columns; const rows = queryResult.rows;
@@ -302,6 +272,12 @@ export function ResultGrid({
   if (queryResult.rows.length === 0) return <Empty description={originalSql ? t('common.noDataReturned') : undefined} />;
 
   const hasChanges = modifiedRows.size > 0 || deletedIndices.size > 0;
+
+  const selectedRows = useMemo(() => {
+    return Array.from(selectedIndices)
+      .filter((i) => i < allRows.length)
+      .map((i) => allRows[i]);
+  }, [selectedIndices, allRows]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -360,24 +336,41 @@ export function ResultGrid({
           isCellModified={isCellModified}
           onSelectionChange={handleSelectionChange}
           onCellEdited={handleCellEdited}
-          onCellContextMenu={(col, row, bounds) => setCtx({ v: true, x: bounds.left, y: bounds.top })}
+          onCellContextMenu={(col, row, bounds) => {
+            const colName = queryResult.columns[col];
+            const rowData = row >= 0 && row < queryResult.rows.length ? queryResult.rows[row] : undefined;
+            openMenu(bounds.x, bounds.y, {
+              row,
+              col,
+              cellValue: rowData?.[col],
+              colName,
+              rowData: rowData ? { ...rowData, __row_index: row } : undefined,
+            });
+          }}
           editable={isEditable}
         />
       </div>
 
-      {/* Context Menu */}
-      {contextMenu.v && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1999 }} onClick={closeCtx} />
-          <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 2000, background: 'var(--background-card)', border: '1px solid var(--border)', borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', padding: '4px 0', minWidth: 180 }} onClick={closeCtx}>
-            {tableName && <CtxItem icon={<CopyOutlined />} label={t('common.dataGrid.copyAsInsert')} onClick={copyAsInsert} />}
-            {tableName && primaryKeyCol && <CtxItem icon={<CopyOutlined />} label={t('common.dataGrid.copyAsUpdate')} onClick={copyAsUpdate} />}
-            {tableName && primaryKeyCol && <CtxItem icon={<DeleteOutlined />} label={t('common.copyAsDelete')} onClick={copyAsDelete} />}
-            {isEditable && <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />}
-            {isEditable && <CtxItem icon={<DeleteOutlined />} label={t('common.deleteSelectedRows')} onClick={() => { closeCtx(); handleDeleteSelected(); }} danger />}
-          </div>
-        </>
-      )}
+      <ResultGridContextMenu
+        menuState={menuState}
+        menuTarget={menuTarget}
+        selectedRows={selectedRows}
+        context={{
+          dbType,
+          tableName: tableName ?? undefined,
+          columns: tableColumns,
+          queryColumns: queryResult.columns,
+          isEditable,
+          onCopyToClipboard: (text) => navigator.clipboard.writeText(text),
+          onCellEdited: handleCellEdited,
+        }}
+        onClose={closeMenu}
+        onAddRow={() => {
+          const newRow = queryResult.columns.map(() => null);
+          setNewRows((prev) => [...prev, newRow]);
+          message.success(`${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`);
+        }}
+      />
 
       {/* SQL Preview */}
       {isEditable && operationSql && (
@@ -387,13 +380,6 @@ export function ResultGrid({
       )}
     </div>
   );
-}
-
-function CtxItem({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
-  return <div style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: danger ? 'var(--color-error)' : 'var(--text-primary)' }}
-    onClick={(e) => { e.stopPropagation(); onClick(); }}
-    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--background-hover)')}
-    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>{icon}{label}</div>;
 }
 
 // ── ExplainPlanGrid ──
