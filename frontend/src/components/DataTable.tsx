@@ -845,9 +845,7 @@ export const DataTable = memo(function DataTable({
             <Spin size="large" />
           </div>
         )}
-        {!loading && (filteredRows.length === 0 || !hasLoaded) && hasLoaded ? (
-          <Empty description={t('common.noData')} style={{ marginTop: '20%' }} />
-        ) : glideCols.length > 0 ? (
+        {glideCols.length > 0 ? (
           <GlideDataTable columns={glideCols} rows={glideRows} hiddenColumns={hiddenColumns}
             rowStatus={tableRowStatus} isCellModified={tableCellModified}
             scrollToRowIndex={scrollToRowIndex}
@@ -866,7 +864,7 @@ export const DataTable = memo(function DataTable({
           />
         ) : (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {hasLoaded ? <Empty description={t('common.noTableStructure')} /> : <Spin size="large" />}
+            {loading ? <Spin size="large" /> : <Empty description={hasLoaded ? t('common.noTableStructure') : t('common.noData')} />}
           </div>
         )}
       </div>

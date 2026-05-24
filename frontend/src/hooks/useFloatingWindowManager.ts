@@ -15,7 +15,7 @@ export function useFloatingWindowManager() {
 
   // 创建浮动窗口（Wails 暂不支持多窗口，保留接口供后续实现）
   const createFloatingWindow = useCallback(
-    async (sqlTabKey: string, _connectionId?: string, _database?: string, _defaultQuery?: string) => {
+    async (sqlTabKey: string, connectionId?: string, database?: string, defaultQuery?: string) => {
       console.warn('Floating windows not supported in Wails v2 yet:', sqlTabKey);
       return null;
     },
@@ -23,7 +23,7 @@ export function useFloatingWindowManager() {
   );
 
   // 关闭浮动窗口
-  const closeFloatingWindow = useCallback(async (_sqlTabKey: string) => {
+  const closeFloatingWindow = useCallback(async (sqlTabKey: string) => {
     // No-op for now
   }, []);
 

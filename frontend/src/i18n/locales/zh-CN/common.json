@@ -1327,6 +1327,7 @@
     "loadFailed": "加载失败",
     "messages": "消息",
     "newRowAdded": "新行已添加",
+    "newRowsCancelled": "已取消新增行",
     "noLogs": "无日志",
     "openTable": "打开表",
     "queryResultsExceeded": "查询结果超过限制",

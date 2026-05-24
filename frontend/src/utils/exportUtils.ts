@@ -18,7 +18,7 @@ export interface ExportOptions {
  * @param options 导出选项
  */
 export function exportToExcel(
-  data: Record<string, any>[],
+  data: Record<string, unknown>[],
   columns?: { field: string; headerName?: string }[],
   options: ExportOptions = {}
 ) {
@@ -56,11 +56,11 @@ export function exportToExcel(
  * 处理大数据集的 Excel 导出（分块处理）
  */
 function exportLargeExcel(
-  data: Record<string, any>[],
+  data: Record<string, unknown>[],
   columns?: { field: string; headerName?: string }[],
   options: ExportOptions = {}
 ) {
-  const { filename = 'export.xlsx', sheetName = 'Sheet1', chunkSize = 5000 } = options;
+  const { filename = 'export.xlsx', chunkSize = 5000 } = options;
   
   // 显示进度提示
   showExportProgress(0, data.length);
@@ -119,7 +119,7 @@ function exportLargeExcel(
  * @param options 导出选项
  */
 export function exportToCSV(
-  data: Record<string, any>[],
+  data: Record<string, unknown>[],
   columns?: { field: string; headerName?: string }[],
   options: ExportOptions = {}
 ) {
@@ -156,7 +156,7 @@ export function exportToCSV(
  * 流式处理大数据集的 CSV 导出
  */
 function exportLargeCSV(
-  data: Record<string, any>[],
+  data: Record<string, unknown>[],
   columns?: { field: string; headerName?: string }[],
   options: ExportOptions = {}
 ) {
@@ -219,7 +219,7 @@ function exportLargeCSV(
  * @param data 数据数组
  * @param options 导出选项
  */
-export function exportToJSON(data: Record<string, any>[], options: ExportOptions = {}) {
+export function exportToJSON(data: Record<string, unknown>[], options: ExportOptions = {}) {
   if (data.length === 0) {
     throw new Error('没有数据可导出');
   }
@@ -240,7 +240,7 @@ export function exportToJSON(data: Record<string, any>[], options: ExportOptions
  * 流式处理大数据集的 JSON 导出
  */
 function exportLargeJSON(
-  data: Record<string, any>[],
+  data: Record<string, unknown>[],
   options: ExportOptions = {}
 ) {
   const { filename = 'export.json', chunkSize = 5000 } = options;
@@ -418,7 +418,7 @@ function downloadBlob(blob: Blob, filename: string) {
 /**
  * 导出进度管理
  */
-let progressModal: any = null;
+let progressModal: ReturnType<typeof Modal.confirm> | null = null;
 let progressTimer: NodeJS.Timeout | null = null;
 
 function showExportProgress(current: number, total: number) {

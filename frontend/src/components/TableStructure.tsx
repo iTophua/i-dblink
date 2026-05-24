@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../hooks/useApi';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../types/api';
 
-const { Text } = Typography;
+
 
 interface TableInfo {
   table_name: string;

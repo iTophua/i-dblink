@@ -338,9 +338,8 @@ export function ResultGrid({
     }
   }, [queryResult, message, t]);
 
-  // 错误/空
+  // 错误
   if (queryResult.error) return <Empty description={<span style={{ color: 'var(--color-error)' }}>{queryResult.error}</span>} />;
-  if (queryResult.rows.length === 0) return <Empty description={originalSql ? t('common.noDataReturned') : undefined} />;
 
   const hasChanges = modifiedRows.size > 0 || deletedIndices.size > 0 || newRows.length > 0;
 

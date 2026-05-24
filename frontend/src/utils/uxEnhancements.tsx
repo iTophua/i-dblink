@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, Card, Typography, Space, Tag, Divider, theme } from 'antd';
+import { Modal, Typography, Space, Tag } from 'antd';
 import {
   ThunderboltOutlined,
   BellOutlined,
@@ -7,19 +7,17 @@ import {
   PlusOutlined,
   ReloadOutlined,
   FullscreenOutlined,
-  SunOutlined,
   MoonOutlined,
   SaveOutlined,
   CloseOutlined,
   CopyOutlined,
   EditOutlined,
-  EnterOutlined,
   SettingOutlined,
   FolderOpenOutlined,
   MinusOutlined,
 } from '@ant-design/icons';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface ShortcutCategory {
   title: string;
@@ -96,9 +94,6 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
   open,
   onClose,
 }) => {
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
-
   return (
     <Modal
       title={
@@ -200,8 +195,6 @@ export const useKeyboardShortcuts = (handlers: Record<string, () => void>) => {
       if (e.key !== 'Control' && e.key !== 'Meta' && e.key !== 'Shift' && e.key !== 'Alt') {
         key.push(e.key.toLowerCase());
       }
-
-      const keyCombo = key.join('+');
 
       for (const [combo, handler] of Object.entries(handlers)) {
         const comboParts = combo.split('+');

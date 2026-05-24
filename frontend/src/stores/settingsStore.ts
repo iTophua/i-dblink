@@ -41,41 +41,44 @@ const defaultSettings: AppSettings = {
 
 const VERSION = 1;
 
-function migrate(state: any, version: number | undefined): Partial<SettingsState> {
+function migrate(state: unknown, version: number | undefined): Partial<SettingsState> {
   if (version === undefined) {
     return { settings: defaultSettings };
   }
 
+  const s = state as Record<string, unknown>;
+  const stateSettings = s.settings as Record<string, unknown> | undefined;
+
   // 迁移逻辑：从旧版格式迁移到新版格式
-  if (state.settings && state.settings.theme && !state.settings.themePreset) {
-    const oldSettings = state.settings;
+  if (stateSettings && stateSettings.theme && !stateSettings.themePreset) {
+    const oldTheme = stateSettings.theme as string;
     const preset =
-      oldSettings.theme === 'dark'
+      oldTheme === 'dark'
         ? 'midnightDeep'
-        : oldSettings.theme === 'light'
+        : oldTheme === 'light'
           ? 'nordicFrost'
           : 'midnightDeep';
-    let mode: ThemeMode = 'dark';
-    if (typeof window !== 'undefined' && oldSettings.theme === 'system') {
-      mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    } else if (oldSettings.theme === 'system') {
-      mode = 'dark'; // fallback for non-browser environments
-    } else {
-      mode = oldSettings.theme as ThemeMode;
-    }
+    const mode: ThemeMode =
+      oldTheme === 'system'
+        ? typeof window !== 'undefined'
+          ? window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light'
+          : 'dark'
+        : (oldTheme as ThemeMode);
     return {
       settings: {
         ...defaultSettings,
-        ...oldSettings,
+        ...(stateSettings as unknown as Partial<AppSettings>),
         themePreset: preset,
         themeMode: mode,
-        themeSyncSystem: oldSettings.theme === 'system',
+        themeSyncSystem: oldTheme === 'system',
       },
     };
   }
 
   return {
-    settings: { ...defaultSettings, ...state.settings },
+    settings: { ...defaultSettings, ...stateSettings },
   };
 }
 

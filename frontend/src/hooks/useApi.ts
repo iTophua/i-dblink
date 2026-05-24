@@ -4,7 +4,6 @@ import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
 
-import { escapeSqlIdentifier, escapeSqlValue } from '../utils/sqlUtils';
 import { getDialect } from '../utils/sqlDialects';
 
 // 防重复调用：跟踪正在加载的 cacheKey
@@ -432,7 +431,7 @@ export const useDatabase = () => {
     setTableDataLoading,
     setTableDataFailed,
     getTableData,
-    clearTableData,
+
   } = useAppStore();
 
   const getTables = useCallback(
@@ -615,7 +614,7 @@ export const useDatabase = () => {
         const row = result.rows[0];
 
         // 统一的字段映射
-        const getValue = (names: string[]): any => {
+        const getValue = (names: string[]): unknown => {
           for (const name of names) {
             const idx = columns.indexOf(name);
             if (idx >= 0) return row[idx];

@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * @param dependencies - 触发重新计算的依赖项
  * @returns tableScrollHeight - 表格滚动区域的高度
  */
-export function useTableScrollHeight(dependencies: any[] = []) {
+export function useTableScrollHeight(dependencies: unknown[] = []) {
   const [tableScrollHeight, setTableScrollHeight] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);

@@ -1,5 +1,5 @@
 import { useHotkeys, Options as HotkeysOptions } from 'react-hotkeys-hook';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { MENU_SHORTCUTS, isMacOS } from '../constants/menuShortcuts';
 import { useSettingsStore } from '../stores/settingsStore';
 

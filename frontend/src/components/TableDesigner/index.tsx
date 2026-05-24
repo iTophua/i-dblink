@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Tabs,
   Table,
@@ -25,13 +25,13 @@ import {
   ColumnWidthOutlined,
   DragOutlined,
 } from '@ant-design/icons';
-import Editor, { OnMount } from '@monaco-editor/react';
+import Editor from '@monaco-editor/react';
 import type { ColumnsType } from 'antd/es/table';
 import { api } from '../../api';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../../types/api';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { getDialect } from '../../utils/sqlDialects';
-import type { CreateTableOptions, AlterTableOptions, DialectColumn, DialectIndex, DialectForeignKey } from '../../utils/sqlDialects/types';
+import type { AlterTableOptions, DialectColumn, DialectIndex, DialectForeignKey } from '../../utils/sqlDialects/types';
 
 const { Text } = Typography;
 
@@ -336,7 +336,7 @@ export function TableDesigner({
 }: TableDesignerProps) {
   const { t } = useTranslation();
   const tc = useThemeColors();
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<unknown>(null);
   const isEditMode = !!propTableName;
   const [activeTab, setActiveTab] = useState('columns');
   const [tableName, setTableName] = useState(propTableName || '');

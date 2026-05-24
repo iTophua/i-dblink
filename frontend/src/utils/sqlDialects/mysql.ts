@@ -4,9 +4,6 @@ import type {
   PaginationOptions,
   CreateTableOptions,
   AlterTableOptions,
-  AlterColumnChange,
-  AlterIndexChange,
-  AlterForeignKeyChange,
   DialectColumn,
 } from './types';
 import type { DatabaseType } from '../../types/api';
@@ -190,7 +187,7 @@ class MySQLDialect extends BaseDialect implements SqlDialect {
   // ── 特性 ──────────────────────────────────────────────────────────────
 
   supportsAlterOperation(
-    operation: 'modifyColumn' | 'dropColumn' | 'addIndex' | 'dropIndex' | 'addForeignKey' | 'dropForeignKey'
+    _operation: 'modifyColumn' | 'dropColumn' | 'addIndex' | 'dropIndex' | 'addForeignKey' | 'dropForeignKey'
   ): boolean {
     return true; // MySQL 支持所有 ALTER TABLE 操作
   }

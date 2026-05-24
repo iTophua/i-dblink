@@ -54,7 +54,6 @@ export interface ThemeColors {
 }
 
 export function useThemeColors(): ThemeColors {
-  const { token } = theme.useToken();
   const { settings } = useSettingsStore();
   const { themePreset, themeMode, themeSyncSystem } = settings;
 

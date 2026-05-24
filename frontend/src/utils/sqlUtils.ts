@@ -1,4 +1,3 @@
-import type { DatabaseType } from '../types/api';
 import { getDialect } from './sqlDialects';
 
 /**

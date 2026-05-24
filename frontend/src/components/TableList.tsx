@@ -438,7 +438,6 @@ function TableListComponent({
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(getInitialViewMode);
   const [localLoading, setLocalLoading] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: null, order: 'asc' });
-  const tc = useThemeColors();
   const dbType = useAppStore(
     (state) => state.connections.find((c) => c.id === connectionId)?.db_type,
   );
@@ -503,7 +502,9 @@ function TableListComponent({
   useEffect(() => {
     try {
       localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
-    } catch {}
+    } catch {
+      // Ignore localStorage errors
+    }
   }, [viewMode]);
 
   useEffect(() => {
@@ -550,7 +551,7 @@ function TableListComponent({
   );
 
   const handleTableClickRef = useRef(handleTableClick);
-  handleTableClickRef.current = handleTableClick;
+  handleTableClickRef.current = handleTableClick; // eslint-disable-line react-hooks/refs
 
   const refreshTablesRef = useCallback(async () => {
     if (!database) return;
@@ -589,7 +590,7 @@ function TableListComponent({
       try {
         setLocalLoading(true);
         await getTables(connectionId, database, true, value || undefined);
-      } catch (error: any) {
+    } catch (error: unknown) {
         if (isMountedRef.current) {
           console.error('Search failed:', error);
         }

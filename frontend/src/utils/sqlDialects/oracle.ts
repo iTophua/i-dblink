@@ -226,7 +226,7 @@ class OracleDialect extends BaseDialect implements SqlDialect {
   // ── 特性 ──────────────────────────────────────────────────────────────
 
   supportsAlterOperation(
-    operation: 'modifyColumn' | 'dropColumn' | 'addIndex' | 'dropIndex' | 'addForeignKey' | 'dropForeignKey'
+    _operation: 'modifyColumn' | 'dropColumn' | 'addIndex' | 'dropIndex' | 'addForeignKey' | 'dropForeignKey'
   ): boolean {
     return true;
   }

@@ -61,33 +61,34 @@ const defaultWorkspace: WorkspaceSnapshot = {
 
 const VERSION = 5;
 
-function migrate(state: any, version: number | undefined): Partial<WorkspaceState> {
+function migrate(state: unknown, version: number | undefined): Partial<WorkspaceState> {
+  const s = state as Record<string, unknown>;
   if (version === undefined) {
     return { ...defaultWorkspace };
   }
   if (version === 1) {
-    if (state.openedSqlTabs) {
-      state.openedSqlTabs = state.openedSqlTabs.map((t: any) => ({
+    if (s.openedSqlTabs) {
+      s.openedSqlTabs = (s.openedSqlTabs as Array<SavedSqlTab & { defaultQuery?: string }>).map((t) => ({
         ...t,
         content: t.content || t.defaultQuery || undefined,
       }));
     }
   }
   if (version === 2) {
-    if (!state.openedViewDefTabs) {
-      state.openedViewDefTabs = [];
+    if (!s.openedViewDefTabs) {
+      s.openedViewDefTabs = [];
     }
   }
   if (version === 3) {
     // v4: 应用重启后重置连接展开状态
-    state.expandedKeys = [];
+    s.expandedKeys = [];
   }
   if (version === 4) {
     // v5: tab key 格式变更，重置 activeKey 避免找不到对应 tab
-    state.activeKey = 'objects';
+    s.activeKey = 'objects';
   }
   // 确保返回完整的 defaultWorkspace 结构
-  return { ...defaultWorkspace, ...state };
+  return { ...defaultWorkspace, ...s } as unknown as WorkspaceSnapshot;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -101,25 +102,22 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           let hasChanges = false;
           
           for (const key in updates) {
-            const updateValue = (updates as any)[key];
+            const updateValue = (updates as Record<string, unknown>)[key];
             if (Array.isArray(updateValue)) {
-              // 对于数组，检查是否需要更新
-              if (JSON.stringify((newState as any)[key]) !== JSON.stringify(updateValue)) {
-                (newState as any)[key] = [...updateValue];
+              if (JSON.stringify((newState as Record<string, unknown>)[key]) !== JSON.stringify(updateValue)) {
+                (newState as Record<string, unknown>)[key] = [...updateValue];
                 hasChanges = true;
               }
             } else if (typeof updateValue === 'object' && updateValue !== null) {
-              // 对于对象，深度合并
-              const current = (newState as any)[key] || {};
-              const updated = { ...current, ...updateValue };
+              const current = (newState as Record<string, unknown>)[key] || {};
+              const updated = { ...(current as Record<string, unknown>), ...updateValue };
               if (JSON.stringify(current) !== JSON.stringify(updated)) {
-                (newState as any)[key] = updated;
+                (newState as Record<string, unknown>)[key] = updated;
                 hasChanges = true;
               }
             } else {
-              // 对于基本类型，直接赋值
-              if ((newState as any)[key] !== updateValue) {
-                (newState as any)[key] = updateValue;
+              if ((newState as Record<string, unknown>)[key] !== updateValue) {
+                (newState as Record<string, unknown>)[key] = updateValue;
                 hasChanges = true;
               }
             }
@@ -128,29 +126,28 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           return hasChanges ? newState : state;
         }),
         
-        // 批量更新方法，减少多次状态更新的开销
         batchUpdate: (updates) => {
           set((state) => {
             const newState = { ...state };
             let hasChanges = false;
             
             for (const key in updates) {
-              const updateValue = (updates as any)[key];
+              const updateValue = (updates as Record<string, unknown>)[key];
               if (Array.isArray(updateValue)) {
-                if (JSON.stringify((newState as any)[key]) !== JSON.stringify(updateValue)) {
-                  (newState as any)[key] = [...updateValue];
+                if (JSON.stringify((newState as Record<string, unknown>)[key]) !== JSON.stringify(updateValue)) {
+                  (newState as Record<string, unknown>)[key] = [...updateValue];
                   hasChanges = true;
                 }
               } else if (typeof updateValue === 'object' && updateValue !== null) {
-                const current = (newState as any)[key] || {};
-                const updated = { ...current, ...updateValue };
+                const current = (newState as Record<string, unknown>)[key] || {};
+                const updated = { ...(current as Record<string, unknown>), ...updateValue };
                 if (JSON.stringify(current) !== JSON.stringify(updated)) {
-                  (newState as any)[key] = updated;
+                  (newState as Record<string, unknown>)[key] = updated;
                   hasChanges = true;
                 }
               } else {
-                if ((newState as any)[key] !== updateValue) {
-                  (newState as any)[key] = updateValue;
+                if ((newState as Record<string, unknown>)[key] !== updateValue) {
+                  (newState as Record<string, unknown>)[key] = updateValue;
                   hasChanges = true;
                 }
               }

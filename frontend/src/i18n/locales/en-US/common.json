@@ -1311,6 +1311,7 @@
     "loadFailed": "Load Failed",
     "messages": "Messages",
     "newRowAdded": "新行已添加",
+    "newRowsCancelled": "New rows cancelled",
     "noLogs": "No Logs",
     "openTable": "Open Table",
     "queryResultsExceeded": "查询结果超过限制",
