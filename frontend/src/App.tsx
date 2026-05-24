@@ -1,5 +1,5 @@
 import { MainLayout } from './components/MainLayout';
-import { ConfigProvider, theme, App as AntdApp } from 'antd';
+import { ConfigProvider, Modal, theme, App as AntdApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import { useEffect, useMemo, useState } from 'react';
@@ -10,6 +10,8 @@ import i18n from './i18n';
 import './style.css';
 import './App.css';
 import { EventsOn } from './api';
+
+// NOTE: Modal 过渡动画已通过全局 CSS 禁用（style.css 中覆盖 rc-motion 相关样式）
 
 // Check if running in Wails environment
 const isWails =

@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 
@@ -164,26 +166,36 @@ func (a *App) ShowDevTools() {
 }
 
 // isDevMode 检查是否为开发模式
-func (a *App) isDevMode() bool {
-	exe, err := os.Executable()
-	if err != nil {
-		return false
+func isDevMode() bool {
+	if os.Getenv("WAILS_DEV") == "1" {
+		return true
 	}
-	// Wails dev 模式下二进制通常在临时目录
-	return strings.Contains(exe, os.TempDir()) || os.Getenv("WAILS_DEV") == "1"
+
+	// wails dev 编译的可执行文件通常位于 build/bin/ 下
+	exe, err := os.Executable()
+	if err == nil && strings.Contains(exe, "build/bin") {
+		return true
+	}
+
+	return false
 }
+
+func (a *App) isDevMode() bool { return isDevMode() }
 
 // getDataDir 获取数据目录
 func (a *App) getDataDir() string {
-	if a.isDevMode() {
-		return filepath.Join(".", ".dev-data")
-	}
-
-	// 生产模式使用系统应用数据目录
+	// 统一使用用户主目录下的固定位置，避免工作目录变化导致数据丢失
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
+
+	if a.isDevMode() {
+		// 开发模式使用独立子目录，避免覆盖生产数据
+		return filepath.Join(home, ".idblink", "dev-data")
+	}
+
+	// 生产模式使用系统应用数据目录
 	return filepath.Join(home, ".idblink", "data")
 }
 
@@ -522,6 +534,15 @@ func callHandler(handlerFunc func(http.ResponseWriter, *http.Request), reqBody i
 		return nil, fmt.Errorf("marshal request failed: %w", err)
 	}
 
+	if isDevMode() {
+		name := trimHandlerName(goruntime.FuncForPC(reflect.ValueOf(handlerFunc).Pointer()).Name())
+		bodyStr := string(body)
+		if len(bodyStr) > 500 {
+			bodyStr = bodyStr[:500] + "..."
+		}
+		fmt.Printf("[API] %s → %s\n", name, bodyStr)
+	}
+
 	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -529,6 +550,15 @@ func callHandler(handlerFunc func(http.ResponseWriter, *http.Request), reqBody i
 	handlerFunc(rr, req)
 
 	respBody := rr.Body.Bytes()
+
+	if isDevMode() {
+		name := trimHandlerName(goruntime.FuncForPC(reflect.ValueOf(handlerFunc).Pointer()).Name())
+		respStr := string(respBody)
+		if len(respStr) > 500 {
+			respStr = respStr[:500] + "..."
+		}
+		fmt.Printf("[API] %s ← %s\n", name, respStr)
+	}
 
 	// 检查响应中是否包含 error 字段
 	var genericResp struct {
@@ -539,6 +569,13 @@ func callHandler(handlerFunc func(http.ResponseWriter, *http.Request), reqBody i
 	}
 
 	return respBody, nil
+}
+
+func trimHandlerName(name string) string {
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		name = name[idx+1:]
+	}
+	return strings.TrimSuffix(name, "-fm")
 }
 
 // callHandlerRaw 调用 handler 并返回原始响应（不检查 error 字段）
