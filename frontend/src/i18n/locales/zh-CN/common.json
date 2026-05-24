@@ -306,6 +306,8 @@
       "insertFailed": "插入失败",
       "updateSuccess": "已更新",
       "updateFailed": "更新失败",
+      "updateConfirm": "确认提交修改？",
+      "updateConfirmContent": "确定将 {{count}} 处修改提交到数据库？",
       "copyInsert": "已复制 INSERT 语句",
       "copyUpdate": "已复制 UPDATE 语句",
       "editCell": "编辑单元格",

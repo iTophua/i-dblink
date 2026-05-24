@@ -93,6 +93,5 @@ e2e/screenshots/
 .env.development
 .env.production
 .env.test
-.gitnexus
 
 

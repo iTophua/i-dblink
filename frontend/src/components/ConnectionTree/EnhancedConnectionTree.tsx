@@ -1107,6 +1107,10 @@ export function EnhancedConnectionTree({
 
         if (conn.status !== 'connected') {
           await onConnect(key);
+          onExpandKeys([
+            ...expandedKeysRef.current.filter((k) => !k.startsWith(`${key}::`)),
+            key,
+          ]);
         } else {
           const isExpanded = expandedKeysRef.current.includes(key);
           if (isExpanded) {

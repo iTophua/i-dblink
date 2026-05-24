@@ -290,6 +290,8 @@
       "insertFailed": "Insert failed",
       "updateSuccess": "Updated",
       "updateFailed": "Update failed",
+      "updateConfirm": "Confirm to submit changes?",
+      "updateConfirmContent": "Submit {{count}} change(s) to the database?",
       "copyInsert": "INSERT statement copied",
       "copyUpdate": "UPDATE statement copied",
       "editCell": "Edit cell",

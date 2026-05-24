@@ -605,7 +605,7 @@ export const useDatabase = () => {
         const dialect = getDialect(dbType);
 
         const sql = dialect.buildTableInfoQuery(tableName, database);
-        const result = await api.executeQuery(connectionId, sql);
+        const result = await api.executeQuery(connectionId, sql, database);
 
         if (result.error || result.rows.length === 0) {
           return null;
@@ -638,7 +638,6 @@ export const useDatabase = () => {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '获取表信息失败';
         setError(errorMsg);
-        message.error(errorMsg);
         throw err;
       } finally {
         setLoading(false);

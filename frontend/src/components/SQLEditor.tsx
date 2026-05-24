@@ -269,6 +269,14 @@ export function SQLEditor({
 
   const tc = useThemeColors();
 
+  // 响应式切换 Monaco Editor 主题
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    if (monaco) {
+      monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
+    }
+  }, [tc.isDark]);
+
   const { executeQuery: executeQueryApi, getTables, getColumns, getAllColumns } = useDatabase();
 
   // 监听 tab-action 事件（来自菜单或工具栏的快捷键）
@@ -499,8 +507,62 @@ export function SQLEditor({
         },
       });
 
+    // 注册亮色主题
+    monaco.editor.defineTheme('custom-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '0000FF' },
+        { token: 'type', foreground: '267F99' },
+        { token: 'string', foreground: 'A31515' },
+        { token: 'comment', foreground: '008000' },
+        { token: 'number', foreground: '098658' },
+        { token: 'operator', foreground: '000000' },
+        { token: 'delimiter', foreground: '000000' },
+        { token: 'variable', foreground: '001080' },
+        { token: 'function', foreground: '795E26' },
+        { token: 'predefined', foreground: '267F99' },
+      ],
+      colors: {
+        'editor.background': '#FFFFFF',
+        'editor.foreground': '#000000',
+        'editorCursor.foreground': '#000000',
+        'editor.lineHighlightBackground': '#F3F3F3',
+        'editor.selectionBackground': '#ADD6FF',
+        'editor.inactiveSelectionBackground': '#E5EBF1',
+        'editorLineNumber.foreground': '#237893',
+        'editorLineNumber.activeForeground': '#0B216F',
+        'editor.findMatchBackground': '#A8AC94',
+        'editor.findMatchHighlightBackground': '#E2E6D4',
+        'editorHoverWidget.background': '#F8F8F8',
+        'editorHoverWidget.border': '#C8C8C8',
+        'editorSuggestWidget.background': '#F8F8F8',
+        'editorSuggestWidget.border': '#C8C8C8',
+        'editorSuggestWidget.selectedBackground': '#D6D6D6',
+        'editorSuggestWidget.foreground': '#000000',
+        'editorSuggestWidget.selectedForeground': '#000000',
+        'editorWidget.background': '#F8F8F8',
+        'editorWidget.border': '#C8C8C8',
+        'editorWidget.resizeBorder': '#C8C8C8',
+        'editorWidget.shadow': '#A8A8A8',
+        'editorGroupHeader.tabsBackground': '#F3F3F3',
+        'editorGroupHeader.noTabsBackground': '#FFFFFF',
+        'editorGroup.border': '#C8C8C8',
+        'editorGroup.dropBackground': '#E8E8E8',
+        'editorGroupHeader.tabsBorder': '#C8C8C8',
+        'editorGroupHeader.noTabsBorder': '#C8C8C8',
+        'editorMarkerNavigation.background': '#F3F3F3',
+        'editorMarkerNavigation.border': '#C8C8C8',
+        'editorOverviewRuler.background': '#FFFFFF',
+        'editorOverviewRuler.border': '#C8C8C8',
+        'editorIndentGuide.background': '#D3D3D3',
+        'editorIndentGuide.activeBackground': '#939393',
+        'editorWhitespace.foreground': '#D3D3D3',
+      },
+    });
+
     // 应用主题
-    monaco.editor.setTheme('custom-dark');
+    monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
 
     // 注销旧的补全提供者（如果存在）
     if (completionProviderRef.current) {

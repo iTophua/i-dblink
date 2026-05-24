@@ -39,7 +39,7 @@ export interface GlideDataTableProps {
   onCellsEdited?: (edits: Array<{ col: number; row: number; value: string }>) => void;
   onCellContextMenu?: (col: number, row: number, bounds: { x: number; y: number }) => void;
   onHeaderClicked?: (colIndex: number) => void;
-  onColumnResized?: (col: GridColumn, newWidth: number) => void;
+  onColumnResized?: (col: GridColumn, newWidth: number, colIndex: number) => void;
   rowHeight?: number;
   headerHeight?: number;
   editable?: boolean;
@@ -94,15 +94,18 @@ export function valueToGridCell(value: unknown, editable: boolean): GridCell {
 const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
   const ref = useRef<HTMLInputElement>(null);
   const cancelledRef = useRef(false);
+  const tc = useThemeColors();
   const cellData = (p.value as any).data;
   const [val, setVal] = useState(p.initialValue ?? String(cellData ?? ''));
 
   useEffect(() => {
-    if (p.forceEditMode && ref.current) {
-      ref.current.focus();
-      ref.current.select();
-    }
-  }, [p.forceEditMode]);
+    const timer = setTimeout(() => {
+      if (ref.current) {
+        ref.current.focus();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const commit = useCallback((v: string) => {
     if (cancelledRef.current) return;
@@ -128,13 +131,15 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
         width: p.target.width,
         height: p.target.height,
         border: 'none',
-        outline: 'none',
+        outline: '1px solid #1890ff',
+        outlineOffset: -1,
         padding: '0 8px',
         margin: 0,
         fontSize: 12,
         fontFamily: 'sans-serif',
-        background: 'transparent',
-        color: 'inherit',
+        background: tc.isDark ? '#252526' : '#FFFFFF',
+        color: tc.isDark ? '#D4D4D4' : '#000000',
+        caretColor: tc.isDark ? '#FFFFFF' : '#000000',
         boxSizing: 'border-box',
       }}
     />
@@ -167,15 +172,41 @@ export function GlideDataTable({
     [isDark]
   );
 
+  // 内部列顺序和宽度（仅在父组件未传回调时使用）
+  const [internalColOrder, setInternalColOrder] = useState<string[] | null>(null);
+  const [internalColWidths, setInternalColWidths] = useState<Record<string, number>>({});
+
+  // 应用内部列重排和宽度
+  const processedColumns = useMemo(() => {
+    let result = columns;
+    if (!onColumnMoved && internalColOrder) {
+      const orderSet = new Set(internalColOrder);
+      const reordered = internalColOrder
+        .map((id) => columns.find((c) => c.id === id))
+        .filter(Boolean) as GlideColumn[];
+      result = [...reordered, ...columns.filter((c) => !orderSet.has(c.id))];
+    }
+    if (!onColumnResized) {
+      result = result.map((c) => ({
+        ...c,
+        width: internalColWidths[c.id] ?? c.width,
+      }));
+    }
+    return result;
+  }, [columns, onColumnMoved, internalColOrder, onColumnResized, internalColWidths]);
+
   const gridColumns = useMemo<GridColumn[]>(
-    () => buildGridColumns(columns, hiddenSet),
-    [columns, hiddenSet]
+    () => buildGridColumns(processedColumns, hiddenSet),
+    [processedColumns, hiddenSet]
   );
 
   const [gridSelection, setGridSelection] = useState<GridSelection>({
     columns: CompactSelection.empty(),
     rows: CompactSelection.empty(),
   });
+  const emptyClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentSelectionRef = useRef(gridSelection);
+  currentSelectionRef.current = gridSelection;
 
   // ===== getCellContent =====
   const getCellContent = useCallback(
@@ -281,6 +312,10 @@ export function GlideDataTable({
   // ===== 选择变化 =====
   const handleSelectionChange = useCallback(
     (newSelection: GridSelection) => {
+      if (emptyClickTimerRef.current !== null) {
+        clearTimeout(emptyClickTimerRef.current);
+        emptyClickTimerRef.current = null;
+      }
       setGridSelection(newSelection);
       if (onSelectionChange) {
         const indices = newSelection.rows.toArray();
@@ -289,6 +324,76 @@ export function GlideDataTable({
     },
     [rows, onSelectionChange]
   );
+
+  // ===== 列拖拽 =====
+  const handleColumnMoved = useCallback(
+    (startIndex: number, endIndex: number) => {
+      if (onColumnMoved) {
+        onColumnMoved(startIndex, endIndex);
+        return;
+      }
+      // 用 gridColumns 而非 columns prop 做索引映射，
+      // 因为 DataEditor 的索引基于当前显示列（经过重排），
+      // columns prop 始终是原始顺序，索引对不上会导致恢复。
+      const visibleCols = gridColumns.filter((c) => c.id !== FILLER_COL_ID);
+      const colId = visibleCols[startIndex]?.id;
+      const targetId = visibleCols[endIndex]?.id;
+      if (!colId || colId === targetId) return;
+      setInternalColOrder((prev) => {
+        const initOrder = () => columns.filter((c) => !hiddenSet.has(c.id)).map((c) => c.id);
+        const cur = prev ? [...prev] : initOrder();
+        const fromIdx = cur.indexOf(colId);
+        if (fromIdx < 0) return cur;
+        const toIdx = targetId ? cur.indexOf(targetId) : cur.length;
+        // 如果列已在目标位置，跳过更新
+        if (fromIdx === toIdx) return prev ?? cur;
+        cur.splice(fromIdx, 1);
+        if (targetId) {
+          const adjustedToIdx = cur.indexOf(targetId);
+          cur.splice(adjustedToIdx, 0, colId);
+        } else {
+          cur.push(colId);
+        }
+        return cur;
+      });
+    },
+    [onColumnMoved, gridColumns, columns, hiddenSet]
+  );
+
+  // ===== 列宽调整 =====
+  const handleColumnResized = useCallback(
+    (col: GridColumn, newWidth: number, _colIndex: number) => {
+      if (onColumnResized) {
+        onColumnResized(col, newWidth, _colIndex);
+        return;
+      }
+      setInternalColWidths((prev) => ({ ...prev, [col.id as string]: newWidth }));
+    },
+    [onColumnResized]
+  );
+
+  // ===== 空区域点击取消选择 =====
+  const handleWrapperPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // 只有点击 wrapper 本身（空白区域）时才清空，点击单元格时不处理
+    if (e.target !== e.currentTarget) return;
+    if (emptyClickTimerRef.current !== null) {
+      clearTimeout(emptyClickTimerRef.current);
+    }
+    emptyClickTimerRef.current = setTimeout(() => {
+      emptyClickTimerRef.current = null;
+      const cur = currentSelectionRef.current;
+      const hasSelection = cur.columns.toArray().length > 0 || cur.rows.toArray().length > 0;
+      if (!hasSelection) return;
+      const empty: GridSelection = {
+        columns: CompactSelection.empty(),
+        rows: CompactSelection.empty(),
+      };
+      setGridSelection(empty);
+      if (onSelectionChange) {
+        onSelectionChange([], empty);
+      }
+    }, 120);
+  }, [onSelectionChange]);
 
   // ===== 编辑 =====
   const handleCellEdited = useCallback(
@@ -306,6 +411,10 @@ export function GlideDataTable({
   const handleCellsEdited = useCallback(
     (newValues: readonly { location: Item; value: EditableGridCell }[]) => {
       if (!onCellsEdited || !editable) return false;
+      // DataEditor 在 Ctrl+Enter 等快捷键时会同时触发
+      // onCellEdited + onCellsEdited（仅1个 cell），
+      // 跳过以阻止父组件弹两次确认。
+      if (onCellEdited && newValues.length <= 1) return true;
       const edits = newValues
         .map(({ location: [col, row], value }) => {
           if (gridColumns[col]?.id === FILLER_COL_ID) return null;
@@ -336,6 +445,7 @@ export function GlideDataTable({
       if (!onCellContextMenu) return;
       const gridCol = gridColumns[cell[0]];
       if (gridCol?.id === FILLER_COL_ID) return;
+      event.preventDefault?.();
       const pos = event?.bounds ?? { x: 0, y: 0 };
       onCellContextMenu(cell[0], cell[1], { x: pos.x, y: pos.y });
     },
@@ -343,7 +453,7 @@ export function GlideDataTable({
   );
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }} onPointerDown={handleWrapperPointerDown}>
       <DataEditor
         columns={gridColumns}
         rows={rows.length}
@@ -352,13 +462,12 @@ export function GlideDataTable({
         drawHeader={drawHeader}
         gridSelection={gridSelection}
         onGridSelectionChange={handleSelectionChange}
-        onColumnMoved={onColumnMoved}
-        onColumnResize={onColumnResized ? (col, newWidth, colIndex) => onColumnResized(col, newWidth, colIndex) : undefined}
+        onColumnMoved={handleColumnMoved}
+        onColumnResize={handleColumnResized}
         onCellEdited={handleCellEdited}
         onCellsEdited={handleCellsEdited}
         onCellContextMenu={handleContextMenu}
         onHeaderClicked={onHeaderClicked}
-        onColumnResized={onColumnResized ? (col, newWidth, colIndex) => onColumnResized(col, newWidth, colIndex) : undefined}
         theme={theme}
         headerHeight={headerHeight}
         rowHeight={rowHeight}

@@ -206,9 +206,9 @@ export function useContextMenu(): UseContextMenuReturn;
 ### DataTable 私有项
 - **Duplicate Row** - 克隆行（新行插入）
 - **Open Row Detail** - 弹窗显示完整行
-- **Find References** - 外键跳转（需后端 API：getForeignKeys）
 
 ### ResultGrid 私有项
+- **Add Row** - 在表格末尾直接插入新空行（不弹窗，与 DataTable 的 Add Row 行为一致）
 - **Submit Changes** - 提交修改到数据库
 - **Undo Changes** - 撤销未提交修改
 - **View Full Text** - 长文本弹窗查看

@@ -46,10 +46,11 @@ export const resultRowStatus = (
   return undefined;
 };
 
-/** 单元格是否被修改（查询结果场景需要传入 modifiedRows Map） */
+/** 单元格是否被修改（查询结果场景需要传入 modifiedRows Map 和原始行数据） */
 export function createResultCellModified(
   modifiedRows: Map<number, unknown[]>,
-  columnNames: string[]
+  columnNames: string[],
+  originalRows: unknown[][]
 ): (row: GlideRow, colId: string) => boolean {
   return (row: GlideRow, colId: string): boolean => {
     const rowId = row.__id as number;
@@ -58,6 +59,8 @@ export function createResultCellModified(
     if (!modified) return false;
     const colIndex = columnNames.indexOf(colId);
     if (colIndex < 0) return false;
-    return modified[colIndex] !== undefined;
+    const originalRow = originalRows[rowId];
+    if (!originalRow) return modified[colIndex] !== undefined;
+    return modified[colIndex] !== originalRow[colIndex];
   };
 }
