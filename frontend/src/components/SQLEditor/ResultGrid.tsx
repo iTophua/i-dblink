@@ -5,7 +5,7 @@
  * 多格式导出(CSV/JSON/Excel/TXT/XML/MD)、底部SQL预览、提交/撤销。
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Button, Space, Empty, Tag, App, Modal, Form, Input, Dropdown, Spin } from 'antd';
+import { Button, Space, Empty, Tag, App, Modal, Dropdown, Spin } from 'antd';
 import {
   DeleteOutlined, SaveOutlined, UndoOutlined, CodeOutlined,
   CopyOutlined, PlusOutlined, DownloadOutlined, FileTextOutlined,
@@ -111,8 +111,6 @@ export function ResultGrid({
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [newRows, setNewRows] = useState<unknown[][]>([]);
   const [operationSql, setOperationSql] = useState('');
-  const [addModalOpen, setAddModalOpen] = useState(false);
-  const [addForm] = Form.useForm();
   const [contextMenu, setCtx] = useState<CtxState>({ v: false, x: 0, y: 0 });
 
   // 行数据
@@ -121,16 +119,16 @@ export function ResultGrid({
       if (deletedIndices.has(i)) return null;
       const r = modifiedRows.has(i) ? modifiedRows.get(i)! : row;
       const obj: Record<string, unknown> = { __id: i, __isNew: false };
-      r.forEach((cell, j) => { obj[String(j)] = cell; });
+      queryResult.columns.forEach((col, j) => { obj[col] = r[j]; });
       return obj;
     }).filter(Boolean) as Record<string, unknown>[];
     const newOnes = newRows.map((row, i) => {
       const obj: Record<string, unknown> = { __id: `new-${i}`, __isNew: true };
-      row.forEach((cell, j) => { obj[String(j)] = cell; });
+      queryResult.columns.forEach((col, j) => { obj[col] = row[j]; });
       return obj;
     });
     return [...existing, ...newOnes];
-  }, [queryResult.rows, modifiedRows, deletedIndices, newRows]);
+  }, [queryResult.rows, queryResult.columns, modifiedRows, deletedIndices, newRows]);
 
   // 行状态回调
   const rowStatus = useCallback((row: GlideRow, _idx: number) => {
@@ -140,7 +138,7 @@ export function ResultGrid({
     return undefined;
   }, [deletedIndices, modifiedRows]);
 
-  const isCellModified = useMemo(() => createResultCellModified(modifiedRows, queryResult.columns), [modifiedRows, queryResult.columns]);
+  const isCellModified = useMemo(() => createResultCellModified(modifiedRows, queryResult.columns, queryResult.rows), [modifiedRows, queryResult.columns, queryResult.rows]);
 
   const glideColumns = useMemo(() => namesToGlideColumns(queryResult.columns), [queryResult.columns]);
   const glideRows = useMemo(() => allRows as GlideRow[], [allRows]);
@@ -157,11 +155,29 @@ export function ResultGrid({
     if (!colName) return;
     const rowId = row;
     if (rowId >= queryResult.rows.length) { /* new row */ return; }
+
+    const originalVal = queryResult.rows[rowId][col];
+    const originalStr = originalVal === null ? 'NULL' : String(originalVal);
+
+    if (originalStr === newValue) {
+      setModifiedRows((prev) => {
+        if (!prev.has(rowId)) return prev;
+        const next = new Map(prev);
+        const current = [...next.get(rowId)!];
+        current[col] = originalVal;
+        const originalRow = queryResult.rows[rowId];
+        const allSame = originalRow.every((v, i) => v === current[i]);
+        if (allSame) next.delete(rowId);
+        else next.set(rowId, current);
+        return next;
+      });
+      return;
+    }
+
     setModifiedRows((prev) => {
       const next = new Map(prev);
       const current = next.get(rowId) ? [...next.get(rowId)!] : [...queryResult.rows[rowId]];
-      const idx = queryResult.columns.indexOf(colName);
-      current[idx] = newValue === 'NULL' ? null : newValue;
+      current[col] = newValue === 'NULL' ? null : newValue;
       next.set(rowId, current);
       return next;
     });
@@ -293,7 +309,10 @@ export function ResultGrid({
       <div style={{ padding: '4px 12px', borderBottom: '1px solid var(--border)', background: 'var(--background-toolbar)', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
         <span style={{ fontSize: 12 }}><strong>{queryResult.rows.length.toLocaleString()}</strong> {t('common.rows')}</span>
         <span style={{ fontSize: 12 }}><strong>{queryResult.columns.length}</strong> {t('common.tableStructure.columns')}</span>
-        {executionTime != null && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{executionTime}ms</span>}
+        {executionTime != null && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('common.executionTime')} {executionTime}ms</span>}
+        {queryResult.totalTime != null && queryResult.totalTime > 0 && queryResult.totalTime !== executionTime && (
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{t('common.totalDuration')} {queryResult.totalTime}ms</span>
+        )}
         {isEditable && <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>{t('common.editable')}</Tag>}
         {tableName && !isEditable && <Tag color="default" style={{ margin: 0, fontSize: 11 }}><ExclamationCircleOutlined /> {t('common.readOnly')}</Tag>}
         <div style={{ flex: 1 }} />
@@ -315,7 +334,20 @@ export function ResultGrid({
             <Button size="small" icon={<CodeOutlined />} onClick={() => Modal.info({ title: t('common.operationSqlPreview'), width: 800, content: <pre style={{ maxHeight: 400, overflow: 'auto', background: 'var(--background-toolbar)', padding: 12, borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }}>{operationSql}</pre>, transitionName: '', maskTransitionName: '' })} style={{ fontSize: 11, height: 22 }}>{t('common.sqlQuery')}</Button>
           </Space>
         )}
-        {isEditable && <Button size="small" icon={<PlusOutlined />} onClick={() => setAddModalOpen(true)} style={{ fontSize: 11, height: 22 }}>{t('common.addNewRow')}</Button>}
+        {isEditable && (
+          <Button
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              const newRow = queryResult.columns.map(() => null);
+              setNewRows((prev) => [...prev, newRow]);
+              message.success(`${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`);
+            }}
+            style={{ fontSize: 11, height: 22 }}
+          >
+            {t('common.addNewRow')}
+          </Button>
+        )}
         {isEditable && <Button size="small" danger icon={<DeleteOutlined />} onClick={handleDeleteSelected} disabled={selectedIndices.size === 0} style={{ fontSize: 11, height: 22 }}>{t('common.dataGrid.deleteRow')}</Button>}
       </div>
 
@@ -346,27 +378,6 @@ export function ResultGrid({
           </div>
         </>
       )}
-
-      {/* Add Row Modal */}
-      <Modal title={t('common.addRowTitle')} open={addModalOpen} onCancel={() => { setAddModalOpen(false); addForm.resetFields(); }}
-        onOk={async () => {
-          try { const values = await addForm.validateFields();
-            const nr = queryResult.columns.map((_, i) => { const cn = queryResult.columns[i]; return values[cn] ?? null; });
-            setNewRows((prev) => [...prev, nr]); setAddModalOpen(false); addForm.resetFields();
-            message.success(`${t('common.newRowAdded')}, ${t('common.pleaseClickSubmit')} ${t('common.toSaveToDatabase')}`);
-          } catch (e) { /* validation failed */ }
-        }}
-        okText={t('common.add')} cancelText={t('common.cancel')} destroyOnClose transitionName="" maskTransitionName="">
-        <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
-          {tableColumns.map((col) => (
-            <Form.Item key={col.column_name} label={<span>{col.column_name}{col.is_nullable !== 'YES' && <span style={{ color: 'var(--color-error)' }}> *</span>}<span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 8 }}>{col.data_type}</span></span>}
-              name={col.column_name}
-              rules={[{ required: col.is_nullable !== 'YES', message: t('common.pleaseEnterColumnValue', { column: col.column_name }) }]}>
-              <Input placeholder={col.comment || col.data_type} />
-            </Form.Item>
-          ))}
-        </Form>
-      </Modal>
 
       {/* SQL Preview */}
       {isEditable && operationSql && (
