@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WindowSetTitle } from '../../wailsjs/runtime/runtime';
-import { Layout, theme, Modal, Form, Input } from 'antd';
+import { Layout, theme, Modal, Form, Input, message } from 'antd';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
@@ -823,6 +823,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         case 'new-connection':
           setConnectionDialogOpen(true);
           break;
+        case 'open-connection':
+          message.info('打开连接功能尚未实现');
+          break;
         case 'options':
           setSettingsDialogOpen(true);
           break;
@@ -856,6 +859,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           break;
         case 'save':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'save' } }));
+          break;
+        case 'save-as':
+          message.info('另存为功能尚未实现');
           break;
         case 'import':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'import' } }));
@@ -916,13 +922,28 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         case 'documentation':
         case 'search':
         case 'check-update':
-        case 'about':
           window.dispatchEvent(new CustomEvent('app-action', { detail: { action } }));
           break;
         case 'data-sync':
+          message.info('数据同步功能尚未实现');
+          break;
         case 'backup':
+          message.info('备份数据库功能尚未实现');
+          break;
         case 'restore':
+          message.info('恢复数据库功能尚未实现');
+          break;
         case 'model-designer':
+          message.info('模型设计器功能尚未实现');
+          break;
+        case 'cascade':
+          message.info('层叠窗口功能尚未实现');
+          break;
+        case 'tile-horizontally':
+          message.info('水平平铺窗口功能尚未实现');
+          break;
+        case 'tile-vertically':
+          message.info('垂直平铺窗口功能尚未实现');
           break;
         default:
           console.log(`Unknown menu action: ${action}`);

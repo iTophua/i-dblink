@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Tabs, Table, Spin, Empty, Tag, Typography } from 'antd';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Tabs, Table, Spin, Empty, Tag, Dropdown, Input, Select, Checkbox, Button, Space, App } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { KeyOutlined, LinkOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import type { MenuProps } from 'antd';
+import { KeyOutlined, LinkOutlined, InfoCircleOutlined, ArrowUpOutlined, ArrowDownOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../hooks/useApi';
+import { api } from '../api';
+import { useAppStore } from '../stores/appStore';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../types/api';
-
-
 
 interface TableInfo {
   table_name: string;
@@ -26,28 +27,71 @@ interface TableStructureProps {
   database?: string;
 }
 
+const COMMON_TYPES = [
+  'VARCHAR(255)',
+  'INT',
+  'BIGINT',
+  'DECIMAL(10,2)',
+  'TEXT',
+  'DATETIME',
+  'TIMESTAMP',
+  'DATE',
+  'BOOLEAN',
+  'FLOAT',
+  'DOUBLE',
+  'BLOB',
+  'JSON',
+];
+
+interface NewColumnData {
+  column_name: string;
+  data_type: string;
+  is_nullable: string;
+  column_default: string;
+  comment: string;
+}
+
 export function TableStructure({ connectionId, tableName, database }: TableStructureProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const { getColumns, getIndexes, getForeignKeys, getTableInfo } = useDatabase();
   const [loading, setLoading] = useState(false);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
   const [indexes, setIndexes] = useState<IndexInfo[]>([]);
   const [foreignKeys, setForeignKeys] = useState<ForeignKeyInfo[]>([]);
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null);
+  const [ddl, setDdl] = useState<string>('');
+
+  // Inline insert state
+  const [insertingIndex, setInsertingIndex] = useState<number | null>(null);
+  const [insertPosition, setInsertPosition] = useState<'before' | 'after'>('after');
+  const [referenceColumn, setReferenceColumn] = useState<string>('');
+  const [newColumnData, setNewColumnData] = useState<NewColumnData>({
+    column_name: '',
+    data_type: 'VARCHAR(255)',
+    is_nullable: 'YES',
+    column_default: '',
+    comment: '',
+  });
+
+  const dbType = useAppStore((s) => s.connections.find((c) => c.id === connectionId)?.db_type);
+  const supportsColumnPosition = dbType === 'mysql' || dbType === 'mariadb';
 
   const loadStructure = useCallback(async () => {
     setLoading(true);
     try {
-      const [cols, idxs, fks, info] = await Promise.all([
+      const [cols, idxs, fks, info, ddlResult] = await Promise.all([
         getColumns(connectionId, tableName, database),
         getIndexes(connectionId, tableName, database),
         getForeignKeys(connectionId, tableName, database),
         getTableInfo(connectionId, tableName, database).catch(() => null),
+        api.getTableDDL(connectionId, tableName, database).catch(() => []),
       ]);
       setColumns(cols);
       setIndexes(idxs);
       setForeignKeys(fks);
       setTableInfo(info);
+      setDdl(Array.isArray(ddlResult) ? ddlResult.join('\n') : String(ddlResult));
     } catch (error) {
       console.error('Failed to load table structure:', error);
     } finally {
@@ -69,41 +113,205 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
     }
   }, [loadStructure]);
 
+  const handleSaveInsert = async () => {
+    if (!newColumnData.column_name.trim()) {
+      message.error(t('common.required'));
+      return;
+    }
+
+    try {
+      const tableRef = database ? `\`${database}\`.\`${tableName}\`` : `\`${tableName}\``;
+      const nullableStr = newColumnData.is_nullable === 'YES' ? '' : ' NOT NULL';
+      const defaultStr = newColumnData.column_default ? ` DEFAULT ${newColumnData.column_default}` : '';
+      const commentStr = newColumnData.comment ? ` COMMENT '${newColumnData.comment}'` : '';
+      const colDef = `\`${newColumnData.column_name}\` ${newColumnData.data_type}${nullableStr}${defaultStr}${commentStr}`;
+
+      let sql: string;
+      if (supportsColumnPosition && referenceColumn) {
+        if (insertPosition === 'before') {
+          const colIndex = columns.findIndex((c) => c.column_name === referenceColumn);
+          if (colIndex > 0) {
+            const prevColumn = columns[colIndex - 1].column_name;
+            sql = `ALTER TABLE ${tableRef} ADD COLUMN ${colDef} AFTER \`${prevColumn}\`;`;
+          } else {
+            sql = `ALTER TABLE ${tableRef} ADD COLUMN ${colDef} FIRST;`;
+          }
+        } else {
+          sql = `ALTER TABLE ${tableRef} ADD COLUMN ${colDef} AFTER \`${referenceColumn}\`;`;
+        }
+      } else {
+        sql = `ALTER TABLE ${tableRef} ADD COLUMN ${colDef};`;
+      }
+
+      await api.executeDDL(connectionId, sql, database);
+      message.success(t('common.tableStructureUpdated'));
+      setInsertingIndex(null);
+      setNewColumnData({
+        column_name: '',
+        data_type: 'VARCHAR(255)',
+        is_nullable: 'YES',
+        column_default: '',
+        comment: '',
+      });
+      loadStructure();
+    } catch (error: any) {
+      message.error(t('common.executeFailed') + ': ' + error.message);
+    }
+  };
+
+  const handleCancelInsert = () => {
+    setInsertingIndex(null);
+    setNewColumnData({
+      column_name: '',
+      data_type: 'VARCHAR(255)',
+      is_nullable: 'YES',
+      column_default: '',
+      comment: '',
+    });
+  };
+
+  const getColumnMenu = useCallback(
+    (columnName: string): MenuProps => ({
+      items: [
+        {
+          key: 'insert-above',
+          label: (
+            <span>
+              <ArrowUpOutlined style={{ marginRight: 4 }} />
+              {t('common.insertColumnAbove')}
+            </span>
+          ),
+          disabled: !supportsColumnPosition || insertingIndex !== null,
+        },
+        {
+          key: 'insert-below',
+          label: (
+            <span>
+              <ArrowDownOutlined style={{ marginRight: 4 }} />
+              {t('common.insertColumnBelow')}
+            </span>
+          ),
+          disabled: !supportsColumnPosition || insertingIndex !== null,
+        },
+      ],
+      onClick: ({ key }) => {
+        if (insertingIndex !== null) return;
+        if (key === 'insert-above' || key === 'insert-below') {
+          const idx = columns.findIndex((c) => c.column_name === columnName);
+          const insertIdx = key === 'insert-above' ? idx : idx + 1;
+          setReferenceColumn(columnName);
+          setInsertPosition(key === 'insert-above' ? 'before' : 'after');
+          setInsertingIndex(insertIdx);
+        }
+      },
+    }),
+    [t, supportsColumnPosition, insertingIndex, columns]
+  );
+
+  const isNewRow = (record: ColumnInfo) => record.column_name === '__new__';
+
   const columnDefs: ColumnsType<ColumnInfo> = [
     {
       title: t('common.tableStructure.columnName'),
       dataIndex: 'column_name',
       key: 'column_name',
       minWidth: 150,
-      render: (text: string, record: ColumnInfo) => (
-        <span>
-          {record.column_key === 'PRI' && (
-            <KeyOutlined style={{ color: '#faad14', marginRight: 4 }} />
-          )}
-          {text}
-        </span>
-      ),
+      render: (_text: string, record: ColumnInfo) => {
+        if (isNewRow(record)) {
+          return (
+            <Input
+              size="small"
+              value={newColumnData.column_name}
+              onChange={(e) =>
+                setNewColumnData((prev) => ({ ...prev, column_name: e.target.value }))
+              }
+              placeholder={t('common.newColumnName')}
+              autoFocus
+              style={{ minWidth: 120 }}
+            />
+          );
+        }
+        return (
+          <Dropdown menu={getColumnMenu(record.column_name)} trigger={['contextMenu']}>
+            <span style={{ cursor: 'context-menu' }}>
+              {record.column_key === 'PRI' && (
+                <KeyOutlined style={{ color: '#faad14', marginRight: 4 }} />
+              )}
+              {record.column_name}
+            </span>
+          </Dropdown>
+        );
+      },
     },
     {
       title: t('common.type'),
       dataIndex: 'data_type',
       key: 'data_type',
       width: 140,
-      render: (text: string) => <Tag color="blue">{text}</Tag>,
+      render: (_text: string, record: ColumnInfo) => {
+        if (isNewRow(record)) {
+          return (
+            <Select
+              size="small"
+              value={newColumnData.data_type}
+              onChange={(value) =>
+                setNewColumnData((prev) => ({ ...prev, data_type: value }))
+              }
+              options={COMMON_TYPES.map((t) => ({ label: t, value: t }))}
+              style={{ width: 130 }}
+              showSearch
+              allowClear
+              placeholder={t('common.newColumnType')}
+            />
+          );
+        }
+        return <Tag color="blue">{record.data_type}</Tag>;
+      },
     },
     {
       title: t('common.nullable'),
       dataIndex: 'is_nullable',
       key: 'is_nullable',
       width: 60,
-      render: (val: string) => (val === 'YES' ? t('common.yes') : t('common.no')),
+      render: (_val: string, record: ColumnInfo) => {
+        if (isNewRow(record)) {
+          return (
+            <Checkbox
+              checked={newColumnData.is_nullable === 'YES'}
+              onChange={(e) =>
+                setNewColumnData((prev) => ({
+                  ...prev,
+                  is_nullable: e.target.checked ? 'YES' : 'NO',
+                }))
+              }
+            >
+              {t('common.yes')}
+            </Checkbox>
+          );
+        }
+        return record.is_nullable === 'YES' ? t('common.yes') : t('common.no');
+      },
     },
     {
       title: t('common.defaultValue'),
       dataIndex: 'column_default',
       key: 'column_default',
       width: 120,
-      ellipsis: true,
+      render: (_text: string, record: ColumnInfo) => {
+        if (isNewRow(record)) {
+          return (
+            <Input
+              size="small"
+              value={newColumnData.column_default}
+              onChange={(e) =>
+                setNewColumnData((prev) => ({ ...prev, column_default: e.target.value }))
+              }
+              placeholder={t('common.newColumnDefault')}
+            />
+          );
+        }
+        return record.column_default || '-';
+      },
     },
     {
       title: t('common.key'),
@@ -122,8 +330,66 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       dataIndex: 'comment',
       key: 'comment',
       ellipsis: true,
+      render: (_text: string, record: ColumnInfo) => {
+        if (isNewRow(record)) {
+          return (
+            <Input
+              size="small"
+              value={newColumnData.comment}
+              onChange={(e) =>
+                setNewColumnData((prev) => ({ ...prev, comment: e.target.value }))
+              }
+              placeholder={t('common.newColumnComment')}
+            />
+          );
+        }
+        return record.comment || '-';
+      },
+    },
+    {
+      title: t('common.actions'),
+      key: 'actions',
+      width: 80,
+      fixed: 'right',
+      render: (_, record: ColumnInfo) => {
+        if (isNewRow(record)) {
+          return (
+            <Space size={4}>
+              <Button
+                type="primary"
+                size="small"
+                icon={<CheckOutlined />}
+                onClick={handleSaveInsert}
+                title={t('common.save')}
+              />
+              <Button
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={handleCancelInsert}
+                title={t('common.cancel')}
+              />
+            </Space>
+          );
+        }
+        return null;
+      },
     },
   ];
+
+  const tableData = useMemo(() => {
+    if (insertingIndex === null) return columns;
+    const insertRow: ColumnInfo = {
+      column_name: '__new__',
+      data_type: '',
+      is_nullable: 'YES',
+      column_default: '',
+      comment: '',
+      ordinal_position: insertingIndex + 1,
+    } as ColumnInfo;
+    const result = [...columns];
+    result.splice(insertingIndex, 0, insertRow);
+    return result;
+  }, [columns, insertingIndex]);
 
   const indexDefs: ColumnsType<IndexInfo> = [
     {
@@ -279,15 +545,11 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>
-                        {t('common.createTime')}
-                      </td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.createTime')}</td>
                       <td>{tableInfo.create_time || '-'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>
-                        {t('common.updateTime')}
-                      </td>
+                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.updateTime')}</td>
                       <td>{tableInfo.update_time || '-'}</td>
                     </tr>
                     <tr>
@@ -305,11 +567,15 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
             key: 'columns',
             label: `${t('common.tableStructure.columns')} (${columns.length})`,
             children:
-              columns.length > 0 ? (
+              columns.length > 0 || insertingIndex !== null ? (
                 <Table
                   columns={columnDefs}
-                  dataSource={columns}
-                  rowKey="column_name"
+                  dataSource={tableData}
+                  rowKey={(record) =>
+                    record.column_name === '__new__'
+                      ? '__new__'
+                      : record.column_name
+                  }
                   size="small"
                   pagination={false}
                   scroll={{ x: 'max-content' }}
@@ -354,9 +620,34 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
               ) : (
                 <Empty description={t('common.noForeignKeys')} />
               ),
-            },
-          ]}
-        />
-      </div>
-    );
+          },
+          {
+            key: 'ddl',
+            label: t('common.ddl'),
+            children: ddl ? (
+              <pre
+                style={{
+                  background: 'var(--background-card)',
+                  padding: 12,
+                  borderRadius: 6,
+                  overflow: 'auto',
+                  maxHeight: 'calc(100vh - 240px)',
+                  fontSize: 12,
+                  border: '1px solid var(--border-color)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {ddl}
+              </pre>
+            ) : (
+              <Empty description={t('common.noData')} />
+            ),
+          },
+        ]}
+      />
+    </div>
+  );
 }
+
+export default TableStructure;

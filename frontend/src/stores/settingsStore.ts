@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { ThemePreset } from '../styles/theme';
 import i18n from '../i18n';
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface ShortcutConfig {
   id: string;
@@ -17,7 +17,6 @@ export interface AppSettings {
   maxResultRows: number;
   themePreset: ThemePreset;
   themeMode: ThemeMode;
-  themeSyncSystem: boolean;
   language: 'zh-CN' | 'en-US';
   settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts';
   shortcuts: Record<string, string>; // id -> keys
@@ -33,8 +32,7 @@ const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
   themePreset: 'midnightDeep',
-  themeMode: 'dark',
-  themeSyncSystem: true,
+  themeMode: 'system',
   language: 'zh-CN',
   shortcuts: {},
 };
@@ -58,21 +56,29 @@ function migrate(state: unknown, version: number | undefined): Partial<SettingsS
         : oldTheme === 'light'
           ? 'nordicFrost'
           : 'midnightDeep';
-    const mode: ThemeMode =
-      oldTheme === 'system'
-        ? typeof window !== 'undefined'
-          ? window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light'
-          : 'dark'
-        : (oldTheme as ThemeMode);
+    const mode: ThemeMode = oldTheme === 'system' ? 'system' : (oldTheme as ThemeMode);
     return {
       settings: {
         ...defaultSettings,
         ...(stateSettings as unknown as Partial<AppSettings>),
         themePreset: preset,
         themeMode: mode,
-        themeSyncSystem: oldTheme === 'system',
+      },
+    };
+  }
+
+  // 迁移：从 themeSyncSystem 字段迁移到 themeMode: 'system'
+  if (stateSettings && 'themeSyncSystem' in stateSettings) {
+    const syncSystem = stateSettings.themeSyncSystem as boolean;
+    const currentMode = (stateSettings.themeMode as ThemeMode) || 'dark';
+    const newMode: ThemeMode = syncSystem ? 'system' : currentMode;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { themeSyncSystem, ...restSettings } = stateSettings as Record<string, unknown>;
+    return {
+      settings: {
+        ...defaultSettings,
+        ...(restSettings as unknown as Partial<AppSettings>),
+        themeMode: newMode,
       },
     };
   }

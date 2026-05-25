@@ -7,7 +7,7 @@ import React, {
   ChangeEvent,
   MouseEvent,
 } from 'react';
-import { Tree, Spin, Dropdown, Badge, Modal, App, Tooltip } from 'antd';
+import { Tree, Spin, Dropdown, Badge, Modal, App, Tooltip, Descriptions } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -27,6 +27,7 @@ import {
   FunctionOutlined,
   MinusOutlined,
   SwapOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import type { Connection, ConnectionGroup } from '../../stores/appStore';
 import type { TableInfo } from '../../types/api';
@@ -42,6 +43,7 @@ import { UserManagementDialog } from '../UserManagementDialog';
 import { SchemaCompareDialog } from '../SchemaCompareDialog';
 import { CreateDatabaseDialog } from './CreateDatabaseDialog';
 import { api } from '../../api';
+import { TableStructure } from '../TableStructure';
 
 const isBaseTable = (tableType: string): boolean => {
   const normalizedType = (tableType || '').toUpperCase().trim();
@@ -463,6 +465,18 @@ export function EnhancedConnectionTree({
     dbType?: string;
   } | null>(null);
   const [schemaCompareOpen, setSchemaCompareOpen] = useState(false);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [propertiesType, setPropertiesType] = useState<
+    'connection' | 'table' | 'view' | 'procedure' | 'function' | 'trigger' | 'group'
+  >('table');
+  const [propertiesTarget, setPropertiesTarget] = useState<{
+    connId: string;
+    name: string;
+    database?: string;
+    data?: any;
+  } | null>(null);
+  const [propertiesContent, setPropertiesContent] = useState<string>('');
+  const [propertiesLoading, setPropertiesLoading] = useState(false);
   const prevTableCountsRef = useRef<Map<string, number>>(new Map());
   const connectionDatabasesRef = useRef(connectionDatabases);
   const closingDbModalRef = useRef(false);
@@ -566,6 +580,12 @@ export function EnhancedConnectionTree({
               { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
               { type: 'divider' },
               {
+                key: 'connection-properties',
+                label: t('common.connectionProperties'),
+                icon: <InfoCircleOutlined />,
+              },
+              { type: 'divider' },
+              {
                 key: 'new-query',
                 label: t('common.sqlEditor.newQuery'),
                 icon: <PlayCircleOutlined />,
@@ -613,6 +633,12 @@ export function EnhancedConnectionTree({
               { key: 'connect', label: t('common.mainLayout.connect'), icon: <LinkOutlined /> },
               { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
               { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
+              { type: 'divider' },
+              {
+                key: 'connection-properties',
+                label: t('common.connectionProperties'),
+                icon: <InfoCircleOutlined />,
+              },
               { type: 'divider' },
               {
                 key: 'move',
@@ -686,6 +712,10 @@ export function EnhancedConnectionTree({
             dbType: connInfo?.db_type,
           });
           setCreateDatabaseOpen(true);
+        } else if (key === 'connection-properties') {
+          setPropertiesType('connection');
+          setPropertiesTarget({ connId: conn.id, name: conn.name, data: conn });
+          setPropertiesOpen(true);
         } else if (key === 'copy') {
           handleCopyConnection(conn);
         } else if (key === 'new-group') {
@@ -726,6 +756,8 @@ export function EnhancedConnectionTree({
         { type: 'divider' },
         { key: 'export', label: t('common.exportGroup') },
         { type: 'divider' },
+        { key: 'group-properties', label: t('common.groupProperties') },
+        { type: 'divider' },
         {
           key: 'delete',
           label: t('common.mainLayout.deleteGroup'),
@@ -735,7 +767,16 @@ export function EnhancedConnectionTree({
         },
       ],
       onClick: ({ key }) => {
-        if (key === 'new-connection') {
+        if (key === 'group-properties') {
+          const connCount = groupedConnections[group.id]?.length || 0;
+          setPropertiesType('group');
+          setPropertiesTarget({
+            connId: '',
+            name: group.name,
+            data: { ...group, connCount },
+          });
+          setPropertiesOpen(true);
+        } else if (key === 'new-connection') {
           onEditConnection({
             id: '',
             name: '',
@@ -870,9 +911,15 @@ export function EnhancedConnectionTree({
         { key: 'dump-table', label: t('common.dumpSqlFile') },
         { key: 'import-csv', label: t('common.importDataMenu') },
         { key: 'export-csv', label: t('common.exportCsvMenu'), disabled: true },
+        { type: 'divider' },
+        { key: 'table-properties', label: t('common.tableProperties') },
       ],
       onClick: async ({ key }) => {
-        if (key === 'open-table') {
+        if (key === 'table-properties') {
+          setPropertiesType('table');
+          setPropertiesTarget({ connId, name: tableName, database });
+          setPropertiesOpen(true);
+        } else if (key === 'open-table') {
           onTableOpen(tableName, database);
         } else if (key === 'design-table') {
           onOpenDesigner?.(tableName, database);
@@ -959,10 +1006,23 @@ export function EnhancedConnectionTree({
         { key: 'drop-view', label: t('common.dropView'), danger: true },
         { type: 'divider' },
         { key: 'view-dependencies', label: t('common.viewDependencies'), disabled: true },
-        { key: 'view-properties', label: t('common.viewProperties'), disabled: true },
+        { key: 'view-properties', label: t('common.viewProperties') },
       ],
       onClick: async ({ key }) => {
-        if (key === 'open-view') {
+        if (key === 'view-properties') {
+          setPropertiesType('view');
+          setPropertiesTarget({ connId, name: viewName, database });
+          setPropertiesLoading(true);
+          setPropertiesOpen(true);
+          try {
+            const ddl = await api.getTableDDL(connId, viewName, database);
+            setPropertiesContent(Array.isArray(ddl) ? ddl.join('\n') : ddl);
+          } catch (err: any) {
+            setPropertiesContent(t('common.loadFailed') + ': ' + err.message);
+          } finally {
+            setPropertiesLoading(false);
+          }
+        } else if (key === 'open-view') {
           onViewOpen?.(viewName, database);
         } else if (key === 'design-view') {
           onOpenViewDefinition?.(viewName, database);
@@ -989,6 +1049,81 @@ export function EnhancedConnectionTree({
       },
     }),
     [onTableOpen, onOpenDesigner, onOpenViewDefinition, onDatabaseRefresh]
+  );
+
+  const getProcedureMenu = useCallback(
+    (connId: string, procedureName: string, database?: string): MenuProps => ({
+      items: [
+        {
+          key: 'procedure-properties',
+          label: t('common.procedureProperties'),
+        },
+      ],
+      onClick: async ({ key }) => {
+        if (key === 'procedure-properties') {
+          setPropertiesType('procedure');
+          setPropertiesTarget({ connId, name: procedureName, database });
+          setPropertiesLoading(true);
+          setPropertiesOpen(true);
+          try {
+            const body = await api.getProcedureBody(connId, procedureName, database);
+            setPropertiesContent(body);
+          } catch (err: any) {
+            setPropertiesContent(t('common.loadFailed') + ': ' + err.message);
+          } finally {
+            setPropertiesLoading(false);
+          }
+        }
+      },
+    }),
+    [t]
+  );
+
+  const getFunctionMenu = useCallback(
+    (connId: string, functionName: string, database?: string): MenuProps => ({
+      items: [
+        {
+          key: 'function-properties',
+          label: t('common.functionProperties'),
+        },
+      ],
+      onClick: async ({ key }) => {
+        if (key === 'function-properties') {
+          setPropertiesType('function');
+          setPropertiesTarget({ connId, name: functionName, database });
+          setPropertiesLoading(true);
+          setPropertiesOpen(true);
+          try {
+            const body = await api.getFunctionBody(connId, functionName, database);
+            setPropertiesContent(body);
+          } catch (err: any) {
+            setPropertiesContent(t('common.loadFailed') + ': ' + err.message);
+          } finally {
+            setPropertiesLoading(false);
+          }
+        }
+      },
+    }),
+    [t]
+  );
+
+  const getTriggerMenu = useCallback(
+    (connId: string, trigger: import('../../types/api').TriggerInfo, database?: string): MenuProps => ({
+      items: [
+        {
+          key: 'trigger-properties',
+          label: t('common.triggerProperties'),
+        },
+      ],
+      onClick: ({ key }) => {
+        if (key === 'trigger-properties') {
+          setPropertiesType('trigger');
+          setPropertiesTarget({ connId, name: trigger.name, database, data: trigger });
+          setPropertiesOpen(true);
+        }
+      },
+    }),
+    [t]
   );
 
   const handleGroupSave = useCallback(
@@ -1350,15 +1485,17 @@ export function EnhancedConnectionTree({
                   key: `proc::${connId}::${db.database}::${proc}`,
                   isLeaf: true,
                   title: (
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
-                      onClick={() => onOpenRoutine?.(connId, db.database, proc, 'procedure')}
-                    >
-                      <ThunderboltOutlined
-                        style={{ color: 'var(--color-warning)', fontSize: 11 }}
-                      />
-                      <span style={{ fontSize: 12 }}>{proc}</span>
-                    </span>
+                    <Dropdown menu={getProcedureMenu(connId, proc, db.database)} trigger={['contextMenu']}>
+                      <span
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                        onClick={() => onOpenRoutine?.(connId, db.database, proc, 'procedure')}
+                      >
+                        <ThunderboltOutlined
+                          style={{ color: 'var(--color-warning)', fontSize: 11 }}
+                        />
+                        <span style={{ fontSize: 12 }}>{proc}</span>
+                      </span>
+                    </Dropdown>
                   ),
                 }))
               : []
@@ -1416,13 +1553,15 @@ export function EnhancedConnectionTree({
                   key: `func::${connId}::${db.database}::${func}`,
                   isLeaf: true,
                   title: (
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
-                      onClick={() => onOpenRoutine?.(connId, db.database, func, 'function')}
-                    >
-                      <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
-                      <span style={{ fontSize: 12 }}>{func}</span>
-                    </span>
+                    <Dropdown menu={getFunctionMenu(connId, func, db.database)} trigger={['contextMenu']}>
+                      <span
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                        onClick={() => onOpenRoutine?.(connId, db.database, func, 'function')}
+                      >
+                        <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
+                        <span style={{ fontSize: 12 }}>{func}</span>
+                      </span>
+                    </Dropdown>
                   ),
                 }))
               : []
@@ -1483,15 +1622,17 @@ export function EnhancedConnectionTree({
                   key: `trigger::${connId}::${db.database}::${trigger.name}`,
                   isLeaf: true,
                   title: (
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
-                      onClick={() => {
-                        onOpenTrigger?.(connId, db.database, trigger.name);
-                      }}
-                    >
-                      <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 11 }} />
-                      <span style={{ fontSize: 12 }}>{trigger.name}</span>
-                    </span>
+                    <Dropdown menu={getTriggerMenu(connId, trigger, db.database)} trigger={['contextMenu']}>
+                      <span
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                        onClick={() => {
+                          onOpenTrigger?.(connId, db.database, trigger.name);
+                        }}
+                      >
+                        <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 11 }} />
+                        <span style={{ fontSize: 12 }}>{trigger.name}</span>
+                      </span>
+                    </Dropdown>
                   ),
                 }))
               : []
@@ -1827,6 +1968,9 @@ export function EnhancedConnectionTree({
     getGroupMenu,
     getDatabaseMenu,
     getViewMenu,
+    getProcedureMenu,
+    getFunctionMenu,
+    getTriggerMenu,
     handleRenameCommit,
     handleCopyConnection,
     handleMoveConnection,
@@ -2228,6 +2372,98 @@ export function EnhancedConnectionTree({
           />
         )}
       </Spin>
+
+      <Modal
+        open={propertiesOpen}
+        title={
+          propertiesType === 'connection'
+            ? `${t('common.connectionProperties')}: ${propertiesTarget?.name}`
+            : propertiesType === 'table'
+              ? `${t('common.tableProperties')}: ${propertiesTarget?.name}`
+              : propertiesType === 'view'
+                ? `${t('common.viewProperties')}: ${propertiesTarget?.name}`
+                : propertiesType === 'procedure'
+                  ? `${t('common.procedureProperties')}: ${propertiesTarget?.name}`
+                  : propertiesType === 'function'
+                    ? `${t('common.functionProperties')}: ${propertiesTarget?.name}`
+                    : propertiesType === 'trigger'
+                      ? `${t('common.triggerProperties')}: ${propertiesTarget?.name}`
+                      : `${t('common.groupProperties')}: ${propertiesTarget?.name}`
+        }
+        width={propertiesType === 'table' ? 900 : 700}
+        onCancel={() => {
+          setPropertiesOpen(false);
+          setPropertiesTarget(null);
+          setPropertiesContent('');
+        }}
+        footer={null}
+        transitionName=""
+        maskTransitionName=""
+      >
+        {propertiesLoading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+            <Spin size="large" />
+          </div>
+        ) : propertiesType === 'table' && propertiesTarget ? (
+          <div style={{ maxHeight: '70vh', overflow: 'auto' }}>
+            <TableStructure
+              connectionId={propertiesTarget.connId}
+              tableName={propertiesTarget.name}
+              database={propertiesTarget.database}
+            />
+          </div>
+        ) : propertiesType === 'connection' && propertiesTarget?.data ? (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label={t('common.name')}>{propertiesTarget.data.name}</Descriptions.Item>
+            <Descriptions.Item label={t('common.type')}>{propertiesTarget.data.db_type}</Descriptions.Item>
+            <Descriptions.Item label={t('common.host')}>{propertiesTarget.data.host}</Descriptions.Item>
+            <Descriptions.Item label={t('common.port')}>{propertiesTarget.data.port}</Descriptions.Item>
+            <Descriptions.Item label={t('common.username')}>{propertiesTarget.data.username}</Descriptions.Item>
+            <Descriptions.Item label={t('common.database')}>{propertiesTarget.data.database || '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('common.status')}>
+              {propertiesTarget.data.status === 'connected' ? t('common.connected') : t('common.disconnected')}
+            </Descriptions.Item>
+            {propertiesTarget.data.group_id && (
+              <Descriptions.Item label={t('common.group')}>
+                {groups.find((g) => g.id === propertiesTarget.data.group_id)?.name || '-'}
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        ) : propertiesType === 'group' && propertiesTarget?.data ? (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label={t('common.name')}>{propertiesTarget.data.name}</Descriptions.Item>
+            <Descriptions.Item label={t('common.icon')}>{propertiesTarget.data.icon}</Descriptions.Item>
+            <Descriptions.Item label={t('common.color')}>
+              <span style={{ display: 'inline-block', width: 16, height: 16, background: propertiesTarget.data.color, borderRadius: 4, border: '1px solid var(--border-color)' }} />
+              {' '}{propertiesTarget.data.color}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('common.connectionCount')}>
+              {propertiesTarget.data.connCount}
+            </Descriptions.Item>
+          </Descriptions>
+        ) : propertiesType === 'trigger' && propertiesTarget?.data ? (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label={t('common.name')}>{propertiesTarget.data.name}</Descriptions.Item>
+            <Descriptions.Item label={t('common.event')}>{propertiesTarget.data.event}</Descriptions.Item>
+            <Descriptions.Item label={t('common.timing')}>{propertiesTarget.data.timing}</Descriptions.Item>
+            <Descriptions.Item label={t('common.table')}>{propertiesTarget.data.table}</Descriptions.Item>
+          </Descriptions>
+        ) : (
+          <pre
+            style={{
+              background: 'var(--background-card)',
+              padding: 16,
+              borderRadius: 8,
+              overflow: 'auto',
+              maxHeight: '60vh',
+              fontSize: 12,
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            {propertiesContent || t('common.noData')}
+          </pre>
+        )}
+      </Modal>
 
       <GroupDialog
         open={groupDialogOpen}

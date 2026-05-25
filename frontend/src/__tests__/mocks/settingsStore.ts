@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ThemePreset } from '../../styles/theme';
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface ShortcutConfig {
   id: string;
@@ -16,7 +16,6 @@ export interface AppSettings {
   maxResultRows: number;
   themePreset: ThemePreset;
   themeMode: ThemeMode;
-  themeSyncSystem: boolean;
   language: 'zh-CN' | 'en-US';
   settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts';
   shortcuts: Record<string, string>;
@@ -32,8 +31,7 @@ const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
   themePreset: 'midnightDeep',
-  themeMode: 'dark',
-  themeSyncSystem: true,
+  themeMode: 'system',
   language: 'zh-CN',
   shortcuts: {},
 };
@@ -53,19 +51,28 @@ function migrate(state: any, version: number | undefined): Partial<SettingsState
         : oldSettings.theme === 'light'
           ? 'nordicFrost'
           : 'midnightDeep';
-    const mode =
-      oldSettings.theme === 'system'
-        ? typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light'
-        : oldSettings.theme;
+    const mode: ThemeMode = oldSettings.theme === 'system' ? 'system' : oldSettings.theme;
     return {
       settings: {
         ...defaultSettings,
         ...oldSettings,
         themePreset: preset,
-        themeMode: mode as ThemeMode,
-        themeSyncSystem: oldSettings.theme === 'system',
+        themeMode: mode,
+      },
+    };
+  }
+
+  // 迁移：从 themeSyncSystem 字段迁移到 themeMode: 'system'
+  if (state.settings && 'themeSyncSystem' in state.settings) {
+    const syncSystem = state.settings.themeSyncSystem as boolean;
+    const currentMode = (state.settings.themeMode as ThemeMode) || 'dark';
+    const newMode: ThemeMode = syncSystem ? 'system' : currentMode;
+    const { themeSyncSystem, ...restSettings } = state.settings;
+    return {
+      settings: {
+        ...defaultSettings,
+        ...restSettings,
+        themeMode: newMode,
       },
     };
   }

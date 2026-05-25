@@ -41,12 +41,9 @@ function App() {
 
   const themePreset = settings.themePreset;
   const themeMode = settings.themeMode;
-  const themeSyncSystem = settings.themeSyncSystem;
 
-  const effectiveMode: ThemeMode = themeSyncSystem
-    ? window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light'
+  const effectiveMode: ThemeMode = themeMode === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : themeMode;
 
   // 缓存主题配置，避免每次渲染都重新计算
@@ -86,7 +83,7 @@ function App() {
       const { action } = event.detail;
       if (action === 'toggle-theme') {
         const newMode = effectiveMode === 'dark' ? 'light' : 'dark';
-        updateSettings({ themeMode: newMode, themeSyncSystem: false });
+        updateSettings({ themeMode: newMode });
       }
     };
 
@@ -99,15 +96,15 @@ function App() {
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
-      if (themeSyncSystem) {
-        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        updateSettings({ themeMode: isDark ? 'dark' : 'light' });
+      if (themeMode === 'system') {
+        // 强制重新渲染以应用新的系统主题
+        updateSettings({});
       }
     };
 
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [themeSyncSystem]);
+  }, [themeMode]);
 
   useEffect(() => {
     if (!isHydrated) return;

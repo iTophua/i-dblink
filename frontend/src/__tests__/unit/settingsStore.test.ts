@@ -6,8 +6,7 @@ const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
   themePreset: 'midnightDeep',
-  themeMode: 'dark',
-  themeSyncSystem: true,
+  themeMode: 'system',
   language: 'zh-CN',
   shortcuts: {},
 };
@@ -23,8 +22,7 @@ describe('settingsStore', () => {
       expect(settings.pageSize).toBe(1000);
       expect(settings.maxResultRows).toBe(10000);
       expect(settings.themePreset).toBe('midnightDeep');
-      expect(settings.themeMode).toBe('dark');
-      expect(settings.themeSyncSystem).toBe(true);
+      expect(settings.themeMode).toBe('system');
       expect(settings.language).toBe('zh-CN');
       expect(settings.shortcuts).toEqual({});
     });
@@ -49,11 +47,6 @@ describe('settingsStore', () => {
     it('updates themeMode', () => {
       useSettingsStore.getState().updateSettings({ themeMode: 'light' });
       expect(useSettingsStore.getState().settings.themeMode).toBe('light');
-    });
-
-    it('updates themeSyncSystem', () => {
-      useSettingsStore.getState().updateSettings({ themeSyncSystem: false });
-      expect(useSettingsStore.getState().settings.themeSyncSystem).toBe(false);
     });
 
     it('updates language', () => {
@@ -99,7 +92,7 @@ describe('settingsStore', () => {
 
       const settings = useSettingsStore.getState().settings;
       expect(settings.pageSize).toBe(1000);
-      expect(settings.themeMode).toBe('dark');
+      expect(settings.themeMode).toBe('system');
       expect(settings.language).toBe('zh-CN');
     });
 

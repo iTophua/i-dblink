@@ -18,8 +18,7 @@ vi.mock('../stores/settingsStore', () => ({
     getState: () => ({
       settings: {
         themePreset: 'midnightDeep',
-        themeMode: 'dark',
-        themeSyncSystem: true,
+        themeMode: 'system',
         language: 'zh-CN',
       },
     }),

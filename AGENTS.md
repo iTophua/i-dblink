@@ -12,7 +12,7 @@ pnpm test:components                  # component tests
 pnpm test:hooks                       # hook tests
 pnpm test:api                         # API tests
 pnpm test:integration                 # frontend integration tests
-go test ./...                         # Go backend tests
+go test ./...                         # Go backend tests (run from root, NOT go-backend/)
 pnpm lint                             # ESLint (flat config in frontend/)
 pnpm exec -- tsc --noEmit             # Type check (in frontend/)
 pnpm format                           # Prettier (config in frontend/)
@@ -43,6 +43,7 @@ Wails v2: Go backend → Wails TS bindings → React 19 frontend. No Rust, no si
 - **Floating window feature is no-op** — Wails v2 lacks frontend multi-window API
 - **i18n not started** — all UI text is hardcoded Chinese
 - **Two Go directories:** `backend/` (real source) and `go-backend/` (stale, contains only `testdata/`). The root `main.go` imports `idblink/backend`. Run `go test ./...` from root.
+- **CI workflow is outdated** — `.github/workflows/test.yml` still references `go-backend/` and `src-tauri/` (Tauri migration remnant)
 
 ## Test quirks
 
@@ -63,4 +64,5 @@ Wails v2: Go backend → Wails TS bindings → React 19 frontend. No Rust, no si
 
 ## References
 
+- `.cursorrules`, `.windsurfrules`, `QODER.md` — identical MCP tool instructions (code-review-graph)
 - Existing full instruction files (may contain stale info): `CLAUDE.md`, `QODER.md`, `QWEN.md`, `.cursorrules`, `.windsurfrules`

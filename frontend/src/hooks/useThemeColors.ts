@@ -55,12 +55,10 @@ export interface ThemeColors {
 
 export function useThemeColors(): ThemeColors {
   const { settings } = useSettingsStore();
-  const { themePreset, themeMode, themeSyncSystem } = settings;
+  const { themePreset, themeMode } = settings;
 
-  const effectiveMode = themeSyncSystem
-    ? window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light'
+  const effectiveMode = themeMode === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : themeMode;
 
   const config = getThemeConfig(themePreset, effectiveMode);

@@ -4,7 +4,7 @@
  * 定义多款科技酷炫主题，每款支持亮暗模式
  */
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'system';
 export type ThemePreset = 'neonCyber' | 'midnightDeep' | 'oceanBlue' | 'nordicFrost';
 
 export interface ThemeColorScheme {
@@ -607,6 +607,10 @@ function createColorScheme(base: {
 }
 
 // 工厂函数：根据主题名和色值构建完整主题配置（自动填充不变的共享配置）
+function getSystemMode(): 'light' | 'dark' {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 function createThemeConfig(
   name: string,
   description: string,
@@ -614,15 +618,16 @@ function createThemeConfig(
   colors: ThemeColorScheme,
   neutralColors: NeutralColors
 ): ThemeConfig {
+  const effectiveMode = mode === 'system' ? getSystemMode() : mode;
   return {
     name,
     description,
-    mode,
+    mode: effectiveMode,
     colors,
     neutralColors,
-    glassEffect: GLASS_EFFECTS[mode],
+    glassEffect: GLASS_EFFECTS[effectiveMode],
     glassLayers: GLASS_LAYERS,
-    focusStyle: FOCUS_STYLES[mode],
+    focusStyle: FOCUS_STYLES[effectiveMode],
     lighting: LIGHTING_EFFECTS,
     dbTypeColors: DB_TYPE_COLORS,
     typography: TYPOGRAPHY,
@@ -1104,7 +1109,8 @@ export const THEMES: Record<ThemePreset, { light: ThemeConfig; dark: ThemeConfig
 };
 
 export function getThemeConfig(preset: ThemePreset, mode: ThemeMode): ThemeConfig {
-  return THEMES[preset][mode];
+  const effectiveMode = mode === 'system' ? getSystemMode() : mode;
+  return THEMES[preset][effectiveMode];
 }
 
 export const THEME_PRESETS_LIST = Object.entries(THEMES).map(([key, value]) => ({

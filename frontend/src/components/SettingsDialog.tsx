@@ -81,8 +81,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       pageSize: 1000,
       maxResultRows: 10000,
       themePreset: 'midnightDeep',
-      themeMode: 'dark',
-      themeSyncSystem: true,
+      themeMode: 'system',
       language: 'zh-CN',
     });
   };
@@ -92,11 +91,11 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
   };
 
   const handleModeChange = (mode: ThemeMode) => {
-    form.setFieldsValue({ themeMode: mode, themeSyncSystem: false });
+    form.setFieldsValue({ themeMode: mode });
   };
 
   const themePreset = Form.useWatch('themePreset', form) ?? 'midnightDeep';
-  const themeSyncSystem = Form.useWatch('themeSyncSystem', form) ?? true;
+  const themeMode = Form.useWatch('themeMode', form) ?? 'system';
 
   const menuItems = useMemo(
     () =>
@@ -263,22 +262,8 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                   <Select onChange={handleModeChange}>
                     <Select.Option value="light">{t('common.light')}</Select.Option>
                     <Select.Option value="dark">{t('common.dark')}</Select.Option>
+                    <Select.Option value="system">{t('common.followSystem')}</Select.Option>
                   </Select>
-                </Form.Item>
-
-                <Form.Item
-                  name="themeSyncSystem"
-                  valuePropName="checked"
-                  tooltip={t('common.followSystemTheme')}
-                >
-                  <Space>
-                    <Switch
-                      checked={themeSyncSystem}
-                      size="small"
-                      onChange={(checked) => form.setFieldsValue({ themeSyncSystem: checked })}
-                    />
-                    <span>{t('common.followSystem')}</span>
-                  </Space>
                 </Form.Item>
               </div>
             )}

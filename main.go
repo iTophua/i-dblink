@@ -28,7 +28,11 @@ func emitMenuEvent(ctx context.Context, action string) {
 
 func callback(app *backend.App, action string) func(*menu.CallbackData) {
 	return func(_ *menu.CallbackData) {
-		emitMenuEvent(app.Context(), action)
+		ctx := app.Context()
+		if ctx == nil {
+			return
+		}
+		emitMenuEvent(ctx, action)
 	}
 }
 
@@ -37,7 +41,7 @@ func createFileMenu(app *backend.App) *menu.Menu {
 	m.Append(menu.Text("新建连接", keys.CmdOrCtrl("n"), callback(app, "new-connection")))
 	m.Append(menu.Text("打开连接", keys.CmdOrCtrl("o"), callback(app, "open-connection")))
 	m.Append(menu.Separator())
-	m.Append(menu.Text("保存", keys.CmdOrCtrl("s"), callback(app, "save-connection")))
+	m.Append(menu.Text("保存", keys.CmdOrCtrl("s"), callback(app, "save")))
 	m.Append(menu.Text("另存为...", keys.CmdOrCtrl("shift-s"), callback(app, "save-as")))
 	m.Append(menu.Separator())
 	m.Append(menu.Text("导入", keys.CmdOrCtrl("i"), callback(app, "import")))
@@ -54,9 +58,9 @@ func createEditMenu(app *backend.App) *menu.Menu {
 	m.Append(menu.Text("剪切", nil, callback(app, "cut")))
 	m.Append(menu.Text("复制", nil, callback(app, "copy")))
 	m.Append(menu.Text("粘贴", nil, callback(app, "paste")))
-	m.Append(menu.Text("全选", nil, callback(app, "selectAll")))
+	m.Append(menu.Text("全选", nil, callback(app, "select-all")))
 	m.Append(menu.Separator())
-	m.Append(menu.Text("查找/替换...", keys.CmdOrCtrl("f"), callback(app, "find-replace")))
+	m.Append(menu.Text("查找/替换...", keys.CmdOrCtrl("f"), callback(app, "find")))
 	return m
 }
 
@@ -68,7 +72,7 @@ func createViewMenu(app *backend.App) *menu.Menu {
 	m.Append(menu.Text("缩小", keys.CmdOrCtrl("-"), callback(app, "zoom-out")))
 	m.Append(menu.Text("实际大小", keys.CmdOrCtrl("0"), callback(app, "zoom-reset")))
 	m.Append(menu.Separator())
-	m.Append(menu.Text("全屏切换", keys.Key("f11"), callback(app, "toggle-fullscreen")))
+	m.Append(menu.Text("全屏切换", keys.Key("f11"), callback(app, "fullscreen")))
 	return m
 }
 
@@ -112,11 +116,11 @@ func createWindowMenu(app *backend.App) *menu.Menu {
 
 func createHelpMenu(app *backend.App) *menu.Menu {
 	m := menu.NewMenu()
-	m.Append(menu.Text("文档", keys.Key("f1"), callback(app, "contents")))
-	m.Append(menu.Text("搜索...", nil, callback(app, "search-help")))
+	m.Append(menu.Text("文档", keys.Key("f1"), callback(app, "documentation")))
+	m.Append(menu.Text("搜索...", nil, callback(app, "search")))
 	m.Append(menu.Separator())
-	m.Append(menu.Text("检查更新...", nil, callback(app, "check-updates")))
-	m.Append(menu.Text("关于 i-dblink", nil, callback(app, "About iDBlink")))
+	m.Append(menu.Text("检查更新...", nil, callback(app, "check-update")))
+
 	m.Append(menu.Separator())
 	m.Append(menu.Text("开发者工具", keys.Key("f12"), func(_ *menu.CallbackData) {
 		app.ShowDevTools()
