@@ -363,6 +363,7 @@ export function SQLEditor({
   const [result, setResult] = useState<QueryResultWithTiming | null>(null);
   const [results, setResults] = useState<QueryResultWithTiming[]>([]);
   const [activeTab, setActiveTab] = useState<'result' | 'messages' | 'explain'>('result');
+  const [resultViewMode, setResultViewMode] = useState<'auto' | 'all' | 'single'>('auto');
   const requestStartTimeRef = useRef(0);
   const [messages, setMessages] = useState<string[]>([]);
   const [explainPlan, setExplainPlan] = useState<any[]>([]);
@@ -432,7 +433,7 @@ export function SQLEditor({
   }, []);
 
   // 可拖拽调整编辑器/结果面板高度
-  const [editorRatio, setEditorRatio] = useState(0.6); // 默认编辑器占 60%
+  const [editorRatio, setEditorRatio] = useState(0.5); // 默认编辑器和结果面板各占 50%
   const isResizingRef = useRef(false);
 
   // 缺失的 ref 定义（修复类型错误）
@@ -675,8 +676,8 @@ export function SQLEditor({
       autoClosingBrackets: 'never',
       autoClosingQuotes: 'never',
       folding: true,
-      foldingStrategy: 'indentation',
-      showFoldingControls: 'always',
+      foldingStrategy: 'auto',
+      showFoldingControls: 'mouseover',
       renderWhitespace: 'selection',
       cursorBlinking: 'blink',
       mouseWheelZoom: false,
@@ -694,26 +695,7 @@ export function SQLEditor({
       inlineSuggest: { enabled: false },
     });
 
-    // 禁用双击选择单词
-    editor.onMouseDown((e: any) => {
-      if (e.event.detail === 2) {
-        e.event.preventDefault();
-        e.event.stopPropagation();
-        if (e.target.position) {
-          queueMicrotask(() => {
-            editor.setPosition(e.target.position);
-            editor.setSelection(
-              new monaco.Selection(
-                e.target.position.lineNumber,
-                e.target.position.column,
-                e.target.position.lineNumber,
-                e.target.position.column
-              )
-            );
-          });
-        }
-      }
-    });
+    // 支持双击选中单词（Monaco Editor 默认行为）
 
     // 自定义右键菜单
     editor.onContextMenu((e: any) => {
@@ -1646,15 +1628,18 @@ export function SQLEditor({
   }, []);
 
   const saveSQL = useCallback(() => {
+    const now = new Date();
+    const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+    const fileName = `query_${ts}.sql`;
     const blob = new Blob([sql], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'query.sql';
+    a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
     message.success(t('common.sqlSaved'));
-  }, [sql]);
+  }, [sql, t]);
 
   const copySQL = useCallback(() => {
     navigator.clipboard.writeText(sql);
@@ -1757,26 +1742,58 @@ export function SQLEditor({
   const resultTabItems = useMemo<NonNullable<TabsProps['items']>>(() => {
     const items: NonNullable<TabsProps['items']> = [];
 
+    const allResults: QueryResultWithTiming[] =
+      results.length > 0 ? results : result ? [result] : [];
+
+    const showAsMulti =
+      (resultViewMode === 'all' && allResults.length >= 1) ||
+      (resultViewMode === 'auto' && allResults.length > 1);
+
     const resultLabel =
-      results.length > 1
-        ? `${t('common.resultLabel')} (${results.length})`
-        : result
-          ? `${t('common.resultLabel')} (${result.rows.length} ${t('common.rowsCount')})`
+      allResults.length > 1
+        ? `${t('common.resultLabel')} (${allResults.length})`
+        : allResults.length === 1
+          ? `${t('common.resultLabel')} (${allResults[0].rows.length} ${t('common.rowsCount')})`
           : t('common.resultLabel');
 
     items.push({
       key: 'result',
-      label: resultLabel,
+      label: (
+        <Space size={4}>
+          <span>{resultLabel}</span>
+          {allResults.length > 1 && (
+            <Dropdown
+              menu={{
+                items: [
+                  { key: 'auto', label: t('common.autoDisplay') },
+                  { key: 'all', label: t('common.showAllResults') },
+                  { key: 'single', label: t('common.showSingleResult') },
+                ],
+                selectedKeys: [resultViewMode],
+                onClick: ({ key }) => setResultViewMode(key as 'auto' | 'all' | 'single'),
+              }}
+              trigger={['click']}
+            >
+              <Tag
+                style={{ fontSize: 10, lineHeight: '16px', cursor: 'pointer', padding: '0 4px', margin: 0 }}
+                color="processing"
+              >
+                {resultViewMode === 'auto' ? t('common.autoDisplay') : resultViewMode === 'all' ? t('common.showAllResults') : t('common.showSingleResult')}
+              </Tag>
+            </Dropdown>
+          )}
+        </Space>
+      ),
       children: (
         <div
           style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
         >
-          {results.length > 1 ? (
+          {showAsMulti ? (
             <Tabs
               type="card"
               size="small"
               style={{ padding: '0 8px' }}
-              items={results.map((r, i) => ({
+              items={allResults.map((r, i) => ({
                 key: `result-${i}`,
                 label: `${t('common.resultLabel')} ${i + 1} (${r.rows.length} ${t('common.rowsCount')})${r.executionTime ? ` · ${r.executionTime}ms` : ''}`,
                 children: renderResultTable(r),
@@ -1842,7 +1859,7 @@ export function SQLEditor({
     }
 
     return items;
-  }, [results, result, messages, explainPlan, tc.isDark, renderResultTable, renderSingleResult]);
+  }, [results, result, messages, explainPlan, tc.isDark, renderResultTable, renderSingleResult, resultViewMode]);
 
   // 当 Tab items 变化导致当前 activeTab 失效时，自动切换到第一个可用 Tab
   useEffect(() => {
@@ -2139,6 +2156,8 @@ export function SQLEditor({
             tabSize: 2,
             wordWrap: 'on',
             folding: true,
+            foldingStrategy: 'auto',
+            showFoldingControls: 'mouseover',
             renderLineHighlight: 'all',
             selectOnLineNumbers: true,
             cursorStyle: 'line',

@@ -346,6 +346,7 @@ export function TableDesigner({
   const [indexes, setIndexes] = useState<DesignerIndex[]>([]);
   const [foreignKeys, setForeignKeys] = useState<DesignerForeignKey[]>([]);
   const [loading, setLoading] = useState(false);
+  const [renamedColumns, setRenamedColumns] = useState<{ key: string; originalName: string }[]>([]);
 
   // 保存原始结构用于生成 ALTER 语句
   const [originalColumns, setOriginalColumns] = useState<DesignerColumn[]>([]);
@@ -440,10 +441,28 @@ export function TableDesigner({
     const dialect = getDialect(dbType);
     
     if (isEditMode) {
-      // 生成 ALTER TABLE SQL
       const columnChanges = columns.map((col) => {
         const orig = originalColumns.find((c) => c.name === col.name);
-        if (!orig) return { type: 'add' as const, column: toDialectColumn(col) };
+        if (!orig) {
+          const renameEntry = renamedColumns.find((r) => r.key === col.key);
+          if (renameEntry) {
+            const origCol = originalColumns.find((c) => c.name === renameEntry.originalName);
+            if (origCol) {
+              const hasPropsChanged =
+                origCol.type !== col.type ||
+                origCol.length !== col.length ||
+                origCol.nullable !== col.nullable ||
+                origCol.defaultValue !== col.defaultValue ||
+                origCol.comment !== col.comment ||
+                origCol.isPrimary !== col.isPrimary;
+              if (hasPropsChanged) {
+                return { type: 'modify' as const, column: toDialectColumn(col), oldName: renameEntry.originalName };
+              }
+              return { type: 'rename' as const, column: toDialectColumn(col), oldName: renameEntry.originalName };
+            }
+          }
+          return { type: 'add' as const, column: toDialectColumn(col) };
+        }
         const hasChanged =
           orig.type !== col.type ||
           orig.length !== col.length ||
@@ -455,9 +474,12 @@ export function TableDesigner({
         return null;
       }).filter(Boolean) as AlterTableOptions['columns'];
 
-      // 删除的列
       const deletedColumns = originalColumns
-        .filter((orig) => !columns.find((c) => c.name === orig.name))
+        .filter((orig) => {
+          if (columns.find((c) => c.name === orig.name)) return false;
+          if (renamedColumns.find((r) => r.originalName === orig.name)) return false;
+          return true;
+        })
         .map((orig) => ({ type: 'drop' as const, column: toDialectColumn(orig) }));
 
       // 索引变更
@@ -535,6 +557,19 @@ export function TableDesigner({
     field: keyof DesignerColumn,
     value: DesignerColumn[keyof DesignerColumn]
   ) => {
+    if (isEditMode && field === 'name') {
+      const col = columns.find((c) => c.key === key);
+      if (col) {
+        const newName = value as string;
+        const existingRename = renamedColumns.find((r) => r.key === key);
+        if (!existingRename) {
+          const origCol = originalColumns.find((c) => c.name === col.name);
+          if (origCol && newName !== col.name) {
+            setRenamedColumns((prev) => [...prev, { key, originalName: col.name }]);
+          }
+        }
+      }
+    }
     setColumns((prev) => prev.map((c) => (c.key === key ? { ...c, [field]: value } : c)));
   };
 
@@ -678,12 +713,17 @@ export function TableDesigner({
               placeholder={t('common.tableStructure.columnPlaceholder')}
               onChange={(e) => updateColumn(record.key, 'name', e.target.value)}
           onBlur={(e) => {
-            // Sync column name to indexes
             if (val !== e.target.value && val) {
               setIndexes((prev) =>
                 prev.map((idx) => ({
                   ...idx,
                   columns: idx.columns.map((c) => (c === val ? e.target.value : c)),
+                }))
+              );
+              setForeignKeys((prev) =>
+                prev.map((fk) => ({
+                  ...fk,
+                  column: fk.column === val ? e.target.value : fk.column,
                 }))
               );
             }

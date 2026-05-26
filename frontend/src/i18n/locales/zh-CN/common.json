@@ -23,6 +23,9 @@
     "no": "否",
     "all": "全部",
     "none": "无",
+    "favorites": "收藏夹",
+    "favoritesLoadFailed": "加载收藏失败",
+    "noFavorites": "暂无收藏",
     "default": "默认",
     "reset": "重置",
     "back": "返回",
@@ -524,7 +527,16 @@
       "exportFailed": "导出失败",
       "importSuccess": "成功导入 {{count}} 条数据",
       "importPartial": "导入完成: 成功 {{success}} 条, 失败 {{failed}} 条",
-      "importFailed": "导入失败"
+      "importFailed": "导入失败",
+      "previewData": "预览数据",
+      "totalRows": "总行数",
+      "mappedColumns": "已映射列",
+      "unmappedColumns": "未映射列",
+      "validationWarnings": "数据验证警告",
+      "noValidationIssues": "数据验证通过，未发现问题",
+      "requiredFieldNotMapped": "必填字段「{{column}}」未映射",
+      "emptyRequiredField": "列「{{header}}」存在空值，目标字段「{{column}}」为 NOT NULL",
+      "moreWarnings": "还有 {{count}} 条警告..."
     },
     "globalSearch": {
       "title": "全局搜索",
@@ -688,6 +700,15 @@
       "executeTime": "执行时间",
       "query": "查询",
       "duration": "耗时"
+    },
+    "operationLog": {
+      "title": "操作日志",
+      "empty": "暂无操作历史",
+      "clearTitle": "清除历史",
+      "clearConfirm": "确定要清除所有操作历史吗？",
+      "cleared": "操作历史已清除",
+      "clearFailed": "清除操作历史失败",
+      "clear": "清除"
     },
     "largeQueryWarning": "大量数据查询警告",
     "queryWithoutLimitWarning": "当前查询没有 LIMIT 限制，可能返回大量数据导致性能问题。是否继续执行？",
@@ -979,6 +1000,7 @@
     "executingLabel": "执行中...",
     "queryHistoryTitle": "查询历史",
     "executeButton": "执行",
+    "executeSelected": "执行选中 SQL",
     "stopButton": "停止",
     "formatButton": "格式化",
     "explainPlanButton": "执行计划",
@@ -1277,6 +1299,15 @@
     "syncSqlPreview": "同步 SQL 预览",
     "executeSync": "执行同步",
     "addNewRow": "新增行",
+    "goToRow": "跳转到行",
+    "invalidRowNumber": "无效行号（最大：{{max}}）",
+    "autoDisplay": "自动",
+    "showAllResults": "显示所有结果",
+    "showSingleResult": "显示单个结果",
+    "connectionReordered": "连接顺序已调整",
+    "reorderFailed": "调整顺序失败",
+    "onlyShowingFirst10Rows": "仅显示前 10 条，共 {{count}} 行",
+    "query": "查询",
     "contextMenu": {
       "copyCellValue": "复制单元格值",
       "copyAsSqlLiteral": "复制为 SQL 值",
@@ -1291,7 +1322,19 @@
       "copyAsUpdate": "复制为 UPDATE",
       "copyAsDelete": "复制为 DELETE",
       "copyAsJson": "复制为 JSON",
-      "addNewRow": "添加新行"
+      "addNewRow": "添加新行",
+      "previewCell": "预览单元格"
+    },
+    "cellPreview": {
+      "text": "文本",
+      "hex": "十六进制",
+      "image": "图片",
+      "alt": "预览",
+      "notRecognized": "无法识别的图片格式",
+      "title": "预览：{{columnName}}",
+      "copy": "复制",
+      "save": "保存",
+      "copied": "已复制"
     },
     "advancedConfigDescription": "配置连接超时和查询行为",
     "allChangesRevoked": "全部更改已撤销",
@@ -1573,6 +1616,21 @@
     "updateMode": "更新模式",
     "viewCount": "视图数量",
     "viewDefinition": "视图定义",
-    "viewStatistics": "视图统计"
+    "viewStatistics": "视图统计",
+    "connectionExportDialog": {
+      "title": "连接导入/导出",
+      "exportTab": "导出",
+      "importTab": "导入",
+      "exportHint": "导出所有连接配置（不含密码）。导入后需要重新输入密码。",
+      "importHint": "从 JSON 文件导入连接配置。密码不会被导入，需要手动重新设置。",
+      "exportButton": "导出连接配置",
+      "selectFile": "选择文件导入",
+      "skipExisting": "跳过已存在的连接",
+      "overwriteExisting": "覆盖已存在的连接",
+      "exportSuccess": "连接配置导出成功",
+      "exportFailed": "导出失败",
+      "importSuccess": "成功导入 {{conns}} 个连接和 {{groups}} 个分组",
+      "importFailed": "导入失败"
+    }
   }
 }

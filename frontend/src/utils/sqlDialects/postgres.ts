@@ -114,7 +114,7 @@ class PostgreSQLDialect extends BaseDialect implements SqlDialect {
           statements.push(`ALTER TABLE ${tableRef} DROP COLUMN ${this.escapeIdentifier(change.column.name)};`);
           break;
         case 'modify': {
-          const colName = this.escapeIdentifier(change.column.name);
+          const colName = change.oldName ? this.escapeIdentifier(change.oldName) : this.escapeIdentifier(change.column.name);
           // PostgreSQL 修改列需要多条语句
           if (change.column.type) {
             statements.push(
@@ -130,6 +130,11 @@ class PostgreSQLDialect extends BaseDialect implements SqlDialect {
             statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${colName} SET NOT NULL;`);
           } else {
             statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${colName} DROP NOT NULL;`);
+          }
+          if (change.oldName) {
+            statements.push(
+              `ALTER TABLE ${tableRef} RENAME COLUMN ${this.escapeIdentifier(change.oldName)} TO ${this.escapeIdentifier(change.column.name)};`
+            );
           }
           break;
         }

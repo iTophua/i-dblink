@@ -4,6 +4,7 @@ import { WindowSetTitle } from '../../wailsjs/runtime/runtime';
 import { Layout, theme, Modal, Form, Input, message } from 'antd';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
+import { Favorites } from './Favorites';
 import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
 import { useMenuShortcuts } from '../hooks/useMenuShortcuts';
 import { Toolbar } from './Toolbar';
@@ -13,7 +14,9 @@ import { DatabaseProperties } from './DatabaseProperties';
 import { TabPanel, type TabPanelRef, type ActiveTabInfo } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
+import { ConnectionExportDialog } from './ConnectionExportDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { OperationLog } from './OperationLog';
 import type { TableInfo, ColumnInfo, IndexInfo } from '../types/api';
 import type { ConnectionFormData } from './ConnectionDialog';
 import type { Connection } from '../stores/appStore';
@@ -66,6 +69,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<ConnectionFormData | undefined>();
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [connectionExportOpen, setConnectionExportOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [passwordDialogConn, setPasswordDialogConn] = useState<{ id: string; name: string } | null>(
     null
@@ -82,6 +86,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [currentExecutionTime, setCurrentExecutionTime] = useState<number>(0);
   const [isQuerying, setIsQuerying] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [operationLogOpen, setOperationLogOpen] = useState(false);
 
   // 恢复侧边栏工作区状态
   useEffect(() => {
@@ -131,7 +137,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
     document.title = title;
 
     // Wails 窗口标题
-    if (typeof window !== 'undefined' && (window as any).__wails__) {
+    if (typeof window !== 'undefined' && (window as any).runtime) {
       try {
         WindowSetTitle(title);
       } catch {
@@ -430,6 +436,20 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       });
     } catch (err) {
       console.error('Failed to load routines:', err);
+      // 即使加载失败也标记为已加载，避免一直显示 loading
+      setConnectionDatabases((prev) => {
+        const dbList = prev[connectionId] || [];
+        const dbIndex = dbList.findIndex((db) => db.database === database);
+        if (dbIndex >= 0) {
+          const newDbList = [...dbList];
+          newDbList[dbIndex] = {
+            ...newDbList[dbIndex],
+            routinesLoaded: true,
+          };
+          return { ...prev, [connectionId]: newDbList };
+        }
+        return prev;
+      });
     }
   }, []);
 
@@ -826,6 +846,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         case 'open-connection':
           message.info('打开连接功能尚未实现');
           break;
+        case 'export-connections':
+          setConnectionExportOpen(true);
+          break;
         case 'options':
           setSettingsDialogOpen(true);
           break;
@@ -927,6 +950,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         case 'data-sync':
           message.info('数据同步功能尚未实现');
           break;
+        case 'favorites':
+          setFavoritesOpen(true);
+          break;
         case 'backup':
           message.info('备份数据库功能尚未实现');
           break;
@@ -944,6 +970,9 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           break;
         case 'tile-vertically':
           message.info('垂直平铺窗口功能尚未实现');
+          break;
+        case 'operation-log':
+          setOperationLogOpen(true);
           break;
         default:
           console.log(`Unknown menu action: ${action}`);
@@ -1131,6 +1160,21 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
 
       <SettingsDialog open={settingsDialogOpen} onCancel={() => setSettingsDialogOpen(false)} />
 
+      <ConnectionExportDialog
+        open={connectionExportOpen}
+        onClose={() => setConnectionExportOpen(false)}
+        onImported={() => {
+          const store = useAppStore.getState();
+          store.setConnections([]);
+          api.getConnections().then((conns) => {
+            store.setConnections(conns.map((c) => ({ ...c, status: 'disconnected' as const })));
+          });
+          api.getGroups().then((groups) => {
+            store.setGroups(groups);
+          });
+        }}
+      />
+
       <GlobalSearch
         open={globalSearchOpen}
         onClose={() => setGlobalSearchOpen(false)}
@@ -1140,6 +1184,23 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           setTableToOpen({ name: tableName, database });
         }}
         connectionDatabases={connectionDatabases}
+      />
+
+      <Favorites
+        open={favoritesOpen}
+        onClose={() => setFavoritesOpen(false)}
+        onSelectTable={(connectionId, database, tableName) => {
+          setSelectedConnectionId(connectionId);
+          setSelectedDatabase(database);
+          setTableToOpen({ name: tableName, database });
+        }}
+        onSelectQuery={(sql) => {
+          if (selectedConnectionId) {
+            window.dispatchEvent(
+              new CustomEvent('tab-action', { detail: { action: 'new-sql-tab', sql } })
+            );
+          }
+        }}
       />
 
       <Modal
@@ -1165,6 +1226,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           </Form.Item>
         </Form>
       </Modal>
+
+      <OperationLog open={operationLogOpen} onClose={() => setOperationLogOpen(false)} />
     </Layout>
   );
 }

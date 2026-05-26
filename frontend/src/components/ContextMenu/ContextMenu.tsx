@@ -78,6 +78,20 @@ export function ContextMenu({ items, visible, x, y, onClose }: ContextMenuProps)
     }
   }, [visible]);
 
+  // 点击/右键菜单外部时关闭菜单。
+  // 使用 mousedown（在 contextmenu 之前触发），右键时先关闭菜单，
+  // 随后 contextmenu 事件自然冒泡到网格触发新菜单。
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [visible, onClose]);
+
   if (!visible) return null;
 
   // Filter hidden items and empty groups
@@ -91,52 +105,46 @@ export function ContextMenu({ items, visible, x, y, onClose }: ContextMenuProps)
   const finalY = adjustedPos?.y ?? y;
 
   return (
-    <>
-      {/* Click overlay to close */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 1999 }} onClick={onClose} />
-      {/* Menu */}
-      <div
-        ref={menuRef}
-        style={{
-          position: 'fixed',
-          top: finalY,
-          left: finalX,
-          zIndex: 2000,
-          background: 'var(--background-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 4,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          padding: '4px 0',
-          minWidth: 180,
-          maxHeight: 'calc(100vh - 16px)',
-          overflowY: 'auto',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {visibleItems.map((item, index) => {
-          if (item.type === 'divider') {
-            return <div key={`divider-${index}`} style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />;
-          }
-          if (item.type === 'group') {
-            return (
-              <div key={item.label || `group-${index}`}>
-                {item.label && (
-                  <div style={{ padding: '4px 12px', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>
-                    {item.label}
-                  </div>
-                )}
-                {item.items
-                  .filter((i) => !i.hidden)
-                  .map((subItem) => (
-                    <MenuItem key={subItem.key} item={subItem} />
-                  ))}
-              </div>
-            );
-          }
-          return <MenuItem key={item.key} item={item} />;
-        })}
-      </div>
-    </>
+    <div
+      ref={menuRef}
+      style={{
+        position: 'fixed',
+        top: finalY,
+        left: finalX,
+        zIndex: 2000,
+        background: 'var(--background-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        padding: '4px 0',
+        minWidth: 180,
+        maxHeight: 'calc(100vh - 16px)',
+        overflowY: 'auto',
+      }}
+    >
+      {visibleItems.map((item, index) => {
+        if (item.type === 'divider') {
+          return <div key={`divider-${index}`} style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />;
+        }
+        if (item.type === 'group') {
+          return (
+            <div key={item.label || `group-${index}`}>
+              {item.label && (
+                <div style={{ padding: '4px 12px', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                  {item.label}
+                </div>
+              )}
+              {item.items
+                .filter((i) => !i.hidden)
+                .map((subItem) => (
+                  <MenuItem key={subItem.key} item={subItem} />
+                ))}
+            </div>
+          );
+        }
+        return <MenuItem key={item.key} item={item} />;
+      })}
+    </div>
   );
 }
 

@@ -393,6 +393,68 @@ func (r *SnippetRepository) Delete(id string) error {
 	return nil
 }
 
+// HistoryRepository 操作历史仓库
+type HistoryRepository struct {
+	db *sql.DB
+}
+
+// NewHistoryRepository 创建操作历史仓库
+func NewHistoryRepository(db *sql.DB) *HistoryRepository {
+	return &HistoryRepository{db: db}
+}
+
+// Record 记录操作历史
+func (r *HistoryRepository) Record(connID, action string, success bool, errMsg string) error {
+	id := uuid.New().String()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := r.db.Exec(
+		"INSERT INTO connection_history (id, connection_id, action, success, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		id, connID, action, success, errMsg, now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to record history: %w", err)
+	}
+	return nil
+}
+
+// GetRecent 获取最近的操作历史
+func (r *HistoryRepository) GetRecent(limit int) ([]map[string]interface{}, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := r.db.Query(
+		"SELECT id, connection_id, action, success, error_message, created_at FROM connection_history ORDER BY created_at DESC LIMIT ?",
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query history: %w", err)
+	}
+	defer rows.Close()
+
+	var result []map[string]interface{}
+	for rows.Next() {
+		var id, connID, action, errMsg, createdAt string
+		var success bool
+		if err := rows.Scan(&id, &connID, &action, &success, &errMsg, &createdAt); err != nil {
+			return nil, fmt.Errorf("failed to scan history: %w", err)
+		}
+		result = append(result, map[string]interface{}{
+			"id": id, "connection_id": connID, "action": action,
+			"success": success, "error_message": errMsg, "created_at": createdAt,
+		})
+	}
+	return result, rows.Err()
+}
+
+// Clear 清空操作历史
+func (r *HistoryRepository) Clear() error {
+	_, err := r.db.Exec("DELETE FROM connection_history")
+	if err != nil {
+		return fmt.Errorf("failed to clear history: %w", err)
+	}
+	return nil
+}
+
 // 辅助函数：扫描连接配置
 func scanConnection(scanner interface {
 	Scan(dest ...interface{}) error
@@ -486,4 +548,124 @@ func scanSnippet(scanner interface {
 	}
 
 	return &snippet, nil
+}
+
+// FavoriteRepository 收藏仓库
+type FavoriteRepository struct {
+	db *sql.DB
+}
+
+func NewFavoriteRepository(db *sql.DB) *FavoriteRepository {
+	return &FavoriteRepository{db: db}
+}
+
+func (r *FavoriteRepository) GetAll() ([]*Favorite, error) {
+	rows, err := r.db.Query(`
+		SELECT id, type, name, connection_id, database, table_name, sql_text, tags, created_at, updated_at
+		FROM favorites ORDER BY updated_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query favorites: %w", err)
+	}
+	defer rows.Close()
+
+	var favorites []*Favorite
+	for rows.Next() {
+		fav, err := scanFavorite(rows)
+		if err != nil {
+			return nil, err
+		}
+		favorites = append(favorites, fav)
+	}
+
+	return favorites, rows.Err()
+}
+
+func (r *FavoriteRepository) Save(fav *Favorite) error {
+	now := time.Now().UTC()
+	fav.UpdatedAt = now
+
+	if fav.ID == "" {
+		fav.ID = uuid.New().String()
+		fav.CreatedAt = now
+		return r.insertFavorite(fav)
+	}
+
+	existing := r.db.QueryRow("SELECT id FROM favorites WHERE id = ?", fav.ID)
+	var id string
+	if err := existing.Scan(&id); err != nil {
+		if err == sql.ErrNoRows {
+			fav.CreatedAt = now
+			return r.insertFavorite(fav)
+		}
+		return fmt.Errorf("failed to check favorite existence: %w", err)
+	}
+
+	return r.updateFavorite(fav)
+}
+
+func (r *FavoriteRepository) insertFavorite(fav *Favorite) error {
+	_, err := r.db.Exec(`
+		INSERT INTO favorites (id, type, name, connection_id, database, table_name, sql_text, tags, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		fav.ID, fav.Type, fav.Name, fav.ConnectionID, fav.Database, fav.TableName, fav.SqlText, fav.Tags,
+		fav.CreatedAt.Format(time.RFC3339), fav.UpdatedAt.Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert favorite: %w", err)
+	}
+	return nil
+}
+
+func (r *FavoriteRepository) updateFavorite(fav *Favorite) error {
+	_, err := r.db.Exec(`
+		UPDATE favorites SET type=?, name=?, connection_id=?, database=?, table_name=?, sql_text=?, tags=?, updated_at=?
+		WHERE id=?
+	`,
+		fav.Type, fav.Name, fav.ConnectionID, fav.Database, fav.TableName, fav.SqlText, fav.Tags,
+		fav.UpdatedAt.Format(time.RFC3339), fav.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update favorite: %w", err)
+	}
+	return nil
+}
+
+func (r *FavoriteRepository) Delete(id string) error {
+	_, err := r.db.Exec("DELETE FROM favorites WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete favorite: %w", err)
+	}
+	return nil
+}
+
+func scanFavorite(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*Favorite, error) {
+	var fav Favorite
+	var createdAt, updatedAt string
+
+	err := scanner.Scan(
+		&fav.ID, &fav.Type, &fav.Name, &fav.ConnectionID, &fav.Database,
+		&fav.TableName, &fav.SqlText, &fav.Tags,
+		&createdAt, &updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to scan favorite: %w", err)
+	}
+
+	fav.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created_at: %w", err)
+	}
+	fav.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse updated_at: %w", err)
+	}
+
+	return &fav, nil
 }

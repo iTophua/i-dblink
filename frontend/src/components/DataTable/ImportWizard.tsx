@@ -160,6 +160,53 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     [fieldMapping]
   );
 
+  const unmappedCount = useMemo(
+    () => (parsedFile?.headers.length || 0) - mappedCount,
+    [parsedFile, mappedCount]
+  );
+
+  const previewMappedColumns = useMemo(() => {
+    if (!parsedFile) return [];
+    return parsedFile.headers
+      .filter((h) => fieldMapping[h])
+      .map((h) => ({
+        title: fieldMapping[h],
+        dataIndex: h,
+        key: h,
+        width: 160,
+        ellipsis: true,
+      }));
+  }, [parsedFile, fieldMapping]);
+
+  const validationWarnings = useMemo(() => {
+    if (!parsedFile) return [];
+    const warnings: string[] = [];
+    const notNullColumns = columns.filter((c) => c.is_nullable === 'NO' || !c.is_nullable);
+    for (const col of notNullColumns) {
+      const mappedHeader = Object.entries(fieldMapping).find(([, v]) => v === col.column_name);
+      if (!mappedHeader) {
+        warnings.push(`${t('common.importExport.requiredFieldNotMapped', { column: col.column_name })}`);
+      }
+    }
+    const sampleRows = parsedFile.rows.slice(0, 10);
+    for (const row of sampleRows) {
+      for (const [header, colName] of Object.entries(fieldMapping)) {
+        if (!colName) continue;
+        const col = columns.find((c) => c.column_name === colName);
+        if (!col) continue;
+        const value = row[header];
+        if (value === '' || value === null || value === undefined) {
+          if (col.is_nullable === 'NO' || !col.is_nullable) {
+            warnings.push(
+              `${t('common.importExport.emptyRequiredField', { column: colName, header })}`
+            );
+          }
+        }
+      }
+    }
+    return [...new Set(warnings)];
+  }, [parsedFile, fieldMapping, columns]);
+
   const steps = [
     {
       title: t('common.selectFile'),
@@ -256,6 +303,66 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       ),
     },
     {
+      title: t('common.importExport.previewData'),
+      content: (
+        <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <Tag color="blue" style={{ fontSize: 13, padding: '2px 10px' }}>
+              {t('common.importExport.totalRows')}: {parsedFile?.rows.length || 0}
+            </Tag>
+            <Tag color="green" style={{ fontSize: 13, padding: '2px 10px' }}>
+              {t('common.importExport.mappedColumns')}: {mappedCount}
+            </Tag>
+            <Tag color="orange" style={{ fontSize: 13, padding: '2px 10px' }}>
+              {t('common.importExport.unmappedColumns')}: {unmappedCount}
+            </Tag>
+          </div>
+          {validationWarnings.length > 0 && (
+            <Alert
+              message={t('common.importExport.validationWarnings')}
+              description={
+                <ul style={{ margin: 0, paddingLeft: 16 }}>
+                  {validationWarnings.slice(0, 10).map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                  {validationWarnings.length > 10 && (
+                    <li>
+                      {t('common.importExport.moreWarnings', { count: validationWarnings.length - 10 })}
+                    </li>
+                  )}
+                </ul>
+              }
+              type="warning"
+              showIcon
+            />
+          )}
+          {validationWarnings.length === 0 && (
+            <Alert
+              message={t('common.importExport.noValidationIssues')}
+              type="success"
+              showIcon
+            />
+          )}
+          <div style={{ maxHeight: 350, overflow: 'auto' }}>
+            <Table
+              dataSource={parsedFile?.rows.slice(0, 10) || []}
+              columns={previewMappedColumns}
+              size="small"
+              pagination={false}
+              bordered
+              rowKey={(_, index) => String(index)}
+              scroll={{ x: 'max-content' }}
+            />
+            {parsedFile && parsedFile.rows.length > 10 && (
+              <div style={{ textAlign: 'center', padding: 8, color: 'var(--text-tertiary)' }}>
+                {t('common.onlyShowingFirst10Rows', { count: parsedFile.rows.length })}
+              </div>
+            )}
+          </div>
+        </Space>
+      ),
+    },
+    {
       title: t('common.confirmImport'),
       content: (
         <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
@@ -271,7 +378,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
           <div style={{ maxHeight: 400, overflow: 'auto' }}>
             <Table
               dataSource={parsedFile?.rows.filter((_, i) => selectedRows.has(i)).slice(0, 10) || []}
-              columns={previewColumns}
+              columns={previewMappedColumns}
               size="small"
               pagination={false}
               bordered
@@ -308,7 +415,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
             <Button
               type="primary"
               onClick={() => setCurrentStep(currentStep + 1)}
-              disabled={!parsedFile}
+              disabled={!parsedFile || (currentStep === 1 && mappedCount === 0)}
             >
               {t('common.nextStep')}
             </Button>

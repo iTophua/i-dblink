@@ -46,6 +46,8 @@ func createFileMenu(app *backend.App) *menu.Menu {
 	m.Append(menu.Separator())
 	m.Append(menu.Text("导入", keys.CmdOrCtrl("i"), callback(app, "import")))
 	m.Append(menu.Text("导出", keys.CmdOrCtrl("e"), callback(app, "export")))
+	m.Append(menu.Separator())
+	m.Append(menu.Text("导出连接配置...", nil, callback(app, "export-connections")))
 	return m
 }
 
@@ -91,6 +93,7 @@ func createConnectionMenu(app *backend.App) *menu.Menu {
 func createToolsMenu(app *backend.App) *menu.Menu {
 	m := menu.NewMenu()
 	m.Append(menu.Text("选项/设置...", keys.CmdOrCtrl(","), callback(app, "options")))
+	m.Append(menu.Text("操作日志", nil, callback(app, "operation-log")))
 	m.Append(menu.Text("数据同步...", nil, callback(app, "data-sync")))
 	m.Append(menu.Separator())
 	m.Append(menu.Text("备份数据库...", nil, callback(app, "backup")))
@@ -134,10 +137,8 @@ func createMenu(app *backend.App) *menu.Menu {
 		menu.SubMenu("文件", createFileMenu(app)),
 	}
 
-	// macOS 上必须使用 menu.EditMenu() 才能启用 Cmd+C/V/Z 等标准编辑快捷键
-	// EditMenu() 会创建标准的 macOS 编辑菜单（Undo/Cut/Copy/Paste/Select All 等）
-	// 这些操作的 selector 会自动转发到当前第一响应者（WKWebView），确保输入框中的复制/粘贴正常工作
 	if gos.GOOS == "darwin" {
+		// macOS: 使用 EditMenu 角色菜单，系统会自动将 Cmd+C/V/X/Z/A 转发给 WebView
 		items = append(items, menu.EditMenu())
 	} else {
 		items = append(items, menu.SubMenu("编辑", createEditMenu(app)))

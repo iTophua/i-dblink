@@ -33,6 +33,8 @@ export interface GlideDataTableProps {
   rows: GlideRow[];
   hiddenColumns?: Set<string>;
   rowStatus?: (row: GlideRow, index: number) => 'new' | 'modified' | 'deleted' | undefined;
+  /** 自定义行底色，返回 CSS 颜色值；未提供时默认偶数行浅灰斑马纹 */
+  getRowColor?: (row: GlideRow, index: number) => string | undefined;
   isCellModified?: (row: GlideRow, colId: string) => boolean;
   onSelectionChange?: (selectedRows: GlideRow[], gridSelection: GridSelection) => void;
   onColumnMoved?: (startIndex: number, endIndex: number) => void;
@@ -176,6 +178,7 @@ export function GlideDataTable({
   rows,
   hiddenColumns,
   rowStatus,
+  getRowColor,
   isCellModified,
   onSelectionChange,
   onColumnMoved,
@@ -313,7 +316,19 @@ export function GlideDataTable({
       ctx.textBaseline = 'middle';
       const centerY = rect.y + rect.height / 2;
 
-      // 背景
+      // 行底色：自定义颜色 > 状态背景 > 斑马纹
+      const rowBg = getRowColor?.(rowItem, drawRow);
+      if (rowBg) {
+        ctx.fillStyle = rowBg;
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      } else if (!status) {
+        const stripeColor = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+        if (drawRow % 2 === 1) {
+          ctx.fillStyle = stripeColor;
+          ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        }
+      }
+      // 状态背景（覆盖在斑马纹之上）
       if (status === 'new') { ctx.fillStyle = 'rgba(82, 196, 26, 0.08)'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
       else if (status === 'modified') { ctx.fillStyle = 'rgba(24, 144, 255, 0.1)'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
       if (isCellModified?.(rowItem, gridCol.id)) { ctx.fillStyle = 'rgba(24, 144, 255, 0.06)'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
@@ -343,7 +358,7 @@ export function GlideDataTable({
       // 文本
       ctx.fillStyle = t.textDark; ctx.font = '12px sans-serif'; ctx.fillText(display, rect.x + 8, centerY);
     },
-    [gridColumns, rows, rowStatus, isCellModified, isDark]
+    [gridColumns, rows, rowStatus, isCellModified, isDark, getRowColor]
   );
 
   // ===== 选择变化 =====
@@ -538,10 +553,11 @@ export function GlideDataTable({
   );
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }} onPointerDown={handleWrapperPointerDown}>
+    <div style={{ position: 'absolute', inset: 0 }} onPointerDown={handleWrapperPointerDown}>
       <DataEditor
         ref={gridRef}
         width="100%"
+        height="100%"
         columns={gridColumns}
         rows={rows.length}
         getCellContent={getCellContent}

@@ -43,6 +43,8 @@ export interface ContextMenuTarget {
 export interface MenuContext {
   dbType?: DatabaseType;
   tableName?: string;
+  row?: number;
+  col?: number;
   colName?: string;
   cellValue?: unknown;
   rowData?: Record<string, unknown>;

@@ -4,6 +4,7 @@ import {
   BatchImport,
   BeginTransaction,
   CheckBackupTool,
+  ClearConnectionHistory,
   CommitTransaction,
   CompareSchema,
   ConnectDatabase,
@@ -19,6 +20,7 @@ import {
   ExecuteQuery,
   GetAllColumns,
   GetColumns,
+  GetConnectionHistory,
   GetConnections,
   GetDatabases,
   GetEvents,
@@ -490,6 +492,37 @@ export const api = {
     await DeleteSnippet(id);
   },
 
+  async saveFavorite(params: {
+    id?: string;
+    type: string;
+    name: string;
+    connection_id?: string;
+    database?: string;
+    table_name?: string;
+    sql_text?: string;
+    tags?: string;
+  }): Promise<string> {
+    return await SaveFavorite(
+      params.id ?? '',
+      params.type,
+      params.name,
+      params.connection_id ?? null,
+      params.database ?? null,
+      params.table_name ?? null,
+      params.sql_text ?? null,
+      params.tags ?? ''
+    );
+  },
+
+  async getFavorites(): Promise<any[]> {
+    const result = await GetFavorites();
+    return result as any[];
+  },
+
+  async deleteFavorite(id: string): Promise<void> {
+    await DeleteFavorite(id);
+  },
+
   async streamExportTable(
     connectionId: string,
     tableName: string,
@@ -693,5 +726,25 @@ export const api = {
 
   async quitApp(): Promise<void> {
     await QuitApp();
+  },
+
+  async getConnectionHistory(limit: number = 100): Promise<any[]> {
+    try {
+      return await GetConnectionHistory(limit);
+    } catch {
+      return [];
+    }
+  },
+
+  async clearConnectionHistory(): Promise<void> {
+    await ClearConnectionHistory();
+  },
+
+  async exportConnections(): Promise<string> {
+    return await WailsExportConnections();
+  },
+
+  async importConnections(jsonStr: string, overwrite: boolean): Promise<any> {
+    return await WailsImportConnections(jsonStr, overwrite);
   },
 };

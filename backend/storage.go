@@ -14,6 +14,8 @@ type Storage struct {
 	connectionRepo *localdb.ConnectionRepository
 	groupRepo      *localdb.GroupRepository
 	snippetRepo    *localdb.SnippetRepository
+	historyRepo    *localdb.HistoryRepository
+	favoriteRepo   *localdb.FavoriteRepository
 }
 
 // NewStorage 创建存储服务
@@ -38,6 +40,8 @@ func NewStorage(dataDir string) (*Storage, error) {
 		connectionRepo: localdb.NewConnectionRepository(pool.DB()),
 		groupRepo:      localdb.NewGroupRepository(pool.DB()),
 		snippetRepo:    localdb.NewSnippetRepository(pool.DB()),
+		historyRepo:    localdb.NewHistoryRepository(pool.DB()),
+		favoriteRepo:   localdb.NewFavoriteRepository(pool.DB()),
 	}, nil
 }
 
@@ -161,4 +165,34 @@ func (s *Storage) SaveSnippet(snippet *localdb.Snippet) error {
 // DeleteSnippet 删除代码片段
 func (s *Storage) DeleteSnippet(id string) error {
 	return s.snippetRepo.Delete(id)
+}
+
+// RecordHistory 记录操作历史
+func (s *Storage) RecordHistory(connID, action string, success bool, errMsg string) error {
+	return s.historyRepo.Record(connID, action, success, errMsg)
+}
+
+// GetRecentHistory 获取最近的操作历史
+func (s *Storage) GetRecentHistory(limit int) ([]map[string]interface{}, error) {
+	return s.historyRepo.GetRecent(limit)
+}
+
+// ClearHistory 清空操作历史
+func (s *Storage) ClearHistory() error {
+	return s.historyRepo.Clear()
+}
+
+// GetFavorites 获取所有收藏
+func (s *Storage) GetFavorites() ([]*localdb.Favorite, error) {
+	return s.favoriteRepo.GetAll()
+}
+
+// SaveFavorite 保存收藏
+func (s *Storage) SaveFavorite(fav *localdb.Favorite) error {
+	return s.favoriteRepo.Save(fav)
+}
+
+// DeleteFavorite 删除收藏
+func (s *Storage) DeleteFavorite(id string) error {
+	return s.favoriteRepo.Delete(id)
 }

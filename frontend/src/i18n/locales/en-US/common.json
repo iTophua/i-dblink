@@ -23,6 +23,9 @@
     "no": "No",
     "all": "All",
     "none": "None",
+    "favorites": "Favorites",
+    "favoritesLoadFailed": "Failed to load favorites",
+    "noFavorites": "No favorites yet",
     "default": "Default",
     "reset": "Reset",
     "back": "Back",
@@ -508,7 +511,16 @@
       "exportFailed": "Export failed",
       "importSuccess": "Successfully imported {{count}} rows",
       "importPartial": "Import complete: {{success}} succeeded, {{failed}} failed",
-      "importFailed": "Import failed"
+      "importFailed": "Import failed",
+      "previewData": "Preview Data",
+      "totalRows": "Total Rows",
+      "mappedColumns": "Mapped Columns",
+      "unmappedColumns": "Unmapped Columns",
+      "validationWarnings": "Validation Warnings",
+      "noValidationIssues": "Validation passed, no issues found",
+      "requiredFieldNotMapped": "Required field \"{{column}}\" is not mapped",
+      "emptyRequiredField": "Column \"{{header}}\" has empty values, target field \"{{column}}\" is NOT NULL",
+      "moreWarnings": "{{count}} more warnings..."
     },
     "globalSearch": {
       "title": "Global Search",
@@ -672,6 +684,15 @@
       "executeTime": "Execution time",
       "query": "Query",
       "duration": "Duration"
+    },
+    "operationLog": {
+      "title": "Operation Log",
+      "empty": "No operation history",
+      "clearTitle": "Clear History",
+      "clearConfirm": "Are you sure you want to clear all operation history?",
+      "cleared": "Operation history cleared",
+      "clearFailed": "Failed to clear operation history",
+      "clear": "Clear"
     },
     "largeQueryWarning": "Large Query Warning",
     "queryWithoutLimitWarning": "The current query has no LIMIT clause and may return a large amount of data, which could cause performance issues. Do you want to continue?",
@@ -963,6 +984,7 @@
     "executingLabel": "Executing...",
     "queryHistoryTitle": "Query History",
     "executeButton": "Execute",
+    "executeSelected": "Execute Selected",
     "stopButton": "Stop",
     "formatButton": "Format",
     "explainPlanButton": "Explain Plan",
@@ -1261,6 +1283,15 @@
     "syncSqlPreview": "Sync SQL Preview",
     "executeSync": "Execute Sync",
     "addNewRow": "Add New Row",
+    "goToRow": "Go to row",
+    "invalidRowNumber": "Invalid row number (max: {{max}})",
+    "autoDisplay": "Auto",
+    "showAllResults": "Show All Results",
+    "showSingleResult": "Show Single Result",
+    "connectionReordered": "Connection reordered",
+    "reorderFailed": "Reorder failed",
+    "onlyShowingFirst10Rows": "Only showing first 10 of {{count}} rows",
+    "query": "Query",
     "contextMenu": {
       "copyCellValue": "Copy Cell Value",
       "copyAsSqlLiteral": "Copy as SQL Literal",
@@ -1275,7 +1306,19 @@
       "copyAsUpdate": "Copy as UPDATE",
       "copyAsDelete": "Copy as DELETE",
       "copyAsJson": "Copy as JSON",
-      "addNewRow": "Add New Row"
+      "addNewRow": "Add New Row",
+      "previewCell": "Preview Cell"
+    },
+    "cellPreview": {
+      "text": "Text",
+      "hex": "Hex",
+      "image": "Image",
+      "alt": "Preview",
+      "notRecognized": "Not a recognizable image format",
+      "title": "Preview: {{columnName}}",
+      "copy": "Copy",
+      "save": "Save",
+      "copied": "Copied"
     },
     "advancedConfigDescription": "配置连接超时和查询行为",
     "allChangesRevoked": "全部更改已撤销",
@@ -1562,6 +1605,21 @@
     "updateMode": "Update Mode",
     "viewCount": "View Count",
     "viewDefinition": "View Definition",
-    "viewStatistics": "View Statistics"
+    "viewStatistics": "View Statistics",
+    "connectionExportDialog": {
+      "title": "Connection Import/Export",
+      "exportTab": "Export",
+      "importTab": "Import",
+      "exportHint": "Export all connection configurations (without passwords). Passwords must be re-entered after import.",
+      "importHint": "Import connection configurations from a JSON file. Passwords are not included and must be set manually.",
+      "exportButton": "Export Connections",
+      "selectFile": "Select File to Import",
+      "skipExisting": "Skip existing connections",
+      "overwriteExisting": "Overwrite existing connections",
+      "exportSuccess": "Connection configuration exported successfully",
+      "exportFailed": "Export failed",
+      "importSuccess": "Successfully imported {{conns}} connection(s) and {{groups}} group(s)",
+      "importFailed": "Import failed"
+    }
   }
 }

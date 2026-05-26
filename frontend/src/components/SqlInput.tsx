@@ -11,6 +11,7 @@ interface SqlInputProps {
   className?: string;
   placeholder?: string;
   size?: 'small' | 'middle' | 'large';
+  dbType?: string;
 }
 
 // 根据数据类型分类
@@ -89,9 +90,10 @@ interface ParsedInput {
   querySoFar: string;
 }
 
+// 支持多种数据库引号的 tokenize：反引号(MySQL)、双引号(PG/Oracle)、方括号(SQL Server)
 function tokenize(sql: string): string[] {
   const tokens: string[] = [];
-  const regex = /`[^`]+`|\S+/g;
+  const regex = /`[^`]+`|"[^"]+"|\[[^\]]+\]|\S+/g;
   let match;
   while ((match = regex.exec(sql)) !== null) {
     tokens.push(match[0]);
@@ -182,7 +184,8 @@ function parseInput(sql: string): ParsedInput {
     return { state: 'value', lastWord, prevWord: 'VALUES', querySoFar: trimmed };
   }
 
-  if (lastWord.match(/^`[^`]+`$/) || lastWord.endsWith('`')) {
+  // 匹配被引号包裹的列名（反引号、双引号、方括号）
+  if (lastWord.match(/^(`[^`]+`|"[^"]+"|\[[^\]]+\])$/) || lastWord.match(/[`"\]]$/)) {
     if (endsWithSpace) {
       return { state: 'operator', lastWord: '', prevWord: lastWord, querySoFar: trimmed };
     }
@@ -222,7 +225,7 @@ function parseInput(sql: string): ParsedInput {
   if (lastUpper === 'IS') {
     return { state: 'operator', lastWord: 'IS', prevWord: prevUpper, querySoFar: trimmed };
   }
-  if (lastUpper === 'NOT' && (prevUpper === 'IS' || prevWord === '`')) {
+  if (lastUpper === 'NOT' && (prevUpper === 'IS' || /^[`"\[]/.test(prevWord))) {
     return { state: 'operator', lastWord: 'NOT', prevWord: prevUpper, querySoFar: trimmed };
   }
 
@@ -286,7 +289,8 @@ function findLastColumn(
 ): { dataType: string; columnName: string } | null {
   const tokens = tokenize(sql);
   for (let i = tokens.length - 1; i >= 0; i--) {
-    const token = tokens[i].replace(/`/g, '');
+    // 移除所有类型的引号（反引号、双引号、方括号）
+    const token = tokens[i].replace(/^[`"\[]|[`"\]]$/g, '');
     const col = columns.find((c) => c.columnName === token);
     if (col) {
       return { dataType: col.dataType, columnName: col.columnName };
@@ -304,10 +308,57 @@ export const SqlInput: React.FC<SqlInputProps> = ({
   className,
   placeholder,
   size = 'small',
+  dbType,
 }) => {
+  // 根据数据库类型确定引号字符
+  const getQuoteChar = useCallback(() => {
+    switch (dbType?.toLowerCase()) {
+      case 'mysql':
+      case 'mariadb':
+      case 'sqlite':
+        return '`';
+      case 'sqlserver':
+        return '['; // SQL Server 使用方括号，需要在末尾添加 ]
+      case 'postgresql':
+      case 'oracle':
+      case 'dameng':
+      case 'kingbase':
+      case 'highgo':
+      case 'vastbase':
+        return '"';
+      default:
+        return '`';
+    }
+  }, [dbType]);
+
+  // 包装列名（根据数据库类型使用正确的引号）
+  const quoteColumn = useCallback(
+    (name: string) => {
+      const quote = getQuoteChar();
+      if (quote === '[') {
+        return `[${name}]`;
+      }
+      return `${quote}${name}${quote}`;
+    },
+    [getQuoteChar]
+  );
+
+  // 根据数据库类型获取运算符
+  const getOperatorsForDb = useCallback(
+    (category: DataTypeCategory): string[] => {
+      const baseOps = getOperatorsForType(category);
+      // PostgreSQL 支持 ILIKE（不区分大小写）
+      if (dbType?.toLowerCase() === 'postgresql' && category === 'string') {
+        return ['ILIKE', 'NOT ILIKE', 'LIKE', 'NOT LIKE', '=', '!=', 'IS NULL', 'IS NOT NULL', 'IN', 'NOT IN'];
+      }
+      return baseOps;
+    },
+    [dbType]
+  );
+
   const columnOptions = useMemo(() => {
     return columns.map((col) => ({
-      value: `\`${col.column_name}\``,
+      value: quoteColumn(col.column_name),
       label: (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <span>{col.column_name}</span>
@@ -328,7 +379,8 @@ export const SqlInput: React.FC<SqlInputProps> = ({
     (input: string): Array<{ value: string; label: React.ReactNode }> => {
       const parsed = parseInput(input);
       const { state, lastWord } = parsed;
-      const searchValue = lastWord.startsWith('`') ? lastWord.slice(1, -1) : lastWord;
+      // 移除所有类型的引号（反引号、双引号、方括号）用于搜索匹配
+      const searchValue = lastWord.replace(/^[`"\[]|[`"\]]$/g, '');
 
       switch (state) {
         case 'start':
@@ -360,7 +412,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
           // 获取最后一个列名的数据类型，用于推荐合适的运算符
           const lastColumn = findLastColumn(input, columnOptions);
           const category = lastColumn ? getDataTypeCategory(lastColumn.dataType) : 'string';
-          const typeOperators = getOperatorsForType(category);
+          const typeOperators = getOperatorsForDb(category);
           return typeOperators
             .filter((op) => fuzzyMatch(searchValue, op))
             .map((op) => ({
@@ -554,7 +606,8 @@ export const SqlInput: React.FC<SqlInputProps> = ({
     const endsWithSpace = val.endsWith(' ');
 
     // 如果选择的是列名（带空格），自动打开下拉列表继续提示
-    if (val.startsWith('`') && endsWithSpace) {
+    // 支持反引号(MySQL)、双引号(PostgreSQL/Oracle)、方括号(SQL Server)
+    if ((val.startsWith('`') || val.startsWith('"') || val.startsWith('[')) && endsWithSpace) {
       isAutoSelectedRef.current = true;
       setAutoOpen(true);
       setTimeout(() => {

@@ -27,6 +27,7 @@ import { GlideDataTable, type GlideRow, type GlideColumn } from './DataTable/Gli
 import { rowsToGlideRows, tableRowStatus, tableCellModified } from './DataTable/adapters/tableAdapter';
 import { useContextMenu } from './ContextMenu';
 import { DataTableContextMenu } from './DataTable/DataTableContextMenu';
+import { CellPreviewDialog } from './DataTable/CellPreviewDialog';
 import { SqlInput } from './SqlInput';
 
 interface DataTableProps {
@@ -61,6 +62,7 @@ export const DataTable = memo(function DataTable({
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const [quickFilter, setQuickFilter] = useState('');
   const [pageInput, setPageInput] = useState('1');
+  const [goToRowValue, setGoToRowValue] = useState('');
   const [whereClause, setWhereClause] = useState('');
   const [orderByClause, setOrderByClause] = useState('');
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
@@ -68,6 +70,8 @@ export const DataTable = memo(function DataTable({
   const [currentSql, setCurrentSql] = useState('');
   const [hasLoaded, setHasLoaded] = useState(false);
   const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
+  const [cellPreview, setCellPreview] = useState<{ open: boolean; value: unknown; columnName: string; rowIndex?: number; colIndex?: number }>({ open: false, value: null, columnName: '' });
+
 
   // ── Range Edit ──
   // ── Filter Panel ──
@@ -574,8 +578,9 @@ export const DataTable = memo(function DataTable({
   const glideCols = useMemo(() => {
     const typeMap = new Map(columns.map((c) => [c.column_name, c.data_type]));
     const pkSet = new Set(columns.filter((c) => c.column_key === 'PRI').map((c) => c.column_name));
-    let cols = queryColumns;
-    if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => queryColumns.includes(n)), ...queryColumns.filter((n) => !s.has(n))]; }
+    // queryColumns 可能为空（查询无数据时），用 columns 元数据兜底
+    let cols = queryColumns.length > 0 ? queryColumns : columns.map((c) => c.column_name);
+    if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => cols.includes(n)), ...cols.filter((n) => !s.has(n))]; }
     return cols.map((name) => ({
       id: name,
       title: `${name}|${typeMap.get(name) || ''}|${pkSet.has(name) ? '1' : '0'}`,
@@ -600,6 +605,15 @@ export const DataTable = memo(function DataTable({
     navigator.clipboard.writeText(currentSql);
     message.success(t('common.sqlCopied'));
   }, [currentSql, t]);
+
+  const handleGoToRow = useCallback(() => {
+    const rowNum = parseInt(goToRowValue);
+    if (isNaN(rowNum) || rowNum < 1 || rowNum > filteredRows.length) {
+      message.warning(t('common.invalidRowNumber', { max: filteredRows.length }));
+      return;
+    }
+    setScrollToRowIndex(rowNum - 1);
+  }, [goToRowValue, filteredRows.length, t]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--background-card)' }}>
@@ -652,14 +666,18 @@ export const DataTable = memo(function DataTable({
           <span style={{ fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{t('common.dataGrid.filter')}</span>
           <SqlInput value={whereClause} onChange={(val) => setWhereClause(val)} placeholder={t('common.dataGrid.filterPlaceholder')} size="small" style={{ flex: 1, height: 20, fontSize: 11 }}
             columns={columns.map((c) => ({ column_name: c.column_name, data_type: c.data_type }))}
+            dbType={dbType}
             onPressEnter={() => { setCurrentPage(1); loadData(); }} />
           <Divider type="vertical" style={{ height: 14, margin: 0, background: 'var(--border-color)' }} />
           <span style={{ fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{t('common.dataGrid.orderBy')}</span>
           <SqlInput value={orderByClause} onChange={(val) => setOrderByClause(val)} placeholder={t('common.dataGrid.orderBy') + ' ASC/DESC ...'} size="small" style={{ flex: 1, height: 20, fontSize: 11 }}
             columns={columns.map((c) => ({ column_name: c.column_name, data_type: c.data_type }))}
+            dbType={dbType}
             onPressEnter={() => { setCurrentPage(1); loadData(); }} />
           <Button size="small" type="primary" onClick={() => { setCurrentPage(1); loadData(); }} style={{ fontSize: 10, height: 20 }}>{t('common.applyFilter')}</Button>
           <Button size="small" onClick={() => { setWhereClause(''); setOrderByClause(''); setCurrentPage(1); loadData(); }} style={{ fontSize: 10, height: 20 }}>{t('common.clearFilter')}</Button>
+          <Divider type="vertical" style={{ height: 14, margin: '0 4px', background: 'var(--border-color)' }} />
+          <Input size="small" placeholder={t('common.goToRow')} value={goToRowValue} onChange={(e) => setGoToRowValue(e.target.value)} onPressEnter={handleGoToRow} style={{ width: 56, fontSize: 11, textAlign: 'center', padding: '0 2px', height: 20 }} />
         </div>
       )}
       {/* ═══ Filter Panel（展开）═══ */}
@@ -845,7 +863,7 @@ export const DataTable = memo(function DataTable({
             <Spin size="large" />
           </div>
         )}
-        {glideCols.length > 0 ? (
+        {hasLoaded && glideCols.length > 0 ? (
           <GlideDataTable columns={glideCols} rows={glideRows} hiddenColumns={hiddenColumns}
             rowStatus={tableRowStatus} isCellModified={tableCellModified}
             scrollToRowIndex={scrollToRowIndex}
@@ -862,11 +880,11 @@ export const DataTable = memo(function DataTable({
             onCellContextMenu={handleCellContextMenu}
             headerHeight={36} rowHeight={24} editable={true}
           />
-        ) : (
+        ) : hasLoaded ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {loading ? <Spin size="large" /> : <Empty description={hasLoaded ? t('common.noTableStructure') : t('common.noData')} />}
+            <Empty description={t('common.noTableStructure')} />
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* ═══ Context Menu ═══ */}
@@ -884,8 +902,22 @@ export const DataTable = memo(function DataTable({
           onCopyToClipboard: (text) => navigator.clipboard.writeText(text),
           onSetWhereClause: (where) => { setWhereClause(where); setCurrentPage(1); loadData(); },
           onCellEdited: handleCellEdited,
+          onPreviewCell: (value, colName, rowIndex, colIndex) => setCellPreview({ open: true, value, columnName: colName, rowIndex, colIndex }),
         }}
         onClose={closeMenu}
+      />
+
+      <CellPreviewDialog
+        key={`${cellPreview.columnName}-${String(cellPreview.value ?? '').slice(0, 30)}`}
+        open={cellPreview.open}
+        onClose={() => setCellPreview({ open: false, value: null, columnName: '' })}
+        value={cellPreview.value}
+        columnName={cellPreview.columnName}
+        onSave={(newVal) => {
+          if (cellPreview.colIndex != null && cellPreview.rowIndex != null) {
+            handleCellEdited(cellPreview.colIndex, cellPreview.rowIndex, newVal);
+          }
+        }}
       />
 
       {/* ═══ Status Bar ═══ */}
@@ -895,18 +927,18 @@ export const DataTable = memo(function DataTable({
           <Button icon={<ImportOutlined />} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.import')}</Button>
         </Space>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
-          <code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontFamily: 'monospace', padding: '2px 6px', background: 'var(--background-toolbar)', borderRadius: 3, border: '1px solid var(--border-color)', maxWidth: 700 }}>{currentSql}</code>
+          <code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontFamily: 'monospace', padding: '2px 6px', background: 'var(--background-toolbar)', borderRadius: 3, border: '1px solid var(--border-color)', maxWidth: 'none' }}>{currentSql}</code>
           <Tooltip title={t('common.copySql')}>
             <Button icon={<CopyOutlined />} type="text" onClick={copySql} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} />
           </Tooltip>
         </div>
         <Space size={2} style={{ flexShrink: 0 }}>
-          <Button size="small" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }} title="第一页">«</Button>
+          <Button size="small" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }} title={t('common.firstPage')}>«</Button>
           <Button size="small" disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }}>‹</Button>
           <Input size="small" value={pageInput} onChange={(e) => setPageInput(e.target.value)} onBlur={() => { const v = parseInt(pageInput); if (!isNaN(v) && v > 0 && v <= Math.ceil(totalCount / pageSize)) setCurrentPage(v); else setPageInput(String(currentPage)); }} onPressEnter={() => { const v = parseInt(pageInput); if (!isNaN(v) && v > 0 && v <= Math.ceil(totalCount / pageSize)) setCurrentPage(v); else setPageInput(String(currentPage)); }} style={{ width: 32, fontSize: 11, textAlign: 'center', padding: '0 2px', height: 20 }} />
           <span style={{ fontSize: 11, color: 'var(--text-secondary)', userSelect: 'none' }}>/ {Math.ceil(totalCount / pageSize) || 1}</span>
           <Button size="small" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(currentPage + 1)} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }}>›</Button>
-          <Button size="small" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize))} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }} title="最后一页">»</Button>
+          <Button size="small" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize))} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }} title={t('common.lastPage')}>»</Button>
           <AutoComplete value={String(pageSize)} onChange={(val) => { const n = parseInt(val); if (n > 0) { setPageSizeState(n); setCurrentPage(1); } }}
             size="small" style={{ width: 56, fontSize: 11 }} options={[{ value: '50' }, { value: '100' }, { value: '500' }, { value: '1000' }]}
             popupClassName="page-size-dropdown"

@@ -84,7 +84,11 @@ class MySQLDialect extends BaseDialect implements SqlDialect {
           statements.push(`ALTER TABLE ${tableRef} DROP COLUMN ${this.escapeIdentifier(change.column.name)};`);
           break;
         case 'modify':
-          statements.push(`ALTER TABLE ${tableRef} MODIFY COLUMN ${this.buildColumnDef(change.column)};`);
+          if (change.oldName) {
+            statements.push(`ALTER TABLE ${tableRef} CHANGE COLUMN ${this.escapeIdentifier(change.oldName)} ${this.buildColumnDef(change.column)};`);
+          } else {
+            statements.push(`ALTER TABLE ${tableRef} MODIFY COLUMN ${this.buildColumnDef(change.column)};`);
+          }
           break;
         case 'rename':
           if (change.oldName) {

@@ -39,6 +39,20 @@ type ConnectionGroup struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
+// Favorite 收藏项
+type Favorite struct {
+	ID           string    `json:"id" db:"id"`
+	Type         string    `json:"type" db:"type"`
+	Name         string    `json:"name" db:"name"`
+	ConnectionID *string   `json:"connection_id,omitempty" db:"connection_id"`
+	Database     *string   `json:"database,omitempty" db:"database"`
+	TableName    *string   `json:"table_name,omitempty" db:"table_name"`
+	SqlText      *string   `json:"sql_text,omitempty" db:"sql_text"`
+	Tags         string    `json:"tags" db:"tags"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+}
+
 // Snippet 代码片段
 type Snippet struct {
 	ID        string    `json:"id" db:"id"`

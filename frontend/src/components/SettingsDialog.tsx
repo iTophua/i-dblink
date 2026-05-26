@@ -118,10 +118,11 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       open={open}
       onCancel={onCancel}
       width={900}
+      style={{ maxHeight: 550 }}
       forceRender
       transitionName=""
       maskTransitionName=""
-      styles={{ body: { maxHeight: 'calc(100vh - 200px)', overflow: 'hidden', padding: 0 } }}
+      styles={{ body: { height: 470, overflow: 'hidden', padding: 0 } }}
       className="settings-dialog-modal"
       data-testid="settings-dialog"
       footer={
@@ -165,8 +166,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
             flex: 1,
             background: 'var(--background-card)',
             padding: '16px 24px',
-            minHeight: 400,
-            maxHeight: 'calc(100vh - 200px)',
+            height: 470,
             overflowY: 'auto',
           }}
         >

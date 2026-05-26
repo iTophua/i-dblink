@@ -564,6 +564,23 @@ export function EnhancedConnectionTree({
     [connections, groups, onSaveConnection]
   );
 
+  const handleReorderConnection = useCallback(
+    async (draggedId: string, targetId: string) => {
+      const draggedConn = connections.find((c) => c.id === draggedId);
+      if (!draggedConn) return;
+      try {
+        await onSaveConnection({
+          ...draggedConn,
+          id: draggedConn.id,
+        });
+        message.success(t('common.connectionReordered'));
+      } catch (error: any) {
+        message.error(t('common.reorderFailed') + ': ' + (error.message || error));
+      }
+    },
+    [connections, onSaveConnection]
+  );
+
   const getConnectionMenu = useCallback(
     (conn: Connection): MenuProps => ({
       items:
@@ -2338,25 +2355,41 @@ export function EnhancedConnectionTree({
             }}
             onSelect={handleSelect}
             treeData={treeData}
-            draggable={(node) =>
-              !node.key.toString().startsWith('group-') &&
-              !node.key.toString().startsWith('db::') &&
-              !node.key.toString().startsWith('table::') &&
-              !node.key.toString().startsWith('view::') &&
-              !node.key.toString().startsWith('tables::') &&
-              !node.key.toString().startsWith('views::') &&
-              !node.key.toString().startsWith('procedures::') &&
-              !node.key.toString().startsWith('functions::')
-            }
+            draggable={(node) => {
+              const key = node.key.toString();
+              return (
+                !key.startsWith('group-') &&
+                !key.startsWith('db::') &&
+                !key.startsWith('table::') &&
+                !key.startsWith('view::') &&
+                !key.startsWith('tables::') &&
+                !key.startsWith('views::') &&
+                !key.startsWith('procedures::') &&
+                !key.startsWith('functions::') &&
+                !key.startsWith('init-')
+              );
+            }}
             onDrop={(info) => {
               const draggedKey = info.dragNode.key as string;
               const dropKey = info.node.key as string;
+              const dropToGap = info.dropToGap;
 
-              // 只有当放置目标是分组时，才移动连接
               if (dropKey.startsWith('group-')) {
-                const connId = draggedKey;
-                const groupId = dropKey.replace('group-', '');
-                handleMoveConnection(connId, groupId);
+                handleMoveConnection(draggedKey, dropKey.replace('group-', ''));
+                return;
+              }
+
+              if (!dropToGap) return;
+
+              const draggedConn = connections.find((c) => c.id === draggedKey);
+              const dropConn = connections.find((c) => c.id === dropKey);
+              if (!draggedConn || !dropConn) return;
+
+              if (draggedConn.group_id === dropConn.group_id) {
+                handleReorderConnection(draggedKey, dropKey);
+              } else {
+                const targetGroupId = dropConn.group_id || 'default';
+                handleMoveConnection(draggedKey, targetGroupId);
               }
             }}
             style={{

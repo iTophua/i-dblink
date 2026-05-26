@@ -16,7 +16,7 @@ import { EventsOn } from './api';
 // Check if running in Wails environment
 const isWails =
   typeof window !== 'undefined' &&
-  !!(window as unknown as Record<string, unknown>).__wails__;
+  !!(window as unknown as Record<string, unknown>).runtime;
 
 function App() {
   const { settings, updateSettings } = useSettingsStore();

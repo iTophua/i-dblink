@@ -14,12 +14,13 @@ import {
   createCopyAsDeleteItem,
   createCopyRowAsJsonItem,
 } from '../ContextMenu/menuItems';
+import { createPreviewCellItem } from './CellPreviewDialog';
 
 interface DataTableContextMenuProps {
   menuState: { visible: boolean; x: number; y: number };
   menuTarget: { row?: number; col?: number; cellValue?: unknown; colName?: string; rowData?: Record<string, unknown> };
   selectedRows: Record<string, unknown>[];
-  context: MenuContext;
+  context: MenuContext & { onPreviewCell?: (value: unknown, colName: string, row?: number, col?: number) => void };
   onClose: () => void;
 }
 
@@ -33,15 +34,18 @@ export function DataTableContextMenu({
   const { t } = useTranslation();
 
   const items = useMemo<MenuConfigItem[]>(() => {
-    const ctx: MenuContext = {
+    const ctx: MenuContext & { onPreviewCell?: (value: unknown, colName: string, row?: number, col?: number) => void } = {
       ...context,
       cellValue: menuTarget.cellValue,
       colName: menuTarget.colName,
       rowData: menuTarget.rowData,
+      row: menuTarget.row,
+      col: menuTarget.col,
       selectedRows,
     };
 
     return [
+      createPreviewCellItem(ctx, t, onClose),
       createCopyCellValueItem(ctx, t, onClose),
       createCopyCellAsSqlLiteralItem(ctx, t, onClose),
       { type: 'divider' },

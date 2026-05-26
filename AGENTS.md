@@ -6,6 +6,7 @@
 pnpm install                          # deps
 wails dev                             # dev mode (Vite:5100 + Wails window)
 wails build                           # production → build/bin/iDBLink.app/
+pnpm package                          # build + create DMG (requires create-dmg)
 pnpm test                             # Vitest (jsdom, all frontend tests)
 pnpm test:unit                        # unit only
 pnpm test:components                  # component tests

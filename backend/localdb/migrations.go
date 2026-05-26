@@ -78,6 +78,21 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_snippets_db_type ON snippets(db_type)`,
 		`INSERT OR IGNORE INTO connection_groups (id, name, icon, color, parent_id, sort_order, created_at, updated_at)
 		 VALUES ('default', '未分组', '📁', '#6d6d6d', NULL, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+		`CREATE TABLE IF NOT EXISTS favorites (
+			id TEXT PRIMARY KEY,
+			type TEXT NOT NULL DEFAULT 'table',
+			name TEXT NOT NULL,
+			connection_id TEXT,
+			database TEXT,
+			table_name TEXT,
+			sql_text TEXT,
+			tags TEXT DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_favorites_type ON favorites(type)`,
+		`CREATE INDEX IF NOT EXISTS idx_favorites_connection_id ON favorites(connection_id)`,
 	}
 
 	for i, migration := range migrations {

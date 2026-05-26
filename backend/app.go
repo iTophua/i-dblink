@@ -13,6 +13,7 @@ import (
 	goruntime "runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -153,15 +154,17 @@ func (a *App) Shutdown(ctx context.Context) {
 
 // ShowDevTools 打开开发者工具（仅在 dev 模式下有效）
 func (a *App) ShowDevTools() {
+	if a.ctx == nil {
+		return
+	}
 	if a.isDevMode() {
-		// Wails v2.12.0 没有 runtime.OpenDevTools API
-		// macOS dev 模式下可通过以下方式打开 Inspector:
-		// 1. Cmd+Shift+F12 (Wails 内置快捷键)
-		// 2. 右键 → Inspect Element
-		msg := "DevTools: macOS 请使用 Cmd+Shift+F12 或右键 → Inspect Element 打开开发者工具"
-		runtime.LogInfo(a.ctx, msg)
-		runtime.WindowExecJS(a.ctx,
-			"console.log('%c[DevTools] "+msg+"', 'color: #1890ff; font-size: 14px;')")
+		runtime.WindowExecJS(a.ctx, `window.WailsInvoke("wails:openInspector")`)
+	} else {
+		runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+			Type:    runtime.InfoDialog,
+			Title:   "开发者工具",
+			Message: "开发者工具仅在开发模式下可用。请使用 wails dev 启动应用。",
+		})
 	}
 }
 
@@ -345,6 +348,7 @@ func (a *App) ConnectDatabase(connectionID string) error {
 	}
 
 	a.activeConns[connectionID] = true
+	_ = a.storage.RecordHistory(connectionID, "connect", true, "")
 	return nil
 }
 
@@ -353,6 +357,7 @@ func (a *App) DisconnectDatabase(connectionID string) error {
 	_ = a.tunnel.StopTunnel(connectionID)
 	err := a.dbManager.Disconnect(connectionID)
 	delete(a.activeConns, connectionID)
+	_ = a.storage.RecordHistory(connectionID, "disconnect", err == nil, "")
 	if err != nil {
 		return fmt.Errorf("connection %s not found or already disconnected", connectionID)
 	}
@@ -929,6 +934,11 @@ func (a *App) ExecuteQuery(connectionID string, sql string, database *string) (m
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		return models.QueryResult{}, err
 	}
+	errMsg := ""
+	if result.Error != "" {
+		errMsg = result.Error
+	}
+	_ = a.storage.RecordHistory(connectionID, "query", result.Error == "", errMsg)
 	return result, nil
 }
 
@@ -1565,9 +1575,149 @@ func (a *App) DeleteSnippet(id string) error {
 	return a.storage.DeleteSnippet(id)
 }
 
+// ==================== 收藏夹 ====================
+
+// SaveFavorite 保存收藏
+func (a *App) SaveFavorite(id string, favType string, name string, connectionID *string, database *string, tableName *string, sqlText *string, tags string) (string, error) {
+	fav := &localdb.Favorite{
+		Type:         favType,
+		Name:         name,
+		ConnectionID: connectionID,
+		Database:     database,
+		TableName:    tableName,
+		SqlText:      sqlText,
+		Tags:         tags,
+	}
+	if id != "" {
+		fav.ID = id
+		existing, err := a.storage.GetFavorites()
+		if err != nil {
+			return "", err
+		}
+		for _, f := range existing {
+			if f.ID == id {
+				fav.CreatedAt = f.CreatedAt
+				break
+			}
+		}
+	}
+
+	err := a.storage.SaveFavorite(fav)
+	if err != nil {
+		return "", err
+	}
+	return fav.ID, nil
+}
+
+// GetFavorites 获取所有收藏
+func (a *App) GetFavorites() ([]localdb.Favorite, error) {
+	favorites, err := a.storage.GetFavorites()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]localdb.Favorite, len(favorites))
+	for i, f := range favorites {
+		result[i] = *f
+	}
+	return result, nil
+}
+
+// DeleteFavorite 删除收藏
+func (a *App) DeleteFavorite(id string) error {
+	return a.storage.DeleteFavorite(id)
+}
+
+// ==================== 连接导入导出 ====================
+
+// ExportConnections 导出所有连接和分组为JSON（不含密码）
+func (a *App) ExportConnections() (string, error) {
+	conns, err := a.storage.GetConnections()
+	if err != nil {
+		return "", fmt.Errorf("failed to get connections: %w", err)
+	}
+
+	groups, err := a.storage.GetGroups()
+	if err != nil {
+		return "", fmt.Errorf("failed to get groups: %w", err)
+	}
+
+	type ExportData struct {
+		Version     string                   `json:"version"`
+		ExportedAt  string                   `json:"exported_at"`
+		Connections []*localdb.DbConnection  `json:"connections"`
+		Groups      []*localdb.ConnectionGroup `json:"groups"`
+	}
+
+	data := ExportData{
+		Version:     "1.0",
+		ExportedAt:  time.Now().UTC().Format(time.RFC3339),
+		Connections: conns,
+		Groups:      groups,
+	}
+
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal export data: %w", err)
+	}
+	return string(jsonBytes), nil
+}
+
+// ImportConnections 从JSON导入连接和分组，返回导入的连接数和分组数
+func (a *App) ImportConnections(jsonStr string, overwrite bool) (int, int, error) {
+	type ImportData struct {
+		Version     string                     `json:"version"`
+		Connections []*localdb.DbConnection    `json:"connections"`
+		Groups      []*localdb.ConnectionGroup `json:"groups"`
+	}
+
+	var data ImportData
+	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+		return 0, 0, fmt.Errorf("invalid JSON format: %w", err)
+	}
+
+	importedConns := 0
+	importedGroups := 0
+
+	for _, group := range data.Groups {
+		if err := a.storage.SaveGroup(group); err != nil {
+			continue
+		}
+		importedGroups++
+	}
+
+	for _, conn := range data.Connections {
+		if !overwrite {
+			existing, _, err := a.storage.GetConnectionWithPassword(conn.ID)
+			if err == nil && existing != nil {
+				continue
+			}
+		}
+		if err := a.storage.SaveConnection(conn, nil); err != nil {
+			continue
+		}
+		importedConns++
+	}
+
+	return importedConns, importedGroups, nil
+}
+
 // ==================== 应用控制 ====================
 
 // QuitApp 退出应用
 func (a *App) QuitApp() {
 	runtime.Quit(a.ctx)
+}
+
+// GetConnectionHistory 获取操作历史
+func (a *App) GetConnectionHistory(limit int) ([]map[string]interface{}, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	return a.storage.GetRecentHistory(limit)
+}
+
+// ClearConnectionHistory 清空操作历史
+func (a *App) ClearConnectionHistory() error {
+	return a.storage.ClearHistory()
 }
