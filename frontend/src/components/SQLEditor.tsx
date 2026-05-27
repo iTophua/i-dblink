@@ -351,6 +351,7 @@ export function SQLEditor({
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const contextMenuMeasuredRef = useRef(false);
 
   // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
   useEffect(() => {
@@ -509,6 +510,40 @@ export function SQLEditor({
   }, [dbType]);
 
   const tc = useThemeColors();
+
+  // 点击其他地方关闭右键菜单
+  const handleClickOutside = useCallback((e: MouseEvent) => {
+    if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+      setContextMenuVisible(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (contextMenuVisible) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [contextMenuVisible, handleClickOutside]);
+
+  // 右键菜单渲染后，检测是否超出视口并调整位置
+  useEffect(() => {
+    if (contextMenuVisible && contextMenuRef.current && !contextMenuMeasuredRef.current) {
+      contextMenuMeasuredRef.current = true;
+      const menuEl = contextMenuRef.current;
+      const menuRect = menuEl.getBoundingClientRect();
+      const vpW = window.innerWidth;
+      const vpH = window.innerHeight;
+      let { x, y } = contextMenuPos;
+      if (x + menuRect.width > vpW) {
+        x = Math.max(0, vpW - menuRect.width - 4);
+      }
+      if (y + menuRect.height > vpH) {
+        y = Math.max(0, vpH - menuRect.height - 4);
+      }
+      if (x !== contextMenuPos.x || y !== contextMenuPos.y) {
+        setContextMenuPos({ x, y });
+      }
+    }
+  }, [contextMenuVisible, contextMenuPos]);
 
   // 响应式切换 Monaco Editor 主题
   useEffect(() => {
@@ -701,24 +736,13 @@ export function SQLEditor({
     editor.onContextMenu((e: any) => {
       e.event.preventDefault();
       e.event.stopPropagation();
-      const editorDom = editor.getDomNode();
-      if (!editorDom) return;
-      const rect = editorDom.getBoundingClientRect();
       setContextMenuPos({
-        x: e.event.posx - rect.left,
-        y: e.event.posy - rect.top,
+        x: e.event.posx,
+        y: e.event.posy,
       });
+      contextMenuMeasuredRef.current = false;
       setContextMenuVisible(true);
     });
-
-    // 点击其他地方关闭右键菜单
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenuVisible(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    cleanupDisposablesRef.current.push({ dispose: () => document.removeEventListener('mousedown', handleClickOutside) });
 
     // 添加自定义主题（延迟加载以减少启动时间）
     monaco.editor.defineTheme('custom-dark', {
@@ -2187,7 +2211,7 @@ export function SQLEditor({
           <div
             ref={contextMenuRef}
             style={{
-              position: 'absolute',
+              position: 'fixed',
               left: contextMenuPos.x,
               top: contextMenuPos.y,
               zIndex: 1000,
