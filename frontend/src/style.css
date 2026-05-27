@@ -775,32 +775,6 @@ tbody tr:hover {
   flex-shrink: 0 !important;
 }
 
-/* ==================== NeonCyber 主题特效 ==================== */
-[data-theme-preset='neonCyber'] {
-  --glow-primary: 0 0 10px var(--color-primary), 0 0 20px var(--color-primary);
-  --glow-success: 0 0 10px var(--color-success), 0 0 20px var(--color-success);
-  --glow-warning: 0 0 10px var(--color-warning), 0 0 20px var(--color-warning);
-  --glow-error: 0 0 10px var(--color-error), 0 0 20px var(--color-error);
-}
-
-[data-theme-preset='neonCyber'] .ant-btn-primary {
-  box-shadow: var(--glow-primary);
-}
-
-[data-theme-preset='neonCyber'] .ant-btn-primary:hover {
-  box-shadow:
-    0 0 15px var(--color-primary),
-    0 0 30px var(--color-primary);
-}
-
-[data-theme-preset='neonCyber'] .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
-  text-shadow: var(--glow-primary);
-}
-
-[data-theme-preset='neonCyber'] .ant-tree .ant-tree-node-content-wrapper:hover {
-  text-shadow: var(--glow-primary);
-}
-
 /* ==================== Wails macOS TitleBarHiddenInset ==================== */
 .wails .toolbar-enhanced {
   --wails-draggable: drag;
@@ -826,8 +800,7 @@ tbody tr:hover {
 }
 
 /* ==================== 主题过渡效果 ==================== */
-[data-theme],
-[data-theme-preset] {
+[data-theme] {
   transition:
     background-color 0.3s ease,
     color 0.3s ease,

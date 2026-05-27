@@ -972,168 +972,15 @@
   color: #a5b4fc !important;
 }
 
-/* ==================== NeonCyber 主题特效增强 ==================== */
-[data-theme-preset='neonCyber'] {
-  --neon-glow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
-}
 
-[data-theme-preset='neonCyber'] .ant-btn-primary {
-  animation: neonPulse 2s ease-in-out infinite;
-}
 
-@keyframes neonPulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 5px var(--color-primary),
-      0 0 10px var(--color-primary);
-  }
-  50% {
-    box-shadow:
-      0 0 10px var(--color-primary),
-      0 0 20px var(--color-primary),
-      0 0 30px var(--color-primary);
-  }
-}
-
-[data-theme-preset='neonCyber'] .ant-tabs-tab-active .ant-tabs-tab-btn {
-  text-shadow: var(--neon-glow);
-}
-
-[data-theme-preset='neonCyber']
-  .connection-tree
-  .ant-tree-node-selected
-  .ant-tree-node-content-wrapper {
-  box-shadow:
-    0 0 10px var(--color-primary),
-    0 0 20px var(--color-primary);
-  border: 1px solid var(--color-primary);
-}
-
-[data-theme-preset='neonCyber'] .toolbar-btn:hover {
-  box-shadow:
-    0 0 8px var(--color-primary),
-    0 0 16px var(--color-primary);
-}
-
-[data-theme='dark'][data-theme-preset='neonCyber'] .neon-glow-subtle {
-  text-shadow: 0 0 8px rgba(0, 245, 255, 0.5);
-}
-
-[data-theme='dark'][data-theme-preset='neonCyber'] .ant-btn-primary {
-  box-shadow:
-    0 0 15px rgba(0, 245, 255, 0.3),
-    0 4px 16px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-[data-theme='dark'][data-theme-preset='neonCyber'] .sidebar-enhanced {
-  border-right: 1px solid rgba(0, 245, 255, 0.2) !important;
-  box-shadow:
-    4px 0 24px rgba(0, 245, 255, 0.15),
-    inset -2px 0 12px rgba(0, 245, 255, 0.05) !important;
-}
-
-[data-theme='dark'][data-theme-preset='neonCyber'] .ant-tabs-tab-active::after {
-  background: linear-gradient(90deg, #00f5ff, #33f7ff) !important;
-  box-shadow: 0 0 12px rgba(0, 245, 255, 0.6);
-}
-
-/* ==================== OceanBlue 主题特效增强 ==================== */
-[data-theme-preset='oceanBlue'] .ant-table-thead > tr > th {
-  background: var(--color-primary-gradient) !important;
-  color: #fff !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-[data-theme-preset='oceanBlue'] .status-bar-enhanced {
-  background: linear-gradient(
-    90deg,
-    var(--color-primary) 0%,
-    transparent 50%,
-    var(--color-primary) 100%
-  ) !important;
-  background-size: 200% 100%;
-  animation: oceanWave 6s ease-in-out infinite;
-}
-
-@keyframes oceanWave {
-  0%,
-  100% {
-    background-position: 0% 0%;
-  }
-  50% {
-    background-position: 100% 0%;
-  }
-}
-
-[data-theme='dark'][data-theme-preset='oceanBlue'] .ant-btn-primary {
-  box-shadow:
-    0 0 15px rgba(56, 189, 248, 0.25),
-    0 4px 16px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-[data-theme='dark'][data-theme-preset='oceanBlue'] .sidebar-enhanced {
-  border-right: 1px solid rgba(56, 189, 248, 0.2) !important;
-  box-shadow:
-    4px 0 24px rgba(56, 189, 248, 0.12),
-    inset -2px 0 12px rgba(56, 189, 248, 0.05) !important;
-}
-
-[data-theme='dark'][data-theme-preset='oceanBlue'] .ant-tabs-tab-active::after {
-  background: linear-gradient(90deg, #38bdf8, #7dd3fc) !important;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
-}
-
-/* ==================== NordicFrost 主题特效增强 ==================== */
-[data-theme-preset='nordicFrost'] {
-  --frost-border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-[data-theme-preset='nordicFrost'] .ant-card {
-  border: var(--frost-border) !important;
-  background: rgba(255, 255, 255, 0.8) !important;
-  backdrop-filter: blur(8px);
-}
-
-[data-theme='dark'][data-theme-preset='nordicFrost'] .ant-card {
-  background: rgba(17, 21, 32, 0.85) !important;
-  border-color: rgba(148, 163, 184, 0.15) !important;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
-}
-
-[data-theme-preset='nordicFrost'] .ant-dropdown-menu {
-  background: rgba(255, 255, 255, 0.9) !important;
-  backdrop-filter: blur(16px);
-}
-
-[data-theme='dark'][data-theme-preset='nordicFrost'] .ant-dropdown-menu {
-  background: rgba(17, 21, 32, 0.92) !important;
-}
-
-[data-theme='dark'][data-theme-preset='nordicFrost'] .ant-btn-primary {
-  box-shadow:
-    0 2px 8px rgba(148, 163, 184, 0.2),
-    0 4px 16px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-[data-theme='dark'][data-theme-preset='nordicFrost'] .sidebar-enhanced {
-  border-right: 1px solid rgba(148, 163, 184, 0.1) !important;
-  box-shadow:
-    2px 0 16px rgba(0, 0, 0, 0.2),
-    inset -1px 0 0 rgba(255, 255, 255, 0.02) !important;
-}
 
 /* ==================== MidnightDeep 主题特效增强 ==================== */
-[data-theme-preset='midnightDeep'] .ant-modal-mask {
+.ant-modal-mask {
   backdrop-filter: blur(4px);
 }
 
-[data-theme-preset='midnightDeep'] .ant-modal-content {
+.ant-modal-content {
   background: linear-gradient(
     180deg,
     var(--background-card) 0%,
@@ -1141,25 +988,25 @@
   ) !important;
 }
 
-[data-theme-preset='midnightDeep'] .sidebar-enhanced {
+.sidebar-enhanced {
   border-right: 2px solid var(--color-primary) !important;
   box-shadow:
     4px 0 20px rgba(99, 102, 241, 0.15),
     inset -2px 0 8px rgba(99, 102, 241, 0.05) !important;
 }
 
-[data-theme='dark'][data-theme-preset='midnightDeep'] .sidebar-enhanced {
+[data-theme='dark'] .sidebar-enhanced {
   border-right: 2px solid rgba(99, 102, 241, 0.4) !important;
   box-shadow:
     4px 0 24px rgba(99, 102, 241, 0.2),
     inset -2px 0 12px rgba(99, 102, 241, 0.08) !important;
 }
 
-[data-theme='dark'][data-theme-preset='midnightDeep'] .ant-tabs-tab-active::after {
+[data-theme='dark'] .ant-tabs-tab-active::after {
   box-shadow: 0 0 12px rgba(129, 140, 248, 0.6);
 }
 
-[data-theme='dark'][data-theme-preset='midnightDeep'] .ant-btn-primary {
+[data-theme='dark'] .ant-btn-primary {
   box-shadow:
     0 2px 8px rgba(99, 102, 241, 0.25),
     0 4px 16px rgba(0, 0, 0, 0.3),

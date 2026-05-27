@@ -352,6 +352,7 @@ export function SQLEditor({
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuMeasuredRef = useRef(false);
+  const contextMenuSelectedSqlRef = useRef<string>('');
 
   // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
   useEffect(() => {
@@ -736,6 +737,11 @@ export function SQLEditor({
     editor.onContextMenu((e: any) => {
       e.event.preventDefault();
       e.event.stopPropagation();
+      const selection = editor.getSelection();
+      const selected = selection && !selection.isEmpty()
+        ? (editor.getModel()?.getValueInRange(selection)?.trim() || '')
+        : '';
+      contextMenuSelectedSqlRef.current = selected;
       setContextMenuPos({
         x: e.event.posx,
         y: e.event.posy,
@@ -761,28 +767,28 @@ export function SQLEditor({
           { token: 'predefined', foreground: '4EC9B0' },
         ],
         colors: {
-          'editor.background': '#1E1E1E',
+          'editor.background': '#0C1929',
           'editor.foreground': '#D4D4D4',
           'editorCursor.foreground': '#FFFFFF',
-          'editor.lineHighlightBackground': '#2D2D30',
-          'editor.selectionBackground': '#264F78',
+          'editor.lineHighlightBackground': '#112840',
+          'editor.selectionBackground': '#1A3A5C',
           'editor.inactiveSelectionBackground': '#3A3D41',
-          'editorLineNumber.foreground': '#858585',
-          'editorLineNumber.activeForeground': '#FFFFFF',
+          'editorLineNumber.foreground': '#4A6A8A',
+          'editorLineNumber.activeForeground': '#60A5FA',
           'editor.findMatchBackground': '#264F78',
           'editor.findMatchHighlightBackground': '#75BEFF',
-          'editorHoverWidget.background': '#252526',
+          'editorHoverWidget.background': '#122840',
           'editorHoverWidget.border': '#404040',
-          'editorSuggestWidget.background': '#252526',
+          'editorSuggestWidget.background': '#122840',
           'editorSuggestWidget.border': '#404040',
           'editorSuggestWidget.selectedBackground': '#094771',
           'editorSuggestWidget.foreground': '#D4D4D4',
           'editorSuggestWidget.selectedForeground': '#FFFFFF',
-          'editorWidget.background': '#252526',
+          'editorWidget.background': '#122840',
           'editorWidget.border': '#404040',
           'editorWidget.resizeBorder': '#404040',
           'editorWidget.shadow': '#000000',
-          'editorGroupHeader.tabsBackground': '#252526',
+          'editorGroupHeader.tabsBackground': '#0F1F33',
           'editorGroupHeader.noTabsBackground': '#1E1E1E',
           'editorGroup.border': '#404040',
           'editorGroup.dropBackground': '#094771',
@@ -818,11 +824,11 @@ export function SQLEditor({
         'editor.background': '#FFFFFF',
         'editor.foreground': '#000000',
         'editorCursor.foreground': '#000000',
-        'editor.lineHighlightBackground': '#F3F3F3',
-        'editor.selectionBackground': '#ADD6FF',
+        'editor.lineHighlightBackground': '#F8FAFC',
+        'editor.selectionBackground': '#DBEAFE',
         'editor.inactiveSelectionBackground': '#E5EBF1',
-        'editorLineNumber.foreground': '#237893',
-        'editorLineNumber.activeForeground': '#0B216F',
+        'editorLineNumber.foreground': '#94A3B8',
+        'editorLineNumber.activeForeground': '#3B82F6',
         'editor.findMatchBackground': '#A8AC94',
         'editor.findMatchHighlightBackground': '#E2E6D4',
         'editorHoverWidget.background': '#F8F8F8',
@@ -1193,17 +1199,20 @@ export function SQLEditor({
     cleanupDisposablesRef.current = [disposable, cursorDisposable, selectionDisposable];
   }, [onSave, onFormat, onStop, setCursorPosition, setSelectedText]);
 
-  const handleExecuteQuery = useCallback(async () => {
+  const handleExecuteQuery = useCallback(async (explicitSql?: string) => {
     // 收起建议列表
     editorRef.current?.getAction('editor.action.hideSuggestWidget')?.run();
 
-    // 获取选中的 SQL，如果没有选中则使用整个 SQL
-    const selectedSql = editorRef.current
-      ?.getModel()
-      ?.getValueInRange(editorRef.current.getSelection())
-      ?.trim();
-
-    let sqlToExecute = selectedSql || sql;
+    let sqlToExecute: string;
+    if (explicitSql) {
+      sqlToExecute = explicitSql;
+    } else {
+      const selectedSql = editorRef.current
+        ?.getModel()
+        ?.getValueInRange(editorRef.current.getSelection())
+        ?.trim();
+      sqlToExecute = selectedSql || sql;
+    }
 
     if (!sqlToExecute.trim()) {
       message.warning(t('common.pleaseEnterSqlStatement'));
@@ -2206,7 +2215,7 @@ export function SQLEditor({
           }}
         />
 
-        {/* 自定义右键菜单 */}
+        {/* 自定义右键菜单 - 紧凑布局 */}
         {contextMenuVisible && (
           <div
             ref={contextMenuRef}
@@ -2216,247 +2225,141 @@ export function SQLEditor({
               top: contextMenuPos.y,
               zIndex: 1000,
               background: tc.isDark ? '#252526' : '#FFFFFF',
-              border: `1px solid ${tc.isDark ? '#404040' : '#E8E8E8'}`,
-              borderRadius: 4,
+              border: `1px solid ${tc.isDark ? '#404040' : '#E0E0E0'}`,
+              borderRadius: 6,
               boxShadow: tc.isDark
-                ? '0 4px 12px rgba(0,0,0,0.5)'
-                : '0 4px 12px rgba(0,0,0,0.15)',
-              minWidth: 180,
-              padding: '4px 0',
+                ? '0 2px 8px rgba(0,0,0,0.45)'
+                : '0 2px 8px rgba(0,0,0,0.12)',
+              padding: '2px 0',
+              minWidth: 160,
+              fontSize: 12,
             }}
           >
             <Menu
               mode="vertical"
+              selectable={false}
+              className="sql-ctx-menu"
               style={{
                 background: 'transparent',
                 border: 'none',
                 boxShadow: 'none',
               }}
-              selectable={false}
               items={[
                 {
                   key: 'execute',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <PlayCircleOutlined style={{ color: 'var(--color-primary)' }} />
-                      {t('common.executeButton')}
-                    </span>
-                  ),
+                  icon: <PlayCircleOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />,
+                  label: contextMenuSelectedSqlRef.current
+                    ? t('common.executeSelected')
+                    : t('common.executeButton'),
                   disabled: !connectionId || loading,
                   onClick: () => {
                     setContextMenuVisible(false);
-                    handleExecuteQuery();
-                  },
-                },
-                {
-                  key: 'execute-selected',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <PlayCircleOutlined style={{ color: 'var(--color-primary)' }} />
-                      {t('common.executeSelected')}
-                    </span>
-                  ),
-                  disabled: !connectionId || loading,
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    handleExecuteQuery();
+                    if (contextMenuSelectedSqlRef.current) {
+                      handleExecuteQuery(contextMenuSelectedSqlRef.current);
+                    } else {
+                      handleExecuteQuery();
+                    }
                   },
                 },
                 {
                   key: 'format',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FormatPainterOutlined />
-                      {t('common.formatButton')}
-                    </span>
-                  ),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    formatSQL();
-                  },
+                  icon: <FormatPainterOutlined style={{ fontSize: 12 }} />,
+                  label: t('common.formatButton'),
+                  onClick: () => { setContextMenuVisible(false); formatSQL(); },
                 },
                 {
                   key: 'explain',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <LineChartOutlined />
-                      {t('common.explainPlanButton')}
-                    </span>
-                  ),
+                  icon: <LineChartOutlined style={{ fontSize: 12 }} />,
+                  label: t('common.explainPlanButton'),
                   disabled: !connectionId,
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    showExplainPlan();
-                  },
+                  onClick: () => { setContextMenuVisible(false); showExplainPlan(); },
                 },
-                {
-                  key: 'divider-1',
-                  type: 'divider',
-                },
+                { key: 'd1', type: 'divider' },
                 {
                   key: 'cut',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12 }}>✂️</span>
-                      {t('common.cut')}
-                    </span>
-                  ),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    editorRef.current?.getAction('editor.action.clipboardCutAction')?.run();
-                  },
+                  icon: <span style={{ fontSize: 11 }}>✂️</span>,
+                  label: t('common.cut'),
+                  onClick: () => { setContextMenuVisible(false); editorRef.current?.getAction('editor.action.clipboardCutAction')?.run(); },
                 },
                 {
                   key: 'copy',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <CopyOutlined />
-                      {t('common.copy')}
-                    </span>
-                  ),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    editorRef.current?.getAction('editor.action.clipboardCopyAction')?.run();
-                  },
+                  icon: <CopyOutlined style={{ fontSize: 12 }} />,
+                  label: t('common.copy'),
+                  onClick: () => { setContextMenuVisible(false); editorRef.current?.getAction('editor.action.clipboardCopyAction')?.run(); },
                 },
                 {
                   key: 'paste',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12 }}>📋</span>
-                      {t('common.paste')}
-                    </span>
-                  ),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    editorRef.current?.getAction('editor.action.clipboardPasteAction')?.run();
-                  },
+                  icon: <span style={{ fontSize: 11 }}>📋</span>,
+                  label: t('common.paste'),
+                  onClick: () => { setContextMenuVisible(false); editorRef.current?.getAction('editor.action.clipboardPasteAction')?.run(); },
                 },
                 {
                   key: 'select-all',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12 }}>☐</span>
-                      {t('common.selectAll')}
-                    </span>
-                  ),
+                  icon: <span style={{ fontSize: 11 }}>☐</span>,
+                  label: t('common.selectAll'),
                   onClick: () => {
                     setContextMenuVisible(false);
-                    const currentEditor = editorRef.current;
-                    const currentMonaco = monacoRef.current;
-                    if (!currentEditor || !currentMonaco) return;
-                    const model = currentEditor.getModel();
-                    if (!model) return;
-                    const lineCount = model.getLineCount();
-                    const lastColumn = model.getLineMaxColumn(lineCount);
-                    currentEditor.setSelection(
-                      new currentMonaco.Selection(1, 1, lineCount, lastColumn)
-                    );
+                    const ed = editorRef.current;
+                    const mc = monacoRef.current;
+                    if (!ed || !mc) return;
+                    const m = ed.getModel();
+                    if (!m) return;
+                    ed.setSelection(new mc.Selection(1, 1, m.getLineCount(), m.getLineMaxColumn(m.getLineCount())));
                   },
                 },
-                {
-                  key: 'divider-2',
-                  type: 'divider',
-                },
+                { key: 'd2', type: 'divider' },
                 {
                   key: 'comment',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FileTextOutlined />
-                      {t('common.commentButton')}
-                    </span>
-                  ),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    editorRef.current?.getAction('editor.action.commentLine')?.run();
-                  },
+                  icon: <FileTextOutlined style={{ fontSize: 12 }} />,
+                  label: t('common.commentButton'),
+                  onClick: () => { setContextMenuVisible(false); editorRef.current?.getAction('editor.action.commentLine')?.run(); },
                 },
                 {
                   key: 'uppercase',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FormatPainterOutlined />
-                      {t('common.uppercase')}
-                    </span>
-                  ),
+                  icon: <span style={{ fontSize: 11 }}>⬆</span>,
+                  label: t('common.uppercase'),
                   onClick: () => {
                     setContextMenuVisible(false);
-                    const currentEditor = editorRef.current;
-                    if (!currentEditor) return;
-                    const model = currentEditor.getModel();
-                    const selection = currentEditor.getSelection();
-                    if (!model || !selection) return;
-                    const selectedText = model.getValueInRange(selection);
-                    if (!selectedText) return;
-                    currentEditor.executeEdits('case-transform', [
-                      { range: selection, text: selectedText.toUpperCase(), forceMoveMarkers: true },
-                    ]);
+                    const ed = editorRef.current;
+                    if (!ed) return;
+                    const sel = ed.getSelection();
+                    const txt = sel && ed.getModel()?.getValueInRange(sel);
+                    if (!sel || !txt) return;
+                    ed.executeEdits('case', [{ range: sel, text: txt.toUpperCase(), forceMoveMarkers: true }]);
                   },
                 },
                 {
                   key: 'lowercase',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FormatPainterOutlined />
-                      {t('common.lowercase')}
-                    </span>
-                  ),
+                  icon: <span style={{ fontSize: 11 }}>⬇</span>,
+                  label: t('common.lowercase'),
                   onClick: () => {
                     setContextMenuVisible(false);
-                    const currentEditor = editorRef.current;
-                    if (!currentEditor) return;
-                    const model = currentEditor.getModel();
-                    const selection = currentEditor.getSelection();
-                    if (!model || !selection) return;
-                    const selectedText = model.getValueInRange(selection);
-                    if (!selectedText) return;
-                    currentEditor.executeEdits('case-transform', [
-                      { range: selection, text: selectedText.toLowerCase(), forceMoveMarkers: true },
-                    ]);
+                    const ed = editorRef.current;
+                    if (!ed) return;
+                    const sel = ed.getSelection();
+                    const txt = sel && ed.getModel()?.getValueInRange(sel);
+                    if (!sel || !txt) return;
+                    ed.executeEdits('case', [{ range: sel, text: txt.toLowerCase(), forceMoveMarkers: true }]);
                   },
                 },
-                {
-                  key: 'divider-3',
-                  type: 'divider',
-                },
-                {
-                  key: 'clear',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <ClearOutlined />
-                      {t('common.clearEditor')}
-                    </span>
-                  ),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    clearEditor();
-                  },
-                },
+                { key: 'd3', type: 'divider' },
                 {
                   key: 'save',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <SaveOutlined />
-                      {t('common.saveSql')}
-                    </span>
-                  ),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    saveSQL();
-                  },
+                  icon: <SaveOutlined style={{ fontSize: 12 }} />,
+                  label: t('common.saveSql'),
+                  onClick: () => { setContextMenuVisible(false); saveSQL(); },
                 },
                 {
                   key: 'copy-sql',
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <CopyOutlined />
-                      {t('common.copySqlMenu')}
-                    </span>
-                  ),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    copySQL();
-                  },
+                  icon: <CopyOutlined style={{ fontSize: 12 }} />,
+                  label: t('common.copySqlMenu'),
+                  onClick: () => { setContextMenuVisible(false); copySQL(); },
+                },
+                {
+                  key: 'clear',
+                  icon: <ClearOutlined style={{ fontSize: 12 }} />,
+                  label: t('common.clearEditor'),
+                  onClick: () => { setContextMenuVisible(false); clearEditor(); },
                 },
               ]}
             />

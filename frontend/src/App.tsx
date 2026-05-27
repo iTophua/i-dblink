@@ -39,7 +39,6 @@ function App() {
     }
   }, [isHydrated, settings.language]);
 
-  const themePreset = settings.themePreset;
   const themeMode = settings.themeMode;
 
   const effectiveMode: ThemeMode = themeMode === 'system'
@@ -48,8 +47,8 @@ function App() {
 
   // 缓存主题配置，避免每次渲染都重新计算
   const themeConfig = useMemo(
-    () => getThemeConfig(themePreset, effectiveMode),
-    [themePreset, effectiveMode]
+    () => getThemeConfig(effectiveMode),
+    [effectiveMode]
   );
 
   useEffect(() => {
@@ -140,13 +139,12 @@ function App() {
       });
 
       root.setAttribute('data-theme', effectiveMode);
-      root.setAttribute('data-theme-preset', themePreset);
     };
 
     requestAnimationFrame(() => {
       applyVars();
     });
-  }, [themePreset, effectiveMode, isHydrated]);
+  }, [effectiveMode, isHydrated]);
 
   if (showSplash) {
     return (

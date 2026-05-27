@@ -5,7 +5,7 @@
  */
 
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type ThemePreset = 'neonCyber' | 'midnightDeep' | 'oceanBlue' | 'nordicFrost';
+export type ThemePreset = 'default';
 
 export interface ThemeColorScheme {
   primary: string;
@@ -444,15 +444,15 @@ export const COMPONENT_STYLES = {
 
 export const DB_TYPE_COLORS = {
   mysql: '#1890ff',
-  postgresql: '#52c41a',
-  sqlite: '#faad14',
-  sqlserver: '#eb2f96',
-  oracle: '#fa8c16',
-  mariadb: '#13c2c2',
-  dameng: '#722ed1',
-  kingbase: '#eb2f96',
-  highgo: '#13c2c2',
-  vastbase: '#52c41a',
+  postgresql: '#336791',
+  sqlite: '#003b57',
+  sqlserver: '#cc2927',
+  oracle: '#f80000',
+  mariadb: '#c0765a',
+  dameng: '#b30000',
+  kingbase: '#0066cc',
+  highgo: '#1e90ff',
+  vastbase: '#008000',
   default: '#1890ff',
 };
 
@@ -558,53 +558,20 @@ export const GLASS_LAYERS = {
 
 export const FOCUS_STYLES = {
   light: {
-    focusRingColor: 'rgba(99, 102, 241, 0.5)',
+    focusRingColor: 'rgba(59, 130, 246, 0.5)',
     focusRingWidth: 2,
     focusRingOffset: 2,
-    focusRingShadow: '0 0 0 2px rgba(99, 102, 241, 0.2)',
+    focusRingShadow: '0 0 0 2px rgba(59, 130, 246, 0.15)',
   },
   dark: {
-    focusRingColor: 'rgba(129, 140, 248, 0.6)',
+    focusRingColor: 'rgba(96, 165, 250, 0.6)',
     focusRingWidth: 2,
     focusRingOffset: 2,
-    focusRingShadow: '0 0 0 2px rgba(129, 140, 248, 0.3)',
+    focusRingShadow: '0 0 0 2px rgba(96, 165, 250, 0.2)',
   },
 };
 
 // ==================== 主题配色方案 ====================
-
-// 工厂函数：自动生成渐变
-function createGradient(from: string, to: string): string {
-  return `linear-gradient(135deg, ${from} 0%, ${to} 100%)`;
-}
-
-// 工厂函数：根据基础色值构建完整配色方案（自动生成渐变）
-function createColorScheme(base: {
-  primary: string;
-  primaryHover: string;
-  primaryActive: string;
-  success: string;
-  successHover: string;
-  successActive: string;
-  warning: string;
-  warningHover: string;
-  warningActive: string;
-  error: string;
-  errorHover: string;
-  errorActive: string;
-  info: string;
-  infoHover: string;
-  infoActive: string;
-}): ThemeColorScheme {
-  return {
-    ...base,
-    primaryGradient: createGradient(base.primary, base.primaryHover),
-    successGradient: createGradient(base.success, base.successHover),
-    warningGradient: createGradient(base.warning, base.warningHover),
-    errorGradient: createGradient(base.error, base.errorHover),
-    infoGradient: createGradient(base.info, base.infoHover),
-  };
-}
 
 // 工厂函数：根据主题名和色值构建完整主题配置（自动填充不变的共享配置）
 function getSystemMode(): 'light' | 'dark' {
@@ -643,343 +610,55 @@ function createThemeConfig(
   };
 }
 
-// 1. NeonCyber - 赛博朋克霓虹风格（深色主题为主）
-const NEON_CYBER_LIGHT = createColorScheme({
-  primary: '#00e5ff',
-  primaryHover: '#33ebff',
-  primaryActive: '#00b8cc',
-  success: '#00ff55',
-  successHover: '#33ff77',
-  successActive: '#00cc44',
-  warning: '#d946ff',
-  warningHover: '#e879f9',
-  warningActive: '#c026d3',
-  error: '#f43f5e',
-  errorHover: '#fb7185',
-  errorActive: '#e11d48',
-  info: '#00e5ff',
-  infoHover: '#33ebff',
-  infoActive: '#00b8cc',
-});
-
-const NEON_CYBER_DARK = createColorScheme({
-  primary: '#00f5ff',
-  primaryHover: '#33f7ff',
-  primaryActive: '#00c4cc',
-  success: '#39ff14',
-  successHover: '#5fff3d',
-  successActive: '#2ecc0f',
-  warning: '#e879f9',
-  warningHover: '#f0abfc',
-  warningActive: '#d946ff',
-  error: '#fb7185',
-  errorHover: '#fda4af',
-  errorActive: '#f43f5e',
-  info: '#00f5ff',
-  infoHover: '#33f7ff',
-  infoActive: '#00c4cc',
-});
-
-const NEON_CYBER_LIGHT_NEUTRAL: NeutralColors = {
-  textPrimary: '#1a1a2e',
-  textSecondary: '#5a5a6e',
-  textTertiary: '#8a8a9a',
-  textDisabled: '#b0b0be',
-  border: '#d8d8e4',
-  borderLight: '#eaeaf0',
-  borderDark: '#a0a0b0',
-  background: '#ffffff',
-  backgroundCard: '#ffffff',
-  backgroundToolbar: '#f5f5f8',
-  backgroundHover: '#f0f0f4',
-  backgroundActive: '#00e5ff15',
-  mask: 'rgba(0, 0, 0, 0.45)',
-  windowBackground: '#ffffff',
-  rowHoverBg: 'rgba(0, 0, 0, 0.02)',
-  rowSelectedBg: 'rgba(0, 229, 255, 0.06)',
-  rowStripeBg: '#fafafa',
-  headerBg: '#f5f5f8',
-  surfaceElevated: '#ffffff',
-  scrollbarThumb: 'rgba(0, 0, 0, 0.15)',
-  scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
-  level1: '#f8f8fc',
-  level2: '#ffffff',
-  level3: '#ffffff',
-  level4: '#ffffff',
-  borderSubtle: '#eaeaef',
-  borderEmphasis: '#d0d0dc',
-  borderActive: '#00e5ff',
-};
-
-const NEON_CYBER_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#e4e4ed',
-  textSecondary: '#a0a0b8',
-  textTertiary: '#686888',
-  textDisabled: '#484860',
-  border: '#2a2a40',
-  borderLight: '#1a1a2e',
-  borderDark: '#3a3a55',
-  background: '#0d0d18',
-  backgroundCard: '#13132a',
-  backgroundToolbar: '#0f0f22',
-  backgroundHover: '#1c1c38',
-  backgroundActive: '#00f5ff15',
-  mask: 'rgba(0, 0, 0, 0.75)',
-  windowBackground: '#0d0d18',
-  rowHoverBg: 'rgba(0, 245, 255, 0.08)',
-  rowSelectedBg: 'rgba(0, 245, 255, 0.14)',
-  rowStripeBg: '#10102a',
-  headerBg: '#16163a',
-  surfaceElevated: '#1c1c40',
-  scrollbarThumb: 'rgba(255, 255, 255, 0.18)',
-  scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
-  level1: '#0d0d18',
-  level2: '#13132a',
-  level3: '#1c1c38',
-  level4: '#252548',
-  borderSubtle: '#222240',
-  borderEmphasis: '#3a3a55',
-  borderActive: '#00f5ff',
-};
-
-// 2. MidnightDeep - 深夜深蓝风格
-const MIDNIGHT_DEEP_LIGHT = createColorScheme({
-  primary: '#6366f1',
-  primaryHover: '#818cf8',
-  primaryActive: '#4f46e5',
+const DEFAULT_LIGHT: ThemeColorScheme = {
+  primary: '#3b82f6',
+  primaryHover: '#60a5fa',
+  primaryActive: '#2563eb',
+  primaryGradient: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
   success: '#10b981',
   successHover: '#34d399',
   successActive: '#059669',
+  successGradient: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
   warning: '#f59e0b',
   warningHover: '#fbbf24',
   warningActive: '#d97706',
+  warningGradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
   error: '#ef4444',
   errorHover: '#f87171',
   errorActive: '#dc2626',
-  info: '#6366f1',
-  infoHover: '#818cf8',
-  infoActive: '#4f46e5',
-});
+  errorGradient: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+  info: '#3b82f6',
+  infoHover: '#60a5fa',
+  infoActive: '#2563eb',
+  infoGradient: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
+};
 
-const MIDNIGHT_DEEP_DARK = createColorScheme({
-  primary: '#818cf8',
-  primaryHover: '#a5b4fc',
-  primaryActive: '#6366f1',
+const DEFAULT_DARK: ThemeColorScheme = {
+  primary: '#60a5fa',
+  primaryHover: '#93c5fd',
+  primaryActive: '#3b82f6',
+  primaryGradient: 'linear-gradient(135deg, #60a5fa 0%, #93c5fd 100%)',
   success: '#34d399',
   successHover: '#6ee7b7',
   successActive: '#10b981',
+  successGradient: 'linear-gradient(135deg, #34d399 0%, #6ee7b7 100%)',
   warning: '#fbbf24',
-  warningHover: '#fcd34d',
+  warningHover: '#fde68a',
   warningActive: '#f59e0b',
+  warningGradient: 'linear-gradient(135deg, #fbbf24 0%, #fde68a 100%)',
   error: '#f87171',
   errorHover: '#fca5a5',
   errorActive: '#ef4444',
-  info: '#818cf8',
-  infoHover: '#a5b4fc',
-  infoActive: '#6366f1',
-});
+  errorGradient: 'linear-gradient(135deg, #f87171 0%, #fca5a5 100%)',
+  info: '#60a5fa',
+  infoHover: '#93c5fd',
+  infoActive: '#3b82f6',
+  infoGradient: 'linear-gradient(135deg, #60a5fa 0%, #93c5fd 100%)',
+};
 
-const MIDNIGHT_DEEP_LIGHT_NEUTRAL: NeutralColors = {
-  textPrimary: '#1e293b',
+const DEFAULT_LIGHT_NEUTRAL: NeutralColors = {
+  textPrimary: '#0f172a',
   textSecondary: '#475569',
-  textTertiary: '#64748b',
-  textDisabled: '#94a3b8',
-  border: '#cbd5e1',
-  borderLight: '#e2e8f0',
-  borderDark: '#94a3b8',
-  background: '#ffffff',
-  backgroundCard: '#ffffff',
-  backgroundToolbar: '#f1f5f9',
-  backgroundHover: '#e8eef3',
-  backgroundActive: '#6366f115',
-  mask: 'rgba(0, 0, 0, 0.5)',
-  windowBackground: '#ffffff',
-  rowHoverBg: 'rgba(0, 0, 0, 0.02)',
-  rowSelectedBg: 'rgba(99, 102, 241, 0.06)',
-  rowStripeBg: '#fafbfd',
-  headerBg: '#f1f5f9',
-  surfaceElevated: '#ffffff',
-  scrollbarThumb: 'rgba(0, 0, 0, 0.15)',
-  scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
-  level1: '#f8fafc',
-  level2: '#ffffff',
-  level3: '#ffffff',
-  level4: '#ffffff',
-  borderSubtle: '#e2e8f0',
-  borderEmphasis: '#cbd5e1',
-  borderActive: '#6366f1',
-};
-
-const MIDNIGHT_DEEP_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#e2e5f0',
-  textSecondary: '#8b95b0',
-  textTertiary: '#5a6480',
-  textDisabled: '#404560',
-  border: '#252d45',
-  borderLight: '#181f35',
-  borderDark: '#323f5a',
-  background: '#0a0f1f',
-  backgroundCard: '#111827',
-  backgroundToolbar: '#0d1020',
-  backgroundHover: '#1a2235',
-  backgroundActive: '#6366f115',
-  mask: 'rgba(0, 0, 0, 0.7)',
-  windowBackground: '#0a0f1f',
-  rowHoverBg: 'rgba(99, 102, 241, 0.06)',
-  rowSelectedBg: 'rgba(99, 102, 241, 0.12)',
-  rowStripeBg: '#0f1525',
-  headerBg: '#141d30',
-  surfaceElevated: '#1a2438',
-  scrollbarThumb: 'rgba(255, 255, 255, 0.15)',
-  scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
-  level1: '#0a0f1f',
-  level2: '#111827',
-  level3: '#1a2235',
-  level4: '#252d45',
-  borderSubtle: '#1a2030',
-  borderEmphasis: '#323f5a',
-  borderActive: '#818cf8',
-};
-
-// 3. OceanBlue - 海洋蓝色风格
-const OCEAN_BLUE_LIGHT = createColorScheme({
-  primary: '#0ea5e9',
-  primaryHover: '#38bdf8',
-  primaryActive: '#0284c7',
-  success: '#14b8a6',
-  successHover: '#2dd4bf',
-  successActive: '#0d9488',
-  warning: '#f59e0b',
-  warningHover: '#fbbf24',
-  warningActive: '#d97706',
-  error: '#f43f5e',
-  errorHover: '#fb7185',
-  errorActive: '#e11d48',
-  info: '#0ea5e9',
-  infoHover: '#38bdf8',
-  infoActive: '#0284c7',
-});
-
-const OCEAN_BLUE_DARK = createColorScheme({
-  primary: '#38bdf8',
-  primaryHover: '#7dd3fc',
-  primaryActive: '#0ea5e9',
-  success: '#2dd4bf',
-  successHover: '#5eead4',
-  successActive: '#14b8a6',
-  warning: '#fbbf24',
-  warningHover: '#fcd34d',
-  warningActive: '#f59e0b',
-  error: '#fb7185',
-  errorHover: '#fda4af',
-  errorActive: '#f43f5e',
-  info: '#38bdf8',
-  infoHover: '#7dd3fc',
-  infoActive: '#0ea5e9',
-});
-
-const OCEAN_BLUE_LIGHT_NEUTRAL: NeutralColors = {
-  textPrimary: '#0c4a6e',
-  textSecondary: '#0369a1',
-  textTertiary: '#0284c7',
-  textDisabled: '#7dd3fc',
-  border: '#bae6fd',
-  borderLight: '#e0f2fe',
-  borderDark: '#38bdf8',
-  background: '#ffffff',
-  backgroundCard: '#ffffff',
-  backgroundToolbar: '#f0f9ff',
-  backgroundHover: '#ddf1fe',
-  backgroundActive: '#0ea5e915',
-  mask: 'rgba(0, 0, 0, 0.5)',
-  windowBackground: '#ffffff',
-  rowHoverBg: 'rgba(0, 0, 0, 0.02)',
-  rowSelectedBg: 'rgba(14, 165, 233, 0.06)',
-  rowStripeBg: '#f5fbff',
-  headerBg: '#f0f9ff',
-  surfaceElevated: '#ffffff',
-  scrollbarThumb: 'rgba(0, 0, 0, 0.15)',
-  scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
-  level1: '#f0f9ff',
-  level2: '#ffffff',
-  level3: '#ffffff',
-  level4: '#ffffff',
-  borderSubtle: '#e0f2fe',
-  borderEmphasis: '#bae6fd',
-  borderActive: '#0ea5e9',
-};
-
-const OCEAN_BLUE_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#ddf2fc',
-  textSecondary: '#94c8e8',
-  textTertiary: '#5a9dc8',
-  textDisabled: '#2a6a98',
-  border: '#1a5080',
-  borderLight: '#103050',
-  borderDark: '#0a3a60',
-  background: '#071520',
-  backgroundCard: '#0d1e30',
-  backgroundToolbar: '#091525',
-  backgroundHover: '#122535',
-  backgroundActive: '#0ea5e915',
-  mask: 'rgba(0, 0, 0, 0.65)',
-  windowBackground: '#071520',
-  rowHoverBg: 'rgba(56, 189, 248, 0.08)',
-  rowSelectedBg: 'rgba(56, 189, 248, 0.14)',
-  rowStripeBg: '#091a2a',
-  headerBg: '#0f1f35',
-  surfaceElevated: '#162840',
-  scrollbarThumb: 'rgba(255, 255, 255, 0.15)',
-  scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
-  level1: '#071520',
-  level2: '#0d1e30',
-  level3: '#122535',
-  level4: '#1a3550',
-  borderSubtle: '#0a3050',
-  borderEmphasis: '#0a3a60',
-  borderActive: '#38bdf8',
-};
-
-// 4. NordicFrost - 北欧冷淡风格
-const NORDIC_FROST_LIGHT = createColorScheme({
-  primary: '#64748b',
-  primaryHover: '#94a3b8',
-  primaryActive: '#475569',
-  success: '#22c55e',
-  successHover: '#4ade80',
-  successActive: '#16a34a',
-  warning: '#f59e0b',
-  warningHover: '#fbbf24',
-  warningActive: '#d97706',
-  error: '#ef4444',
-  errorHover: '#f87171',
-  errorActive: '#dc2626',
-  info: '#64748b',
-  infoHover: '#94a3b8',
-  infoActive: '#475569',
-});
-
-const NORDIC_FROST_DARK = createColorScheme({
-  primary: '#94a3b8',
-  primaryHover: '#cbd5e1',
-  primaryActive: '#64748b',
-  success: '#4ade80',
-  successHover: '#86efac',
-  successActive: '#22c55e',
-  warning: '#fbbf24',
-  warningHover: '#fcd34d',
-  warningActive: '#f59e0b',
-  error: '#f87171',
-  errorHover: '#fca5a5',
-  errorActive: '#ef4444',
-  info: '#94a3b8',
-  infoHover: '#cbd5e1',
-  infoActive: '#64748b',
-});
-
-const NORDIC_FROST_LIGHT_NEUTRAL: NeutralColors = {
-  textPrimary: '#334155',
-  textSecondary: '#64748b',
   textTertiary: '#94a3b8',
   textDisabled: '#cbd5e1',
   border: '#e2e8f0',
@@ -987,134 +666,72 @@ const NORDIC_FROST_LIGHT_NEUTRAL: NeutralColors = {
   borderDark: '#cbd5e1',
   background: '#ffffff',
   backgroundCard: '#ffffff',
-  backgroundToolbar: '#f8fafc',
-  backgroundHover: '#eef1f4',
-  backgroundActive: '#64748b15',
-  mask: 'rgba(0, 0, 0, 0.5)',
+  backgroundToolbar: '#ffffff',
+  backgroundHover: '#f8fafc',
+  backgroundActive: '#eff6ff',
+  mask: 'rgba(15,23,42,0.4)',
   windowBackground: '#ffffff',
-  rowHoverBg: 'rgba(0, 0, 0, 0.02)',
-  rowSelectedBg: 'rgba(100, 116, 139, 0.06)',
-  rowStripeBg: '#fafbfc',
+  rowHoverBg: '#f8fafc',
+  rowSelectedBg: '#eff6ff',
+  rowStripeBg: 'transparent',
   headerBg: '#f8fafc',
   surfaceElevated: '#ffffff',
-  scrollbarThumb: 'rgba(0, 0, 0, 0.15)',
-  scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
+  scrollbarThumb: 'rgba(0,0,0,0.15)',
+  scrollbarTrack: 'transparent',
   level1: '#f8fafc',
   level2: '#ffffff',
   level3: '#ffffff',
   level4: '#ffffff',
   borderSubtle: '#f1f5f9',
-  borderEmphasis: '#e2e8f0',
-  borderActive: '#64748b',
+  borderEmphasis: '#cbd5e1',
+  borderActive: '#3b82f6',
 };
 
-const NORDIC_FROST_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#e2e5f0',
-  textSecondary: '#a5b0c5',
-  textTertiary: '#6b7590',
-  textDisabled: '#4a5068',
-  border: '#2a3245',
-  borderLight: '#1a2030',
-  borderDark: '#3a4455',
-  background: '#0c1018',
-  backgroundCard: '#111520',
-  backgroundToolbar: '#0e1020',
-  backgroundHover: '#1a2030',
-  backgroundActive: '#94a3b815',
-  mask: 'rgba(0, 0, 0, 0.65)',
-  windowBackground: '#0c1018',
-  rowHoverBg: 'rgba(148, 163, 184, 0.06)',
-  rowSelectedBg: 'rgba(148, 163, 184, 0.12)',
-  rowStripeBg: '#0f1520',
-  headerBg: '#131825',
-  surfaceElevated: '#1a2230',
-  scrollbarThumb: 'rgba(255, 255, 255, 0.12)',
-  scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
-  level1: '#0c1018',
-  level2: '#111520',
-  level3: '#1a2030',
-  level4: '#252d40',
-  borderSubtle: '#1a2030',
-  borderEmphasis: '#3a4455',
-  borderActive: '#94a3b8',
+const DEFAULT_DARK_NEUTRAL: NeutralColors = {
+  textPrimary: '#f1f5f9',
+  textSecondary: '#94a3b8',
+  textTertiary: 'rgba(148,163,184,0.5)',
+  textDisabled: 'rgba(148,163,184,0.25)',
+  border: '#1e3a5f',
+  borderLight: 'rgba(30,58,95,0.3)',
+  borderDark: '#2a4a75',
+  background: '#0c1929',
+  backgroundCard: '#0f1f33',
+  backgroundToolbar: '#0d1e30',
+  backgroundHover: 'rgba(96,165,250,0.06)',
+  backgroundActive: 'rgba(96,165,250,0.10)',
+  mask: 'rgba(0,0,0,0.6)',
+  windowBackground: '#0c1929',
+  rowHoverBg: '#112840',
+  rowSelectedBg: '#1a3a5c',
+  rowStripeBg: 'transparent',
+  headerBg: '#0d1e30',
+  surfaceElevated: '#0f1f33',
+  scrollbarThumb: 'rgba(148,163,184,0.2)',
+  scrollbarTrack: 'transparent',
+  level1: '#0a1628',
+  level2: '#0f1f33',
+  level3: '#122840',
+  level4: '#1a3050',
+  borderSubtle: 'rgba(30,58,95,0.2)',
+  borderEmphasis: '#2a4a75',
+  borderActive: '#60a5fa',
 };
 
 // ==================== 导出所有主题配置 ====================
 
-export const THEMES: Record<ThemePreset, { light: ThemeConfig; dark: ThemeConfig }> = {
-  neonCyber: {
-    light: createThemeConfig(
-      'NeonCyber',
-      '赛博朋克霓虹风格',
-      'light',
-      NEON_CYBER_LIGHT,
-      NEON_CYBER_LIGHT_NEUTRAL
-    ),
-    dark: createThemeConfig(
-      'NeonCyber',
-      '赛博朋克霓虹风格',
-      'dark',
-      NEON_CYBER_DARK,
-      NEON_CYBER_DARK_NEUTRAL
-    ),
+export const THEMES = {
+  default: {
+    light: createThemeConfig('Default', '默认主题', 'light', DEFAULT_LIGHT, DEFAULT_LIGHT_NEUTRAL),
+    dark: createThemeConfig('Default', '默认主题', 'dark', DEFAULT_DARK, DEFAULT_DARK_NEUTRAL),
   },
-  midnightDeep: {
-    light: createThemeConfig(
-      'MidnightDeep',
-      '深夜深蓝风格',
-      'light',
-      MIDNIGHT_DEEP_LIGHT,
-      MIDNIGHT_DEEP_LIGHT_NEUTRAL
-    ),
-    dark: createThemeConfig(
-      'MidnightDeep',
-      '深夜深蓝风格',
-      'dark',
-      MIDNIGHT_DEEP_DARK,
-      MIDNIGHT_DEEP_DARK_NEUTRAL
-    ),
-  },
-  oceanBlue: {
-    light: createThemeConfig(
-      'OceanBlue',
-      '海洋蓝色风格',
-      'light',
-      OCEAN_BLUE_LIGHT,
-      OCEAN_BLUE_LIGHT_NEUTRAL
-    ),
-    dark: createThemeConfig(
-      'OceanBlue',
-      '海洋蓝色风格',
-      'dark',
-      OCEAN_BLUE_DARK,
-      OCEAN_BLUE_DARK_NEUTRAL
-    ),
-  },
-  nordicFrost: {
-    light: createThemeConfig(
-      'NordicFrost',
-      '北欧冷淡风格',
-      'light',
-      NORDIC_FROST_LIGHT,
-      NORDIC_FROST_LIGHT_NEUTRAL
-    ),
-    dark: createThemeConfig(
-      'NordicFrost',
-      '北欧冷淡风格',
-      'dark',
-      NORDIC_FROST_DARK,
-      NORDIC_FROST_DARK_NEUTRAL
-    ),
-  },
-};
+} as const;
 
-export function getThemeConfig(preset: ThemePreset, mode: ThemeMode): ThemeConfig {
+export function getThemeConfig(mode: ThemeMode): ThemeConfig {
   const effectiveMode = mode === 'system' ? getSystemMode() : mode;
-  return THEMES[preset][effectiveMode];
+  return THEMES.default[effectiveMode];
 }
 
-export const THEME_PRESETS_LIST = Object.entries(THEMES).map(([key, value]) => ({
-  value: key as ThemePreset,
-  label: value.light.name,
-  description: value.light.description,
-}));
+export const THEME_PRESETS_LIST = [
+  { value: 'default' as ThemePreset, label: '默认主题', description: '天蓝清新风格' },
+];

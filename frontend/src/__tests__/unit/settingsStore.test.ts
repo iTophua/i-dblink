@@ -5,7 +5,6 @@ import type { AppSettings } from '../../stores/settingsStore';
 const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
-  themePreset: 'midnightDeep',
   themeMode: 'system',
   language: 'zh-CN',
   shortcuts: {},
@@ -21,7 +20,6 @@ describe('settingsStore', () => {
       const settings = useSettingsStore.getState().settings;
       expect(settings.pageSize).toBe(1000);
       expect(settings.maxResultRows).toBe(10000);
-      expect(settings.themePreset).toBe('midnightDeep');
       expect(settings.themeMode).toBe('system');
       expect(settings.language).toBe('zh-CN');
       expect(settings.shortcuts).toEqual({});
@@ -37,11 +35,6 @@ describe('settingsStore', () => {
     it('updates maxResultRows', () => {
       useSettingsStore.getState().updateSettings({ maxResultRows: 5000 });
       expect(useSettingsStore.getState().settings.maxResultRows).toBe(5000);
-    });
-
-    it('updates themePreset', () => {
-      useSettingsStore.getState().updateSettings({ themePreset: 'nordicFrost' });
-      expect(useSettingsStore.getState().settings.themePreset).toBe('nordicFrost');
     });
 
     it('updates themeMode', () => {
@@ -75,7 +68,6 @@ describe('settingsStore', () => {
       useSettingsStore.getState().updateSettings({ pageSize: 500 });
       const settings = useSettingsStore.getState().settings;
       expect(settings.pageSize).toBe(500);
-      expect(settings.themePreset).toBe('midnightDeep');
       expect(settings.language).toBe('zh-CN');
     });
   });

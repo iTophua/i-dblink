@@ -5,17 +5,16 @@ import {
   InputNumber,
   Select,
   Button,
-  Space,
-  Tag,
-  Tooltip,
   Switch,
   Menu,
   Input,
+  Space,
+  Tag,
+  Tooltip,
   message,
   type InputRef,
 } from 'antd';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
-import { ThemePreset, THEME_PRESETS_LIST } from '../styles/theme';
 import {
   MENU_SHORTCUTS,
   isMacOS,
@@ -30,13 +29,6 @@ interface SettingsDialogProps {
 }
 
 type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts';
-
-const THEME_PREVIEW_COLORS: Record<ThemePreset, { light: string; dark: string }> = {
-  neonCyber: { light: '#00f5ff', dark: '#00f5ff' },
-  midnightDeep: { light: '#6366f1', dark: '#818cf8' },
-  oceanBlue: { light: '#0ea5e9', dark: '#38bdf8' },
-  nordicFrost: { light: '#64748b', dark: '#94a3b8' },
-};
 
 const MENU_ITEMS = [
   { key: 'general', labelKey: 'common.general' },
@@ -80,22 +72,14 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
     form.setFieldsValue({
       pageSize: 1000,
       maxResultRows: 10000,
-      themePreset: 'midnightDeep',
       themeMode: 'system',
       language: 'zh-CN',
     });
   };
 
-  const handlePresetChange = (preset: ThemePreset) => {
-    form.setFieldsValue({ themePreset: preset });
-  };
-
   const handleModeChange = (mode: ThemeMode) => {
     form.setFieldsValue({ themeMode: mode });
   };
-
-  const themePreset = Form.useWatch('themePreset', form) ?? 'midnightDeep';
-  const themeMode = Form.useWatch('themeMode', form) ?? 'system';
 
   const menuItems = useMemo(
     () =>
@@ -206,58 +190,6 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
 
             {activeTab === 'appearance' && (
               <div>
-                <Form.Item label={t('common.theme')} style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {THEME_PRESETS_LIST.map((item) => (
-                      <Tooltip key={item.value} title={item.description}>
-                        <Tag
-                          color={THEME_PREVIEW_COLORS[item.value].dark}
-                          style={{
-                            cursor: 'pointer',
-                            border:
-                              themePreset === item.value
-                                ? '2px solid var(--color-primary)'
-                                : '1px solid var(--border-color)',
-                            padding: '4px 12px',
-                            fontSize: 12,
-                          }}
-                          onClick={() => handlePresetChange(item.value)}
-                        >
-                          {item.label}
-                        </Tag>
-                      </Tooltip>
-                    ))}
-                  </div>
-                </Form.Item>
-
-                <Form.Item
-                  label={t('common.themePreset')}
-                  name="themePreset"
-                  rules={[{ required: true }]}
-                >
-                  <Select>
-                    {THEME_PRESETS_LIST.map((item) => (
-                      <Select.Option key={item.value} value={item.value}>
-                        <Space>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              width: 12,
-                              height: 12,
-                              borderRadius: 2,
-                              background: `linear-gradient(135deg, ${THEME_PREVIEW_COLORS[item.value].light}, ${THEME_PREVIEW_COLORS[item.value].dark})`,
-                            }}
-                          />
-                          <span>{item.label}</span>
-                          <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                            - {item.description}
-                          </span>
-                        </Space>
-                      </Select.Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-
                 <Form.Item label={t('common.themeMode')} name="themeMode">
                   <Select onChange={handleModeChange}>
                     <Select.Option value="light">{t('common.light')}</Select.Option>

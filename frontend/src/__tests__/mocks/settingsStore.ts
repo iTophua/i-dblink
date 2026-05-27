@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ThemePreset } from '../../styles/theme';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -14,7 +13,7 @@ export interface ShortcutConfig {
 export interface AppSettings {
   pageSize: number;
   maxResultRows: number;
-  themePreset: ThemePreset;
+
   themeMode: ThemeMode;
   language: 'zh-CN' | 'en-US';
   settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts';
@@ -30,7 +29,7 @@ interface SettingsState {
 const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
-  themePreset: 'midnightDeep',
+
   themeMode: 'system',
   language: 'zh-CN',
   shortcuts: {},
@@ -41,25 +40,6 @@ const VERSION = 1;
 function migrate(state: any, version: number | undefined): Partial<SettingsState> {
   if (version === undefined) {
     return { settings: defaultSettings };
-  }
-
-  if (state.settings && state.settings.theme && !state.settings.themePreset) {
-    const oldSettings = state.settings;
-    const preset =
-      oldSettings.theme === 'dark'
-        ? 'midnightDeep'
-        : oldSettings.theme === 'light'
-          ? 'nordicFrost'
-          : 'midnightDeep';
-    const mode: ThemeMode = oldSettings.theme === 'system' ? 'system' : oldSettings.theme;
-    return {
-      settings: {
-        ...defaultSettings,
-        ...oldSettings,
-        themePreset: preset,
-        themeMode: mode,
-      },
-    };
   }
 
   // 迁移：从 themeSyncSystem 字段迁移到 themeMode: 'system'
