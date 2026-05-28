@@ -7,44 +7,44 @@
 /* ==================== CSS 变量定义 ==================== */
 :root {
   /* Fallback values - will be overridden by dynamic theme variables from App.tsx */
-  --color-primary: #1890ff;
-  --color-primary-hover: #40a9ff;
-  --color-primary-active: #096dd9;
-  --color-success: #52c41a;
-  --color-warning: #faad14;
-  --color-error: #ff4d4f;
-  --color-info: #1890ff;
+  --color-primary: #3b82f6;
+  --color-primary-hover: #60a5fa;
+  --color-primary-active: #2563eb;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
 
   --db-color-mysql: #1890ff;
   --db-color-postgresql: #336791;
   --db-color-sqlite: #003b57;
-  --db-color-sqlserver: #eb2f96;
-  --db-color-oracle: #fa8c16;
-  --db-color-mariadb: #13c2c2;
-  --db-color-dameng: #722ed1;
-  --db-color-kingbase: #eb2f96;
-  --db-color-highgo: #13c2c2;
-  --db-color-vastbase: #52c41a;
+  --db-color-sqlserver: #cc2927;
+  --db-color-oracle: #f80000;
+  --db-color-mariadb: #c0765a;
+  --db-color-dameng: #b30000;
+  --db-color-kingbase: #0066cc;
+  --db-color-highgo: #1e90ff;
+  --db-color-vastbase: #008000;
 
-  --text-primary: #0f0f0f;
-  --text-secondary: #595959;
-  --text-tertiary: #8c8c8c;
-  --text-disabled: #bfbfbf;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --text-disabled: #cbd5e1;
 
-  --border-color: #d9d9d9;
-  --border-color-light: #e8e8e8;
-  --border-color-dark: #bfbfbf;
+  --border-color: #e2e8f0;
+  --border-color-light: #f1f5f9;
+  --border-color-dark: #cbd5e1;
 
-  --background: #f6f6f6;
+  --background: #ffffff;
   --background-card: #ffffff;
-  --background-toolbar: #fafafa;
-  --background-hover: #f5f5f5;
-  --background-active: #e6f7ff;
+  --background-toolbar: #ffffff;
+  --background-hover: #f8fafc;
+  --background-active: #eff6ff;
 
-  --row-hover-bg: rgba(24, 144, 255, 0.04);
-  --row-selected-bg: rgba(24, 144, 255, 0.08);
-  --row-stripe-bg: rgba(0, 0, 0, 0.02);
-  --header-bg: #fafafa;
+  --row-hover-bg: #f8fafc;
+  --row-selected-bg: #eff6ff;
+  --row-stripe-bg: transparent;
+  --header-bg: #f8fafc;
   --surface-elevated: #ffffff;
   --scrollbar-thumb: rgba(0, 0, 0, 0.15);
   --scrollbar-track: rgba(0, 0, 0, 0.03);
