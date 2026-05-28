@@ -6,6 +6,7 @@ const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
   themeMode: 'system',
+  themePreset: 'default',
   language: 'zh-CN',
   shortcuts: {},
 };

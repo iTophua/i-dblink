@@ -7,13 +7,13 @@
 /* ==================== CSS 变量定义 ==================== */
 :root {
   /* Fallback values - will be overridden by dynamic theme variables from App.tsx */
-  --color-primary: #3b82f6;
-  --color-primary-hover: #60a5fa;
-  --color-primary-active: #2563eb;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-  --color-info: #3b82f6;
+  --color-primary: #1E3A8A;
+  --color-primary-hover: #2563EB;
+  --color-primary-active: #1E40AF;
+  --color-success: #10B981;
+  --color-warning: #F97316;
+  --color-error: #EF4444;
+  --color-info: #1E3A8A;
 
   --db-color-mysql: #1890ff;
   --db-color-postgresql: #336791;
@@ -35,17 +35,17 @@
   --border-color-light: #f1f5f9;
   --border-color-dark: #cbd5e1;
 
-  --background: #ffffff;
-  --background-card: #ffffff;
-  --background-toolbar: #ffffff;
-  --background-hover: #f8fafc;
-  --background-active: #eff6ff;
+  --background: #F9FAFB;
+  --background-card: #FFFFFF;
+  --background-toolbar: #FFFFFF;
+  --background-hover: #F1F5F9;
+  --background-active: #EFF6FF;
 
-  --row-hover-bg: #f8fafc;
-  --row-selected-bg: #eff6ff;
+  --row-hover-bg: #F1F5F9;
+  --row-selected-bg: #DBEAFE;
   --row-stripe-bg: transparent;
-  --header-bg: #f8fafc;
-  --surface-elevated: #ffffff;
+  --header-bg: #F8FAFC;
+  --surface-elevated: #FFFFFF;
   --scrollbar-thumb: rgba(0, 0, 0, 0.15);
   --scrollbar-track: rgba(0, 0, 0, 0.03);
 

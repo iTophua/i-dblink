@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import i18n from '../i18n';
+import type { ThemePreset } from '../styles/theme';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -15,6 +16,7 @@ export interface AppSettings {
   pageSize: number;
   maxResultRows: number;
   themeMode: ThemeMode;
+  themePreset: ThemePreset;
   language: 'zh-CN' | 'en-US';
   settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts';
   shortcuts: Record<string, string>; // id -> keys
@@ -30,6 +32,7 @@ const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
   themeMode: 'system',
+  themePreset: 'default',
   language: 'zh-CN',
   shortcuts: {},
 };

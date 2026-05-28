@@ -15,6 +15,7 @@ import {
   type InputRef,
 } from 'antd';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
+import { THEME_PRESETS_LIST } from '../styles/theme';
 import {
   MENU_SHORTCUTS,
   isMacOS,
@@ -73,6 +74,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       pageSize: 1000,
       maxResultRows: 10000,
       themeMode: 'system',
+      themePreset: 'default',
       language: 'zh-CN',
     });
   };
@@ -190,6 +192,20 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
 
             {activeTab === 'appearance' && (
               <div>
+                <Form.Item label={t('common.themePreset')} name="themePreset">
+                  <Select>
+                    {THEME_PRESETS_LIST.map((preset) => (
+                      <Select.Option key={preset.value} value={preset.value}>
+                        <div>
+                          <div>{preset.label}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                            {preset.description}
+                          </div>
+                        </div>
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
                 <Form.Item label={t('common.themeMode')} name="themeMode">
                   <Select onChange={handleModeChange}>
                     <Select.Option value="light">{t('common.light')}</Select.Option>
