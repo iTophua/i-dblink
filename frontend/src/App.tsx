@@ -40,6 +40,7 @@ function App() {
   }, [isHydrated, settings.language]);
 
   const themeMode = settings.themeMode;
+  const themePreset = settings.themePreset;
 
   const effectiveMode: ThemeMode = themeMode === 'system'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
@@ -47,8 +48,8 @@ function App() {
 
   // 缓存主题配置，避免每次渲染都重新计算
   const themeConfig = useMemo(
-    () => getThemeConfig(effectiveMode),
-    [effectiveMode]
+    () => getThemeConfig(effectiveMode, themePreset),
+    [effectiveMode, themePreset]
   );
 
   useEffect(() => {
@@ -139,12 +140,13 @@ function App() {
       });
 
       root.setAttribute('data-theme', effectiveMode);
+      root.setAttribute('data-theme-preset', themePreset);
     };
 
     requestAnimationFrame(() => {
       applyVars();
     });
-  }, [effectiveMode, isHydrated]);
+  }, [effectiveMode, themePreset, isHydrated]);
 
   if (showSplash) {
     return (
@@ -181,9 +183,16 @@ function App() {
       colorTextTertiary: themeConfig.neutralColors.textTertiary,
       colorTextQuaternary: themeConfig.neutralColors.textDisabled,
       borderRadius: 6,
+      borderRadiusLG: 8,
+      borderRadiusSM: 4,
       fontSize: 14,
+      fontSizeHeading1: 20,
+      fontSizeHeading2: 16,
+      fontSizeHeading3: 14,
       fontFamily:
-        "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+        "'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      fontFamilyCode:
+        "'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace",
     },
     components: {
       Layout: {
@@ -202,10 +211,15 @@ function App() {
       Tabs: {
         cardBg: themeConfig.neutralColors.backgroundCard,
         itemSelectedColor: themeConfig.colors.primary,
+        fontSize: 13,
       },
       Table: {
         headerBg: themeConfig.neutralColors.backgroundToolbar,
         rowHoverBg: themeConfig.neutralColors.backgroundHover,
+        headerBorderRadius: 6,
+        cellFontSize: 13,
+        cellFontSizeMD: 13,
+        headerFontSize: 13,
       },
       Card: {
         colorBgContainer: themeConfig.neutralColors.backgroundCard,
@@ -216,12 +230,24 @@ function App() {
       },
       Input: {
         colorBgContainer: themeConfig.neutralColors.backgroundCard,
+        borderRadius: 6,
+        controlHeight: 32,
+        controlHeightSM: 28,
       },
       Select: {
         colorBgContainer: themeConfig.neutralColors.backgroundCard,
+        borderRadius: 6,
+        controlHeight: 32,
+        controlHeightSM: 28,
       },
       Button: {
         primaryColor: '#ffffff',
+        borderRadius: 6,
+        borderRadiusLG: 8,
+        borderRadiusSM: 4,
+        controlHeight: 32,
+        controlHeightSM: 28,
+        controlHeightLG: 40,
       },
       Form: {
         labelColor: themeConfig.neutralColors.textPrimary,
@@ -242,7 +268,7 @@ function App() {
       Typography: {
         colorTextHeading: themeConfig.neutralColors.textPrimary,
         colorTextLabel: themeConfig.neutralColors.textSecondary,
-        colorTextDescription: themeConfig.neutralColors.textTertiary,
+        colorTextDescription: themeConfig.neutralColors.textSecondary,
         colorTextDisabled: themeConfig.neutralColors.textDisabled,
       },
       Message: {

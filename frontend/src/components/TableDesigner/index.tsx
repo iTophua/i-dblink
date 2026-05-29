@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Tabs,
   Table,
@@ -13,7 +14,9 @@ import {
   Typography,
   Tooltip,
   Spin,
+  Menu,
 } from 'antd';
+import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { GlobalInput } from '../GlobalInput';
 import {
@@ -24,6 +27,8 @@ import {
   LinkOutlined,
   ColumnWidthOutlined,
   DragOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
 } from '@ant-design/icons';
 import Editor from '@monaco-editor/react';
 import type { ColumnsType } from 'antd/es/table';
@@ -347,6 +352,12 @@ export function TableDesigner({
   const [foreignKeys, setForeignKeys] = useState<DesignerForeignKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [renamedColumns, setRenamedColumns] = useState<{ key: string; originalName: string }[]>([]);
+  const [ctxMenu, setCtxMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    record: DesignerColumn | null;
+  }>({ visible: false, x: 0, y: 0, record: null });
 
   // 保存原始结构用于生成 ALTER 语句
   const [originalColumns, setOriginalColumns] = useState<DesignerColumn[]>([]);
@@ -596,6 +607,76 @@ export function TableDesigner({
     });
   };
 
+  const insertColumnAbove = (key: string) => {
+    const idx = columns.findIndex((c) => c.key === key);
+    if (idx < 0) return;
+    const newCol: DesignerColumn = {
+      key: genKey(),
+      name: '',
+      type: 'VARCHAR',
+      length: 255,
+      nullable: true,
+    };
+    setColumns((prev) => {
+      const next = [...prev];
+      next.splice(idx, 0, newCol);
+      return next;
+    });
+  };
+
+  const insertColumnBelow = (key: string) => {
+    const idx = columns.findIndex((c) => c.key === key);
+    if (idx < 0) return;
+    const newCol: DesignerColumn = {
+      key: genKey(),
+      name: '',
+      type: 'VARCHAR',
+      length: 255,
+      nullable: true,
+    };
+    setColumns((prev) => {
+      const next = [...prev];
+      next.splice(idx + 1, 0, newCol);
+      return next;
+    });
+  };
+
+  const supportsColumnPosition = dbType === 'mysql' || dbType === 'mariadb';
+
+  const columnRowMenu = useCallback(
+    (record: DesignerColumn): MenuProps => ({
+      items: [
+        ...(supportsColumnPosition
+          ? [
+              {
+                key: 'insert-above',
+                label: t('common.insertColumnAbove'),
+                icon: <ArrowUpOutlined />,
+              },
+              {
+                key: 'insert-below',
+                label: t('common.insertColumnBelow'),
+                icon: <ArrowDownOutlined />,
+              },
+              { type: 'divider' as const },
+            ]
+          : []),
+        {
+          key: 'delete',
+          label: t('common.deleteColumn'),
+          icon: <DeleteOutlined />,
+          danger: true,
+        },
+      ],
+      onClick: ({ key }) => {
+        if (key === 'insert-above') insertColumnAbove(record.key);
+        else if (key === 'insert-below') insertColumnBelow(record.key);
+        else if (key === 'delete') deleteColumn(record.key);
+      },
+    }),
+    [t, supportsColumnPosition, columns]
+  );
+
   // ── Index CRUD ─────────────────────────────────────────────────────────
   const addIndex = () => {
     setIndexes((prev) => [
@@ -814,14 +895,36 @@ export function TableDesigner({
     },
     {
       title: '',
-      width: 50,
+      width: 100,
       render: (_: unknown, record: DesignerColumn) => (
-        <Popconfirm
-          title={t('common.confirmDeleteColumn')}
-          onConfirm={() => deleteColumn(record.key)}
-        >
-          <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-        </Popconfirm>
+        <span>
+          {supportsColumnPosition && (
+            <>
+              <Tooltip title={t('common.insertColumnAbove')}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ArrowUpOutlined style={{ fontSize: 11 }} />}
+                  onClick={() => insertColumnAbove(record.key)}
+                />
+              </Tooltip>
+              <Tooltip title={t('common.insertColumnBelow')}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ArrowDownOutlined style={{ fontSize: 11 }} />}
+                  onClick={() => insertColumnBelow(record.key)}
+                />
+              </Tooltip>
+            </>
+          )}
+          <Popconfirm
+            title={t('common.confirmDeleteColumn')}
+            onConfirm={() => deleteColumn(record.key)}
+          >
+            <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </span>
       ),
     },
   ];
@@ -1023,6 +1126,12 @@ export function TableDesigner({
               size="small"
               pagination={false}
               scroll={{ y: 'calc(100vh - 320px)' }}
+              onRow={(record) => ({
+                onContextMenu: (e) => {
+                  e.preventDefault();
+                  setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, record });
+                },
+              })}
             />
           </div>
         </div>
@@ -1231,6 +1340,41 @@ export function TableDesigner({
           style={{ flex: 1, overflow: 'hidden' }}
         />
       </div>
+
+      {ctxMenu.visible && ctxMenu.record && createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1050 }}
+          onClick={() => setCtxMenu((s) => ({ ...s, visible: false }))}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setCtxMenu((s) => ({ ...s, visible: false }));
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              left: ctxMenu.x,
+              top: ctxMenu.y,
+              background: '#fff',
+              borderRadius: 6,
+              boxShadow: '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
+              padding: 4,
+            }}
+          >
+            <Menu
+              items={columnRowMenu(ctxMenu.record).items}
+              onClick={({ key: menuKey }) => {
+                if (menuKey === 'insert-above') insertColumnAbove(ctxMenu.record!.key);
+                else if (menuKey === 'insert-below') insertColumnBelow(ctxMenu.record!.key);
+                else if (menuKey === 'delete') deleteColumn(ctxMenu.record!.key);
+                setCtxMenu((s) => ({ ...s, visible: false }));
+              }}
+              style={{ border: 'none' }}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

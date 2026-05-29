@@ -59,6 +59,7 @@ import type { QueryResult, DatabaseType } from '../types/api';
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;
   totalTime?: number;
+  executedSql?: string;
 }
 
 declare global {
@@ -558,12 +559,15 @@ export function SQLEditor({
 
   // 监听 tab-action 事件（来自菜单或工具栏的快捷键）
   useEffect(() => {
-    const handleTabAction = () => {
-      handleExecuteQueryRef.current();
+    const handleTabAction = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.action === 'execute-query') {
+        handleExecuteQueryRef.current();
+      }
     };
-    window.addEventListener('tab-action', handleTabAction as EventListener);
+    window.addEventListener('tab-action', handleTabAction);
     return () => {
-      window.removeEventListener('tab-action', handleTabAction as EventListener);
+      window.removeEventListener('tab-action', handleTabAction);
     };
   }, []);
 
@@ -1411,7 +1415,7 @@ export function SQLEditor({
           setActiveTab('messages');
           message.error(`${t('common.sqlExecutionFailed')}: ${queryResult.error}`);
           highlightError(queryResult.error);
-          setResult({ ...queryResult, executionTime, totalTime });
+          setResult({ ...queryResult, executionTime, totalTime, executedSql: sqlToExecute });
           window.__sqlHistoryApi?.addHistory({
             sql: sqlToExecute,
             success: false,
@@ -1424,7 +1428,7 @@ export function SQLEditor({
           const rowCount = truncatedRows.length;
           const affectedRows = queryResult.rows_affected || 0;
 
-          setResult({ ...queryResult, rows: truncatedRows, executionTime, totalTime });
+          setResult({ ...queryResult, rows: truncatedRows, executionTime, totalTime, executedSql: sqlToExecute });
 
           clearErrorMarkers();
 
@@ -1923,7 +1927,9 @@ export function SQLEditor({
           alignItems: 'center',
           background: 'var(--background-toolbar)',
         }}
+        className="sql-editor-toolbar"
       >
+        <style>{`.sql-editor-toolbar .ant-btn { height: 22px; font-size: 12px; }`}</style>
         <Space size="small">
           <Tooltip
             title={`${t('common.sqlEditor.execute')} (${formatShortcutForDisplay(getEffectiveShortcut('execute-query', useSettingsStore.getState().settings.shortcuts || {}))})`}
@@ -1934,10 +1940,6 @@ export function SQLEditor({
               onClick={handleExecuteQuery}
               loading={loading}
               disabled={!connectionId}
-              style={{
-                borderRadius: 4,
-                fontWeight: 500,
-              }}
               size="small"
               data-testid="sql-execute-btn"
             >
@@ -1949,7 +1951,6 @@ export function SQLEditor({
             onClick={stopQuery}
             disabled={!loading}
             danger
-            style={{ borderRadius: 4 }}
             size="small"
           >
             {t('common.stopButton')}
@@ -1967,7 +1968,6 @@ export function SQLEditor({
           <Button
             icon={<FormatPainterOutlined />}
             onClick={formatSQL}
-            style={{ borderRadius: 4 }}
             size="small"
           >
             {t('common.formatButton')}
@@ -1976,20 +1976,9 @@ export function SQLEditor({
             icon={<LineChartOutlined />}
             onClick={showExplainPlan}
             disabled={!connectionId}
-            style={{ borderRadius: 4 }}
             size="small"
           >
             {t('common.explainPlanButton')}
-          </Button>
-          <Button
-            icon={<StopOutlined />}
-            onClick={stopQuery}
-            disabled={!loading}
-            danger
-            style={{ borderRadius: 4 }}
-            size="small"
-          >
-            {t('common.stopButton')}
           </Button>
 
           <div
@@ -2006,7 +1995,6 @@ export function SQLEditor({
               icon={<ThunderboltOutlined />}
               onClick={handleBeginTransaction}
               disabled={!connectionId}
-              style={{ borderRadius: 4 }}
               size="small"
             >
               {t('common.beginTransaction')}
@@ -2017,7 +2005,6 @@ export function SQLEditor({
                 icon={<CheckCircleOutlined />}
                 onClick={handleCommitTransaction}
                 type="primary"
-                style={{ borderRadius: 4 }}
                 size="small"
               >
                 {t('common.commitTransaction')}
@@ -2026,7 +2013,6 @@ export function SQLEditor({
                 icon={<CloseCircleOutlined />}
                 onClick={handleRollbackTransaction}
                 danger
-                style={{ borderRadius: 4 }}
                 size="small"
               >
                 {t('common.rollbackTransaction')}
@@ -2047,7 +2033,6 @@ export function SQLEditor({
             <Button
               icon={<FileTextOutlined />}
               onClick={() => editorRef.current?.getAction('editor.action.commentLine')?.run()}
-              style={{ borderRadius: 4 }}
               size="small"
             >
               {t('common.commentButton')}
@@ -2076,7 +2061,7 @@ export function SQLEditor({
               },
             }}
           >
-            <Button icon={<FormatPainterOutlined />} style={{ borderRadius: 4 }} size="small">
+            <Button icon={<FormatPainterOutlined />} size="small">
               {t('common.caseButton')}
             </Button>
           </Dropdown>
@@ -2107,7 +2092,7 @@ export function SQLEditor({
               },
             }}
           >
-            <Button icon={<FileTextOutlined />} style={{ borderRadius: 4 }} size="small">
+            <Button icon={<FileTextOutlined />} size="small">
               {t('common.moreButton')}
             </Button>
           </Dropdown>
@@ -2154,8 +2139,10 @@ export function SQLEditor({
             icon={<FullscreenOutlined />}
             type="text"
             onClick={() => {
-              if (editorRef.current) {
-                editorRef.current.getAction('editor.action.fullScreen').run();
+              if (!document.fullscreenElement) {
+                containerRef.current?.requestFullscreen();
+              } else {
+                document.exitFullscreen();
               }
             }}
           />

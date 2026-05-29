@@ -165,7 +165,7 @@ class MySQLDialect extends BaseDialect implements SqlDialect {
   }
 
   buildTableInfoQuery(tableName: string, schema?: string): string {
-    const safeTable = this.escapeIdentifier(tableName);
+    const safeTable = this.escapeValue(tableName);
     if (schema) {
       const safeSchema = this.escapeValue(schema);
       return `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${safeSchema} AND TABLE_NAME = ${safeTable}`;

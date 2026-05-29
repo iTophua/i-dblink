@@ -5,7 +5,7 @@
  */
 
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type ThemePreset = 'default';
+export type ThemePreset = 'default' | 'modern';
 
 export interface ThemeColorScheme {
   primary: string;
@@ -106,18 +106,46 @@ export interface ThemeConfig {
 // ==================== 字体排印 ====================
 
 export const TYPOGRAPHY = {
+  // 主字体 — 优先载入 Inter，并补充 macOS / Windows 中文回退
   fontFamily:
-    "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+    "'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  // 等宽字体
   fontFamilyCode: "'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace",
-  fontSizeHeading1: 20,
-  fontSizeHeading2: 16,
-  fontSizeHeading3: 14,
-  fontSizeBody: 14,
+  // 数字字体 — 用于表格、统计等数字密集型场景，搭配比例数字和表格数字特性
+  fontFamilyNumeric:
+    "'Inter', 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace",
+  // OpenType 特性 — 开启比例数字、表格数字、替代样式、连字等
+  fontFeatureSettings: {
+    default: "'cv01', 'cv05', 'ss01', 'ss03', 'kern'",
+    numeric: "'tnum', 'cv01', 'cv05', 'ss01'",
+    code: "'calt', 'liga', 'cv01', 'cv05', 'ss01', 'ss03', 'zero'",
+  },
+  // 字体渲染
+  fontDisplay: 'swap',
+  fontSmoothing:
+    "antialiased" as const,
+  textRendering: 'optimizeLegibility' as const,
+  // 字号
+  fontSizeMini: 11,
   fontSizeSecondary: 12,
   fontSizeCode: 13,
-  lineHeightHeading: 1.4,
+  fontSizeBody: 14,
+  fontSizeHeading3: 14,
+  fontSizeHeading2: 16,
+  fontSizeHeading1: 20,
+  fontSizeDisplay: 24,
+  // 行高
   lineHeightBody: 1.57,
+  lineHeightHeading: 1.4,
   lineHeightCode: 1.5,
+  lineHeightCompact: 1.3,
+  // 字距 — 大标题适当收紧，小字号适当放开增强可读性
+  letterSpacingHeading: '-0.02em',
+  letterSpacingBody: 'normal',
+  letterSpacingSecondary: '0.01em',
+  letterSpacingCode: 'normal',
+  letterSpacingDisplay: '-0.03em',
+  // 字重
   fontWeightNormal: 400,
   fontWeightMedium: 500,
   fontWeightSemibold: 600,
@@ -186,10 +214,10 @@ export const BORDER_RADIUS = {
   radiusLG: 8,
   radiusXL: 12,
   radiusXXL: 16,
-  buttonRadius: 6,
-  inputRadius: 6,
-  cardRadius: 8,
-  modalRadius: 8,
+  buttonRadius: 8,
+  inputRadius: 8,
+  cardRadius: 10,
+  modalRadius: 12,
 };
 
 // ==================== 阴影规范 - 增强层次感 ====================
@@ -578,12 +606,24 @@ function getSystemMode(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+interface ThemeOverrides {
+  glassEffect?: GlassEffect;
+  focusStyle?: FocusStyle;
+  lighting?: typeof LIGHTING_EFFECTS;
+  shadows?: typeof SHADOWS;
+  shadowLevels?: typeof SHADOW_LEVELS;
+  glassLayers?: typeof GLASS_LAYERS;
+  animation?: typeof ANIMATION;
+  animationEnhanced?: typeof ANIMATION_ENHANCED;
+}
+
 function createThemeConfig(
   name: string,
   description: string,
   mode: ThemeMode,
   colors: ThemeColorScheme,
-  neutralColors: NeutralColors
+  neutralColors: NeutralColors,
+  overrides?: ThemeOverrides
 ): ThemeConfig {
   const effectiveMode = mode === 'system' ? getSystemMode() : mode;
   return {
@@ -592,29 +632,29 @@ function createThemeConfig(
     mode: effectiveMode,
     colors,
     neutralColors,
-    glassEffect: GLASS_EFFECTS[effectiveMode],
-    glassLayers: GLASS_LAYERS,
-    focusStyle: FOCUS_STYLES[effectiveMode],
-    lighting: LIGHTING_EFFECTS,
+    glassEffect: overrides?.glassEffect ?? GLASS_EFFECTS[effectiveMode],
+    glassLayers: overrides?.glassLayers ?? GLASS_LAYERS,
+    focusStyle: overrides?.focusStyle ?? FOCUS_STYLES[effectiveMode],
+    lighting: overrides?.lighting ?? LIGHTING_EFFECTS,
     dbTypeColors: DB_TYPE_COLORS,
     typography: TYPOGRAPHY,
     spacing: SPACING,
     sizes: SIZES,
     borderRadius: BORDER_RADIUS,
-    shadows: SHADOWS,
-    shadowLevels: SHADOW_LEVELS,
-    animation: ANIMATION,
-    animationEnhanced: ANIMATION_ENHANCED,
+    shadows: overrides?.shadows ?? SHADOWS,
+    shadowLevels: overrides?.shadowLevels ?? SHADOW_LEVELS,
+    animation: overrides?.animation ?? ANIMATION,
+    animationEnhanced: overrides?.animationEnhanced ?? ANIMATION_ENHANCED,
     breakpoints: BREAKPOINTS,
     zIndex: Z_INDEX,
   };
 }
 
 const DEFAULT_LIGHT: ThemeColorScheme = {
-  primary: '#1E3A8A',
-  primaryHover: '#2563EB',
+  primary: '#1D4ED8',
+  primaryHover: '#4F6EF7',
   primaryActive: '#1E40AF',
-  primaryGradient: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%)',
+  primaryGradient: 'linear-gradient(135deg, #1E3A8A 0%, #4F6EF7 100%)',
   success: '#10B981',
   successHover: '#34D399',
   successActive: '#059669',
@@ -627,17 +667,17 @@ const DEFAULT_LIGHT: ThemeColorScheme = {
   errorHover: '#F87171',
   errorActive: '#DC2626',
   errorGradient: 'linear-gradient(135deg, #EF4444 0%, #F87171 100%)',
-  info: '#1E3A8A',
-  infoHover: '#2563EB',
-  infoActive: '#1E40AF',
-  infoGradient: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%)',
+  info: '#6366F1',
+  infoHover: '#818CF8',
+  infoActive: '#4F46E5',
+  infoGradient: 'linear-gradient(135deg, #6366F1 0%, #818CF8 100%)',
 };
 
 const DEFAULT_DARK: ThemeColorScheme = {
-  primary: '#2563EB',
-  primaryHover: '#3B82F6',
-  primaryActive: '#1E3A8A',
-  primaryGradient: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+  primary: '#3B82F6',
+  primaryHover: '#60A5FA',
+  primaryActive: '#2563EB',
+  primaryGradient: 'linear-gradient(135deg, #2563EB 0%, #60A5FA 100%)',
   success: '#10B981',
   successHover: '#34D399',
   successActive: '#059669',
@@ -650,88 +690,337 @@ const DEFAULT_DARK: ThemeColorScheme = {
   errorHover: '#F87171',
   errorActive: '#DC2626',
   errorGradient: 'linear-gradient(135deg, #EF4444 0%, #F87171 100%)',
-  info: '#2563EB',
-  infoHover: '#3B82F6',
-  infoActive: '#1E3A8A',
-  infoGradient: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+  info: '#818CF8',
+  infoHover: '#A5B4FC',
+  infoActive: '#6366F1',
+  infoGradient: 'linear-gradient(135deg, #818CF8 0%, #A5B4FC 100%)',
 };
 
 const DEFAULT_LIGHT_NEUTRAL: NeutralColors = {
-  textPrimary: '#0F172A',
-  textSecondary: '#475569',
-  textTertiary: '#94A3B8',
-  textDisabled: '#CBD5E1',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  borderDark: '#CBD5E1',
-  background: '#F9FAFB',
+  textPrimary: '#111111',
+  textSecondary: '#3F3F46',
+  textTertiary: '#6B7280',
+  textDisabled: '#C7C7CC',
+  border: '#E5E5EA',
+  borderLight: '#F0F0F3',
+  borderDark: '#D1D1D6',
+  background: '#FFFFFF',
   backgroundCard: '#FFFFFF',
   backgroundToolbar: '#FFFFFF',
-  backgroundHover: '#F1F5F9',
-  backgroundActive: '#EFF6FF',
-  mask: 'rgba(15,23,42,0.4)',
-  windowBackground: '#F9FAFB',
-  rowHoverBg: '#F1F5F9',
+  backgroundHover: '#EDEDF0',
+  backgroundActive: '#E8F0FE',
+  mask: 'rgba(0, 0, 0, 0.3)',
+  windowBackground: '#F5F5F7',
+  rowHoverBg: '#EDEDF0',
   rowSelectedBg: '#DBEAFE',
-  rowStripeBg: 'transparent',
-  headerBg: '#F8FAFC',
+  rowStripeBg: 'rgba(0, 0, 0, 0.015)',
+  headerBg: '#F8F8FA',
   surfaceElevated: '#FFFFFF',
-  scrollbarThumb: 'rgba(0,0,0,0.15)',
-  scrollbarTrack: 'transparent',
-  level1: '#F1F5F9',
+  scrollbarThumb: 'rgba(0, 0, 0, 0.12)',
+  scrollbarTrack: 'rgba(0, 0, 0, 0.02)',
+  level1: '#EEEEF0',
   level2: '#FFFFFF',
   level3: '#FFFFFF',
   level4: '#FFFFFF',
-  borderSubtle: '#F1F5F9',
-  borderEmphasis: '#CBD5E1',
-  borderActive: '#1E3A8A',
+  borderSubtle: '#F0F0F3',
+  borderEmphasis: '#D1D1D6',
+  borderActive: '#1D4ED8',
 };
 
 const DEFAULT_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#F1F5F9',
-  textSecondary: '#94A3B8',
-  textTertiary: 'rgba(148,163,184,0.5)',
-  textDisabled: 'rgba(148,163,184,0.25)',
-  border: '#1E3A5F',
-  borderLight: 'rgba(30,58,95,0.3)',
-  borderDark: '#2A4A75',
-  background: '#0B1426',
-  backgroundCard: '#0F1D32',
-  backgroundToolbar: '#0D1B2E',
-  backgroundHover: 'rgba(37,99,235,0.06)',
-  backgroundActive: 'rgba(37,99,235,0.10)',
-  mask: 'rgba(0,0,0,0.6)',
-  windowBackground: '#0B1426',
-  rowHoverBg: '#112840',
-  rowSelectedBg: '#1A3A5C',
-  rowStripeBg: 'transparent',
-  headerBg: '#0D1B2E',
-  surfaceElevated: '#0F1D32',
-  scrollbarThumb: 'rgba(148,163,184,0.2)',
-  scrollbarTrack: 'transparent',
-  level1: '#0A1424',
-  level2: '#0F1D32',
-  level3: '#132840',
-  level4: '#1A3050',
-  borderSubtle: 'rgba(30,58,95,0.2)',
-  borderEmphasis: '#2A4A75',
-  borderActive: '#2563EB',
+  textPrimary: '#FAFAFA',
+  textSecondary: '#A1A1AA',
+  textTertiary: '#71717A',
+  textDisabled: '#3F3F46',
+  border: '#27272A',
+  borderLight: '#1E1E21',
+  borderDark: '#3F3F46',
+  background: '#09090B',
+  backgroundCard: '#141416',
+  backgroundToolbar: '#0F0F11',
+  backgroundHover: '#27272A',
+  backgroundActive: '#172554',
+  mask: 'rgba(0, 0, 0, 0.7)',
+  windowBackground: '#09090B',
+  rowHoverBg: '#1C1C1F',
+  rowSelectedBg: '#1E3A5F',
+  rowStripeBg: 'rgba(255, 255, 255, 0.01)',
+  headerBg: '#0F0F11',
+  surfaceElevated: '#18181B',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.10)',
+  scrollbarTrack: 'rgba(255, 255, 255, 0.02)',
+  level1: '#09090B',
+  level2: '#141416',
+  level3: '#1C1C1F',
+  level4: '#252528',
+  borderSubtle: '#1F1F23',
+  borderEmphasis: '#3F3F46',
+  borderActive: '#3B82F6',
+};
+
+// ---------- Default 专属增强效果 ----------
+
+const DEFAULT_GLASS_LIGHT: GlassEffect = {
+  glassBackground: 'rgba(255, 255, 255, 0.78)',
+  glassBorder: 'rgba(0, 0, 0, 0.04)',
+  glassBlur: 'blur(16px)',
+  glassShadow: '0 4px 20px rgba(0,0,0,0.06), 0 0 0 0.5px rgba(0,0,0,0.03)',
+  glassInnerGlow: 'inset 0 1px 0 rgba(255,255,255,0.82)',
+  glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 35%)',
+};
+
+const DEFAULT_GLASS_DARK: GlassEffect = {
+  glassBackground: 'rgba(20, 20, 22, 0.72)',
+  glassBorder: 'rgba(255, 255, 255, 0.05)',
+  glassBlur: 'blur(20px)',
+  glassShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,255,255,0.03)',
+  glassInnerGlow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+  glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 35%)',
+};
+
+const DEFAULT_FOCUS_LIGHT: FocusStyle = {
+  focusRingColor: 'rgba(29, 78, 216, 0.4)',
+  focusRingWidth: 2,
+  focusRingOffset: 2,
+  focusRingShadow: '0 0 0 2px rgba(29,78,216,0.12)',
+};
+
+const DEFAULT_FOCUS_DARK: FocusStyle = {
+  focusRingColor: 'rgba(59, 130, 246, 0.5)',
+  focusRingWidth: 2,
+  focusRingOffset: 2,
+  focusRingShadow: '0 0 0 2px rgba(59,130,246,0.15), 0 0 12px rgba(59,130,246,0.06)',
+};
+
+const DEFAULT_SHADOWS = {
+  ...SHADOWS,
+  shadowSm: '0 1px 2px rgba(0,0,0,0.03)',
+  shadowMd: '0 1px 2px rgba(0,0,0,0.03), 0 3px 10px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
+  shadowLg: '0 1px 2px rgba(0,0,0,0.04), 0 5px 20px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
+  shadowXl: '0 1px 2px rgba(0,0,0,0.05), 0 10px 36px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.9)',
+  shadow2xl: '0 2px 4px rgba(0,0,0,0.06), 0 18px 56px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.9)',
+  cardShadowLight: '0 1px 2px rgba(0,0,0,0.03), 0 3px 10px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)',
+  headerShadowLight: '0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.05)',
+  cardShadowDark: '0 1px 2px rgba(0,0,0,0.3), 0 6px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)',
+  headerShadowDark: '0 1px 2px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.45), inset 0 -1px 0 rgba(255,255,255,0.02)',
+  glowPrimary: '0 0 24px rgba(29,78,216,0.14)',
+  glowPrimarySoft: '0 0 36px rgba(29,78,216,0.10), 0 0 72px rgba(29,78,216,0.04)',
+  glowPrimaryStrong: '0 0 48px rgba(59,130,246,0.22), 0 0 96px rgba(59,130,246,0.08)',
+};
+
+// ==================== Modern 主题配色（Sequel Ace / TablePlus 风格）====================
+
+// ---------- Modern 专属增强效果 ----------
+
+const MODERN_GLASS_LIGHT: GlassEffect = {
+  glassBackground: 'rgba(255, 255, 255, 0.72)',
+  glassBorder: 'rgba(0, 0, 0, 0.04)',
+  glassBlur: 'blur(20px)',
+  glassShadow: '0 4px 24px rgba(0,0,0,0.05), 0 0 0 0.5px rgba(0,0,0,0.03)',
+  glassInnerGlow: 'inset 0 1px 0 rgba(255,255,255,0.86)',
+  glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 35%)',
+};
+
+const MODERN_GLASS_DARK: GlassEffect = {
+  glassBackground: 'rgba(28, 30, 32, 0.62)',
+  glassBorder: 'rgba(255, 255, 255, 0.06)',
+  glassBlur: 'blur(24px)',
+  glassShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 0 0.5px rgba(255,255,255,0.04)',
+  glassInnerGlow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+  glassHighlight: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 35%)',
+};
+
+const MODERN_FOCUS_LIGHT: FocusStyle = {
+  focusRingColor: 'rgba(8, 145, 132, 0.4)',
+  focusRingWidth: 2,
+  focusRingOffset: 2,
+  focusRingShadow: '0 0 0 2px rgba(8,145,132,0.12)',
+};
+
+const MODERN_FOCUS_DARK: FocusStyle = {
+  focusRingColor: 'rgba(45, 212, 191, 0.5)',
+  focusRingWidth: 2,
+  focusRingOffset: 2,
+  focusRingShadow: '0 0 0 2px rgba(45,212,191,0.15), 0 0 16px rgba(45,212,191,0.06)',
+};
+
+const MODERN_SHADOWS = {
+  ...SHADOWS,
+  // 方向性阴影 — 模拟光源从上方略靠前，上方深贴近、下方弥散远
+  shadowSm: '0 1px 2px rgba(0,0,0,0.03)',
+  shadowMd: '0 1px 2px rgba(0,0,0,0.03), 0 3px 10px rgba(0,0,0,0.05)',
+  shadowLg: '0 1px 2px rgba(0,0,0,0.04), 0 5px 20px rgba(0,0,0,0.08)',
+  shadowXl: '0 1px 2px rgba(0,0,0,0.05), 0 10px 36px rgba(0,0,0,0.12)',
+  shadow2xl: '0 2px 4px rgba(0,0,0,0.06), 0 18px 56px rgba(0,0,0,0.16)',
+  cardShadowLight: '0 1px 2px rgba(0,0,0,0.03), 0 3px 10px rgba(0,0,0,0.05)',
+  headerShadowLight: '0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.05)',
+  cardShadowDark: '0 1px 2px rgba(0,0,0,0.25), 0 6px 16px rgba(0,0,0,0.35)',
+  headerShadowDark: '0 1px 2px rgba(0,0,0,0.30), 0 4px 12px rgba(0,0,0,0.40)',
+  glowPrimary: '0 0 24px rgba(8,145,132,0.12)',
+  glowPrimarySoft: '0 0 36px rgba(8,145,132,0.08), 0 0 72px rgba(8,145,132,0.03)',
+  glowPrimaryStrong: '0 0 48px rgba(45,212,191,0.20), 0 0 96px rgba(45,212,191,0.08)',
+};
+
+// ---------- Modern 配色常量 ----------
+
+const MODERN_LIGHT: ThemeColorScheme = {
+  // 主色：温润青碧 — 加大渐变色差，让按钮和重点元素更有层次
+  primary: '#089184',
+  primaryHover: '#0CA599',
+  primaryActive: '#067A6E',
+  primaryGradient: 'linear-gradient(135deg, #078075 0%, #0CA599 100%)',
+  success: '#059669',
+  successHover: '#10B981',
+  successActive: '#047857',
+  successGradient: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+  warning: '#D97706',
+  warningHover: '#F59E0B',
+  warningActive: '#B45309',
+  warningGradient: 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+  error: '#DC2626',
+  errorHover: '#EF4444',
+  errorActive: '#B91C1C',
+  errorGradient: 'linear-gradient(135deg, #DC2626 0%, #EF4444 100%)',
+  info: '#2563EB',
+  infoHover: '#3B82F6',
+  infoActive: '#1D4ED8',
+  infoGradient: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+};
+
+const MODERN_DARK: ThemeColorScheme = {
+  // 主色：辉光青碧 — 暗色背景上更大色差，按钮悬浮感更强
+  primary: '#2DD4BF',
+  primaryHover: '#5EEAD4',
+  primaryActive: '#14B8A6',
+  primaryGradient: 'linear-gradient(135deg, #14B8A6 0%, #3DDBC9 100%)',
+  success: '#10B981',
+  successHover: '#34D399',
+  successActive: '#059669',
+  successGradient: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+  warning: '#F59E0B',
+  warningHover: '#FBBF24',
+  warningActive: '#D97706',
+  warningGradient: 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
+  error: '#F87171',
+  errorHover: '#FCA5A5',
+  errorActive: '#EF4444',
+  errorGradient: 'linear-gradient(135deg, #F87171 0%, #FCA5A5 100%)',
+  info: '#38BDF8',
+  infoHover: '#7DD3FC',
+  infoActive: '#0EA5E9',
+  infoGradient: 'linear-gradient(135deg, #38BDF8 0%, #7DD3FC 100%)',
+};
+
+const MODERN_LIGHT_NEUTRAL: NeutralColors = {
+  // 文本 — Apple-style 层次：近黑 → 中灰 → 浅灰 → 禁用灰
+  textPrimary: '#1D1D1F',
+  textSecondary: '#6E6E73',
+  textTertiary: '#AEAEB2',
+  textDisabled: '#D1D1D6',
+  // 边框 — 极淡，擦着存在感的边
+  border: '#ECECF0',
+  borderLight: '#F3F3F6',
+  borderDark: '#DEDEE3',
+  // 背景层级 — 暖白基调，侧栏深、内容亮，形成清晰的左右分区
+  background: '#F6F6F8',
+  backgroundCard: '#FFFFFF',
+  backgroundToolbar: '#FAFAFC',
+  backgroundHover: '#EEEEF3',
+  backgroundActive: '#DEF2ED',
+  mask: 'rgba(0, 0, 0, 0.25)',
+  windowBackground: '#F6F6F8',
+  rowHoverBg: '#EEEEF3',
+  rowSelectedBg: '#DEF2ED',
+  rowStripeBg: 'rgba(0, 0, 0, 0.01)',
+  headerBg: '#FAFAFC',
+  surfaceElevated: '#FFFFFF',
+  scrollbarThumb: 'rgba(0, 0, 0, 0.07)',
+  scrollbarTrack: 'rgba(0, 0, 0, 0.012)',
+  // 层级过渡 — 侧边栏明显深于内容区，模拟物理阴影落在边缘
+  level1: '#E8E8EE',
+  level2: '#FFFFFF',
+  level3: '#FFFFFF',
+  level4: '#FFFFFF',
+  borderSubtle: '#F3F3F6',
+  borderEmphasis: '#DEDEE3',
+  borderActive: '#089184',
+};
+
+const MODERN_DARK_NEUTRAL: NeutralColors = {
+  // 文本 — 暖白 + 渐进灰，避免刺眼的纯白
+  textPrimary: '#F2F2F4',
+  textSecondary: '#98989E',
+  textTertiary: '#636368',
+  textDisabled: '#3E3E42',
+  // 边框 — 半透明融入背景，不抢视线
+  border: '#303034',
+  borderLight: '#26262A',
+  borderDark: '#3C3C40',
+  // 背景层级 — 底层近纯黑（≈3% 青蓝底调），卡片跃升 6 点，形成「卡片悬浮」纵深
+  background: '#0E1013',
+  backgroundCard: '#181A1C',
+  backgroundToolbar: '#121416',
+  backgroundHover: '#26282C',
+  backgroundActive: '#0D332E',
+  mask: 'rgba(0, 0, 0, 0.75)',
+  windowBackground: '#0E1013',
+  rowHoverBg: '#26282C',
+  rowSelectedBg: '#0D332E',
+  rowStripeBg: 'rgba(255, 255, 255, 0.008)',
+  headerBg: '#121416',
+  surfaceElevated: '#181A1C',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.08)',
+  scrollbarTrack: 'rgba(255, 255, 255, 0.012)',
+  // 层级过渡 — 底层到卡片的跳跃最大（6点），之后逐级收敛
+  level1: '#0E1013',
+  level2: '#181A1C',
+  level3: '#1F2124',
+  level4: '#26282C',
+  borderSubtle: '#242428',
+  borderEmphasis: '#3A3A3E',
+  borderActive: '#2DD4BF',
 };
 
 // ==================== 导出所有主题配置 ====================
 
 export const THEMES = {
   default: {
-    light: createThemeConfig('Default', '默认主题', 'light', DEFAULT_LIGHT, DEFAULT_LIGHT_NEUTRAL),
-    dark: createThemeConfig('Default', '默认主题', 'dark', DEFAULT_DARK, DEFAULT_DARK_NEUTRAL),
+    light: createThemeConfig('Default', '默认主题', 'light', DEFAULT_LIGHT, DEFAULT_LIGHT_NEUTRAL, {
+      glassEffect: DEFAULT_GLASS_LIGHT,
+      focusStyle: DEFAULT_FOCUS_LIGHT,
+      shadows: DEFAULT_SHADOWS,
+    }),
+    dark: createThemeConfig('Default', '默认主题', 'dark', DEFAULT_DARK, DEFAULT_DARK_NEUTRAL, {
+      glassEffect: DEFAULT_GLASS_DARK,
+      focusStyle: DEFAULT_FOCUS_DARK,
+      shadows: DEFAULT_SHADOWS,
+    }),
+  },
+  modern: {
+    light: createThemeConfig('Modern', '现代主题', 'light', MODERN_LIGHT, MODERN_LIGHT_NEUTRAL, {
+      glassEffect: MODERN_GLASS_LIGHT,
+      focusStyle: MODERN_FOCUS_LIGHT,
+      shadows: MODERN_SHADOWS,
+    }),
+    dark: createThemeConfig('Modern', '现代主题', 'dark', MODERN_DARK, MODERN_DARK_NEUTRAL, {
+      glassEffect: MODERN_GLASS_DARK,
+      focusStyle: MODERN_FOCUS_DARK,
+      shadows: MODERN_SHADOWS,
+    }),
   },
 } as const;
 
-export function getThemeConfig(mode: ThemeMode): ThemeConfig {
+export function getThemeConfig(mode: ThemeMode, preset?: ThemePreset): ThemeConfig {
   const effectiveMode = mode === 'system' ? getSystemMode() : mode;
+  const themeName = preset ?? 'default';
+
+  if (themeName === 'modern') {
+    return THEMES.modern[effectiveMode];
+  }
   return THEMES.default[effectiveMode];
 }
 
 export const THEME_PRESETS_LIST = [
-  { value: 'default' as ThemePreset, label: '默认主题', description: '深蓝专业风格' },
+  { value: 'default' as ThemePreset, label: '默认主题', description: '高端质感，中性灰蓝专业风格' },
+  { value: 'modern' as ThemePreset, label: '现代主题', description: '清新简约，Teal 青碧风格' },
 ];

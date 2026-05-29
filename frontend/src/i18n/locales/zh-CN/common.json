@@ -646,7 +646,21 @@
     "tableList": {
       "title": "表列表",
       "searchPlaceholder": "搜索表...",
-      "rowCount": "行数"
+      "rowCount": "行数",
+      "contextMenu": {
+        "openTable": "打开表",
+        "designTable": "设计表",
+        "copyTableName": "复制表名",
+        "copyStructure": "复制表 → 仅结构",
+        "copyStructureAndData": "复制表 → 结构和数据",
+        "truncateTable": "清空表",
+        "dropTable": "删除表",
+        "dumpSql": "转储 SQL",
+        "newTable": "新建表",
+        "refresh": "刷新",
+        "importWizard": "导入向导",
+        "exportWizard": "导出向导"
+      }
     },
     "tableStructure": {
       "title": "表结构",
@@ -964,6 +978,7 @@
     "addColumn": "添加列",
     "insertColumnAbove": "在上方插入字段",
     "insertColumnBelow": "在下方插入字段",
+    "deleteColumn": "删除列",
     "newColumnName": "新字段名",
     "newColumnType": "字段类型",
     "newColumnDefault": "默认值",
@@ -1082,6 +1097,11 @@
     "functionProperties": "函数属性",
     "triggerProperties": "触发器属性",
     "groupProperties": "分组属性",
+    "color": "颜色",
+    "icon": "图标",
+    "connectionCount": "连接数",
+    "event": "事件",
+    "timing": "触发时机",
     "copyConnectionConfig": "复制连接配置",
     "moveToGroup": "移动至分组",
     "newGroup": "新建分组",
@@ -1457,6 +1477,8 @@
     "exportWizard": "导出向导",
     "switchToGridView": "切换到网格视图",
     "switchToListView": "切换到列表视图",
+    "showDetail": "显示详情",
+    "hideDetail": "隐藏详情",
     "willCopyTable": "将复制表 \"{{tableName}}\"",
     "confirmDropTable": "确定要删除表 \"{{tableName}}\" 吗？此操作不可撤销。",
     "failedToRefreshTableList": "刷新表列表失败",

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { Tag, Spin, Empty, Button, Space, Tooltip, Modal, App } from 'antd';
+import { Tag, Spin, Empty, Button, Space, Tooltip, Modal, App, Dropdown } from 'antd';
 import { GlobalInput } from './GlobalInput';
+import { TableDetailSidebar } from './TableDetailSidebar';
 import { useTranslation } from 'react-i18next';
 import {
   TableOutlined,
@@ -18,15 +19,16 @@ import {
   ClearOutlined,
   CopyOutlined,
   CodeOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '../stores/appStore';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
 
-// View mode storage key
 const VIEW_MODE_STORAGE_KEY = 'tablelist-viewmode';
+const SHOW_DETAIL_STORAGE_KEY = 'tablelist-show-detail';
+const DETAIL_WIDTH_STORAGE_KEY = 'tablelist-detail-width';
 
-// Helper to get saved view mode
 function getInitialViewMode(): 'list' | 'grid' {
   try {
     const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
@@ -36,7 +38,27 @@ function getInitialViewMode(): 'list' | 'grid' {
   } catch {
     // Ignore localStorage errors
   }
-  return 'list'; // Default to list view
+  return 'list';
+}
+
+function getInitialShowDetail(): boolean {
+  try {
+    const saved = localStorage.getItem(SHOW_DETAIL_STORAGE_KEY);
+    return saved === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function getInitialDetailWidth(): number {
+  try {
+    const saved = localStorage.getItem(DETAIL_WIDTH_STORAGE_KEY);
+    const w = saved ? parseInt(saved, 10) : NaN;
+    if (w >= 200 && w <= 600) return w;
+  } catch {
+    // ignore
+  }
+  return 320;
 }
 
 export interface TableData {
@@ -89,6 +111,7 @@ const TableGridCard = React.memo(
   }) {
     return (
       <div
+        data-table-name={table.table_name}
         onClick={onClick}
         style={{
           display: 'flex',
@@ -283,6 +306,7 @@ const TableRow = React.memo(
 
     return (
       <div
+        data-table-name={table.table_name}
         onClick={onClick}
         style={{
           display: 'grid',
@@ -438,6 +462,8 @@ function TableListComponent({
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(getInitialViewMode);
   const [localLoading, setLocalLoading] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: null, order: 'asc' });
+  const [showDetail, setShowDetail] = useState(getInitialShowDetail);
+  const [detailWidth, setDetailWidth] = useState(getInitialDetailWidth);
   const dbType = useAppStore(
     (state) => state.connections.find((c) => c.id === connectionId)?.db_type,
   );
@@ -508,6 +534,22 @@ function TableListComponent({
   }, [viewMode]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_DETAIL_STORAGE_KEY, String(showDetail));
+    } catch {
+      // ignore
+    }
+  }, [showDetail]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DETAIL_WIDTH_STORAGE_KEY, String(detailWidth));
+    } catch {
+      // ignore
+    }
+  }, [detailWidth]);
+
+  useEffect(() => {
     // 未选择数据库时不自动加载
     if (!database) return;
     if (autoLoadTriggeredRef.current) return;
@@ -570,6 +612,138 @@ function TableListComponent({
     }
   }, [connectionId, database, message, t]);
 
+  const [contextTarget, setContextTarget] = useState<string | null>(null);
+  const [contextOpen, setContextOpen] = useState(false);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-table-name]');
+      const tableName = el?.getAttribute('data-table-name') ?? selectedRow ?? null;
+      if (el) {
+        setSelectedRow(tableName);
+      }
+      setContextTarget(tableName);
+      setContextOpen(true);
+    },
+    [selectedRow],
+  );
+
+  const contextMenu = useMemo(() => {
+    const table = contextTarget;
+    return {
+      items: [
+        {
+          key: 'open',
+          icon: <FolderOpenOutlined />,
+          label: t('common.tableList.contextMenu.openTable'),
+          disabled: !table,
+          onClick: () => table && onTableOpen?.(table, database),
+        },
+        {
+          key: 'design',
+          icon: <EditOutlined />,
+          label: t('common.tableList.contextMenu.designTable'),
+          disabled: !table,
+          onClick: () => table && onTableDesign?.(table, database),
+        },
+        { type: 'divider' as const, key: 'd1' },
+        {
+          key: 'newTable',
+          icon: <PlusOutlined />,
+          label: t('common.tableList.contextMenu.newTable'),
+          onClick: () => onTableNew?.(),
+        },
+        { type: 'divider' as const, key: 'd2' },
+        {
+          key: 'copyName',
+          icon: <CopyOutlined />,
+          label: t('common.tableList.contextMenu.copyTableName'),
+          disabled: !table,
+          onClick: () => {
+            if (table) navigator.clipboard.writeText(table).catch(() => {});
+          },
+        },
+        {
+          key: 'copyStructure',
+          icon: <CopyOutlined />,
+          label: t('common.tableList.contextMenu.copyStructure'),
+          disabled: !table,
+          onClick: () => table && onTableCopy?.(table, database),
+        },
+        {
+          key: 'copyStructureAndData',
+          icon: <CopyOutlined />,
+          label: t('common.tableList.contextMenu.copyStructureAndData'),
+          disabled: !table,
+          onClick: () => table && onTableCopy?.(table, database),
+        },
+        { type: 'divider' as const, key: 'd3' },
+        {
+          key: 'truncate',
+          icon: <ClearOutlined />,
+          danger: true,
+          label: t('common.tableList.contextMenu.truncateTable'),
+          disabled: !table,
+          onClick: () => {
+            if (!table) return;
+            Modal.confirm({
+              title: t('common.confirmTruncateTable'),
+              content: t('common.confirmTruncateTableContent', { tableName: table }),
+              okText: t('common.truncate'),
+              okType: 'danger',
+              onOk: () => onTableTruncate?.(table, database),
+            });
+          },
+        },
+        {
+          key: 'drop',
+          icon: <DeleteOutlined />,
+          danger: true,
+          label: t('common.tableList.contextMenu.dropTable'),
+          disabled: !table,
+          onClick: () => {
+            if (!table) return;
+            Modal.confirm({
+              title: t('common.confirmDelete'),
+              content: t('common.confirmDropTable', { tableName: table }),
+              okText: t('common.delete'),
+              okType: 'danger',
+              onOk: () => onTableDelete?.(table, database),
+            });
+          },
+        },
+        { type: 'divider' as const, key: 'd4' },
+        {
+          key: 'dump',
+          icon: <CodeOutlined />,
+          label: t('common.tableList.contextMenu.dumpSql'),
+          disabled: !table,
+          onClick: () => table && onTableDump?.(table, database),
+        },
+        { type: 'divider' as const, key: 'd5' },
+        {
+          key: 'refresh',
+          icon: <ReloadOutlined />,
+          label: t('common.tableList.contextMenu.refresh'),
+          onClick: () => refreshTablesRef(),
+        },
+      ],
+    };
+  }, [
+    contextTarget,
+    t,
+    database,
+    onTableOpen,
+    onTableDesign,
+    onTableNew,
+    onTableCopy,
+    onTableTruncate,
+    onTableDelete,
+    onTableDump,
+    refreshTablesRef,
+  ]);
+
   const handleSort = useCallback((key: SortKey) => {
     setSort((prev) => {
       if (prev.key === key) {
@@ -601,6 +775,11 @@ function TableListComponent({
       }
     }, 300);
   };
+
+  const selectedTable = useMemo(
+    () => tables.find((t) => t.table_name === selectedRow),
+    [tables, selectedRow],
+  );
 
   const { filteredTables, tableCount, viewCount } = useMemo(() => {
     let tableCount = 0;
@@ -882,69 +1061,100 @@ function TableListComponent({
               />
             </span>
           </Tooltip>
+          <Tooltip title={showDetail ? t('common.hideDetail') : t('common.showDetail')}>
+            <span>
+              <Button
+                icon={<InfoCircleOutlined />}
+                size="small"
+                type={showDetail ? 'primary' : 'text'}
+                onClick={() => setShowDetail((prev) => !prev)}
+              />
+            </span>
+          </Tooltip>
         </Space>
       </div>
 
       {/* Content area */}
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          contentVisibility: 'auto',
-          contain: 'layout style paint',
-        }}
-      >
-        {loading ? (
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <Dropdown
+          menu={contextMenu}
+          trigger={['contextMenu']}
+          open={contextOpen}
+          onOpenChange={setContextOpen}
+        >
           <div
+            onContextMenu={handleContextMenu}
             style={{
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              contentVisibility: 'auto',
+              contain: 'layout style paint',
             }}
           >
-            <Spin size="large" />
-            <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
-              {t('common.erDiagram.loading')}
-            </div>
-          </div>
-        ) : filteredTables.length === 0 ? (
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {searchText ? (
-              <Empty
-                description={searchText ? t('common.noMatchingTables') : t('common.noTables')}
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            ) : (
-              <Empty description={t('common.noTables')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            )}
-          </div>
-        ) : viewMode === 'list' ? (
-          <div style={{ background: 'var(--background-card)' }}>
-            <ListHeader sort={sort} onSort={handleSort} columns={columns} />
-            {tableRowItems}
-          </div>
-        ) : (
-          <div style={{ padding: 4 }}>
+          {loading ? (
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: 2,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              {tableGridItems}
+              <Spin size="large" />
+              <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
+                {t('common.erDiagram.loading')}
+              </div>
             </div>
+          ) : filteredTables.length === 0 ? (
+            <div
+              style={{
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {searchText ? (
+                <Empty
+                  description={searchText ? t('common.noMatchingTables') : t('common.noTables')}
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                />
+              ) : (
+                <Empty description={t('common.noTables')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )}
+            </div>
+          ) : viewMode === 'list' ? (
+            <div style={{ background: 'var(--background-card)' }}>
+              <ListHeader sort={sort} onSort={handleSort} columns={columns} />
+              {tableRowItems}
+            </div>
+          ) : (
+            <div style={{ padding: 4 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                  gap: 2,
+                }}
+              >
+                {tableGridItems}
+              </div>
+            </div>
+          )}
           </div>
+        </Dropdown>
+        {showDetail && (
+          <TableDetailSidebar
+            connectionId={connectionId}
+            database={database}
+            tableName={selectedRow}
+            tableType={selectedTable?.table_type}
+            tableComment={selectedTable?.comment}
+            width={detailWidth}
+            onWidthChange={setDetailWidth}
+          />
         )}
       </div>
     </div>

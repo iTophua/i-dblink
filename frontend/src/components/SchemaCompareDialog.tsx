@@ -17,6 +17,7 @@ import { DiffOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { api } from '../api';
 import type { ConnectionOutput } from '../types/api';
+import { DDLViewer } from './DDLViewer';
 
 const { Panel } = Collapse;
 const { Text, Title } = Typography;
@@ -389,18 +390,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
                 {diff.alter_sql.length > 0 && (
                   <div>
                     <Title level={5}>{t('common.syncSqlPreview')}</Title>
-                    <pre
-                      style={{
-                        background: '#f5f5f5',
-                        padding: 12,
-                        borderRadius: 4,
-                        fontSize: 12,
-                        maxHeight: 200,
-                        overflow: 'auto',
-                      }}
-                    >
-                      {diff.alter_sql.join('\n')}
-                    </pre>
+                    <DDLViewer ddl={diff.alter_sql.join('\n')} maxHeight={200} />
                     <Button
                       type="primary"
                       icon={<ThunderboltOutlined />}

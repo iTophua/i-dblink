@@ -1052,13 +1052,16 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                      setTableToOpen({ name: tableName, database });
                    }, 0);
                  }}
-                 onViewOpen={(viewName, database) => {
-                   setTableToOpen(null);
-                   setTimeout(() => {
-                     setTableToOpen({ name: viewName, database, isView: true });
-                   }, 0);
-                 }}
-                 onExpand={(connectionId, expanded) => {
+                  onOpenDesigner={(tableName) => {
+                    tabPanelRef.current?.openDesignerTab(tableName);
+                  }}
+                  onViewOpen={(viewName, database) => {
+                    setTableToOpen(null);
+                    setTimeout(() => {
+                      setTableToOpen({ name: viewName, database, isView: true });
+                    }, 0);
+                  }}
+                  onExpand={(connectionId, expanded) => {
                    if (expanded) {
                      setExpandedKeys((prev) => [...prev, connectionId]);
                    } else {

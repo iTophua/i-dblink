@@ -1,5 +1,5 @@
 import React, { type JSX, useCallback, useState } from 'react';
-import { Layout, Button, Dropdown, Tooltip } from 'antd';
+import { Layout, Button, Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -47,11 +47,11 @@ export function Toolbar(): JSX.Element {
   }, []);
 
   const toolbarStyle: ToolbarStyle = {
-    height: 36,
-    lineHeight: '36px',
-    background: 'var(--background-toolbar)',
+    height: 44,
+    lineHeight: '44px',
+    background: 'var(--background)',
     borderBottom: '1px solid var(--border-color)',
-    padding: '0 12px',
+    padding: '0 14px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -59,9 +59,9 @@ export function Toolbar(): JSX.Element {
 
   const dividerStyle: React.CSSProperties = {
     width: 1,
-    height: 20,
+    height: 24,
     background: 'var(--border-color)',
-    margin: '0 8px',
+    margin: '0 10px',
   };
 
   const fileMenuItems: MenuProps['items'] = [
@@ -173,76 +173,184 @@ export function Toolbar(): JSX.Element {
 
   const buttonStyle: React.CSSProperties = {
     fontSize: 12,
-    color: 'var(--text-primary)',
+    color: 'var(--text-tertiary)',
   };
 
   const renderToolbarButtons = () => (
     <>
-      <Button
-        type="text"
-        size="small"
-        icon={<PlusOutlined />}
+      <div
         onClick={() => handleMenuAction('new-connection')}
-        style={buttonStyle}
         data-testid="toolbar-new-connection"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 12px',
+          height: 30,
+          borderRadius: 6,
+          background: 'var(--color-primary)',
+          color: '#fff',
+          fontSize: 12,
+          fontWeight: 500,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          boxShadow: '0 2px 8px rgba(29,78,216,0.2)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-1px)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(29,78,216,0.3)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 2px 8px rgba(29,78,216,0.2)';
+        }}
       >
+        <PlusOutlined />
         {t('common.newConnectionBtn')}
-      </Button>
-      <Button
-        type="text"
-        size="small"
-        icon={<ReloadOutlined />}
-        onClick={() => handleMenuAction('refresh')}
-        style={buttonStyle}
-        data-testid="toolbar-refresh"
-      >
-        {t('common.refreshBtn')}
-      </Button>
-      <Button
-        type="text"
-        size="small"
-        icon={<CodeOutlined />}
+      </div>
+      <div
         onClick={() => handleMenuAction('new-query')}
-        style={buttonStyle}
         data-testid="toolbar-new-query"
+        className="toolbar-btn-bordered"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 12px',
+          height: 30,
+          borderRadius: 6,
+          background: 'var(--background-hover)',
+          color: 'var(--text-secondary)',
+          fontSize: 12,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          border: '1px solid var(--border-color)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = 'var(--color-primary)';
+          e.currentTarget.style.color = 'var(--color-primary)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = 'var(--border-color)';
+          e.currentTarget.style.color = 'var(--text-secondary)';
+        }}
       >
+        <CodeOutlined />
         {t('common.newQueryBtn')}
-      </Button>
+      </div>
+      <div
+        onClick={() => handleMenuAction('refresh')}
+        data-testid="toolbar-refresh"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 12px',
+          height: 30,
+          borderRadius: 6,
+          color: 'var(--text-tertiary)',
+          fontSize: 12,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--background-hover)';
+          e.currentTarget.style.color = 'var(--text-primary)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--text-tertiary)';
+        }}
+      >
+        <ReloadOutlined />
+        {t('common.refreshLabel')}
+      </div>
     </>
   );
 
   const renderAppButtons = () => (
     <>
-      <Tooltip title={t('common.shortcutsTitle') + ' (?'} placement="bottom">
-        <Button
-          type="text"
-          size="small"
-          icon={<KeyOutlined />}
-          onClick={() => setShortcutsModalOpen(true)}
-          style={buttonStyle}
-          data-testid="toolbar-shortcuts"
-        />
-      </Tooltip>
-      <Button
-        type="text"
-        size="small"
-        icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
+      <div
+        onClick={() => setShortcutsModalOpen(true)}
+        data-testid="toolbar-shortcuts"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 12px',
+          height: 30,
+          borderRadius: 6,
+          color: 'var(--text-tertiary)',
+          fontSize: 12,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--background-hover)';
+          e.currentTarget.style.color = 'var(--text-primary)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--text-tertiary)';
+        }}
+      >
+        <KeyOutlined />
+        {t('common.shortcutsTitle')}
+      </div>
+      <div
         onClick={handleToggleTheme}
-        style={buttonStyle}
         data-testid="toolbar-theme-toggle"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 12px',
+          height: 30,
+          borderRadius: 6,
+          color: 'var(--text-tertiary)',
+          fontSize: 12,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--background-hover)';
+          e.currentTarget.style.color = 'var(--text-primary)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--text-tertiary)';
+        }}
       >
-        {isDarkMode ? t('common.lightModeBtn') : t('common.darkModeBtn')}
-      </Button>
-      <Button
-        type="text"
-        size="small"
-        icon={<SettingOutlined />}
+        {isDarkMode ? <SunOutlined /> : <MoonOutlined />}
+        {isDarkMode ? t('common.lightMode') : t('common.darkMode')}
+      </div>
+      <div
         onClick={() => handleMenuAction('options')}
-        style={buttonStyle}
         data-testid="toolbar-settings"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 12px',
+          height: 30,
+          borderRadius: 6,
+          color: 'var(--text-tertiary)',
+          fontSize: 12,
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--background-hover)';
+          e.currentTarget.style.color = 'var(--text-primary)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--text-tertiary)';
+        }}
       >
-        {t('common.settingsBtn')}
-      </Button>
+        <SettingOutlined />
+        {t('common.options')}
+      </div>
     </>
   );
 

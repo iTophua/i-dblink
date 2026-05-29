@@ -193,15 +193,22 @@ func damengGetColumns(ctx context.Context, dbConn db.Executor, tableName string,
 	}
 
 	query := `
-		SELECT COLUMN_NAME, DATA_TYPE,
-			CASE WHEN NULLABLE = 'N' THEN 'NO' ELSE 'YES' END AS IS_NULLABLE,
-			NULL AS COLUMN_KEY,
-			DATA_DEFAULT AS COLUMN_DEFAULT,
+		SELECT c.COLUMN_NAME, c.DATA_TYPE,
+			CASE WHEN c.NULLABLE = 'N' THEN 'NO' ELSE 'YES' END AS IS_NULLABLE,
+			CASE WHEN EXISTS (
+				SELECT 1 FROM SYS.DBA_CONS_COLUMNS cc
+				JOIN SYS.DBA_CONSTRAINTS co ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME
+				WHERE co.CONSTRAINT_TYPE = 'P'
+					AND co.OWNER = c.OWNER
+					AND co.TABLE_NAME = c.TABLE_NAME
+					AND cc.COLUMN_NAME = c.COLUMN_NAME
+			) THEN 'PRI' ELSE '' END AS COLUMN_KEY,
+			c.DATA_DEFAULT AS COLUMN_DEFAULT,
 			NULL AS EXTRA,
 			NULL AS COMMENT
-		FROM SYS.DBA_TAB_COLUMNS
-		WHERE OWNER = ? AND TABLE_NAME = ?
-		ORDER BY COLUMN_ID
+		FROM SYS.DBA_TAB_COLUMNS c
+		WHERE c.OWNER = ? AND c.TABLE_NAME = ?
+		ORDER BY c.COLUMN_ID
 	`
 	rows, err := dbConn.QueryContext(ctx, query, schema, tableName)
 	if err != nil {
@@ -228,6 +235,7 @@ func damengGetColumns(ctx context.Context, dbConn db.Executor, tableName string,
 		if err := rows.Scan(&c.ColumnName, &c.DataType, &c.IsNullable, &key, &def, &extra, &comment); err != nil {
 			continue
 		}
+		c.ColumnKey = nullStr(key)
 		c.ColumnDefault = nullStrEmpty(def)
 		result = append(result, c)
 	}

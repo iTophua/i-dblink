@@ -15,8 +15,8 @@ import {
   AppstoreOutlined,
   HomeOutlined,
   CloseOutlined,
-  PushpinOutlined,
   EyeOutlined,
+
 } from '@ant-design/icons';
 import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
@@ -66,16 +66,19 @@ interface OpenedTable {
   database?: string;
   isDirty?: boolean;
   isView?: boolean;
+  createdAt: number;
 }
 
 interface OpenedSqlTab {
   key: string;
   title: string;
   connectionId?: string;
+  connectionName?: string;
   database?: string;
   defaultQuery?: string;
   isFloating?: boolean;
   floatingWindowId?: string;
+  createdAt: number;
 }
 
 interface OpenedDesignerTab {
@@ -85,6 +88,7 @@ interface OpenedDesignerTab {
   database?: string;
   tableName?: string;
   isNewTable?: boolean;
+  createdAt: number;
 }
 
 interface OpenedViewDefTab {
@@ -93,6 +97,7 @@ interface OpenedViewDefTab {
   connectionId: string;
   database?: string;
   viewName: string;
+  createdAt: number;
 }
 
 export interface ActiveTabInfo {
@@ -181,14 +186,25 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       ws.openedDesignerTabs.length > 0
     ) {
       // 重新生成 SQL Tab 的 key 避免时间戳冲突
-      const restoredSqlTabs = ws.openedSqlTabs.map((t) => ({
-        ...t,
-        key: `sql-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        defaultQuery: t.content || undefined,
-      }));
-      setOpenedTables(ws.openedTables.map((t) => ({ ...t, isDirty: false })));
+      const restoredSqlTabs = ws.openedSqlTabs.map((t) => {
+        const connName = t.connectionId
+          ? connections.find((c) => c.id === t.connectionId)?.name || t.connectionId
+          : undefined;
+        return {
+          ...t,
+          key: `sql-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          connectionName: connName,
+          defaultQuery: t.content || undefined,
+          createdAt: Date.now(),
+        };
+      });
+      setOpenedTables(
+        ws.openedTables.map((t) => ({ ...t, isDirty: false, createdAt: Date.now() }))
+      );
       setOpenedSqlTabs(restoredSqlTabs);
-      setOpenedDesignerTabs(ws.openedDesignerTabs);
+      setOpenedDesignerTabs(
+        ws.openedDesignerTabs.map((t) => ({ ...t, createdAt: Date.now() }))
+      );
       // 只有当 activeKey 对应的 tab 存在时才激活，否则默认 objects
       const validKeys = new Set([
         'objects',
@@ -232,15 +248,21 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       defaultQuery?: string;
       content?: string;
     }) => {
-      const newSqlKey = `sql-${Date.now()}`;
+      const rand = Math.random().toString(36).slice(2, 8);
+      const newSqlKey = `sql-${Date.now()}-${rand}`;
+      const connName = options.connectionId
+        ? connections.find((c) => c.id === options.connectionId)?.name || options.connectionId
+        : undefined;
       setOpenedSqlTabs((prev) => [
         ...prev,
         {
           key: newSqlKey,
           title: options.title || t('common.sqlQuery'),
           connectionId: options.connectionId,
+          connectionName: connName,
           database: options.database,
           defaultQuery: options.content || options.defaultQuery,
+          createdAt: Date.now(),
         },
       ]);
       setActiveKey(newSqlKey);
@@ -443,9 +465,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
   const handleDragOver = (e: React.DragEvent, key: string) => {
     e.preventDefault();
-    const sourceCat = getTabCategory(dragKeyRef.current || '');
     const targetCat = getTabCategory(key);
-    if (sourceCat !== 'fixed' && sourceCat === targetCat) {
+    if (dragKeyRef.current && targetCat !== 'fixed') {
       e.dataTransfer.dropEffect = 'move';
     } else {
       e.dataTransfer.dropEffect = 'none';
@@ -456,41 +477,39 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     const sourceKey = dragKeyRef.current;
     dragKeyRef.current = null;
     if (!sourceKey || sourceKey === targetKey) return;
-    const sourceCat = getTabCategory(sourceKey);
     const targetCat = getTabCategory(targetKey);
-    if (sourceCat === 'fixed' || sourceCat !== targetCat) return;
+    if (targetCat === 'fixed') return;
 
-    if (sourceCat === 'data') {
-      setOpenedTables((prev) => {
-        const sourceIndex = prev.findIndex((t) => getDataTabKey(t) === sourceKey);
-        const targetIndex = prev.findIndex((t) => getDataTabKey(t) === targetKey);
-        if (sourceIndex === -1 || targetIndex === -1) return prev;
-        const next = [...prev];
-        const [removed] = next.splice(sourceIndex, 1);
-        next.splice(targetIndex, 0, removed);
-        return next;
-      });
-    } else if (sourceCat === 'sql') {
-      setOpenedSqlTabs((prev) => {
-        const sourceIndex = prev.findIndex((t) => t.key === sourceKey);
-        const targetIndex = prev.findIndex((t) => t.key === targetKey);
-        if (sourceIndex === -1 || targetIndex === -1) return prev;
-        const next = [...prev];
-        const [removed] = next.splice(sourceIndex, 1);
-        next.splice(targetIndex, 0, removed);
-        return next;
-      });
-    } else if (sourceCat === 'designer') {
-      setOpenedDesignerTabs((prev) => {
-        const sourceIndex = prev.findIndex((t) => t.key === sourceKey);
-        const targetIndex = prev.findIndex((t) => t.key === targetKey);
-        if (sourceIndex === -1 || targetIndex === -1) return prev;
-        const next = [...prev];
-        const [removed] = next.splice(sourceIndex, 1);
-        next.splice(targetIndex, 0, removed);
-        return next;
-      });
-    }
+    const allItems: { key: string; createdAt: number }[] = [
+      ...openedTables.map((t) => ({ key: getDataTabKey(t), createdAt: t.createdAt })),
+      ...openedSqlTabs.map((t) => ({ key: t.key, createdAt: t.createdAt })),
+      ...openedDesignerTabs.map((t) => ({ key: t.key, createdAt: t.createdAt })),
+      ...openedViewDefTabs.map((t) => ({ key: t.key, createdAt: t.createdAt })),
+    ].sort((a, b) => a.createdAt - b.createdAt);
+
+    if (!allItems.some((i) => i.key === sourceKey)) return;
+
+    const withoutSource = allItems.filter((i) => i.key !== sourceKey);
+    const insertPos = withoutSource.findIndex((i) => i.key === targetKey);
+    if (insertPos === -1) return;
+
+    const newCreatedAt =
+      insertPos === 0
+        ? withoutSource[0].createdAt - 1
+        : (withoutSource[insertPos - 1].createdAt + withoutSource[insertPos].createdAt) / 2;
+
+    setOpenedTables((prev) =>
+      prev.map((t) => (getDataTabKey(t) === sourceKey ? { ...t, createdAt: newCreatedAt } : t))
+    );
+    setOpenedSqlTabs((prev) =>
+      prev.map((t) => (t.key === sourceKey ? { ...t, createdAt: newCreatedAt } : t))
+    );
+    setOpenedDesignerTabs((prev) =>
+      prev.map((t) => (t.key === sourceKey ? { ...t, createdAt: newCreatedAt } : t))
+    );
+    setOpenedViewDefTabs((prev) =>
+      prev.map((t) => (t.key === sourceKey ? { ...t, createdAt: newCreatedAt } : t))
+    );
   };
 
   const renderDraggableTabBar: TabsProps['renderTabBar'] = (tabBarProps, DefaultTabBar) => (
@@ -525,17 +544,22 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     ) => {
       const { action, connectionId: eventConnId, database: eventDb } = event.detail;
       if (action === 'new-sql-tab') {
-        const newSqlKey = `sql-${Date.now()}`;
+        const rand = Math.random().toString(36).slice(2, 8);
+        const newSqlKey = `sql-${Date.now()}-${rand}`;
         const connId = eventConnId || selectedConnectionId;
-        // 如果传入了数据库，使用传入的；否则使用当前选中的数据库
         const dbName = eventDb || selectedDatabase;
+        const connName = connId
+          ? connections.find((c) => c.id === connId)?.name || connId
+          : undefined;
         setOpenedSqlTabs((prev) => [
           ...prev,
           {
             key: newSqlKey,
             title: t('common.sqlQuery'),
             connectionId: connId || undefined,
+            connectionName: connName,
             database: dbName,
+            createdAt: Date.now(),
           },
         ]);
         setActiveKey(newSqlKey);
@@ -579,6 +603,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             database,
             isDirty: false,
             isView,
+            createdAt: Date.now(),
           },
         ]);
       }
@@ -611,7 +636,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
       const isNewTable = !tableName || tableName === '';
       const tabKey = isNewTable
-        ? `designer-new-${Date.now()}`
+        ? `designer-new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         : selectedDatabase
           ? `designer-${tableName}@${selectedDatabase}@${selectedConnectionId}`
           : `designer-${tableName}@${selectedConnectionId}`;
@@ -634,6 +659,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             database: selectedDatabase,
             tableName: isNewTable ? undefined : tableName,
             isNewTable,
+            createdAt: Date.now(),
           },
         ]);
       }
@@ -666,6 +692,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             connectionId: selectedConnectionId,
             database: selectedDatabase,
             viewName,
+            createdAt: Date.now(),
           },
         ]);
       }
@@ -843,14 +870,20 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     (targetKey: React.MouseEvent | React.KeyboardEvent | string, action: 'add' | 'remove') => {
       if (action === 'add') {
         // 点击 + 号新增 SQL 查询 Tab
-        const newSqlKey = `sql-${Date.now()}`;
+        const rand = Math.random().toString(36).slice(2, 8);
+        const newSqlKey = `sql-${Date.now()}-${rand}`;
+        const connName = selectedConnectionId
+          ? connections.find((c) => c.id === selectedConnectionId)?.name || selectedConnectionId
+          : undefined;
         setOpenedSqlTabs((prev) => [
           ...prev,
           {
             key: newSqlKey,
             title: t('common.sqlQuery'),
             connectionId: selectedConnectionId ?? undefined,
+            connectionName: connName,
             database: selectedDatabase ?? undefined,
+            createdAt: Date.now(),
           },
         ]);
         setActiveKey(newSqlKey);
@@ -862,7 +895,213 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     [activeKey, openedTables, openedSqlTabs, handleCloseTab]
   );
 
-  // 构建 Tab 列表
+  // 动态 Tab：合并并按 createdAt 排序
+  const dynamicTabItems: TabsProps['items'] = [
+    ...openedTables.flatMap((table) => {
+      const dataTabKey = getDataTabKey(table);
+      const tooltipTitle = table.database
+        ? `${table.database} @ ${table.connectionName}`
+        : table.connectionName;
+
+      return [
+        {
+          key: dataTabKey,
+          label: (
+            <Tooltip title={tooltipTitle} placement="bottom">
+              <span
+                onContextMenu={(e) => handleTabContextMenu(e, dataTabKey)}
+                style={{
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  maxWidth: 160,
+                }}
+              >
+                {table.isView ? (
+                  <EyeOutlined style={{ marginRight: 4, flexShrink: 0 }} />
+                ) : (
+                  <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />
+                )}
+                <span
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {table.name}
+                </span>
+                {table.isDirty && (
+                  <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>
+                )}
+              </span>
+            </Tooltip>
+          ),
+          children: (
+            <div style={{ height: '100%' }} data-testid={`data-tab-${table.name}`}>
+              <DataTable
+                tableName={table.name}
+                connectionId={table.connectionId}
+                database={table.database}
+                pageSize={pageSize}
+                onDirtyChange={(isDirty) => handleTableDirtyChange(dataTabKey, isDirty)}
+              />
+            </div>
+          ),
+          closable: true,
+          _createdAt: table.createdAt ?? 0,
+        },
+      ];
+    }),
+    ...openedSqlTabs.map((sqlTab) => {
+      const sqlTooltip = sqlTab.database
+        ? `${sqlTab.database} @ ${sqlTab.connectionName || ''}`
+        : sqlTab.connectionName || '';
+      return {
+        key: sqlTab.key,
+        label: (
+          <Tooltip title={sqlTooltip} placement="bottom">
+            <span
+              onContextMenu={(e) => handleTabContextMenu(e, sqlTab.key)}
+              style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              onDoubleClick={() => {
+                Modal.confirm({
+                  title: t('common.renameTabTitle'),
+                  content: (
+                    <input
+                      autoFocus
+                      defaultValue={sqlTab.title}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: '1px solid var(--border)',
+                        borderRadius: 4,
+                        background: 'var(--background)',
+                        color: 'var(--text)',
+                      }}
+                      onChange={(e) => {
+                        const newTitle = e.target.value;
+                        setOpenedSqlTabs((prev) =>
+                          prev.map((t) => (t.key === sqlTab.key ? { ...t, title: newTitle } : t))
+                        );
+                      }}
+                    />
+                  ),
+                  okText: t('common.confirm'),
+                  cancelText: t('common.cancel'),
+                  transitionName: '',
+                  maskTransitionName: '',
+                  onOk: () => {},
+                });
+              }}
+            >
+              <DatabaseOutlined style={{ marginRight: 4 }} />
+              {sqlTab.title}
+            </span>
+          </Tooltip>
+        ),
+        children: (
+          <div style={{ height: '100%' }} data-testid={`sql-tab-${sqlTab.key}`}>
+            <SQLEditor
+              connectionId={sqlTab.connectionId || selectedConnectionId}
+              database={sqlTab.database}
+              defaultQuery={sqlTab.defaultQuery}
+              dbType={getDbType(sqlTab.connectionId || selectedConnectionId)}
+              availableDatabases={
+                (sqlTab.connectionId || selectedConnectionId) && connectionDatabases?.[sqlTab.connectionId || selectedConnectionId || '']
+                  ? connectionDatabases[sqlTab.connectionId || selectedConnectionId || ''].map((db) => db.database)
+                  : []
+              }
+              onDatabaseChange={(database) => {
+                setOpenedSqlTabs((prev) =>
+                  prev.map((t) => (t.key === sqlTab.key ? { ...t, database } : t))
+                );
+              }}
+              onQueryStatusChange={onQueryStatusChange}
+            />
+          </div>
+        ),
+        closable: true,
+        _createdAt: sqlTab.createdAt ?? 0,
+      };
+    }),
+    ...openedDesignerTabs.map((designerTab) => ({
+      key: designerTab.key,
+      label: (
+        <span
+          onContextMenu={(e) => handleTabContextMenu(e, designerTab.key)}
+          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        >
+          <TableOutlined style={{ marginRight: 4 }} />
+          {designerTab.title}
+        </span>
+      ),
+      children: (
+        <div style={{ height: '100%' }}>
+          <TableDesigner
+            connectionId={designerTab.connectionId}
+            tableName={designerTab.tableName}
+            database={designerTab.database}
+            dbType={getDbType(designerTab.connectionId)}
+            onSave={async (sql: string) => {
+              try {
+                const statements = sql.split(';').filter((s) => s.trim());
+                for (const stmt of statements) {
+                  if (stmt.trim()) {
+                    await api.executeDDL(
+                      designerTab.connectionId,
+                      stmt.trim(),
+                      designerTab.database
+                    );
+                  }
+                }
+                message.success(
+                  designerTab.isNewTable
+                    ? t('common.tableCreated')
+                    : t('common.tableStructureUpdated')
+                );
+                setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
+                setActiveKey('objects');
+                window.dispatchEvent(
+                  new CustomEvent('refresh-connection-tree', {
+                    detail: { connectionId: designerTab.connectionId },
+                  })
+                );
+              } catch (err: any) {
+                message.error(t('common.sqlEditor.executeFailed') + ': ' + (err.message || err));
+              }
+            }}
+            onCancel={() => {
+              setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
+              setActiveKey('objects');
+            }}
+          />
+        </div>
+      ),
+      closable: true,
+      _createdAt: designerTab.createdAt ?? 0,
+    })),
+    ...openedViewDefTabs.map((viewDefTab) => ({
+      key: viewDefTab.key,
+      label: (
+        <span
+          onContextMenu={(e) => handleTabContextMenu(e, viewDefTab.key)}
+          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        >
+          <EyeOutlined style={{ marginRight: 4 }} />
+          {viewDefTab.title}
+        </span>
+      ),
+      children: (
+        <div style={{ height: '100%' }}>
+          <ViewDefinition
+            connectionId={viewDefTab.connectionId}
+            viewName={viewDefTab.viewName}
+            database={viewDefTab.database}
+          />
+        </div>
+      ),
+      closable: true,
+      _createdAt: viewDefTab.createdAt ?? 0,
+    })),
+  ].sort((a: any, b: any) => a._createdAt - b._createdAt);
+
   const tabItems: TabsProps['items'] = [
     {
       key: 'objects',
@@ -990,202 +1229,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       ),
       closable: false,
     },
-    // 已打开的数据表 Tab
-    ...openedTables.flatMap((table) => {
-      const dataTabKey = getDataTabKey(table);
-      const tooltipTitle = table.database
-        ? `${table.database} @ ${table.connectionName}`
-        : table.connectionName;
-
-      return [
-        {
-          key: dataTabKey,
-          label: (
-            <Tooltip title={tooltipTitle} placement="bottom">
-              <span
-                onContextMenu={(e) => handleTabContextMenu(e, dataTabKey)}
-                style={{
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  maxWidth: 160,
-                }}
-              >
-                {table.isView ? (
-                  <EyeOutlined style={{ marginRight: 4, flexShrink: 0 }} />
-                ) : (
-                  <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />
-                )}
-                <span
-                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                >
-                  {table.name}
-                </span>
-                {table.isDirty && (
-                  <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>
-                )}
-              </span>
-            </Tooltip>
-          ),
-          children: (
-            <div style={{ height: '100%' }} data-testid={`data-tab-${table.name}`}>
-              <DataTable
-                tableName={table.name}
-                connectionId={table.connectionId}
-                database={table.database}
-                pageSize={pageSize}
-                onDirtyChange={(isDirty) => handleTableDirtyChange(dataTabKey, isDirty)}
-              />
-            </div>
-          ),
-          closable: true,
-        },
-      ];
-    }),
-    // 动态 SQL 查询 Tab
-    ...openedSqlTabs.map((sqlTab, index) => ({
-      key: sqlTab.key,
-      label: (
-        <span
-          onContextMenu={(e) => handleTabContextMenu(e, sqlTab.key)}
-          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-          onDoubleClick={() => {
-            Modal.confirm({
-              title: t('common.renameTabTitle'),
-              content: (
-                <input
-                  autoFocus
-                  defaultValue={sqlTab.title}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid var(--border)',
-                    borderRadius: 4,
-                    background: 'var(--background)',
-                    color: 'var(--text)',
-                  }}
-                  onChange={(e) => {
-                    const newTitle = e.target.value;
-                    setOpenedSqlTabs((prev) =>
-                      prev.map((t) => (t.key === sqlTab.key ? { ...t, title: newTitle } : t))
-                    );
-                  }}
-                />
-              ),
-              okText: t('common.confirm'),
-              cancelText: t('common.cancel'),
-              transitionName: '',
-              maskTransitionName: '',
-              onOk: () => {},
-            });
-          }}
-        >
-          <DatabaseOutlined style={{ marginRight: 4 }} />
-          {sqlTab.title || `SQL ${index + 1}`}
-        </span>
-      ),
-children: (
-          <div style={{ height: '100%' }} data-testid={`sql-tab-${sqlTab.key}`}>
-            <SQLEditor
-              connectionId={sqlTab.connectionId || selectedConnectionId}
-              database={sqlTab.database}
-              defaultQuery={sqlTab.defaultQuery}
-              dbType={getDbType(sqlTab.connectionId || selectedConnectionId)}
-              availableDatabases={
-                (sqlTab.connectionId || selectedConnectionId) && connectionDatabases?.[sqlTab.connectionId || selectedConnectionId || '']
-                  ? connectionDatabases[sqlTab.connectionId || selectedConnectionId || ''].map((db) => db.database)
-                  : []
-              }
-              onDatabaseChange={(database) => {
-                setOpenedSqlTabs((prev) =>
-                  prev.map((t) => (t.key === sqlTab.key ? { ...t, database } : t))
-                );
-              }}
-              onQueryStatusChange={onQueryStatusChange}
-            />
-          </div>
-        ),
-      closable: true,
-    })),
-    // 表设计器 Tab
-    ...openedDesignerTabs.map((designerTab) => ({
-      key: designerTab.key,
-      label: (
-        <span
-          onContextMenu={(e) => handleTabContextMenu(e, designerTab.key)}
-          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-        >
-          <TableOutlined style={{ marginRight: 4 }} />
-          {designerTab.title}
-        </span>
-      ),
-      children: (
-        <div style={{ height: '100%' }}>
-          <TableDesigner
-            connectionId={designerTab.connectionId}
-            tableName={designerTab.tableName}
-            database={designerTab.database}
-            dbType={getDbType(designerTab.connectionId)}
-            onSave={async (sql: string) => {
-              try {
-                const statements = sql.split(';').filter((s) => s.trim());
-                for (const stmt of statements) {
-                  if (stmt.trim()) {
-                    await api.executeDDL(
-                      designerTab.connectionId,
-                      stmt.trim(),
-                      designerTab.database
-                    );
-                  }
-                }
-                message.success(
-                  designerTab.isNewTable
-                    ? t('common.tableCreated')
-                    : t('common.tableStructureUpdated')
-                );
-                setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
-                setActiveKey('objects');
-                window.dispatchEvent(
-                  new CustomEvent('refresh-connection-tree', {
-                    detail: { connectionId: designerTab.connectionId },
-                  })
-                );
-              } catch (err: any) {
-                message.error(t('common.sqlEditor.executeFailed') + ': ' + (err.message || err));
-              }
-            }}
-            onCancel={() => {
-              setOpenedDesignerTabs((prev) => prev.filter((t) => t.key !== designerTab.key));
-              setActiveKey('objects');
-            }}
-          />
-        </div>
-      ),
-      closable: true,
-    })),
-    // 视图定义 Tab
-    ...openedViewDefTabs.map((viewDefTab) => ({
-      key: viewDefTab.key,
-      label: (
-        <span
-          onContextMenu={(e) => handleTabContextMenu(e, viewDefTab.key)}
-          style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-        >
-          <EyeOutlined style={{ marginRight: 4 }} />
-          {viewDefTab.title}
-        </span>
-      ),
-      children: (
-        <div style={{ height: '100%' }}>
-          <ViewDefinition
-            connectionId={viewDefTab.connectionId}
-            viewName={viewDefTab.viewName}
-            database={viewDefTab.database}
-          />
-        </div>
-      ),
-      closable: true,
-    })),
+    ...dynamicTabItems,
   ];
 
   return (

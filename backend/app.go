@@ -1139,6 +1139,27 @@ func (a *App) GetTableDDL(connectionID string, tableName string, database *strin
 	return result.DDLs, nil
 }
 
+// GetDatabaseDDL 获取建库语句
+func (a *App) GetDatabaseDDL(connectionID string, database string) (string, error) {
+	req := api.GetDatabaseDDLRequest{
+		ConnectionID: connectionID,
+		Database:     database,
+	}
+
+	respBytes, err := callHandler(a.handler.GetDatabaseDDL, req)
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		DDL string `json:"ddl"`
+	}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return "", err
+	}
+	return result.DDL, nil
+}
+
 // GetTriggers 获取触发器列表
 func (a *App) GetTriggers(connectionID string, database *string) ([]map[string]interface{}, error) {
 	req := api.GetTriggersRequest{

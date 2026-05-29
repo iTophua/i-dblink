@@ -7,7 +7,7 @@ import React, {
   ChangeEvent,
   MouseEvent,
 } from 'react';
-import { Tree, Spin, Dropdown, Badge, Modal, App, Tooltip, Descriptions } from 'antd';
+import { Tree, Spin, Dropdown, Badge, Modal, App, Tooltip, Descriptions, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -44,6 +44,7 @@ import { SchemaCompareDialog } from '../SchemaCompareDialog';
 import { CreateDatabaseDialog } from './CreateDatabaseDialog';
 import { api } from '../../api';
 import { TableStructure } from '../TableStructure';
+import { DDLViewer } from '../DDLViewer';
 
 const isBaseTable = (tableType: string): boolean => {
   const normalizedType = (tableType || '').toUpperCase().trim();
@@ -109,7 +110,7 @@ const QuickActionButton: React.FC<QuickActionButtonProps> = ({
           height: 18,
           borderRadius: 4,
           cursor: 'pointer',
-          fontSize: 11,
+          fontSize: 12,
           background: 'var(--background-hover)',
           color: 'var(--text-secondary)',
           transition: 'all 0.2s ease',
@@ -189,10 +190,10 @@ const TableNode = React.memo<TableNodeProps>(
           }}
           data-testid={`table-node-${table.table_name}`}
         >
-          <TableOutlined style={{ color: 'var(--color-success)', fontSize: 11 }} />
-          <span style={{ fontSize: 12 }}>{table.table_name}</span>
+          <TableOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
+          <span style={{ fontSize: 13 }}>{table.table_name}</span>
           {table.row_count != null && (
-            <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 4 }}>
               ({formatRowCount(table.row_count)})
             </span>
           )}
@@ -281,8 +282,8 @@ const ViewNode = React.memo<ViewNodeProps>(
           }}
           data-testid={`view-node-${view.table_name}`}
         >
-          <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 11 }} />
-          <span style={{ fontSize: 12 }}>{view.table_name}</span>
+          <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
+          <span style={{ fontSize: 13 }}>{view.table_name}</span>
           {view.row_count != null && (
             <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
               (
@@ -377,12 +378,12 @@ type ConnectionTreeProps = {
   onCreateConnection?: () => void;
 };
 
-function getDbIcon(dbType: string) {
-  return <DatabaseIcon type={dbType} size={16} />;
+function getDbIcon(dbType: string, connected = true) {
+  return <DatabaseIcon type={dbType} size={16} grayscale={!connected} />;
 }
 
-function getConnIcon(dbType: string) {
-  return <DatabaseIcon type={dbType} size={16} />;
+function getConnIcon(dbType: string, connected = true) {
+  return <DatabaseIcon type={dbType} size={16} grayscale={!connected} />;
 }
 
 export function EnhancedConnectionTree({
@@ -425,6 +426,7 @@ export function EnhancedConnectionTree({
 }: ConnectionTreeProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const { Text } = Typography;
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
@@ -929,7 +931,7 @@ export function EnhancedConnectionTree({
         { key: 'import-csv', label: t('common.importDataMenu') },
         { key: 'export-csv', label: t('common.exportCsvMenu'), disabled: true },
         { type: 'divider' },
-        { key: 'table-properties', label: t('common.tableProperties') },
+        { key: 'table-properties', label: t('common.mainLayout.tableProperties') },
       ],
       onClick: async ({ key }) => {
         if (key === 'table-properties') {
@@ -1337,7 +1339,7 @@ export function EnhancedConnectionTree({
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <TableOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
+            <TableOutlined style={{ color: 'var(--color-success)', fontSize: 13 }} />
             <span>{t('common.tables', { count: tableItems.length })}</span>
           </span>
         ),
@@ -1405,7 +1407,7 @@ export function EnhancedConnectionTree({
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-            <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
+            <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 13 }} />
             <span>{t('common.views', { count: viewItems.length })}</span>
           </span>
         ),
@@ -1508,9 +1510,9 @@ export function EnhancedConnectionTree({
                         onClick={() => onOpenRoutine?.(connId, db.database, proc, 'procedure')}
                       >
                         <ThunderboltOutlined
-                          style={{ color: 'var(--color-warning)', fontSize: 11 }}
+                          style={{ color: 'var(--color-warning)', fontSize: 12 }}
                         />
-                        <span style={{ fontSize: 12 }}>{proc}</span>
+                        <span style={{ fontSize: 13 }}>{proc}</span>
                       </span>
                     </Dropdown>
                   ),
@@ -1575,8 +1577,8 @@ export function EnhancedConnectionTree({
                         style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
                         onClick={() => onOpenRoutine?.(connId, db.database, func, 'function')}
                       >
-                        <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 12 }} />
-                        <span style={{ fontSize: 12 }}>{func}</span>
+                        <FunctionOutlined style={{ color: 'var(--db-color-dameng)', fontSize: 13 }} />
+                        <span style={{ fontSize: 13 }}>{func}</span>
                       </span>
                     </Dropdown>
                   ),
@@ -1646,8 +1648,8 @@ export function EnhancedConnectionTree({
                           onOpenTrigger?.(connId, db.database, trigger.name);
                         }}
                       >
-                        <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 11 }} />
-                        <span style={{ fontSize: 12 }}>{trigger.name}</span>
+                        <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
+                        <span style={{ fontSize: 13 }}>{trigger.name}</span>
                       </span>
                     </Dropdown>
                   ),
@@ -1726,7 +1728,7 @@ export function EnhancedConnectionTree({
                             : db.loaded
                               ? 'var(--color-success)'
                               : undefined,
-                          fontWeight: db.loaded ? 500 : undefined,
+                          fontWeight: db.loaded ? 600 : undefined,
                           userSelect: 'none',
                         }}
                       >
@@ -1789,11 +1791,11 @@ export function EnhancedConnectionTree({
         >
           <Dropdown menu={getConnectionMenu(conn)} trigger={['contextMenu']}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-              {getConnIcon(conn.db_type)}
+              {getConnIcon(conn.db_type, conn.status === 'connected')}
               <span
                 style={{
                   color: conn.status === 'connected' ? 'var(--color-success)' : undefined,
-                  fontWeight: conn.status === 'connected' ? 500 : undefined,
+                  fontWeight: conn.status === 'connected' ? 700 : undefined,
                   userSelect: 'none',
                 }}
               >
@@ -1811,31 +1813,34 @@ export function EnhancedConnectionTree({
                     }}
                   />
                 )}
-                {conn.status === 'connected' ? (
-                  <Tooltip title={t('common.mainLayout.connected')}>
-                    <span
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: 'var(--color-success)',
-                        animation: 'pulse 2s infinite',
-                      }}
-                    />
-                  </Tooltip>
-                ) : (
-                  <Tooltip title={t('common.mainLayout.disconnected')}>
-                    <span
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: 'var(--text-disabled)',
-                        opacity: 0.5,
-                      }}
-                    />
-                  </Tooltip>
-                )}
+                 {conn.status === 'connected' ? (
+                   <Tooltip title={t('common.mainLayout.connected')}>
+                     <span
+                       style={{
+                         width: 8,
+                         height: 8,
+                         borderRadius: '50%',
+                         background: '#52c41a',
+                         display: 'inline-block',
+                         marginLeft: 6,
+                         boxShadow: '0 0 4px rgba(82,196,26,0.5)',
+                       }}
+                     />
+                   </Tooltip>
+                 ) : (
+                   <Tooltip title={t('common.mainLayout.disconnected')}>
+                     <span
+                       style={{
+                         width: 8,
+                         height: 8,
+                         borderRadius: '50%',
+                         background: '#bbb',
+                         display: 'inline-block',
+                         marginLeft: 6,
+                       }}
+                     />
+                   </Tooltip>
+                 )}
                 {conn.status === 'loading' && (
                   <Tooltip title={t('common.mainLayout.connecting')}>
                     <span
@@ -2266,7 +2271,7 @@ export function EnhancedConnectionTree({
                   transition: 'background 0.2s',
                 }}
               >
-                {getDbIcon(conn.db_type)}
+                {getDbIcon(conn.db_type, conn.status === 'connected')}
               </div>
             </Dropdown>
           ))
@@ -2395,7 +2400,7 @@ export function EnhancedConnectionTree({
             style={{
               background: 'transparent',
               padding: '0 4px 8px',
-              fontSize: 12,
+              fontSize: 13,
               userSelect: 'none',
               height: '100%',
             }}
@@ -2412,7 +2417,7 @@ export function EnhancedConnectionTree({
           propertiesType === 'connection'
             ? `${t('common.connectionProperties')}: ${propertiesTarget?.name}`
             : propertiesType === 'table'
-              ? `${t('common.tableProperties')}: ${propertiesTarget?.name}`
+              ? `${t('common.mainLayout.tableProperties')}: ${propertiesTarget?.name}`
               : propertiesType === 'view'
                 ? `${t('common.viewProperties')}: ${propertiesTarget?.name}`
                 : propertiesType === 'procedure'
@@ -2482,19 +2487,37 @@ export function EnhancedConnectionTree({
             <Descriptions.Item label={t('common.table')}>{propertiesTarget.data.table}</Descriptions.Item>
           </Descriptions>
         ) : (
-          <pre
-            style={{
-              background: 'var(--background-card)',
-              padding: 16,
-              borderRadius: 8,
-              overflow: 'auto',
-              maxHeight: '60vh',
-              fontSize: 12,
-              border: '1px solid var(--border-color)',
-            }}
-          >
-            {propertiesContent || t('common.noData')}
-          </pre>
+          <div>
+            <Descriptions bordered column={1} size="small" style={{ marginBottom: 16 }}>
+              <Descriptions.Item label={t('common.name')}>
+                {propertiesTarget?.name || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label={t('common.type')}>
+                {propertiesType === 'view'
+                  ? t('common.view')
+                  : propertiesType === 'procedure'
+                    ? t('common.procedure')
+                    : propertiesType === 'function'
+                      ? t('common.function')
+                      : '-'}
+              </Descriptions.Item>
+              {propertiesTarget?.database && (
+                <Descriptions.Item label={t('common.database')}>
+                  {propertiesTarget.database}
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+            {propertiesContent ? (
+              <div>
+                <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
+                  {t('common.ddl')}
+                </Text>
+                <DDLViewer ddl={propertiesContent} maxHeight="60vh" />
+              </div>
+            ) : (
+              <Text type="secondary">{t('common.noData')}</Text>
+            )}
+          </div>
         )}
       </Modal>
 

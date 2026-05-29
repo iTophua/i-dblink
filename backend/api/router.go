@@ -66,6 +66,7 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 
 	// DDL 操作
 	mux.HandleFunc("POST /table-ddl", recoverMiddleware(h.GetTableDDL))
+	mux.HandleFunc("POST /database-ddl", recoverMiddleware(h.GetDatabaseDDL))
 	mux.HandleFunc("POST /execute-ddl", recoverMiddleware(h.ExecuteDDL))
 	mux.HandleFunc("POST /truncate-table", recoverMiddleware(h.TruncateTable))
 	mux.HandleFunc("POST /drop-table", recoverMiddleware(h.DropTable))

@@ -24,7 +24,7 @@ import { ResultGridContextMenu } from './ResultGridContextMenu';
 
 // ── Types ──
 interface ResultGridProps {
-  queryResult: QueryResult & { executionTime?: number; totalTime?: number };
+  queryResult: QueryResult & { executionTime?: number; totalTime?: number; executedSql?: string };
   executionTime?: number;
   isDark: boolean;
   connectionId?: string;
@@ -95,14 +95,22 @@ export function ResultGrid({
   const { message } = App.useApp();
   const { getColumns, executeQuery } = useDatabase();
 
-  const tableName = useMemo(() => (originalSql ? extractTable(originalSql) : null), [originalSql]);
+  const sqlForExtract = queryResult.executedSql || originalSql || '';
+  const tableName = useMemo(() => (sqlForExtract ? extractTable(sqlForExtract) : null), [sqlForExtract]);
   const [tableColumns, setTableColumns] = useState<ColumnInfo[]>([]);
-  const primaryKeyCol = useMemo(() => tableColumns.find((c) => c.column_key === 'PRI') || null, [tableColumns]);
+  const primaryKeyCol = useMemo(() => {
+    const pk = tableColumns.find((c) => c.column_key === 'PRI') || null;
+    return pk;
+  }, [tableColumns]);
   const isEditable = !!(tableName && primaryKeyCol && connectionId);
 
   useEffect(() => {
     if (!connectionId || !tableName) { setTableColumns([]); return; }
-    getColumns(connectionId, tableName, database).then(setTableColumns).catch(() => setTableColumns([]));
+    getColumns(connectionId, tableName, database).then((cols) => {
+      setTableColumns(cols);
+    }).catch(() => {
+      setTableColumns([]);
+    });
   }, [connectionId, tableName, database, getColumns]);
 
   // 重新执行 SQL 时清除编辑状态
@@ -359,8 +367,16 @@ export function ResultGrid({
         {queryResult.totalTime != null && queryResult.totalTime > 0 && queryResult.totalTime !== executionTime && (
           <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{t('common.totalDuration')} {queryResult.totalTime}ms</span>
         )}
-        {isEditable && <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>{t('common.editable')}</Tag>}
-        {tableName && !isEditable && <Tag color="default" style={{ margin: 0, fontSize: 11 }}><ExclamationCircleOutlined /> {t('common.readOnly')}</Tag>}
+        {isEditable && (
+          <Tag color="blue" style={{ margin: 0, fontSize: 11, lineHeight: '20px' }}>
+            {t('common.editable')}
+          </Tag>
+        )}
+        {tableName && !isEditable && (
+          <Tag color="default" style={{ margin: 0, fontSize: 11, lineHeight: '20px' }}>
+            <ExclamationCircleOutlined /> {t('common.readOnly')}
+          </Tag>
+        )}
         <div style={{ flex: 1 }} />
         <Dropdown menu={{ items: [
           { key: 'csv', label: t('common.exportedCsv'), onClick: () => handleExport('csv') },
@@ -401,7 +417,7 @@ export function ResultGrid({
       </div>
 
       {/* Grid */}
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <GlideDataTable
           columns={glideColumns}
           rows={glideRows}

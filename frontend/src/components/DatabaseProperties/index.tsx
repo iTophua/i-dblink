@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Table, Spin, Typography, Tag, Descriptions } from 'antd';
+import { Card, Spin, Typography, Descriptions } from 'antd';
 import {
   DatabaseOutlined,
   TableOutlined,
@@ -8,12 +8,11 @@ import {
   BarChartOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
-import type { TableInfo } from '../../types/api';
+import { DDLViewer } from '../DDLViewer';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface DatabasePropertiesProps {
   connectionId: string;
@@ -31,11 +30,10 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<StatItem[]>([]);
-  const [tableStats, setTableStats] = useState<{ tables: TableInfo[]; views: TableInfo[] }>({
-    tables: [],
-    views: [],
-  });
   const [serverInfo, setServerInfo] = useState<Record<string, unknown> | null>(null);
+  const [ddl, setDdl] = useState<string>('');
+  const [ddlLoading, setDdlLoading] = useState(false);
+  const [ddlError, setDdlError] = useState<string>('');
 
   useEffect(() => {
     const loadProperties = async () => {
@@ -46,7 +44,6 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
           api.getServerInfo(connectionId, databaseName),
         ]);
 
-        setTableStats(categorized);
         setServerInfo(server);
 
         const tables = categorized.tables || [];
@@ -136,45 +133,21 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
     };
 
     loadProperties();
-  }, [connectionId, databaseName]);
 
-  const sizeColumns: ColumnsType<TableInfo> = [
-    {
-      title: t('common.tableName'),
-      dataIndex: 'table_name',
-      width: 200,
-    },
-    {
-      title: t('common.tableList.rowCount'),
-      dataIndex: 'row_count',
-      width: 120,
-      render: (val: number) => (val ? val.toLocaleString() : '-'),
-    },
-    {
-      title: t('common.dataSize'),
-      dataIndex: 'data_size',
-      width: 120,
-      render: (val: string) => (val ? formatBytes(parseFloat(val)) : '-'),
-    },
-    {
-      title: t('common.indexSize'),
-      dataIndex: 'index_size',
-      width: 120,
-      render: (val: string) => (val ? formatBytes(parseFloat(val)) : '-'),
-    },
-    {
-      title: t('common.engine'),
-      dataIndex: 'engine',
-      width: 100,
-      render: (val: string) => (val ? <Tag color="blue">{val}</Tag> : '-'),
-    },
-    {
-      title: t('common.comment'),
-      dataIndex: 'comment',
-      ellipsis: true,
-      render: (val: string) => val || '-',
-    },
-  ];
+    const loadDdl = async () => {
+      setDdlLoading(true);
+      setDdlError('');
+      try {
+        const result = await api.getDatabaseDDL(connectionId, databaseName);
+        setDdl(result);
+      } catch (err: any) {
+        setDdlError(err.message || String(err));
+      } finally {
+        setDdlLoading(false);
+      }
+    };
+    loadDdl();
+  }, [connectionId, databaseName]);
 
   if (loading) {
     return (
@@ -192,12 +165,7 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
   }
 
   return (
-    <div style={{ padding: 24, overflow: 'auto', height: '100%' }}>
-      <Title level={4} style={{ marginBottom: 24 }}>
-        <DatabaseOutlined style={{ marginRight: 8 }} />
-        {t('common.databaseProperties')}: {databaseName}
-      </Title>
-
+    <div>
       <Card title={t('common.basicInfo')} style={{ marginBottom: 16 }}>
         <Descriptions bordered column={2} size="small">
           {stats.map((item) => (
@@ -216,40 +184,19 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
         </Descriptions>
       </Card>
 
-      <Card title={t('common.tableStatistics')} style={{ marginBottom: 16 }}>
-        <Table
-          rowKey="table_name"
-          columns={sizeColumns}
-          dataSource={tableStats.tables}
-          size="small"
-          pagination={{ pageSize: 20 }}
-          scroll={{ y: 400 }}
-        />
+      <Card title={t('common.ddl')} size="small">
+        {ddlLoading ? (
+          <div style={{ textAlign: 'center', padding: 24 }}>
+            <Spin />
+          </div>
+        ) : ddlError ? (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {ddlError}
+          </Text>
+        ) : (
+          <DDLViewer ddl={ddl} maxHeight={200} />
+        )}
       </Card>
-
-      {tableStats.views.length > 0 && (
-        <Card title={`${t('common.viewStatistics')} (${tableStats.views.length})`}>
-          <Table
-            rowKey="table_name"
-            columns={[
-              {
-                title: t('common.viewDefinition.viewName'),
-                dataIndex: 'table_name',
-                width: 200,
-              },
-              {
-                title: t('common.comment'),
-                dataIndex: 'comment',
-                ellipsis: true,
-                render: (val: string) => val || '-',
-              },
-            ]}
-            dataSource={tableStats.views}
-            size="small"
-            pagination={false}
-          />
-        </Card>
-      )}
     </div>
   );
 }

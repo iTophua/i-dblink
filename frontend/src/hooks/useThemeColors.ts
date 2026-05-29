@@ -55,13 +55,13 @@ export interface ThemeColors {
 
 export function useThemeColors(): ThemeColors {
   const { settings } = useSettingsStore();
-  const { themeMode } = settings;
+  const { themeMode, themePreset } = settings;
 
   const effectiveMode = themeMode === 'system'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : themeMode;
 
-  const config = getThemeConfig(effectiveMode);
+  const config = getThemeConfig(effectiveMode, themePreset);
   const isDark = effectiveMode === 'dark';
   const n = config.neutralColors;
   const c = config.colors;

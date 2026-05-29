@@ -26,16 +26,16 @@
   --db-color-highgo: #1e90ff;
   --db-color-vastbase: #008000;
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-tertiary: #94a3b8;
-  --text-disabled: #cbd5e1;
+  --text-primary: #111111;
+  --text-secondary: #3F3F46;
+  --text-tertiary: #6B7280;
+  --text-disabled: #C7C7CC;
 
   --border-color: #e2e8f0;
   --border-color-light: #f1f5f9;
   --border-color-dark: #cbd5e1;
 
-  --background: #F9FAFB;
+  --background: #FFFFFF;
   --background-card: #FFFFFF;
   --background-toolbar: #FFFFFF;
   --background-hover: #F1F5F9;
@@ -50,15 +50,27 @@
   --scrollbar-track: rgba(0, 0, 0, 0.03);
 
   --font-family:
-    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+    'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-family-code: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
+  --font-family-numeric:
+    'Inter', 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+  --font-feature-settings: 'cv01', 'cv05', 'ss01', 'ss03', 'kern';
+  --font-feature-settings-numeric: 'tnum', 'cv01', 'cv05', 'ss01';
+  --font-feature-settings-code: 'calt', 'liga', 'cv01', 'cv05', 'ss01', 'ss03', 'zero';
   --font-size-base: 14px;
   --font-size-sm: 12px;
+  --font-size-xs: 11px;
   --font-size-lg: 16px;
   --font-size-xl: 20px;
+  --font-size-display: 24px;
   --line-height-base: 1.57;
   --line-height-heading: 1.4;
+  --line-height-compact: 1.3;
+  --letter-spacing-heading: -0.02em;
+  --letter-spacing-body: normal;
+  --letter-spacing-sm: 0.01em;
+  --letter-spacing-display: -0.03em;
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
@@ -108,6 +120,8 @@ body {
   font-size: var(--font-size-base);
   line-height: var(--line-height-base);
   font-weight: var(--font-weight-normal);
+  font-feature-settings: var(--font-feature-settings);
+  letter-spacing: var(--letter-spacing-body);
   color: var(--text-primary);
   background-color: var(--background);
   margin: 0;
@@ -158,25 +172,6 @@ button:disabled {
   opacity: 0.6;
 }
 
-/* ==================== 滚动条样式 ==================== */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--background-toolbar);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-color-dark);
-  border-radius: var(--radius-md);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-}
-
 /* ==================== 文本样式 ==================== */
 h1,
 h2,
@@ -223,6 +218,7 @@ strong {
 code {
   font-family: var(--font-family-code);
   font-size: 0.9em;
+  font-feature-settings: var(--font-feature-settings-code);
   padding: 2px 6px;
   background-color: var(--background-hover);
   border-radius: var(--radius-sm);
@@ -232,6 +228,7 @@ code {
 pre {
   font-family: var(--font-family-code);
   font-size: var(--font-size-sm);
+  font-feature-settings: var(--font-feature-settings-code);
   background-color: var(--background-toolbar);
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
@@ -531,17 +528,6 @@ tbody tr:hover {
   flex: 1;
 }
 
-/* ==================== 焦点样式 ==================== */
-:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-::selection {
-  background-color: var(--color-primary);
-  color: #fff;
-}
-
 /* ==================== 打印样式 ==================== */
 @media print {
   body {
@@ -737,10 +723,12 @@ tbody tr:hover {
   display: flex !important;
   flex-direction: column !important;
   height: 100% !important;
+  width: 100% !important;
 }
 
 .ant-tabs-content {
   height: 100% !important;
+  width: 100% !important;
   flex: 1 !important;
   min-height: 0 !important;
   display: flex !important;
@@ -749,6 +737,7 @@ tbody tr:hover {
 
 .ant-tabs-tabpane {
   height: 100% !important;
+  width: 100% !important;
   flex: 1 !important;
   min-height: 0 !important;
   flex-direction: column !important;
@@ -756,6 +745,7 @@ tbody tr:hover {
 
 .ant-tabs-tabpane-active {
   height: 100% !important;
+  width: 100% !important;
   flex: 1 !important;
   min-height: 0 !important;
   display: flex !important;

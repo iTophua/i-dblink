@@ -630,7 +630,21 @@
     "tableList": {
       "title": "Table List",
       "searchPlaceholder": "Search tables...",
-      "rowCount": "Row count"
+      "rowCount": "Row count",
+      "contextMenu": {
+        "openTable": "Open Table",
+        "designTable": "Design Table",
+        "copyTableName": "Copy Table Name",
+        "copyStructure": "Copy Table → Structure Only",
+        "copyStructureAndData": "Copy Table → Structure and Data",
+        "truncateTable": "Truncate Table",
+        "dropTable": "Drop Table",
+        "dumpSql": "Dump SQL",
+        "newTable": "New Table",
+        "refresh": "Refresh",
+        "importWizard": "Import Wizard",
+        "exportWizard": "Export Wizard"
+      }
     },
     "tableStructure": {
       "title": "Table Structure",
@@ -948,6 +962,7 @@
     "addColumn": "Add Column",
     "insertColumnAbove": "Insert Column Above",
     "insertColumnBelow": "Insert Column Below",
+    "deleteColumn": "Delete Column",
     "newColumnName": "New Column Name",
     "newColumnType": "Column Type",
     "newColumnDefault": "Default Value",
@@ -1066,6 +1081,11 @@
     "functionProperties": "Function Properties",
     "triggerProperties": "Trigger Properties",
     "groupProperties": "Group Properties",
+    "color": "Color",
+    "icon": "Icon",
+    "connectionCount": "Connections",
+    "event": "Event",
+    "timing": "Timing",
     "copyConnectionConfig": "Copy Connection Config",
     "moveToGroup": "Move to Group",
     "newGroup": "New Group",
@@ -1446,6 +1466,8 @@
     "exportWizard": "Export Wizard",
     "switchToGridView": "Switch to grid view",
     "switchToListView": "Switch to list view",
+    "showDetail": "Show Details",
+    "hideDetail": "Hide Details",
     "willCopyTable": "Will copy table \"{{tableName}}\"",
     "confirmDropTable": "Are you sure you want to drop table \"{{tableName}}\"? This action cannot be undone.",
     "failedToRefreshTableList": "Failed to refresh table list",

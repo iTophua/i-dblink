@@ -529,7 +529,7 @@ export const useDatabase = () => {
         return cached;
       }
 
-      const TIMEOUT_MS = 15000; // 15秒超时
+      const TIMEOUT_MS = 15000;
 
       const promise = (async () => {
         const result = await Promise.race([
@@ -538,12 +538,11 @@ export const useDatabase = () => {
             setTimeout(() => reject(new Error('获取表结构超时 (15s)，请检查 Go sidecar 是否运行或网络连接')), TIMEOUT_MS)
           ),
         ]);
-        // 缓存实际结果，不缓存失败的 Promise
-        structureCache.set(cacheKey, result);
         return result;
       })();
 
-      // 如果失败，不缓存，下次会重新请求
+      structureCache.set(cacheKey, promise);
+
       promise.catch(() => {
         structureCache.delete(cacheKey);
       });

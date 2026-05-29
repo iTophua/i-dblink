@@ -22,6 +22,7 @@ import {
   GetColumns,
   GetConnectionHistory,
   GetConnections,
+  GetDatabaseDDL,
   GetDatabases,
   GetEvents,
   GetForeignKeys,
@@ -445,6 +446,10 @@ export const api = {
     database?: string
   ): Promise<string[]> {
     return await GetTableDDL(connectionId, tableName, database ?? null);
+  },
+
+  async getDatabaseDDL(connectionId: string, database: string): Promise<string> {
+    return await GetDatabaseDDL(connectionId, database);
   },
 
   async getTriggers(
