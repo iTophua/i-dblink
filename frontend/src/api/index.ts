@@ -58,6 +58,13 @@ import {
   TestConnection,
   TruncateTable,
   UpdateConnectionPassword,
+  SaveFavorite,
+  GetFavorites,
+  DeleteFavorite,
+  ExportConnections,
+  ExportConnectionsByID,
+  ImportConnections,
+  ImportNavicatConnections,
 } from '../../wailsjs/go/backend/App';
 import { backend } from '../../wailsjs/go/models';
 const ConnectionInput = backend.ConnectionInput;
@@ -210,6 +217,16 @@ export const api = {
 
   async deleteConnection(id: string): Promise<void> {
     await DeleteConnection(id);
+  },
+
+  async reorderConnections(orders: Record<string, number>): Promise<void> {
+    const { ReorderConnections } = await import('../../wailsjs/go/backend/App');
+    await ReorderConnections(orders);
+  },
+
+  async batchDeleteConnections(ids: string[]): Promise<void> {
+    const { BatchDeleteConnections } = await import('../../wailsjs/go/backend/App');
+    await BatchDeleteConnections(ids);
   },
 
   async getGroups(): Promise<GroupOutput[]> {
@@ -746,10 +763,18 @@ export const api = {
   },
 
   async exportConnections(): Promise<string> {
-    return await WailsExportConnections();
+    return await ExportConnections();
+  },
+
+  async exportConnectionsByIds(ids: string[]): Promise<string> {
+    return await ExportConnectionsByID(ids);
   },
 
   async importConnections(jsonStr: string, overwrite: boolean): Promise<any> {
-    return await WailsImportConnections(jsonStr, overwrite);
+    return await ImportConnections(jsonStr, overwrite);
+  },
+
+  async importNavicatConnections(ncxContent: string, overwrite: boolean): Promise<number> {
+    return await ImportNavicatConnections(ncxContent, overwrite);
   },
 };

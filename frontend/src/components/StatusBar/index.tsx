@@ -125,7 +125,7 @@ export function StatusBar({
           </Tag>
         )}
         {isConnected && dbTypeLabel && (
-          <Tag color="blue" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}>
+          <Tag style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px', padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
             {dbTypeLabel}
           </Tag>
         )}

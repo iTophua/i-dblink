@@ -5,6 +5,7 @@ import Editor from '@monaco-editor/react';
 import type { ColumnsType } from 'antd/es/table';
 import type { ColumnInfo } from '../../types/api';
 import { useTranslation } from 'react-i18next';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { api } from '../../api';
 
 const { Text } = Typography;
@@ -17,6 +18,7 @@ interface ViewDefinitionProps {
 
 export function ViewDefinition({ connectionId, viewName, database }: ViewDefinitionProps) {
   const { t } = useTranslation();
+  const tc = useThemeColors();
   const [activeTab, setActiveTab] = useState('ddl');
   const [ddl, setDdl] = useState<string>('');
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
@@ -94,8 +96,8 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
       <div
         style={{
           padding: '12px 16px',
-          borderBottom: '1px solid #f0f0f0',
-          background: '#fff',
+          borderBottom: `1px solid ${tc.borderLight}`,
+          background: tc.backgroundCard,
         }}
       >
         <Text strong style={{ fontSize: 14 }}>

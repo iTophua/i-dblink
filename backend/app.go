@@ -462,6 +462,21 @@ func (a *App) DeleteConnection(id string) error {
 	return a.storage.DeleteConnection(id)
 }
 
+// BatchDeleteConnections 批量删除连接
+func (a *App) BatchDeleteConnections(ids []string) error {
+	for _, id := range ids {
+		if err := a.storage.DeleteConnection(id); err != nil {
+			return fmt.Errorf("failed to delete connection %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+// ReorderConnections 重新排列连接顺序
+func (a *App) ReorderConnections(orders map[string]int) error {
+	return a.storage.UpdateSortOrders(orders)
+}
+
 // UpdateConnectionPassword 更新连接密码
 func (a *App) UpdateConnectionPassword(connectionID string, password string) error {
 	return a.storage.UpdateConnectionPassword(connectionID, password)
@@ -1663,10 +1678,41 @@ func (a *App) ExportConnections() (string, error) {
 		return "", fmt.Errorf("failed to get groups: %w", err)
 	}
 
+	return marshalExportData(conns, groups)
+}
+
+// ExportConnectionsByID 按连接 ID 导出指定连接
+func (a *App) ExportConnectionsByID(ids []string) (string, error) {
+	allConns, err := a.storage.GetConnections()
+	if err != nil {
+		return "", fmt.Errorf("failed to get connections: %w", err)
+	}
+
+	idSet := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
+
+	conns := make([]*localdb.DbConnection, 0, len(ids))
+	for _, c := range allConns {
+		if idSet[c.ID] {
+			conns = append(conns, c)
+		}
+	}
+
+	groups, err := a.storage.GetGroups()
+	if err != nil {
+		return "", fmt.Errorf("failed to get groups: %w", err)
+	}
+
+	return marshalExportData(conns, groups)
+}
+
+func marshalExportData(conns []*localdb.DbConnection, groups []*localdb.ConnectionGroup) (string, error) {
 	type ExportData struct {
-		Version     string                   `json:"version"`
-		ExportedAt  string                   `json:"exported_at"`
-		Connections []*localdb.DbConnection  `json:"connections"`
+		Version     string                     `json:"version"`
+		ExportedAt  string                     `json:"exported_at"`
+		Connections []*localdb.DbConnection    `json:"connections"`
 		Groups      []*localdb.ConnectionGroup `json:"groups"`
 	}
 
@@ -1721,6 +1767,36 @@ func (a *App) ImportConnections(jsonStr string, overwrite bool) (int, int, error
 	}
 
 	return importedConns, importedGroups, nil
+}
+
+// ImportNavicatConnections 从 Navicat NCX 文件导入连接
+func (a *App) ImportNavicatConnections(ncxContent string, overwrite bool) (int, error) {
+	ncx, err := parseNCX(ncxContent)
+	if err != nil {
+		return 0, err
+	}
+
+	imported := 0
+	for _, nc := range ncx.Connections {
+		conn, password, err := ncxToDbConnection(nc)
+		if err != nil {
+			continue
+		}
+
+		if !overwrite {
+			existing, _, err := a.storage.GetConnectionWithPassword(conn.ID)
+			if err == nil && existing != nil {
+				continue
+			}
+		}
+
+		if err := a.storage.SaveConnection(conn, password); err != nil {
+			continue
+		}
+		imported++
+	}
+
+	return imported, nil
 }
 
 // ==================== 应用控制 ====================

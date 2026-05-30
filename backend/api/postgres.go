@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 
 	"idblink/backend/db"
@@ -10,10 +11,10 @@ import (
 )
 
 func postgresGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, error) {
-	query := `SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres', 'template0', 'template1') ORDER BY datname`
+	query := `SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname`
 	rows, err := dbConn.QueryContext(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("postgresGetDatabases query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -21,11 +22,17 @@ func postgresGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, er
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("postgresGetDatabases scan failed: %w", err)
 		}
 		result = append(result, name)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgresGetDatabases rows error: %w", err)
+	}
+	if result == nil {
+		result = []string{}
+	}
+	return result, nil
 }
 
 func postgresGetTables(ctx context.Context, dbConn db.Executor, database *string) ([]models.TableInfo, error) {
@@ -33,6 +40,7 @@ func postgresGetTables(ctx context.Context, dbConn db.Executor, database *string
 	query := `
 		SELECT c.relname AS table_name,
 			CASE c.relkind WHEN 'r' THEN 'BASE TABLE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'OTHER' END AS table_type,
+			n.nspname AS schema_name,
 			NULL::bigint AS row_count,
 			COALESCE(d.description, '') AS comment,
 			NULL AS engine, NULL AS data_size, NULL AS index_size,
@@ -43,7 +51,7 @@ func postgresGetTables(ctx context.Context, dbConn db.Executor, database *string
 		WHERE c.relkind IN ('r','v','m','f')
 			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 			AND n.nspname NOT LIKE 'pg_toast%%'
-		ORDER BY c.relname
+		ORDER BY n.nspname, c.relname
 	`
 
 	rows, err := dbConn.QueryContext(ctx, query)
@@ -57,7 +65,7 @@ func postgresGetTables(ctx context.Context, dbConn db.Executor, database *string
 		var t models.TableInfo
 		var comment string
 		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7 interface{}
-		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7); err != nil {
+		if err := rows.Scan(&t.TableName, &t.TableType, &t.Schema, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7); err != nil {
 			return nil, err
 		}
 		t.Comment = strPtr(comment)
@@ -78,6 +86,7 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, datab
 		query = `
 			SELECT c.relname AS table_name,
 				CASE c.relkind WHEN 'r' THEN 'BASE TABLE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'OTHER' END AS table_type,
+				n.nspname AS schema_name,
 				NULL::bigint AS row_count,
 				COALESCE(d.description, '') AS comment,
 				NULL AS engine, NULL AS data_size, NULL AS index_size,
@@ -89,13 +98,14 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, datab
 				AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 				AND n.nspname NOT LIKE 'pg_toast%%'
 				AND c.relname LIKE $1
-			ORDER BY c.relname
+			ORDER BY n.nspname, c.relname
 		`
 		args = append(args, "%"+*search+"%")
 	} else {
 		query = `
 			SELECT c.relname AS table_name,
 				CASE c.relkind WHEN 'r' THEN 'BASE TABLE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'OTHER' END AS table_type,
+				n.nspname AS schema_name,
 				NULL::bigint AS row_count,
 				COALESCE(d.description, '') AS comment,
 				NULL AS engine, NULL AS data_size, NULL AS index_size,
@@ -106,7 +116,7 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, datab
 			WHERE c.relkind IN ('r','v','m','f')
 				AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 				AND n.nspname NOT LIKE 'pg_toast%%'
-			ORDER BY c.relname
+			ORDER BY n.nspname, c.relname
 		`
 	}
 
@@ -120,7 +130,7 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, datab
 		var t models.TableInfo
 		var comment string
 		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7 interface{}
-		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7); err != nil {
+		if err := rows.Scan(&t.TableName, &t.TableType, &t.Schema, &tmp1, &comment, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7); err != nil {
 			continue
 		}
 		t.Comment = strPtr(comment)
@@ -135,19 +145,23 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, datab
 }
 
 func postgresGetAllColumns(ctx context.Context, dbConn db.Executor, database *string) (models.AllColumnsResult, error) {
-	schema := "public"
-	if database != nil && *database != "" {
-		schema = *database
-	}
-
 	query := `
-		SELECT table_name, column_name, data_type, is_nullable,
-			column_default, '' as extra, '' as comment
-		FROM information_schema.columns
-		WHERE table_schema = $1
-		ORDER BY table_name, ordinal_position
+		SELECT n.nspname, c.relname, a.attname,
+			pg_catalog.format_type(a.atttypid, a.atttypmod),
+			CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END,
+			pg_catalog.pg_get_expr(d.adbin, d.adrelid),
+			'', ''
+		FROM pg_catalog.pg_attribute a
+		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+		WHERE a.attnum > 0 AND NOT a.attisdropped
+			AND c.relkind IN ('r', 'v', 'm')
+			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			AND n.nspname NOT LIKE 'pg_toast%%'
+		ORDER BY n.nspname, c.relname, a.attnum
 	`
-	rows, err := dbConn.QueryContext(ctx, query, schema)
+	rows, err := dbConn.QueryContext(ctx, query)
 	if err != nil {
 		return models.AllColumnsResult{}, err
 	}
@@ -156,13 +170,14 @@ func postgresGetAllColumns(ctx context.Context, dbConn db.Executor, database *st
 	result := models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}
 	for rows.Next() {
 		var c models.ColumnInfo
-		var tableName string
+		var schemaName, tableName string
 		var def sql.NullString
-		if err := rows.Scan(&tableName, &c.ColumnName, &c.DataType, &c.IsNullable, &def, &c.Extra, &c.Comment); err != nil {
+		if err := rows.Scan(&schemaName, &tableName, &c.ColumnName, &c.DataType, &c.IsNullable, &def, &c.Extra, &c.Comment); err != nil {
 			continue
 		}
 		c.ColumnDefault = nullStrEmpty(def)
-		result.Tables[tableName] = append(result.Tables[tableName], c)
+		key := schemaName + "." + tableName
+		result.Tables[key] = append(result.Tables[key], c)
 	}
 	return result, rows.Err()
 }

@@ -128,6 +128,11 @@ func (s *Storage) DeleteConnection(id string) error {
 	return s.connectionRepo.Delete(id)
 }
 
+// UpdateSortOrders 批量更新连接排序
+func (s *Storage) UpdateSortOrders(orders map[string]int) error {
+	return s.connectionRepo.UpdateSortOrders(orders)
+}
+
 // GetGroups 获取所有分组
 func (s *Storage) GetGroups() ([]*localdb.ConnectionGroup, error) {
 	return s.groupRepo.GetAll()

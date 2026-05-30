@@ -38,6 +38,7 @@ import {
   BugOutlined,
   DownloadOutlined,
   BookOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
@@ -376,6 +377,7 @@ export function SQLEditor({
   const [paramDialogOpen, setParamDialogOpen] = useState(false);
   const [paramDialogParams, setParamDialogParams] = useState<string[]>([]);
   const [pendingSql, setPendingSql] = useState<string>('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const editorRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const schemaRef = useRef<{
@@ -550,10 +552,116 @@ export function SQLEditor({
   // 响应式切换 Monaco Editor 主题
   useEffect(() => {
     const monaco = monacoRef.current;
-    if (monaco) {
-      monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
-    }
-  }, [tc.isDark]);
+    if (!monaco) return;
+
+    monaco.editor.defineTheme('custom-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '569CD6' },
+        { token: 'type', foreground: '4EC9B0' },
+        { token: 'string', foreground: 'CE9178' },
+        { token: 'comment', foreground: '6A9955' },
+        { token: 'number', foreground: 'B5CEA8' },
+        { token: 'operator', foreground: 'D4D4D4' },
+        { token: 'delimiter', foreground: 'D4D4D4' },
+        { token: 'variable', foreground: '9CDCFE' },
+        { token: 'function', foreground: 'DCDCAA' },
+        { token: 'predefined', foreground: '4EC9B0' },
+      ],
+      colors: {
+        'editor.background': tc.background,
+        'editor.foreground': tc.textPrimary,
+        'editorCursor.foreground': '#FFFFFF',
+        'editor.lineHighlightBackground': tc.backgroundToolbar,
+        'editor.selectionBackground': tc.backgroundActive,
+        'editor.inactiveSelectionBackground': tc.backgroundHover,
+        'editorLineNumber.foreground': tc.textTertiary,
+        'editorLineNumber.activeForeground': tc.primary,
+        'editor.findMatchBackground': tc.backgroundActive,
+        'editor.findMatchHighlightBackground': tc.backgroundHover,
+        'editorHoverWidget.background': tc.backgroundCard,
+        'editorHoverWidget.border': tc.border,
+        'editorSuggestWidget.background': tc.backgroundCard,
+        'editorSuggestWidget.border': tc.border,
+        'editorSuggestWidget.selectedBackground': tc.backgroundActive,
+        'editorSuggestWidget.foreground': tc.textPrimary,
+        'editorSuggestWidget.selectedForeground': tc.textPrimary,
+        'editorWidget.background': tc.backgroundCard,
+        'editorWidget.border': tc.border,
+        'editorWidget.resizeBorder': tc.border,
+        'editorWidget.shadow': '#000000',
+        'editorGroupHeader.tabsBackground': tc.backgroundToolbar,
+        'editorGroupHeader.noTabsBackground': tc.background,
+        'editorGroup.border': tc.border,
+        'editorGroup.dropBackground': tc.backgroundActive,
+        'editorGroupHeader.tabsBorder': tc.border,
+        'editorGroupHeader.noTabsBorder': tc.border,
+        'editorMarkerNavigation.background': tc.backgroundToolbar,
+        'editorMarkerNavigation.border': tc.border,
+        'editorOverviewRuler.background': tc.background,
+        'editorOverviewRuler.border': tc.border,
+        'editorIndentGuide.background': tc.border,
+        'editorIndentGuide.activeBackground': tc.textTertiary,
+        'editorWhitespace.foreground': tc.border,
+      },
+    });
+
+    monaco.editor.defineTheme('custom-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '0000FF' },
+        { token: 'type', foreground: '267F99' },
+        { token: 'string', foreground: 'A31515' },
+        { token: 'comment', foreground: '008000' },
+        { token: 'number', foreground: '098658' },
+        { token: 'operator', foreground: '000000' },
+        { token: 'delimiter', foreground: '000000' },
+        { token: 'variable', foreground: '001080' },
+        { token: 'function', foreground: '795E26' },
+        { token: 'predefined', foreground: '267F99' },
+      ],
+      colors: {
+        'editor.background': tc.background,
+        'editor.foreground': tc.textPrimary,
+        'editorCursor.foreground': tc.textPrimary,
+        'editor.lineHighlightBackground': tc.backgroundToolbar,
+        'editor.selectionBackground': tc.backgroundActive,
+        'editor.inactiveSelectionBackground': tc.backgroundHover,
+        'editorLineNumber.foreground': tc.textTertiary,
+        'editorLineNumber.activeForeground': tc.primary,
+        'editor.findMatchBackground': tc.backgroundActive,
+        'editor.findMatchHighlightBackground': tc.backgroundHover,
+        'editorHoverWidget.background': tc.backgroundCard,
+        'editorHoverWidget.border': tc.border,
+        'editorSuggestWidget.background': tc.backgroundCard,
+        'editorSuggestWidget.border': tc.border,
+        'editorSuggestWidget.selectedBackground': tc.backgroundHover,
+        'editorSuggestWidget.foreground': tc.textPrimary,
+        'editorSuggestWidget.selectedForeground': tc.textPrimary,
+        'editorWidget.background': tc.backgroundCard,
+        'editorWidget.border': tc.border,
+        'editorWidget.resizeBorder': tc.border,
+        'editorWidget.shadow': '#A8A8A8',
+        'editorGroupHeader.tabsBackground': tc.backgroundToolbar,
+        'editorGroupHeader.noTabsBackground': tc.backgroundCard,
+        'editorGroup.border': tc.border,
+        'editorGroup.dropBackground': tc.backgroundHover,
+        'editorGroupHeader.tabsBorder': tc.border,
+        'editorGroupHeader.noTabsBorder': tc.border,
+        'editorMarkerNavigation.background': tc.backgroundToolbar,
+        'editorMarkerNavigation.border': tc.border,
+        'editorOverviewRuler.background': tc.backgroundCard,
+        'editorOverviewRuler.border': tc.border,
+        'editorIndentGuide.background': tc.border,
+        'editorIndentGuide.activeBackground': tc.textTertiary,
+        'editorWhitespace.foreground': tc.border,
+      },
+    });
+
+    monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
+  }, [tc]);
 
   const { executeQuery: executeQueryApi, getTables, getColumns, getAllColumns } = useDatabase();
 
@@ -605,7 +713,8 @@ export function SQLEditor({
             tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
           const targetMap = isView ? viewsMap : tablesMap;
 
-          const columns = allColumnsResult[table.table_name];
+          const lookupKey = table.schema ? `${table.schema}.${table.table_name}` : table.table_name;
+          const columns = allColumnsResult[lookupKey];
           if (columns) {
             targetMap.set(
               table.table_name,
@@ -754,115 +863,7 @@ export function SQLEditor({
       setContextMenuVisible(true);
     });
 
-    // 添加自定义主题（延迟加载以减少启动时间）
-    monaco.editor.defineTheme('custom-dark', {
-        base: 'vs-dark',
-        inherit: true,
-        rules: [
-          { token: 'keyword', foreground: '569CD6' },
-          { token: 'type', foreground: '4EC9B0' },
-          { token: 'string', foreground: 'CE9178' },
-          { token: 'comment', foreground: '6A9955' },
-          { token: 'number', foreground: 'B5CEA8' },
-          { token: 'operator', foreground: 'D4D4D4' },
-          { token: 'delimiter', foreground: 'D4D4D4' },
-          { token: 'variable', foreground: '9CDCFE' },
-          { token: 'function', foreground: 'DCDCAA' },
-          { token: 'predefined', foreground: '4EC9B0' },
-        ],
-        colors: {
-          'editor.background': '#0C1929',
-          'editor.foreground': '#D4D4D4',
-          'editorCursor.foreground': '#FFFFFF',
-          'editor.lineHighlightBackground': '#112840',
-          'editor.selectionBackground': '#1A3A5C',
-          'editor.inactiveSelectionBackground': '#3A3D41',
-          'editorLineNumber.foreground': '#4A6A8A',
-          'editorLineNumber.activeForeground': '#60A5FA',
-          'editor.findMatchBackground': '#264F78',
-          'editor.findMatchHighlightBackground': '#75BEFF',
-          'editorHoverWidget.background': '#122840',
-          'editorHoverWidget.border': '#404040',
-          'editorSuggestWidget.background': '#122840',
-          'editorSuggestWidget.border': '#404040',
-          'editorSuggestWidget.selectedBackground': '#094771',
-          'editorSuggestWidget.foreground': '#D4D4D4',
-          'editorSuggestWidget.selectedForeground': '#FFFFFF',
-          'editorWidget.background': '#122840',
-          'editorWidget.border': '#404040',
-          'editorWidget.resizeBorder': '#404040',
-          'editorWidget.shadow': '#000000',
-          'editorGroupHeader.tabsBackground': '#0F1F33',
-          'editorGroupHeader.noTabsBackground': '#1E1E1E',
-          'editorGroup.border': '#404040',
-          'editorGroup.dropBackground': '#094771',
-          'editorGroupHeader.tabsBorder': '#404040',
-          'editorGroupHeader.noTabsBorder': '#404040',
-          'editorMarkerNavigation.background': '#2D2D30',
-          'editorMarkerNavigation.border': '#404040',
-          'editorOverviewRuler.background': '#1E1E1E',
-          'editorOverviewRuler.border': '#404040',
-          'editorIndentGuide.background': '#404040',
-          'editorIndentGuide.activeBackground': '#707070',
-          'editorWhitespace.foreground': '#404040',
-        },
-      });
-
-    // 注册亮色主题
-    monaco.editor.defineTheme('custom-light', {
-      base: 'vs',
-      inherit: true,
-      rules: [
-        { token: 'keyword', foreground: '0000FF' },
-        { token: 'type', foreground: '267F99' },
-        { token: 'string', foreground: 'A31515' },
-        { token: 'comment', foreground: '008000' },
-        { token: 'number', foreground: '098658' },
-        { token: 'operator', foreground: '000000' },
-        { token: 'delimiter', foreground: '000000' },
-        { token: 'variable', foreground: '001080' },
-        { token: 'function', foreground: '795E26' },
-        { token: 'predefined', foreground: '267F99' },
-      ],
-      colors: {
-        'editor.background': '#FFFFFF',
-        'editor.foreground': '#000000',
-        'editorCursor.foreground': '#000000',
-        'editor.lineHighlightBackground': '#F8FAFC',
-        'editor.selectionBackground': '#DBEAFE',
-        'editor.inactiveSelectionBackground': '#E5EBF1',
-        'editorLineNumber.foreground': '#94A3B8',
-        'editorLineNumber.activeForeground': '#3B82F6',
-        'editor.findMatchBackground': '#A8AC94',
-        'editor.findMatchHighlightBackground': '#E2E6D4',
-        'editorHoverWidget.background': '#F8F8F8',
-        'editorHoverWidget.border': '#C8C8C8',
-        'editorSuggestWidget.background': '#F8F8F8',
-        'editorSuggestWidget.border': '#C8C8C8',
-        'editorSuggestWidget.selectedBackground': '#D6D6D6',
-        'editorSuggestWidget.foreground': '#000000',
-        'editorSuggestWidget.selectedForeground': '#000000',
-        'editorWidget.background': '#F8F8F8',
-        'editorWidget.border': '#C8C8C8',
-        'editorWidget.resizeBorder': '#C8C8C8',
-        'editorWidget.shadow': '#A8A8A8',
-        'editorGroupHeader.tabsBackground': '#F3F3F3',
-        'editorGroupHeader.noTabsBackground': '#FFFFFF',
-        'editorGroup.border': '#C8C8C8',
-        'editorGroup.dropBackground': '#E8E8E8',
-        'editorGroupHeader.tabsBorder': '#C8C8C8',
-        'editorGroupHeader.noTabsBorder': '#C8C8C8',
-        'editorMarkerNavigation.background': '#F3F3F3',
-        'editorMarkerNavigation.border': '#C8C8C8',
-        'editorOverviewRuler.background': '#FFFFFF',
-        'editorOverviewRuler.border': '#C8C8C8',
-        'editorIndentGuide.background': '#D3D3D3',
-        'editorIndentGuide.activeBackground': '#939393',
-        'editorWhitespace.foreground': '#D3D3D3',
-      },
-    });
-
-    // 应用主题
+    // 应用主题（defineTheme 已移至 useEffect，监听 tc 变化）
     monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
 
     // 注销旧的补全提供者（如果存在）
@@ -1915,6 +1916,17 @@ export function SQLEditor({
         height: '100%',
         minHeight: 0,
         background: 'var(--background-card)',
+        ...(isFullscreen
+          ? {
+              position: 'fixed' as const,
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              height: '100vh',
+            }
+          : {}),
       }}
       data-testid="sql-editor"
     >
@@ -1934,17 +1946,39 @@ export function SQLEditor({
           <Tooltip
             title={`${t('common.sqlEditor.execute')} (${formatShortcutForDisplay(getEffectiveShortcut('execute-query', useSettingsStore.getState().settings.shortcuts || {}))})`}
           >
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={handleExecuteQuery}
-              loading={loading}
-              disabled={!connectionId}
-              size="small"
+            <div
+              onClick={() => !loading && connectionId && handleExecuteQuery()}
               data-testid="sql-execute-btn"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '0 10px',
+                height: 22,
+                borderRadius: 6,
+                background: 'var(--color-primary)',
+                color: tc.isDark ? '#000000' : '#FFFFFF',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: !connectionId || loading ? 'not-allowed' : 'pointer',
+                opacity: !connectionId ? 0.5 : 1,
+                transition: 'all 0.2s ease',
+                boxShadow: `0 2px 8px ${tc.primary}33`,
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => {
+                if (!connectionId || loading) return;
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = `0 4px 12px ${tc.primary}4D`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = `0 2px 8px ${tc.primary}33`;
+              }}
             >
+              {loading ? <LoadingOutlined /> : <PlayCircleOutlined />}
               {t('common.executeButton')}
-            </Button>
+            </div>
           </Tooltip>
           <Button
             icon={<StopOutlined />}
@@ -2139,10 +2173,10 @@ export function SQLEditor({
             icon={<FullscreenOutlined />}
             type="text"
             onClick={() => {
-              if (!document.fullscreenElement) {
-                containerRef.current?.requestFullscreen();
-              } else {
-                document.exitFullscreen();
+              const next = !isFullscreen;
+              setIsFullscreen(next);
+              if (editorRef.current) {
+                setTimeout(() => editorRef.current.layout(), 0);
               }
             }}
           />
@@ -2211,8 +2245,8 @@ export function SQLEditor({
               left: contextMenuPos.x,
               top: contextMenuPos.y,
               zIndex: 1000,
-              background: tc.isDark ? '#252526' : '#FFFFFF',
-              border: `1px solid ${tc.isDark ? '#404040' : '#E0E0E0'}`,
+              background: tc.backgroundCard,
+              border: `1px solid ${tc.border}`,
               borderRadius: 6,
               boxShadow: tc.isDark
                 ? '0 2px 8px rgba(0,0,0,0.45)'

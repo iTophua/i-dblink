@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useThemeColors } from '../hooks/useThemeColors';
 import {
   Modal,
   Form,
@@ -70,6 +71,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
   database,
 }) => {
   const { t } = useTranslation();
+  const tc = useThemeColors();
   const { message: msg } = App.useApp();
   const [grantForm] = Form.useForm();
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -356,7 +358,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
 
           {selectedUser && (
             <>
-              <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
+              <div style={{ borderTop: `1px solid ${tc.borderLight}`, paddingTop: 16 }}>
                 <div
                   style={{
                     display: 'flex',

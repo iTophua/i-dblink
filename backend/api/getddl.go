@@ -65,25 +65,30 @@ func getTableDDL(pool *db.DBPool, tableName string, database string) ([]string, 
 		}
 
 	case "postgresql", "highgo", "vastbase":
+		var schemaName string
+		schemaQuery := "SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = $1 AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' ORDER BY n.nspname LIMIT 1"
+		if err := db.QueryRow(schemaQuery, tableName).Scan(&schemaName); err != nil || schemaName == "" {
+			schemaName = "public"
+		}
+
 		var createSQL string
 		err := db.QueryRow(
-			"SELECT pg_get_viewdef($1::text, true)",
-			fmt.Sprintf("%s.%s", database, tableName),
+			"SELECT pg_get_viewdef($1::regclass, true)",
+			fmt.Sprintf("%s.%s", schemaName, tableName),
 		).Scan(&createSQL)
 		if err == nil && createSQL != "" {
-			ddls = append(ddls, createSQL)
+			ddls = append(ddls, "CREATE OR REPLACE VIEW "+schemaName+"."+tableName+" AS\n"+createSQL+";")
 		} else {
-			// 尝试作为表获取
 			var tableDef string
 			err = db.QueryRow(
-				"SELECT 'CREATE TABLE ' || quote_ident($1) || '.' || quote_ident($2) || ' (' || array_to_string(array_agg(column_def::text), ', ') || ');'"+
+				"SELECT 'CREATE TABLE ' || quote_ident($1) || '.' || quote_ident($2) || ' (' || string_agg(column_def, ', ') || ');'"+
 					" FROM ("+
-					"   SELECT column_name || ' ' || data_type || case when character_maximum_length is not null then '(' || character_maximum_length::text || ')' else '' end"+
+					"   SELECT quote_ident(column_name) || ' ' || data_type || case when character_maximum_length is not null then '(' || character_maximum_length::text || ')' else '' end AS column_def"+
 					"   FROM information_schema.columns"+
 					"   WHERE table_schema = $1 AND table_name = $2"+
 					"   ORDER BY ordinal_position"+
 					" ) AS cols",
-				database, tableName,
+				schemaName, tableName,
 			).Scan(&tableDef)
 			if err == nil && tableDef != "" {
 				ddls = append(ddls, tableDef)

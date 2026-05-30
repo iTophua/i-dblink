@@ -15,6 +15,7 @@ import { TabPanel, type TabPanelRef, type ActiveTabInfo } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
 import { ConnectionExportDialog } from './ConnectionExportDialog';
+import { BatchManageDialog } from './ConnectionTree/BatchManageDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { OperationLog } from './OperationLog';
 import type { TableInfo, ColumnInfo, IndexInfo } from '../types/api';
@@ -38,6 +39,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [selectedDatabase, setSelectedDatabase] = useState<string | undefined>();
+  const [selectedSchema, setSelectedSchema] = useState<string | undefined>();
   const [selectedObjectType, setSelectedObjectType] = useState<'table' | 'view' | 'all'>('all');
   // 双击表时触发，用于在 TabPanel 中打开新 Tab
   const [tableToOpen, setTableToOpen] = useState<{
@@ -70,6 +72,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
   const [editingConnection, setEditingConnection] = useState<ConnectionFormData | undefined>();
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [connectionExportOpen, setConnectionExportOpen] = useState(false);
+  const [batchManageOpen, setBatchManageOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [passwordDialogConn, setPasswordDialogConn] = useState<{ id: string; name: string } | null>(
     null
@@ -181,8 +184,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       onNewConnection: () => setConnectionDialogOpen(true),
       onSave: () => {},
       onSaveAs: () => {},
-      onImport: () => {},
-      onExport: () => {},
+      onImport: () => setConnectionExportOpen(true),
+      onExport: () => setConnectionExportOpen(true),
       onQuit: () => {},
       onUndo: () => {},
       onRedo: () => {},
@@ -462,7 +465,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       const { setLoading, clearTableData, setConnections, setError } = useAppStore.getState();
       try {
         await connect(connectionId);
-        const databases = await getDatabases(connectionId);
+        const databases = (await getDatabases(connectionId)) || [];
         const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
         setConnectionDatabases((prev) => ({
           ...prev,
@@ -516,7 +519,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       const { setLoading, clearTableData, setConnections, setError } = useAppStore.getState();
       try {
         await connect(passwordDialogConn.id);
-        const databases = await getDatabases(passwordDialogConn.id);
+        const databases = (await getDatabases(passwordDialogConn.id)) || [];
         const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
         setConnectionDatabases((prev) => {
           const next = { ...prev };
@@ -636,14 +639,23 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         if (selectedConnectionId === connectionId && selectedDatabase === database) {
           setSelectedTable(null);
           setSelectedDatabase(undefined);
+          setSelectedSchema(undefined);
         }
       };
 
-      if (hasTabs && tabInfo && tabInfo.dataTabCount > 0) {
+      if (hasTabs && tabInfo && (tabInfo.dataTabCount > 0 || tabInfo.sqlTabCount > 0)) {
         closingDbModalRef.current = true;
+        const tabDesc = [
+          tabInfo.dataTabCount > 0
+            ? t('common.dataTableCount', { count: tabInfo.dataTabCount })
+            : '',
+          tabInfo.sqlTabCount > 0 ? t('common.sqlQueryCount', { count: tabInfo.sqlTabCount }) : '',
+        ]
+          .filter(Boolean)
+          .join(t('common.enumerationSeparator'));
         Modal.confirm({
           title: t('common.closeRelatedTabsTitle'),
-          content: t('common.closeDatabaseTabsContent', { count: tabInfo.dataTabCount }),
+          content: t('common.closeDatabaseTabsContent', { tabs: tabDesc }),
           okText: t('common.closeAndCloseDatabase'),
           cancelText: t('common.closeDatabaseOnly'),
           transitionName: '',
@@ -746,6 +758,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           setSelectedConnectionId(null);
           setSelectedTable(null);
           setSelectedDatabase(undefined);
+          setSelectedSchema(undefined);
           setActiveConnection(null);
         }
         disconnect(connectionId);
@@ -846,6 +859,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         case 'open-connection':
           message.info('打开连接功能尚未实现');
           break;
+        case 'import-connections':
         case 'export-connections':
           setConnectionExportOpen(true);
           break;
@@ -1037,15 +1051,19 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                  groups={groups}
                  selectedId={selectedConnectionId}
                  selectedTableId={selectedTable}
-                 onSelect={(id) => {
-                   setSelectedConnectionId(id);
-                   setSelectedTable(null);
-                 }}
+                  onSelect={(id) => {
+                    setSelectedConnectionId(id);
+                    setSelectedTable(null);
+                    setSelectedSchema(undefined);
+                  }}
                  onTableSelect={(table, database) => {
                    setSelectedTable(table);
                    setSelectedDatabase(database);
                  }}
-                 onObjectTypeSelect={setSelectedObjectType}
+                  onObjectTypeSelect={(objectType, _database, schema) => {
+                    setSelectedObjectType(objectType);
+                    setSelectedSchema(schema);
+                  }}
                  onTableOpen={(tableName, database) => {
                    setTableToOpen(null);
                    setTimeout(() => {
@@ -1090,7 +1108,21 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                  }}
                  onSaveGroup={saveGroup}
                  onDeleteGroup={deleteGroup}
-                 onCreateConnection={() => setConnectionDialogOpen(true)}
+                  onCreateConnection={() => setConnectionDialogOpen(true)}
+                   onImportConnections={() => setConnectionExportOpen(true)}
+                   onBatchManage={() => setBatchManageOpen(true)}
+                   onRefreshConnections={() => {
+                     const currentConns = useAppStore.getState().connections;
+                     const statusMap = new Map(currentConns.map((c) => [c.id, c.status]));
+                     api.getConnections().then((conns) => {
+                       useAppStore.getState().setConnections(
+                         conns.map((c) => ({
+                           ...c,
+                           status: statusMap.get(c.id) || ('disconnected' as const),
+                         }))
+                       );
+                     });
+                   }}
                />
              </div>
 
@@ -1124,6 +1156,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
               }
               selectedTable={selectedTable}
               selectedDatabase={selectedDatabase}
+              selectedSchema={selectedSchema}
               selectedObjectType={selectedObjectType}
               tableToOpen={tableToOpen}
               onSqlTabCountChange={setSqlTabCount}
@@ -1174,6 +1207,22 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           });
           api.getGroups().then((groups) => {
             store.setGroups(groups);
+          });
+        }}
+      />
+
+      <BatchManageDialog
+        open={batchManageOpen}
+        connections={connections}
+        groups={groups}
+        onClose={() => setBatchManageOpen(false)}
+        onSaveConnection={async (data: any) => {
+          await saveConnection(data);
+        }}
+        onRefresh={() => {
+          api.getConnections().then((conns) => {
+            const store = useAppStore.getState();
+            store.setConnections(conns.map((c) => ({ ...c, status: 'disconnected' as const })));
           });
         }}
       />

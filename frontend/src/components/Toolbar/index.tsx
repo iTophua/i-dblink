@@ -189,20 +189,20 @@ export function Toolbar(): JSX.Element {
           height: 30,
           borderRadius: 6,
           background: 'var(--color-primary)',
-          color: '#fff',
+          color: tc.isDark ? '#000000' : '#FFFFFF',
           fontSize: 12,
           fontWeight: 500,
           cursor: 'pointer',
           transition: 'all 0.2s ease',
-          boxShadow: '0 2px 8px rgba(29,78,216,0.2)',
+          boxShadow: `0 2px 8px ${tc.primary}33`,
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'translateY(-1px)';
-          e.currentTarget.style.boxShadow = '0 4px 12px rgba(29,78,216,0.3)';
+          e.currentTarget.style.boxShadow = `0 4px 12px ${tc.primary}4D`;
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 2px 8px rgba(29,78,216,0.2)';
+          e.currentTarget.style.boxShadow = `0 2px 8px ${tc.primary}33`;
         }}
       >
         <PlusOutlined />

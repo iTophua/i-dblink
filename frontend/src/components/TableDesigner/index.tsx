@@ -753,7 +753,7 @@ export function TableDesigner({
       render: (_: unknown, __: DesignerColumn, index: number) => (
         <Tooltip title={t('common.dragToReorder')}>
           <DragOutlined
-            style={{ cursor: 'grab', color: '#999' }}
+            style={{ cursor: 'grab', color: tc.textTertiary }}
             onMouseDown={(e) => {
               // Simple drag: use HTML5 drag
               const row = e.currentTarget.closest('tr');
@@ -1225,13 +1225,13 @@ export function TableDesigner({
                   { token: 'operator', foreground: 'f0abfc' },
                 ],
                 colors: {
-                  'editor.background': '#13132a',
-                  'editor.foreground': '#e4e4ed',
-                  'editor.lineHighlightBackground': '#1c1c38',
-                  'editorLineNumber.foreground': '#686888',
-                  'editorLineNumber.activeForeground': '#a0a0b8',
-                  'editor.selectionBackground': '#00f5ff30',
-                  'editorCursor.foreground': '#00f5ff',
+                  'editor.background': tc.background,
+                  'editor.foreground': tc.textPrimary,
+                  'editor.lineHighlightBackground': tc.backgroundToolbar,
+                  'editorLineNumber.foreground': tc.textTertiary,
+                  'editorLineNumber.activeForeground': tc.primary,
+                  'editor.selectionBackground': tc.backgroundActive,
+                  'editorCursor.foreground': tc.primary,
                 },
               });
               monaco.editor.defineTheme('app-light', {
@@ -1246,13 +1246,13 @@ export function TableDesigner({
                   { token: 'operator', foreground: 'e879f9' },
                 ],
                 colors: {
-                  'editor.background': '#ffffff',
-                  'editor.foreground': '#1a1a2e',
-                  'editor.lineHighlightBackground': '#f0f0f4',
-                  'editorLineNumber.foreground': '#8a8a9a',
-                  'editorLineNumber.activeForeground': '#5a5a6e',
-                  'editor.selectionBackground': '#00e5ff20',
-                  'editorCursor.foreground': '#00e5ff',
+                  'editor.background': tc.backgroundCard,
+                  'editor.foreground': tc.textPrimary,
+                  'editor.lineHighlightBackground': tc.backgroundToolbar,
+                  'editorLineNumber.foreground': tc.textTertiary,
+                  'editorLineNumber.activeForeground': tc.primary,
+                  'editor.selectionBackground': tc.backgroundActive,
+                  'editorCursor.foreground': tc.primary,
                 },
               });
               monaco.editor.setTheme(tc.isDark ? 'app-dark' : 'app-light');
@@ -1301,8 +1301,8 @@ export function TableDesigner({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '12px 16px',
-          borderBottom: '1px solid #f0f0f0',
-          background: '#fff',
+          borderBottom: `1px solid ${tc.borderLight}`,
+          background: tc.backgroundCard,
         }}
       >
         <Space>
@@ -1315,7 +1315,7 @@ export function TableDesigner({
             value={tableName}
               placeholder={t('common.tableStructure.tableNamePlaceholder')}
               onChange={(e) => setTableName(e.target.value)}
-            prefix={<CodeOutlined style={{ color: '#999' }} />}
+            prefix={<CodeOutlined style={{ color: tc.textTertiary }} />}
           />
         </Space>
         <Space>
@@ -1355,7 +1355,7 @@ export function TableDesigner({
               position: 'absolute',
               left: ctxMenu.x,
               top: ctxMenu.y,
-              background: '#fff',
+              background: tc.backgroundCard,
               borderRadius: 6,
               boxShadow: '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
               padding: 4,

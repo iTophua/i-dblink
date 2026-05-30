@@ -24,9 +24,9 @@ func (r *ConnectionRepository) GetAll() ([]*DbConnection, error) {
 		SELECT id, name, db_type, host, port, username, database, group_id, color,
 		       ssh_host, ssh_port, ssh_username, ssh_auth_method, ssh_private_key_path,
 		       ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path, ssl_skip_verify,
-		       created_at, updated_at
+		       sort_order, created_at, updated_at
 		FROM connections
-		ORDER BY name
+		ORDER BY sort_order, name
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query connections: %w", err)
@@ -51,7 +51,7 @@ func (r *ConnectionRepository) GetByID(id string) (*DbConnection, error) {
 		SELECT id, name, db_type, host, port, username, database, group_id, color,
 		       ssh_host, ssh_port, ssh_username, ssh_auth_method, ssh_private_key_path,
 		       ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path, ssl_skip_verify,
-		       created_at, updated_at
+		       sort_order, created_at, updated_at
 		FROM connections WHERE id = ?
 	`, id)
 
@@ -88,14 +88,14 @@ func (r *ConnectionRepository) insert(conn *DbConnection) error {
 			id, name, db_type, host, port, username, database, group_id, color,
 			ssh_host, ssh_port, ssh_username, ssh_auth_method, ssh_private_key_path,
 			ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path, ssl_skip_verify,
-			created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			sort_order, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		conn.ID, conn.Name, conn.DbType, conn.Host, conn.Port, conn.Username,
 		conn.Database, conn.GroupID, conn.Color,
 		conn.SSHHost, conn.SSHPort, conn.SSHUsername, conn.SSHAuthMethod, conn.SSHPrivateKeyPath,
 		conn.SSLEnabled, conn.SSLCAPath, conn.SSLCertPath, conn.SSLKeyPath, conn.SSLSkipVerify,
-		conn.CreatedAt.Format(time.RFC3339), conn.UpdatedAt.Format(time.RFC3339),
+		conn.SortOrder, conn.CreatedAt.Format(time.RFC3339), conn.UpdatedAt.Format(time.RFC3339),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert connection: %w", err)
@@ -110,14 +110,14 @@ func (r *ConnectionRepository) update(conn *DbConnection) error {
 			database = ?, group_id = ?, color = ?,
 			ssh_host = ?, ssh_port = ?, ssh_username = ?, ssh_auth_method = ?, ssh_private_key_path = ?,
 			ssl_enabled = ?, ssl_ca_path = ?, ssl_cert_path = ?, ssl_key_path = ?, ssl_skip_verify = ?,
-			updated_at = ?
+			sort_order = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		conn.Name, conn.DbType, conn.Host, conn.Port, conn.Username,
 		conn.Database, conn.GroupID, conn.Color,
 		conn.SSHHost, conn.SSHPort, conn.SSHUsername, conn.SSHAuthMethod, conn.SSHPrivateKeyPath,
 		conn.SSLEnabled, conn.SSLCAPath, conn.SSLCertPath, conn.SSLKeyPath, conn.SSLSkipVerify,
-		conn.UpdatedAt.Format(time.RFC3339), conn.ID,
+		conn.SortOrder, conn.UpdatedAt.Format(time.RFC3339), conn.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update connection: %w", err)
@@ -132,6 +132,24 @@ func (r *ConnectionRepository) Delete(id string) error {
 		return fmt.Errorf("failed to delete connection: %w", err)
 	}
 	return nil
+}
+
+// UpdateSortOrders 批量更新连接排序
+func (r *ConnectionRepository) UpdateSortOrders(orders map[string]int) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for id, order := range orders {
+		_, err := tx.Exec("UPDATE connections SET sort_order = ?, updated_at = ? WHERE id = ?",
+			order, time.Now().UTC().Format(time.RFC3339), id)
+		if err != nil {
+			return fmt.Errorf("failed to update sort_order for %s: %w", id, err)
+		}
+	}
+	return tx.Commit()
 }
 
 // GetPassword 获取连接密码
@@ -467,7 +485,7 @@ func scanConnection(scanner interface {
 		&conn.Database, &conn.GroupID, &conn.Color,
 		&conn.SSHHost, &conn.SSHPort, &conn.SSHUsername, &conn.SSHAuthMethod, &conn.SSHPrivateKeyPath,
 		&conn.SSLEnabled, &conn.SSLCAPath, &conn.SSLCertPath, &conn.SSLKeyPath, &conn.SSLSkipVerify,
-		&createdAt, &updatedAt,
+		&conn.SortOrder, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {

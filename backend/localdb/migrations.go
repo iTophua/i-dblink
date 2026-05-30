@@ -28,6 +28,7 @@ func RunMigrations(db *sql.DB) error {
 			ssl_cert_path TEXT,
 			ssl_key_path TEXT,
 			ssl_skip_verify TEXT,
+			sort_order INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
@@ -97,9 +98,11 @@ func RunMigrations(db *sql.DB) error {
 
 	for i, migration := range migrations {
 		if _, err := db.Exec(migration); err != nil {
-			return fmt.Errorf("migration %d failed: %w", i, err)
+			return fmt.Errorf("migration %d failed: %w (sql: %s)", i, err, migration)
 		}
 	}
+
+	db.Exec("ALTER TABLE connections ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
 
 	return nil
 }

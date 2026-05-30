@@ -24,7 +24,11 @@ import { TableList } from '../TableList';
 import { TableStructure } from '../TableStructure';
 import { TableDesigner } from '../TableDesigner';
 import { ViewDefinition } from '../ViewDefinition';
-import type { TableInfo, DatabaseType } from '../../types/api';
+import { TableImportWizard } from '../TableImportWizard';
+import { TableExportWizard } from '../TableExportWizard';
+import { DumpDialog } from '../DumpDialog';
+import { CopyTableDialog } from '../CopyTableDialog';
+import type { TableInfo, DatabaseType, ColumnInfo } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAppStore } from '../../stores/appStore';
 import { api } from '../../api';
@@ -34,6 +38,7 @@ interface TabPanelProps {
   selectedConnectionName?: string;
   selectedTable: string | null;
   selectedDatabase?: string;
+  selectedSchema?: string;
   selectedObjectType?: 'table' | 'view' | 'all';
   /** 双击表时设置此值，TabPanel 会打开新的数据浏览 Tab */
   tableToOpen?: { name: string; database?: string; isView?: boolean } | null;
@@ -123,7 +128,7 @@ export interface TabPanelRef {
   closeConnectionTabs: (connectionId: string) => void;
   closeDatabaseTabs: (connectionId: string, database: string) => void;
   getConnectionTabInfo: (connectionId: string) => { dataTabCount: number; sqlTabCount: number };
-  getDatabaseTabInfo: (connectionId: string, database: string) => { dataTabCount: number };
+  getDatabaseTabInfo: (connectionId: string, database: string) => { dataTabCount: number; sqlTabCount: number };
   getActiveTabInfo: () => ActiveTabInfo;
   getQueryStatus: () => { resultRows?: number; executionTime?: number };
 }
@@ -134,6 +139,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     selectedConnectionName,
     selectedTable,
     selectedDatabase,
+    selectedSchema,
     selectedObjectType = 'all',
     tableToOpen,
     onSqlTabCountChange,
@@ -164,6 +170,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const [openedViewDefTabs, setOpenedViewDefTabs] = useState<OpenedViewDefTab[]>([]);
   const [activeKey, setActiveKey] = useState('objects');
   const isRestoredRef = useRef(false);
+
+  const [importWizardOpen, setImportWizardOpen] = useState(false);
+  const [exportWizardOpen, setExportWizardOpen] = useState(false);
+  const [dumpDialogOpen, setDumpDialogOpen] = useState(false);
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [wizardTableName, setWizardTableName] = useState('');
+  const [wizardColumns, setWizardColumns] = useState<ColumnInfo[]>([]);
 
   // 生成数据浏览 Tab 的 key（包含 connectionId 避免不同连接冲突）
   const getDataTabKey = useCallback(
@@ -273,7 +286,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       return hasDataTabs || hasSqlTabs;
     },
     hasDatabaseTabs: (connectionId: string, database: string) => {
-      return openedTables.some((t) => t.connectionId === connectionId && t.database === database);
+      return (
+        openedTables.some((t) => t.connectionId === connectionId && t.database === database) ||
+        openedSqlTabs.some((t) => t.connectionId === connectionId && t.database === database)
+      );
     },
     closeConnectionTabs: (connectionId: string) => {
       const tablesToClose = openedTables.filter((t) => t.connectionId === connectionId);
@@ -293,12 +309,19 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       const tablesToClose = openedTables.filter(
         (t) => t.connectionId === connectionId && t.database === database
       );
+      const sqlTabsToClose = openedSqlTabs.filter(
+        (t) => t.connectionId === connectionId && t.database === database
+      );
       const closedDataKeys = new Set(tablesToClose.map((t) => getDataTabKey(t)));
+      const closedSqlKeys = new Set(sqlTabsToClose.map((t) => t.key));
       setOpenedTables((prev) =>
         prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
       );
+      setOpenedSqlTabs((prev) =>
+        prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
+      );
       setActiveKey((current) => {
-        if (closedDataKeys.has(current)) {
+        if (closedDataKeys.has(current) || closedSqlKeys.has(current)) {
           return 'objects';
         }
         return current;
@@ -310,6 +333,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     }),
     getDatabaseTabInfo: (connectionId: string, database: string) => ({
       dataTabCount: openedTables.filter(
+        (t) => t.connectionId === connectionId && t.database === database
+      ).length,
+      sqlTabCount: openedSqlTabs.filter(
         (t) => t.connectionId === connectionId && t.database === database
       ).length,
     }),
@@ -1168,6 +1194,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               <TableList
                 connectionId={selectedConnectionId}
                 database={selectedDatabase}
+                schema={selectedSchema}
                 objectType={selectedObjectType}
                 onTableSelect={() => {
                   // Single click in TableList → show structure in objects tab
@@ -1202,10 +1229,22 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   }
                 }}
                 onTableCopy={(tableName) => {
-                  message.warning(t('common.copyTableComingSoon'));
+                  setWizardTableName(tableName);
+                  setCopyDialogOpen(true);
                 }}
                 onTableDump={(tableName) => {
-                  message.warning(t('common.dumpSqlComingSoon'));
+                  setWizardTableName(tableName);
+                  setDumpDialogOpen(true);
+                }}
+                onImport={(tableName, db) => {
+                  setWizardTableName(tableName);
+                  setWizardColumns([]);
+                  setImportWizardOpen(true);
+                }}
+                onExport={(tableName, db) => {
+                  setWizardTableName(tableName);
+                  setWizardColumns([]);
+                  setExportWizardOpen(true);
                 }}
               />
             )
@@ -1292,6 +1331,59 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           />
         </div>
       )}
+
+      <TableImportWizard
+        open={importWizardOpen}
+        onClose={() => setImportWizardOpen(false)}
+        connectionId={selectedConnectionId || ''}
+        tableName={wizardTableName}
+        database={selectedDatabase}
+        dbType={getDbType(selectedConnectionId)}
+        columns={wizardColumns}
+        onSuccess={() => {
+          window.dispatchEvent(
+            new CustomEvent('refresh-connection-tree', {
+              detail: { connectionId: selectedConnectionId },
+            })
+          );
+        }}
+      />
+      <TableExportWizard
+        open={exportWizardOpen}
+        onClose={() => setExportWizardOpen(false)}
+        connectionId={selectedConnectionId || ''}
+        tableName={wizardTableName}
+        database={selectedDatabase}
+        dbType={getDbType(selectedConnectionId)}
+      />
+      <DumpDialog
+        open={dumpDialogOpen}
+        tableName={wizardTableName}
+        database={selectedDatabase}
+        connectionId={selectedConnectionId || ''}
+        dbType={getDbType(selectedConnectionId)}
+        onCancel={() => setDumpDialogOpen(false)}
+        onSuccess={() => setDumpDialogOpen(false)}
+      />
+      <CopyTableDialog
+        open={copyDialogOpen}
+        sourceTable={wizardTableName}
+        sourceDatabase={selectedDatabase}
+        connectionId={selectedConnectionId || ''}
+        dbType={getDbType(selectedConnectionId)}
+        databases={
+          connectionDatabases?.[selectedConnectionId || '']?.map((d) => d.database) || []
+        }
+        onCancel={() => setCopyDialogOpen(false)}
+        onSuccess={() => {
+          setCopyDialogOpen(false);
+          window.dispatchEvent(
+            new CustomEvent('refresh-connection-tree', {
+              detail: { connectionId: selectedConnectionId },
+            })
+          );
+        }}
+      />
     </div>
   );
 });

@@ -307,7 +307,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       content: (
         <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <Tag color="blue" style={{ fontSize: 13, padding: '2px 10px' }}>
+            <Tag style={{ fontSize: 13, padding: '2px 10px', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
               {t('common.importExport.totalRows')}: {parsedFile?.rows.length || 0}
             </Tag>
             <Tag color="green" style={{ fontSize: 13, padding: '2px 10px' }}>

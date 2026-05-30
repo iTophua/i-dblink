@@ -23,6 +23,7 @@ type DbConnection struct {
 	SSLCertPath       *string   `json:"ssl_cert_path,omitempty" db:"ssl_cert_path"`
 	SSLKeyPath        *string   `json:"ssl_key_path,omitempty" db:"ssl_key_path"`
 	SSLSkipVerify     *string   `json:"ssl_skip_verify,omitempty" db:"ssl_skip_verify"`
+	SortOrder         int       `json:"sort_order" db:"sort_order"`
 	CreatedAt         time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
 }

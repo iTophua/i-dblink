@@ -27,6 +27,9 @@ func mysqlGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, error
 			result = append(result, name)
 		}
 	}
+	if result == nil {
+		result = []string{}
+	}
 	return result, rows.Err()
 }
 

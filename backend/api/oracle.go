@@ -25,6 +25,9 @@ func oracleGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, erro
 		}
 		result = append(result, name)
 	}
+	if result == nil {
+		result = []string{}
+	}
 	return result, rows.Err()
 }
 

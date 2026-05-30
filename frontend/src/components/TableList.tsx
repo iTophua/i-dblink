@@ -85,6 +85,7 @@ interface ColumnDef {
 export interface TableListProps {
   connectionId: string;
   database?: string;
+  schema?: string;
   objectType?: 'table' | 'view' | 'all';
   onTableSelect?: (tableName: string, database?: string) => void;
   onTableOpen?: (tableName: string, database?: string) => void;
@@ -94,8 +95,8 @@ export interface TableListProps {
   onTableTruncate?: (tableName: string, database?: string) => void;
   onTableCopy?: (tableName: string, database?: string) => void;
   onTableDump?: (tableName: string, database?: string) => void;
-  onImport?: () => void;
-  onExport?: () => void;
+  onImport?: (tableName: string, database?: string) => void;
+  onExport?: (tableName: string, database?: string) => void;
 }
 
 // Navicat-style grid card component
@@ -137,10 +138,10 @@ const TableGridCard = React.memo(
       >
         {table.table_type === 'VIEW' ? (
           <EyeOutlined
-            style={{ fontSize: 14, color: 'var(--db-color-sqlserver)', flexShrink: 0 }}
+             style={{ fontSize: 14, color: 'var(--color-info)', flexShrink: 0 }}
           />
         ) : (
-          <TableOutlined style={{ fontSize: 14, color: 'var(--color-success)', flexShrink: 0 }} />
+          <TableOutlined style={{ fontSize: 14, color: 'var(--color-primary)', flexShrink: 0 }} />
         )}
         <span
           title={table.table_name}
@@ -181,9 +182,9 @@ const TableRow = React.memo(
       table_name: (t) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           {t.table_type === 'VIEW' ? (
-            <EyeOutlined style={{ fontSize: 12, color: 'var(--db-color-sqlserver)', flexShrink: 0 }} />
+            <EyeOutlined style={{ fontSize: 12, color: 'var(--color-info)', flexShrink: 0 }} />
           ) : (
-            <TableOutlined style={{ color: 'var(--color-success)', flexShrink: 0, fontSize: 12 }} />
+            <TableOutlined style={{ color: 'var(--color-primary)', flexShrink: 0, fontSize: 12 }} />
           )}
           <span
             title={t.table_name}
@@ -443,6 +444,7 @@ function ListHeader({
 function TableListComponent({
   connectionId,
   database,
+  schema,
   objectType = 'all',
   onTableSelect,
   onTableOpen,
@@ -785,6 +787,7 @@ function TableListComponent({
     let tableCount = 0;
     let viewCount = 0;
     const filtered = tables.filter((t) => {
+      if (schema && t.schema && t.schema !== schema) return false;
       if (t.table_type === 'BASE TABLE') {
         tableCount++;
         return objectType === 'table' || objectType === 'all';
@@ -809,13 +812,13 @@ function TableListComponent({
       });
     }
     return { filteredTables: filtered, tableCount, viewCount };
-  }, [tables, objectType, sort]);
+  }, [tables, objectType, schema, sort]);
 
   const tableRowItems = useMemo(
     () =>
       filteredTables.map((table) => (
         <TableRow
-          key={table.table_name}
+          key={table.schema ? `${table.schema}.${table.table_name}` : table.table_name}
           table={table}
           selected={selectedRow === table.table_name}
           onClick={() => handleTableClickRef.current(table.table_name)}
@@ -829,7 +832,7 @@ function TableListComponent({
     () =>
       filteredTables.map((table) => (
         <TableGridCard
-          key={table.table_name}
+          key={table.schema ? `${table.schema}.${table.table_name}` : table.table_name}
           table={table}
           selected={selectedRow === table.table_name}
           onClick={() => handleTableClickRef.current(table.table_name)}
@@ -993,12 +996,20 @@ function TableListComponent({
           <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
           <Tooltip title={t('common.importWizard')}>
             <span>
-              <Button icon={<ImportOutlined />} size="small" onClick={onImport} />
+              <Button
+                icon={<ImportOutlined />}
+                size="small"
+                onClick={() => onImport?.(selectedRow || '', database)}
+              />
             </span>
           </Tooltip>
           <Tooltip title={t('common.exportWizard')}>
             <span>
-              <Button icon={<ExportOutlined />} size="small" onClick={onExport} />
+              <Button
+                icon={<ExportOutlined />}
+                size="small"
+                onClick={() => onExport?.(selectedRow || '', database)}
+              />
             </span>
           </Tooltip>
           <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
@@ -1031,19 +1042,19 @@ function TableListComponent({
         <Space size="small">
           {objectType === 'all' ? (
             <>
-              <Tag color="blue">
+              <Tag style={{ margin: 0, padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
                 {t('common.dumpDialog.tables')} {tableCount}
               </Tag>
-              <Tag color="purple">
+              <Tag style={{ margin: 0, padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-info-alpha-15)', color: 'var(--color-info)', border: '1px solid var(--color-info-alpha-30)' }}>
                 {t('common.databaseProperties.views')} {viewCount}
               </Tag>
             </>
           ) : objectType === 'table' ? (
-            <Tag color="blue">
+            <Tag style={{ margin: 0, padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
               {t('common.dumpDialog.tables')} {tableCount}
             </Tag>
           ) : (
-            <Tag color="purple">
+            <Tag style={{ margin: 0, padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-info-alpha-15)', color: 'var(--color-info)', border: '1px solid var(--color-info-alpha-30)' }}>
               {t('common.databaseProperties.views')} {viewCount}
             </Tag>
           )}

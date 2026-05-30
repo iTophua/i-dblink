@@ -3,6 +3,7 @@ import { Tabs, Table, Spin, Empty, Tag, App } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { KeyOutlined, LinkOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useThemeColors } from '../hooks/useThemeColors';
 import { useDatabase } from '../hooks/useApi';
 import { api } from '../api';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../types/api';
@@ -28,6 +29,7 @@ interface TableStructureProps {
 
 export function TableStructure({ connectionId, tableName, database }: TableStructureProps) {
   const { t } = useTranslation();
+  const tc = useThemeColors();
   const { message } = App.useApp();
   const { getColumns, getIndexes, getForeignKeys, getTableInfo } = useDatabase();
   const [loading, setLoading] = useState(false);
@@ -94,7 +96,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       render: (_text: string, record: ColumnInfo) => (
         <span>
           {record.column_key === 'PRI' && (
-            <KeyOutlined style={{ color: '#faad14', marginRight: 4 }} />
+            <KeyOutlined style={{ color: tc.warning, marginRight: 4 }} />
           )}
           {record.column_name}
         </span>
@@ -106,7 +108,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       key: 'data_type',
       width: 140,
       render: (_text: string, record: ColumnInfo) => (
-        <Tag color="blue">{record.data_type}</Tag>
+        <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{record.data_type}</Tag>
       ),
     },
     {
@@ -132,7 +134,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       render: (val?: string) => {
         if (val === 'PRI') return <Tag color="gold">PRI</Tag>;
         if (val === 'UNI') return <Tag color="green">UNI</Tag>;
-        if (val === 'MUL') return <Tag color="blue">MUL</Tag>;
+        if (val === 'MUL') return <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>MUL</Tag>;
         return null;
       },
     },
@@ -155,7 +157,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       width: 180,
       render: (text: string, record: IndexInfo) => (
         <span>
-          {record.is_primary && <KeyOutlined style={{ color: '#faad14', marginRight: 4 }} />}
+          {record.is_primary && <KeyOutlined style={{ color: tc.warning, marginRight: 4 }} />}
           {text}
         </span>
       ),
@@ -200,13 +202,13 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       dataIndex: 'column_name',
       key: 'column_name',
       width: 120,
-      render: (text: string) => <Tag color="blue">{text}</Tag>,
+      render: (text: string) => <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{text}</Tag>,
     },
     {
       title: '',
       key: 'arrow',
       width: 30,
-      render: () => <LinkOutlined style={{ color: '#999' }} />,
+      render: () => <LinkOutlined style={{ color: tc.textTertiary }} />,
     },
     {
       title: t('common.referencedTable'),
@@ -255,7 +257,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 <Table
                   columns={columnDefs}
                   dataSource={tableData}
-                  rowKey={(record) => record.column_name}
+                  rowKey={(record, index) => `${record.column_name}-${index}`}
                   size="small"
                   pagination={false}
                   scroll={{ x: 'max-content' }}
@@ -273,7 +275,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 <Table
                   columns={indexDefs}
                   dataSource={indexes}
-                  rowKey={(record) => `${record.index_name}-${record.column_name}`}
+                  rowKey={(record, index) => `${record.index_name}-${record.column_name}-${index}`}
                   size="small"
                   pagination={false}
                   scroll={{ x: 'max-content' }}
@@ -291,7 +293,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 <Table
                   columns={fkDefs}
                   dataSource={foreignKeys}
-                  rowKey={(record) => `${record.constraint_name}-${record.column_name}`}
+                  rowKey={(record, index) => `${record.constraint_name}-${record.column_name}-${index}`}
                   size="small"
                   pagination={false}
                   scroll={{ x: 'max-content' }}
@@ -322,7 +324,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                     <tr>
                       <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.engine')}</td>
                       <td>
-                        <Tag color="blue">{tableInfo.engine || '-'}</Tag>
+                        <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{tableInfo.engine || '-'}</Tag>
                       </td>
                     </tr>
                     <tr>

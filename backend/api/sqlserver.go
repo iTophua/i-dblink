@@ -26,6 +26,9 @@ func sqlserverGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, e
 		}
 		result = append(result, name)
 	}
+	if result == nil {
+		result = []string{}
+	}
 	return result, rows.Err()
 }
 

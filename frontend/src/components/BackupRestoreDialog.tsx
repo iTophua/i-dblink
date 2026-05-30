@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Modal, Form, Checkbox, message, Space, Button as AntButton } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { useThemeColors } from '../hooks/useThemeColors';
 import { FolderOutlined, DatabaseOutlined, UploadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { GlobalInput } from './GlobalInput';
@@ -59,6 +60,7 @@ export function BackupRestoreDialog({
   onSuccess,
 }: BackupRestoreDialogProps) {
   const { t } = useTranslation();
+  const tc = useThemeColors();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [toolChecked, setToolChecked] = useState(false);
@@ -166,7 +168,7 @@ export function BackupRestoreDialog({
         )}
 
         {toolChecked && !toolAvailable && (
-          <div style={{ marginBottom: 16, color: '#ff4d4f', textAlign: 'center' }}>
+          <div style={{ marginBottom: 16, color: tc.error, textAlign: 'center' }}>
             {t('common.backupToolNotFoundPleaseInstall')}
           </div>
         )}

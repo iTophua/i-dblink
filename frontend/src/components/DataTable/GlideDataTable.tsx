@@ -18,7 +18,7 @@ import DataEditor, {
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { lightGlideTheme, darkGlideTheme } from './glide-theme';
+import { buildGlideTheme } from './glide-theme';
 
 export type GlideRow = Record<string, unknown>;
 
@@ -51,6 +51,14 @@ export interface GlideDataTableProps {
 }
 
 const FILLER_COL_ID = '__filler__';
+
+function hexWithAlpha(hex: string, alpha: number): string {
+  if (hex.startsWith('#') && hex.length === 7) {
+    const a = Math.round(alpha * 255).toString(16).padStart(2, '0');
+    return hex + a;
+  }
+  return hex;
+}
 
 export function buildGridColumns(columns: GlideColumn[], hiddenColumns: Set<string>): GridColumn[] {
   return columns
@@ -158,15 +166,15 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
         width: p.target.width,
         height: p.target.height,
         border: 'none',
-        outline: '1px solid #1890ff',
+        outline: `1px solid ${tc.primary}`,
         outlineOffset: -1,
         padding: '0 8px',
         margin: 0,
         fontSize: 12,
         fontFamily: 'sans-serif',
-        background: tc.isDark ? '#252526' : '#FFFFFF',
-        color: tc.isDark ? '#D4D4D4' : '#000000',
-        caretColor: tc.isDark ? '#FFFFFF' : '#000000',
+        background: tc.backgroundCard,
+        color: tc.textPrimary,
+        caretColor: tc.textPrimary,
         boxSizing: 'border-box',
       }}
     />
@@ -197,8 +205,8 @@ export function GlideDataTable({
   const hiddenSet = hiddenColumns ?? new Set<string>();
 
   const theme = useMemo<Partial<Theme>>(
-    () => (isDark ? darkGlideTheme : lightGlideTheme),
-    [isDark]
+    () => buildGlideTheme(tc),
+    [tc]
   );
 
   // 内部列顺序和宽度（仅在父组件未传回调时使用）
@@ -265,23 +273,20 @@ export function GlideDataTable({
 
   // ===== drawHeader =====
   const drawHeader: DrawHeaderCallback = useCallback(
-    (args) => {
+    (args, _drawContent) => {
       const { ctx, rect, column, isSelected, theme: t } = args;
-      if (column.id === FILLER_COL_ID) return true;
+      if (column.id === FILLER_COL_ID) return;
       const parts = (column.title || '').split('|');
       const name = parts[0] || '';
       const type = parts[1] || '';
       const isPk = parts[2] === '1';
-      // 选中背景
       if (isSelected) {
-        ctx.fillStyle = isDark ? 'rgba(24,144,255,0.15)' : 'rgba(24,144,255,0.08)';
+        ctx.fillStyle = t.bgHeaderHasFocus;
         ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       }
-      // 列名
-      ctx.fillStyle = t.textDark || '#0f0f0f';
+      ctx.fillStyle = tc.textPrimary;
       ctx.font = '600 12px sans-serif';
       ctx.fillText(name, rect.x + 8, rect.y + 16);
-      // 类型 + PK（第二行）
       const secondY = rect.y + 26;
       let secondX = rect.x + 8;
       if (isPk) {
@@ -291,13 +296,12 @@ export function GlideDataTable({
         secondX += 22;
       }
       if (type) {
-        ctx.fillStyle = t.textLight || '#8c8c8c';
+        ctx.fillStyle = tc.textSecondary;
         ctx.font = '10px sans-serif';
         ctx.fillText(type, secondX, secondY);
       }
-      return false;
     },
-    [isDark, gridColumns]
+    [tc, gridColumns]
   );
 
   // ===== drawCell =====
@@ -329,9 +333,9 @@ export function GlideDataTable({
         }
       }
       // 状态背景（覆盖在斑马纹之上）
-      if (status === 'new') { ctx.fillStyle = 'rgba(82, 196, 26, 0.08)'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
-      else if (status === 'modified') { ctx.fillStyle = 'rgba(24, 144, 255, 0.1)'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
-      if (isCellModified?.(rowItem, gridCol.id)) { ctx.fillStyle = 'rgba(24, 144, 255, 0.06)'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
+      if (status === 'new') { ctx.fillStyle = hexWithAlpha(tc.success, 0.08); ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
+      else if (status === 'modified') { ctx.fillStyle = hexWithAlpha(tc.primary, 0.1); ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
+      if (isCellModified?.(rowItem, gridCol.id)) { ctx.fillStyle = hexWithAlpha(tc.primary, 0.06); ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
 
       // 删除
       if (status === 'deleted') {

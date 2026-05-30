@@ -654,7 +654,7 @@ export const DataTable = memo(function DataTable({
         </Space>
         <Space size={2}>
           <Input prefix={<SearchOutlined style={{ fontSize: 10, color: 'var(--text-tertiary)' }} />} value={quickFilter} onChange={(e) => setQuickFilter(e.target.value)} placeholder={t('common.search')} size="small" style={{ width: 160, height: 18, fontSize: 10 }} />
-          <Tag color="blue" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>{tableName}</Tag>
+          <Tag style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16, background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{tableName}</Tag>
           <Tag color="green" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>{totalCount.toLocaleString()} {t('common.rows')}</Tag>
           {selectedRows.length > 0 && <Tag color="orange" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>{selectedRows.length} {t('common.rows')}</Tag>}
         </Space>

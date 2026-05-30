@@ -1,4 +1,5 @@
 import React from 'react';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 interface DatabaseIconProps {
   type: string;
@@ -129,7 +130,8 @@ function TextDbIcon({ color, text, size, muted }: { color: string; text: string;
 export function DatabaseIcon({ type, size = 20, grayscale, connected }: DatabaseIconProps) {
   const isConnected = connected ?? !grayscale;
   const muted = !isConnected;
-  const color = BRAND_COLORS[type] || '#1890ff';
+  const tc = useThemeColors();
+  const color = BRAND_COLORS[type] || tc.primary;
   const official = OFFICIAL_PATHS[type];
   const textConfig = TEXT_ICONS[type];
 
@@ -154,7 +156,8 @@ export function DatabaseIcon({ type, size = 20, grayscale, connected }: Database
 }
 
 export function DatabaseIconWithLabel({ type, size = 20 }: DatabaseIconProps) {
-  const color = BRAND_COLORS[type] || '#1890ff';
+  const tc = useThemeColors();
+  const color = BRAND_COLORS[type] || tc.primary;
   const label =
     {
       mysql: 'MySQL',

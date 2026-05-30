@@ -131,7 +131,7 @@ export function HistoryPanel({
         </Space>
 
         <Space size="small">
-          <Tag color="blue">
+          <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
             {' '}
             {history.length} {t('common.items')}
           </Tag>

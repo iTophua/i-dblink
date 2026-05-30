@@ -4,6 +4,7 @@ package models
 type TableInfo struct {
 	TableName  string  `json:"table_name"`
 	TableType  string  `json:"table_type"`
+	Schema     string  `json:"schema,omitempty"`
 	RowCount   *uint64 `json:"row_count,omitempty"`
 	Comment    *string `json:"comment,omitempty"`
 	Engine     *string `json:"engine,omitempty"`

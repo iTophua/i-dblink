@@ -368,7 +368,7 @@ export function ResultGrid({
           <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{t('common.totalDuration')} {queryResult.totalTime}ms</span>
         )}
         {isEditable && (
-          <Tag color="blue" style={{ margin: 0, fontSize: 11, lineHeight: '20px' }}>
+          <Tag style={{ margin: 0, fontSize: 11, lineHeight: '20px', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
             {t('common.editable')}
           </Tag>
         )}

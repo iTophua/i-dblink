@@ -7,10 +7,7 @@ import (
 )
 
 func openPostgres(args ConnectArgs) (*sql.DB, error) {
-	sslMode := "prefer"
-	if args.Host == "localhost" || args.Host == "127.0.0.1" {
-		sslMode = "disable"
-	}
+	sslMode := "disable"
 
 	dbName := args.Database
 	if dbName == "" {
@@ -28,7 +25,7 @@ func openPostgres(args ConnectArgs) (*sql.DB, error) {
 		}.Encode(),
 	}
 
-	// SSL/TLS 配置
+	// SSL/TLS 配置（用户主动启用时才使用）
 	if args.SSL.Enabled {
 		if args.SSL.SkipVerify {
 			dsn.RawQuery = url.Values{

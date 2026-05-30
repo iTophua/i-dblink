@@ -44,10 +44,8 @@ func createFileMenu(app *backend.App) *menu.Menu {
 	m.Append(menu.Text("保存", keys.CmdOrCtrl("s"), callback(app, "save")))
 	m.Append(menu.Text("另存为...", keys.CmdOrCtrl("shift-s"), callback(app, "save-as")))
 	m.Append(menu.Separator())
-	m.Append(menu.Text("导入", keys.CmdOrCtrl("i"), callback(app, "import")))
-	m.Append(menu.Text("导出", keys.CmdOrCtrl("e"), callback(app, "export")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("导出连接配置...", nil, callback(app, "export-connections")))
+	m.Append(menu.Text("导入连接配置...", keys.CmdOrCtrl("i"), callback(app, "import-connections")))
+	m.Append(menu.Text("导出连接配置...", keys.CmdOrCtrl("e"), callback(app, "export-connections")))
 	return m
 }
 

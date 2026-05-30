@@ -5,7 +5,7 @@
  */
 
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type ThemePreset = 'default' | 'modern';
+export type ThemePreset = 'default' | 'modern' | 'ink';
 
 export interface ThemeColorScheme {
   primary: string;
@@ -706,7 +706,7 @@ const DEFAULT_LIGHT_NEUTRAL: NeutralColors = {
   borderDark: '#D1D1D6',
   background: '#FFFFFF',
   backgroundCard: '#FFFFFF',
-  backgroundToolbar: '#FFFFFF',
+  backgroundToolbar: '#F8F9FB',
   backgroundHover: '#EDEDF0',
   backgroundActive: '#E8F0FE',
   mask: 'rgba(0, 0, 0, 0.3)',
@@ -714,7 +714,7 @@ const DEFAULT_LIGHT_NEUTRAL: NeutralColors = {
   rowHoverBg: '#EDEDF0',
   rowSelectedBg: '#DBEAFE',
   rowStripeBg: 'rgba(0, 0, 0, 0.015)',
-  headerBg: '#F8F8FA',
+  headerBg: '#F6F7F9',
   surfaceElevated: '#FFFFFF',
   scrollbarThumb: 'rgba(0, 0, 0, 0.12)',
   scrollbarTrack: 'rgba(0, 0, 0, 0.02)',
@@ -728,33 +728,33 @@ const DEFAULT_LIGHT_NEUTRAL: NeutralColors = {
 };
 
 const DEFAULT_DARK_NEUTRAL: NeutralColors = {
-  textPrimary: '#FAFAFA',
+  textPrimary: '#E4E4E7',
   textSecondary: '#A1A1AA',
-  textTertiary: '#71717A',
+  textTertiary: '#6B6B76',
   textDisabled: '#3F3F46',
-  border: '#27272A',
-  borderLight: '#1E1E21',
-  borderDark: '#3F3F46',
-  background: '#09090B',
-  backgroundCard: '#141416',
-  backgroundToolbar: '#0F0F11',
-  backgroundHover: '#27272A',
+  border: '#2A2A30',
+  borderLight: '#1E1E24',
+  borderDark: '#3A3A42',
+  background: '#0A0D14',
+  backgroundCard: '#12151E',
+  backgroundToolbar: '#0E1119',
+  backgroundHover: '#24272F',
   backgroundActive: '#172554',
   mask: 'rgba(0, 0, 0, 0.7)',
-  windowBackground: '#09090B',
-  rowHoverBg: '#1C1C1F',
+  windowBackground: '#0A0D14',
+  rowHoverBg: '#1C1F28',
   rowSelectedBg: '#1E3A5F',
   rowStripeBg: 'rgba(255, 255, 255, 0.01)',
-  headerBg: '#0F0F11',
-  surfaceElevated: '#18181B',
+  headerBg: '#0E1119',
+  surfaceElevated: '#161921',
   scrollbarThumb: 'rgba(255, 255, 255, 0.10)',
   scrollbarTrack: 'rgba(255, 255, 255, 0.02)',
-  level1: '#09090B',
-  level2: '#141416',
-  level3: '#1C1C1F',
-  level4: '#252528',
-  borderSubtle: '#1F1F23',
-  borderEmphasis: '#3F3F46',
+  level1: '#0A0D14',
+  level2: '#12151E',
+  level3: '#1A1D26',
+  level4: '#22252E',
+  borderSubtle: '#1F222A',
+  borderEmphasis: '#3A3A42',
   borderActive: '#3B82F6',
 };
 
@@ -981,6 +981,166 @@ const MODERN_DARK_NEUTRAL: NeutralColors = {
   borderActive: '#2DD4BF',
 };
 
+// ==================== Ink 墨色主题配色 ====================
+// 设计理念：浓墨淡彩，黑白灰基底 + 朱砂红点缀
+// 灵感：中国水墨画「焦浓重淡清」五墨色阶
+
+const INK_LIGHT: ThemeColorScheme = {
+  primary: '#000000',
+  primaryHover: '#333333',
+  primaryActive: '#000000',
+  primaryGradient: 'linear-gradient(135deg, #000000 0%, #333333 100%)',
+  success: '#333333',
+  successHover: '#555555',
+  successActive: '#000000',
+  successGradient: 'linear-gradient(135deg, #333333 0%, #555555 100%)',
+  warning: '#666666',
+  warningHover: '#888888',
+  warningActive: '#555555',
+  warningGradient: 'linear-gradient(135deg, #666666 0%, #888888 100%)',
+  error: '#333333',
+  errorHover: '#555555',
+  errorActive: '#000000',
+  errorGradient: 'linear-gradient(135deg, #333333 0%, #555555 100%)',
+  info: '#666666',
+  infoHover: '#888888',
+  infoActive: '#555555',
+  infoGradient: 'linear-gradient(135deg, #666666 0%, #888888 100%)',
+};
+
+const INK_DARK: ThemeColorScheme = {
+  primary: '#FFFFFF',
+  primaryHover: '#CCCCCC',
+  primaryActive: '#FFFFFF',
+  primaryGradient: 'linear-gradient(135deg, #FFFFFF 0%, #CCCCCC 100%)',
+  success: '#CCCCCC',
+  successHover: '#EEEEEE',
+  successActive: '#FFFFFF',
+  successGradient: 'linear-gradient(135deg, #CCCCCC 0%, #EEEEEE 100%)',
+  warning: '#999999',
+  warningHover: '#BBBBBB',
+  warningActive: '#888888',
+  warningGradient: 'linear-gradient(135deg, #999999 0%, #BBBBBB 100%)',
+  error: '#CCCCCC',
+  errorHover: '#EEEEEE',
+  errorActive: '#FFFFFF',
+  errorGradient: 'linear-gradient(135deg, #CCCCCC 0%, #EEEEEE 100%)',
+  info: '#999999',
+  infoHover: '#BBBBBB',
+  infoActive: '#888888',
+  infoGradient: 'linear-gradient(135deg, #999999 0%, #BBBBBB 100%)',
+};
+
+const INK_LIGHT_NEUTRAL: NeutralColors = {
+  textPrimary: '#000000',
+  textSecondary: '#333333',
+  textTertiary: '#666666',
+  textDisabled: '#999999',
+  border: '#CCCCCC',
+  borderLight: '#E0E0E0',
+  borderDark: '#999999',
+  background: '#FFFFFF',
+  backgroundCard: '#FFFFFF',
+  backgroundToolbar: '#FFFFFF',
+  backgroundHover: '#F0F0F0',
+  backgroundActive: '#E5E5E5',
+  mask: 'rgba(0, 0, 0, 0.35)',
+  windowBackground: '#FFFFFF',
+  rowHoverBg: '#F0F0F0',
+  rowSelectedBg: '#E5E5E5',
+  rowStripeBg: 'rgba(0, 0, 0, 0.015)',
+  headerBg: '#F5F5F5',
+  surfaceElevated: '#FFFFFF',
+  scrollbarThumb: 'rgba(0, 0, 0, 0.12)',
+  scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
+  level1: '#F5F5F5',
+  level2: '#FFFFFF',
+  level3: '#FFFFFF',
+  level4: '#FFFFFF',
+  borderSubtle: '#E0E0E0',
+  borderEmphasis: '#999999',
+  borderActive: '#000000',
+};
+
+const INK_DARK_NEUTRAL: NeutralColors = {
+  textPrimary: '#FFFFFF',
+  textSecondary: '#CCCCCC',
+  textTertiary: '#888888',
+  textDisabled: '#555555',
+  border: '#333333',
+  borderLight: '#222222',
+  borderDark: '#444444',
+  background: '#000000',
+  backgroundCard: '#000000',
+  backgroundToolbar: '#000000',
+  backgroundHover: '#1A1A1A',
+  backgroundActive: '#222222',
+  mask: 'rgba(0, 0, 0, 0.75)',
+  windowBackground: '#000000',
+  rowHoverBg: '#1A1A1A',
+  rowSelectedBg: '#222222',
+  rowStripeBg: 'rgba(255, 255, 255, 0.01)',
+  headerBg: '#0A0A0A',
+  surfaceElevated: '#111111',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.1)',
+  scrollbarTrack: 'rgba(255, 255, 255, 0.015)',
+  level1: '#000000',
+  level2: '#0A0A0A',
+  level3: '#111111',
+  level4: '#181818',
+  borderSubtle: '#1A1A1A',
+  borderEmphasis: '#444444',
+  borderActive: '#FFFFFF',
+};
+
+const INK_GLASS_LIGHT: GlassEffect = {
+  glassBackground: 'rgba(255, 255, 255, 0.9)',
+  glassBorder: 'rgba(0, 0, 0, 0.08)',
+  glassBlur: 'blur(16px)',
+  glassShadow: '0 4px 20px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.05)',
+  glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+  glassHighlight: 'linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 30%)',
+};
+
+const INK_GLASS_DARK: GlassEffect = {
+  glassBackground: 'rgba(0, 0, 0, 0.85)',
+  glassBorder: 'rgba(255, 255, 255, 0.06)',
+  glassBlur: 'blur(20px)',
+  glassShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.03)',
+  glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.03)',
+  glassHighlight: 'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 30%)',
+};
+
+const INK_FOCUS_LIGHT: FocusStyle = {
+  focusRingColor: 'rgba(0, 0, 0, 0.35)',
+  focusRingWidth: 2,
+  focusRingOffset: 2,
+  focusRingShadow: '0 0 0 2px rgba(0, 0, 0, 0.08)',
+};
+
+const INK_FOCUS_DARK: FocusStyle = {
+  focusRingColor: 'rgba(255, 255, 255, 0.45)',
+  focusRingWidth: 2,
+  focusRingOffset: 2,
+  focusRingShadow: '0 0 0 2px rgba(255, 255, 255, 0.1), 0 0 12px rgba(255, 255, 255, 0.03)',
+};
+
+const INK_SHADOWS = {
+  ...SHADOWS,
+  shadowSm: '0 1px 2px rgba(0,0,0,0.04)',
+  shadowMd: '0 1px 3px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.04)',
+  shadowLg: '0 2px 4px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.06)',
+  shadowXl: '0 4px 8px rgba(0,0,0,0.08), 0 12px 40px rgba(0,0,0,0.10)',
+  shadow2xl: '0 8px 16px rgba(0,0,0,0.10), 0 20px 60px rgba(0,0,0,0.14)',
+  cardShadowLight: '0 1px 3px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.03)',
+  headerShadowLight: '0 1px 2px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.03)',
+  cardShadowDark: '0 2px 8px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.02)',
+  headerShadowDark: '0 2px 6px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.35), inset 0 -1px 0 rgba(255,255,255,0.01)',
+  glowPrimary: '0 0 20px rgba(192,57,43,0.10)',
+  glowPrimarySoft: '0 0 32px rgba(192,57,43,0.06), 0 0 64px rgba(192,57,43,0.03)',
+  glowPrimaryStrong: '0 0 40px rgba(224,90,78,0.16), 0 0 80px rgba(224,90,78,0.06)',
+};
+
 // ==================== 导出所有主题配置 ====================
 
 export const THEMES = {
@@ -1008,6 +1168,18 @@ export const THEMES = {
       shadows: MODERN_SHADOWS,
     }),
   },
+  ink: {
+    light: createThemeConfig('Ink', '墨色主题', 'light', INK_LIGHT, INK_LIGHT_NEUTRAL, {
+      glassEffect: INK_GLASS_LIGHT,
+      focusStyle: INK_FOCUS_LIGHT,
+      shadows: INK_SHADOWS,
+    }),
+    dark: createThemeConfig('Ink', '墨色主题', 'dark', INK_DARK, INK_DARK_NEUTRAL, {
+      glassEffect: INK_GLASS_DARK,
+      focusStyle: INK_FOCUS_DARK,
+      shadows: INK_SHADOWS,
+    }),
+  },
 } as const;
 
 export function getThemeConfig(mode: ThemeMode, preset?: ThemePreset): ThemeConfig {
@@ -1017,10 +1189,14 @@ export function getThemeConfig(mode: ThemeMode, preset?: ThemePreset): ThemeConf
   if (themeName === 'modern') {
     return THEMES.modern[effectiveMode];
   }
+  if (themeName === 'ink') {
+    return THEMES.ink[effectiveMode];
+  }
   return THEMES.default[effectiveMode];
 }
 
 export const THEME_PRESETS_LIST = [
   { value: 'default' as ThemePreset, label: '默认主题', description: '高端质感，中性灰蓝专业风格' },
   { value: 'modern' as ThemePreset, label: '现代主题', description: '清新简约，Teal 青碧风格' },
+  { value: 'ink' as ThemePreset, label: '墨色主题', description: '浓墨淡彩，朱砂红点缀的东方美学' },
 ];

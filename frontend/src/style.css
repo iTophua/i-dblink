@@ -15,6 +15,11 @@
   --color-error: #EF4444;
   --color-info: #1E3A8A;
 
+  --color-primary-alpha-15: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  --color-primary-alpha-30: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --color-info-alpha-15: color-mix(in srgb, var(--color-info) 15%, transparent);
+  --color-info-alpha-30: color-mix(in srgb, var(--color-info) 30%, transparent);
+
   --db-color-mysql: #1890ff;
   --db-color-postgresql: #336791;
   --db-color-sqlite: #003b57;

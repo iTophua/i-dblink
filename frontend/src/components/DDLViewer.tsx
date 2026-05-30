@@ -1,8 +1,9 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useMemo } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { CopyOutlined } from '@ant-design/icons';
 import { Tooltip, App } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { format as formatSql } from 'sql-formatter';
 import { useThemeColors } from '../hooks/useThemeColors';
 
 interface DDLViewerProps {
@@ -48,6 +49,14 @@ export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight }) => {
   );
 
   if (!ddl) return null;
+
+  const formattedDDL = useMemo(() => {
+    try {
+      return formatSql(ddl, { keywordCase: 'upper', indentStyle: 'standard', linesBetweenQueries: 2 });
+    } catch {
+      return ddl;
+    }
+  }, [ddl]);
 
   const sqlTheme = {
     'code[class*="language-"]': {
@@ -142,7 +151,7 @@ export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight }) => {
         }}
         wrapLines
       >
-        {ddl}
+        {formattedDDL}
       </SyntaxHighlighter>
     </div>
   );

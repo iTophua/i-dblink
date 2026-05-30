@@ -1,6 +1,7 @@
 import { AutoComplete, Input } from 'antd';
 import type { InputRef } from 'antd';
 import React, { useMemo, useCallback, useRef, useEffect, useState } from 'react';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 interface SqlInputProps {
   value?: string;
@@ -310,6 +311,8 @@ export const SqlInput: React.FC<SqlInputProps> = ({
   size = 'small',
   dbType,
 }) => {
+  const tc = useThemeColors();
+
   // 根据数据库类型确定引号字符
   const getQuoteChar = useCallback(() => {
     switch (dbType?.toLowerCase()) {
@@ -362,7 +365,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
       label: (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <span>{col.column_name}</span>
-          <span style={{ color: '#888', fontSize: 10 }}>{col.data_type}</span>
+          <span style={{ color: tc.textTertiary, fontSize: 10 }}>{col.data_type}</span>
         </div>
       ),
       dataType: col.data_type,
@@ -386,9 +389,9 @@ export const SqlInput: React.FC<SqlInputProps> = ({
         case 'start':
           return [
             ...columnOptions.slice(0, 5),
-            { value: 'WHERE', label: <span style={{ color: '#1890ff' }}>WHERE</span> },
-            { value: 'ORDER BY', label: <span style={{ color: '#1890ff' }}>ORDER BY</span> },
-            { value: 'GROUP BY', label: <span style={{ color: '#1890ff' }}>GROUP BY</span> },
+            { value: 'WHERE', label: <span style={{ color: tc.primary }}>WHERE</span> },
+            { value: 'ORDER BY', label: <span style={{ color: tc.primary }}>ORDER BY</span> },
+            { value: 'GROUP BY', label: <span style={{ color: tc.primary }}>GROUP BY</span> },
           ];
 
         case 'column':
@@ -402,7 +405,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
               label: (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                   <span>{opt.columnName}</span>
-                  <span style={{ color: '#888', fontSize: 10 }}>{opt.dataType}</span>
+                  <span style={{ color: tc.textTertiary, fontSize: 10 }}>{opt.dataType}</span>
                 </div>
               ),
             }))
@@ -417,7 +420,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
             .filter((op) => fuzzyMatch(searchValue, op))
             .map((op) => ({
               value: op.endsWith(' ') ? op : op + ' ',
-              label: <span style={{ color: '#52c41a' }}>{op}</span>,
+              label: <span style={{ color: tc.success }}>{op}</span>,
             }));
         }
 
@@ -443,7 +446,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
                         style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}
                       >
                         <span>{opt.columnName}</span>
-                        <span style={{ color: '#888', fontSize: 10 }}>{opt.dataType}</span>
+                        <span style={{ color: tc.textTertiary, fontSize: 10 }}>{opt.dataType}</span>
                       </div>
                     ),
                   });
@@ -459,7 +462,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
                         style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}
                       >
                         <span>{opt.columnName}</span>
-                        <span style={{ color: '#888', fontSize: 10 }}>{opt.dataType}</span>
+                        <span style={{ color: tc.textTertiary, fontSize: 10 }}>{opt.dataType}</span>
                       </div>
                     ),
                   });
@@ -470,40 +473,40 @@ export const SqlInput: React.FC<SqlInputProps> = ({
                 if (!suggestions.some((s) => s.value === `'%${searchValue}%'`)) {
                   suggestions.push({
                     value: `'%${searchValue}%'`,
-                    label: <span style={{ color: '#fa8c16' }}>'%{searchValue}%'</span>,
+                    label: <span style={{ color: tc.warning }}>'%{searchValue}%'</span>,
                   });
                 }
               } else if (category === 'date') {
                 if (!suggestions.some((s) => s.value === `'NOW()'`)) {
                   suggestions.push({
                     value: `'NOW()'`,
-                    label: <span style={{ color: '#fa8c16' }}>'NOW()'</span>,
+                    label: <span style={{ color: tc.warning }}>'NOW()'</span>,
                   });
                 }
                 if (!suggestions.some((s) => s.value === `'${searchValue}'`)) {
                   suggestions.push({
                     value: `'${searchValue}'`,
-                    label: <span style={{ color: '#fa8c16' }}>'{searchValue}'</span>,
+                    label: <span style={{ color: tc.warning }}>'{searchValue}'</span>,
                   });
                 }
               } else if (category === 'boolean') {
                 if (!suggestions.some((s) => s.value === `'TRUE'`)) {
                   suggestions.push({
                     value: `'TRUE'`,
-                    label: <span style={{ color: '#fa8c16' }}>'TRUE'</span>,
+                    label: <span style={{ color: tc.warning }}>'TRUE'</span>,
                   });
                 }
                 if (!suggestions.some((s) => s.value === `'FALSE'`)) {
                   suggestions.push({
                     value: `'FALSE'`,
-                    label: <span style={{ color: '#fa8c16' }}>'FALSE'</span>,
+                    label: <span style={{ color: tc.warning }}>'FALSE'</span>,
                   });
                 }
               } else {
                 if (!suggestions.some((s) => s.value === `'${searchValue}'`)) {
                   suggestions.push({
                     value: `'${searchValue}'`,
-                    label: <span style={{ color: '#fa8c16' }}>'{searchValue}'</span>,
+                    label: <span style={{ color: tc.warning }}>'{searchValue}'</span>,
                   });
                 }
               }
@@ -515,13 +518,13 @@ export const SqlInput: React.FC<SqlInputProps> = ({
 
         case 'value2':
           return [
-            { value: `'`, label: <span style={{ color: '#fa8c16' }}>'value'</span> },
+            { value: `'`, label: <span style={{ color: tc.warning }}>'value'</span> },
             ...columnOptions.slice(0, 3).map((opt) => ({
               value: opt.value,
               label: (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                   <span>{opt.columnName}</span>
-                  <span style={{ color: '#888', fontSize: 10 }}>{opt.dataType}</span>
+                  <span style={{ color: tc.textTertiary, fontSize: 10 }}>{opt.dataType}</span>
                 </div>
               ),
             })),
@@ -532,15 +535,15 @@ export const SqlInput: React.FC<SqlInputProps> = ({
             (dir) => dir !== lastWord.toUpperCase() && fuzzyMatch(searchValue, dir)
           ).map((dir) => ({
             value: dir + ' ',
-            label: <span style={{ color: '#1890ff' }}>{dir}</span>,
+            label: <span style={{ color: tc.primary }}>{dir}</span>,
           }));
 
         case 'logic':
           return [
-            { value: 'AND ', label: <span style={{ color: '#722ed1' }}>AND</span> },
-            { value: 'OR ', label: <span style={{ color: '#722ed1' }}>OR</span> },
-            { value: 'ORDER BY ', label: <span style={{ color: '#1890ff' }}>ORDER BY</span> },
-            { value: 'LIMIT ', label: <span style={{ color: '#1890ff' }}>LIMIT</span> },
+            { value: 'AND ', label: <span style={{ color: tc.info }}>AND</span> },
+            { value: 'OR ', label: <span style={{ color: tc.info }}>OR</span> },
+            { value: 'ORDER BY ', label: <span style={{ color: tc.primary }}>ORDER BY</span> },
+            { value: 'LIMIT ', label: <span style={{ color: tc.primary }}>LIMIT</span> },
           ];
 
         case 'afterLogic':

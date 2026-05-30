@@ -72,6 +72,7 @@ export interface GroupOutput {
 export interface TableInfo {
   table_name: string;
   table_type: string;
+  schema?: string;
   row_count?: number;
   comment?: string;
   engine?: string;

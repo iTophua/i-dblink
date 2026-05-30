@@ -216,7 +216,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
                     <CodeOutlined />
                     <Text strong>{snippet.name}</Text>
                     {snippet.db_type && (
-                      <Tag color="blue" style={{ fontSize: 10 }}>
+                      <Tag style={{ fontSize: 10, background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
                         {snippet.db_type}
                       </Tag>
                     )}

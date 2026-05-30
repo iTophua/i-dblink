@@ -75,7 +75,7 @@ class TTLCache<T> {
   }
 }
 
-const structureCache = new TTLCache<import('../api').TableStructure>(100, 10 * 60 * 1000);
+const structureCache = new TTLCache<Promise<import('../api').TableStructure>>(100, 10 * 60 * 1000);
 
 // Schema 补全缓存：用于智能代码补全
 interface SchemaCompletionEntry {
