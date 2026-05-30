@@ -232,6 +232,7 @@ function App() {
       Modal: {
         contentBg: themeConfig.neutralColors.backgroundCard,
         headerBg: themeConfig.neutralColors.backgroundCard,
+        footerBg: themeConfig.neutralColors.backgroundCard,
       },
       Input: {
         colorBgContainer: themeConfig.neutralColors.backgroundCard,

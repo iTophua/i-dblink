@@ -103,7 +103,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       title={t('common.settings')}
       open={open}
       onCancel={onCancel}
-      width={900}
+      width={780}
       style={{ maxHeight: 550 }}
       forceRender
       transitionName=""
@@ -387,7 +387,7 @@ function ShortcutsSettings() {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '8px 12px',
-                  background: 'var(--background-toolbar)',
+                  background: 'var(--background-active)',
                   borderRadius: 6,
                   border: '1px solid var(--border)',
                 }}
