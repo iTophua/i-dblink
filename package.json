@@ -9,7 +9,7 @@
     "dev:backend": "wails dev",
     "test": "cd frontend && pnpm test",
     "package": "bash scripts/package.sh",
-    "test:go": "cd go-backend && go test ./...",
+    "test:go": "go test ./...",
     "lint": "cd frontend && pnpm lint",
     "format": "cd frontend && pnpm format"
   }

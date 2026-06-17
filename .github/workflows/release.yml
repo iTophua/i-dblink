@@ -1,0 +1,148 @@
+name: Release
+
+# 仅在推送 v*.*.* 格式的 tag 时触发打包发布
+# 例: git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write   # softprops/action-gh-release 需要
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build (darwin/universal)
+        run: wails build -platform darwin/universal -clean
+
+      - name: Create DMG
+        run: |
+          # create-dmg 对未签名 app 可能报 code signing 警告，用 || true 容错；
+          # 失败时回退到 zip，保证总有可分发的 macOS 产物。
+          if create-dmg \
+              --volname "iDBLink" \
+              --window-pos 200 120 \
+              --window-size 600 400 \
+              --icon-size 100 \
+              --icon "iDBLink.app" 175 120 \
+              --app-drop-link 425 120 \
+              "build/bin/iDBLink-macos.dmg" \
+              "build/bin/iDBLink.app"; then
+            echo "DMG created successfully"
+          else
+            echo "DMG creation failed, falling back to zip"
+            cd build/bin && ditto -c -k --keepParent iDBLink.app iDBLink-macos.zip && cd -
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iDBLink-macos
+          path: |
+            build/bin/iDBLink-macos.dmg
+            build/bin/iDBLink-macos.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (windows/amd64, NSIS installer + embedded WebView2)
+        run: wails build -platform windows/amd64 -nsis -webview2 embed -clean
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iDBLink-windows
+          # Wails v2 产出：NSIS 安装包 (*-installer.exe) + 独立 exe
+          path: |
+            build/bin/*installer*.exe
+            build/bin/iDBLink.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" \) -exec cp {} release/ \;
+          echo "=== Release assets ==="
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: release/*
