@@ -142,10 +142,11 @@ class SQLiteDialect extends BaseDialect implements SqlDialect {
 
   // ── 条件 ──────────────────────────────────────────────────────────────
 
-  buildLikeCondition(field: string, value: string): { condition: string; value: string } {
+  buildLikeCondition(field: string, value: string, negate = false): { condition: string; value: string } {
     const escaped = value.replace(/\\/g, '\\\\').replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const op = negate ? 'NOT LIKE' : 'LIKE';
     return {
-      condition: `${this.escapeIdentifier(field)} LIKE ? ESCAPE '\\'`,
+      condition: `${this.escapeIdentifier(field)} ${op} ? ESCAPE '\\'`,
       value: escaped,
     };
   }

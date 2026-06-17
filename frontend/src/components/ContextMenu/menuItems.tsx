@@ -1,6 +1,6 @@
 import { CopyOutlined, FilterOutlined } from '@ant-design/icons';
 import type { MenuItemConfig, MenuGroupConfig, MenuContext } from './types';
-import { escapeSqlValue, escapeSqlIdentifier } from '../../utils/sqlUtils';
+import { getDialect } from '../../utils/sqlDialects';
 
 // Helper: copy to clipboard
 function copyToClipboard(text: string) {
@@ -44,8 +44,8 @@ export function createCopyCellAsSqlLiteralItem(
     label: t('common.contextMenu.copyAsSqlLiteral'),
     onClick: () => {
       const value = ctx.cellValue;
-      const sql = escapeSqlValue(value, ctx.dbType);
-      copyToClipboard(sql);
+      const dialect = getDialect(ctx.dbType);
+      copyToClipboard(dialect.escapeValue(value));
       onClose();
     },
   };
@@ -57,19 +57,18 @@ export function createSetNullItem(
   t: (key: string) => string,
   onClose: () => void
 ): MenuItemConfig {
-  const colInfo = ctx.columns?.find((c) => c.column_name === ctx.colName);
-  const canBeNull = colInfo?.is_nullable === 'YES';
-  const isEditable = ctx.isEditable && canBeNull;
+  const isEditable = ctx.isEditable && ctx.colName != null;
 
   return {
     key: 'set-null',
     icon: <CopyOutlined />,
     label: t('common.contextMenu.setNull'),
     disabled: !isEditable,
+    hidden: ctx.colName == null,
     onClick: () => {
-      if (!isEditable || !ctx.onCellEdited || ctx.colName == null || ctx.rowData == null) return;
-      const rowIdx = ctx.rowData.__row_index as number;
-      const colIdx = ctx.queryColumns?.indexOf(ctx.colName) ?? -1;
+      if (!isEditable || !ctx.onCellEdited) return;
+      const colIdx = ctx.queryColumns?.indexOf(ctx.colName!) ?? -1;
+      const rowIdx = ctx.row ?? -1;
       if (rowIdx >= 0 && colIdx >= 0) {
         ctx.onCellEdited(colIdx, rowIdx, 'NULL');
       }
@@ -84,19 +83,18 @@ export function createSetDefaultItem(
   t: (key: string) => string,
   onClose: () => void
 ): MenuItemConfig {
-  const colInfo = ctx.columns?.find((c) => c.column_name === ctx.colName);
-  const hasDefault = colInfo?.column_default != null;
-  const isEditable = ctx.isEditable && hasDefault;
+  const isEditable = ctx.isEditable;
 
   return {
     key: 'set-default',
     icon: <CopyOutlined />,
     label: t('common.contextMenu.setDefault'),
     disabled: !isEditable,
+    hidden: ctx.colName == null,
     onClick: () => {
-      if (!isEditable || !ctx.onCellEdited || ctx.colName == null || ctx.rowData == null) return;
-      const rowIdx = ctx.rowData.__row_index as number;
-      const colIdx = ctx.queryColumns?.indexOf(ctx.colName) ?? -1;
+      if (!isEditable || !ctx.onCellEdited) return;
+      const colIdx = ctx.queryColumns?.indexOf(ctx.colName!) ?? -1;
+      const rowIdx = ctx.row ?? -1;
       if (rowIdx >= 0 && colIdx >= 0) {
         ctx.onCellEdited(colIdx, rowIdx, 'DEFAULT');
       }
@@ -113,6 +111,10 @@ export function createQuickFilterItems(
 ): MenuGroupConfig {
   const colName = ctx.colName;
   const value = ctx.cellValue;
+  const dialect = getDialect(ctx.dbType);
+
+  const eqValue = dialect.escapeValue(value);
+  const colRef = colName ? dialect.escapeIdentifier(colName) : '';
 
   return {
     type: 'group',
@@ -125,8 +127,7 @@ export function createQuickFilterItems(
         disabled: colName == null,
         onClick: () => {
           if (!colName || !ctx.onSetWhereClause) return;
-          const where = `${escapeSqlIdentifier(colName, ctx.dbType)} = ${escapeSqlValue(value, ctx.dbType)}`;
-          ctx.onSetWhereClause(where);
+          ctx.onSetWhereClause(`${colRef} = ${eqValue}`);
           onClose();
         },
       },
@@ -137,8 +138,7 @@ export function createQuickFilterItems(
         disabled: colName == null,
         onClick: () => {
           if (!colName || !ctx.onSetWhereClause) return;
-          const where = `${escapeSqlIdentifier(colName, ctx.dbType)} != ${escapeSqlValue(value, ctx.dbType)}`;
-          ctx.onSetWhereClause(where);
+          ctx.onSetWhereClause(`${colRef} != ${eqValue}`);
           onClose();
         },
       },
@@ -149,7 +149,8 @@ export function createQuickFilterItems(
         disabled: colName == null || value == null,
         onClick: () => {
           if (!colName || !ctx.onSetWhereClause) return;
-          const where = `${escapeSqlIdentifier(colName, ctx.dbType)} LIKE '%${String(value).replace(/'/g, "''")}%'`;
+          const { condition, value: escapedVal } = dialect.buildLikeCondition(colName, `%${String(value)}%`);
+          const where = condition.replace('?', dialect.escapeValue(escapedVal));
           ctx.onSetWhereClause(where);
           onClose();
         },
@@ -172,12 +173,12 @@ export function createCopyAsInsertItem(
     disabled: !hasRows || !ctx.tableName,
     onClick: () => {
       if (!ctx.tableName || !ctx.selectedRows?.length) return;
+      const dialect = getDialect(ctx.dbType);
+      const tableRef = dialect.buildTableRef(ctx.tableName, ctx.database);
       const cols = getVisibleColumns(ctx);
-      const vals = ctx.selectedRows.map((r) => `(${cols.map((c) => escapeSqlValue(r[c], ctx.dbType)).join(', ')})`);
-      const sql = `INSERT INTO ${escapeSqlIdentifier(ctx.tableName, ctx.dbType)} (${cols.map((c) => escapeSqlIdentifier(c, ctx.dbType)).join(', ')})
-VALUES
-${vals.join(',\n')};`;
-      copyToClipboard(sql);
+      const values = ctx.selectedRows.map((r) => cols.map((c) => r[c]));
+      const sqls = dialect.buildInsert(tableRef, cols, values);
+      copyToClipboard(sqls.join(';\n') + ';');
       onClose();
     },
   };
@@ -199,11 +200,12 @@ export function createCopyAsSingleInsertItem(
     disabled: !hasRows || !ctx.tableName,
     onClick: () => {
       if (!ctx.tableName || targetRows.length === 0) return;
+      const dialect = getDialect(ctx.dbType);
+      const tableRef = dialect.buildTableRef(ctx.tableName, ctx.database);
       const cols = getVisibleColumns(ctx);
       const sqls = targetRows.map((r) => {
-        const vals = `(${cols.map((c) => escapeSqlValue(r[c], ctx.dbType)).join(', ')})`;
-        return `INSERT INTO ${escapeSqlIdentifier(ctx.tableName!, ctx.dbType)} (${cols.map((c) => escapeSqlIdentifier(c, ctx.dbType)).join(', ')})
-VALUES ${vals};`;
+        const vals = [cols.map((c) => r[c])];
+        return dialect.buildInsert(tableRef, cols, vals)[0] + ';';
       });
       copyToClipboard(sqls.join('\n'));
       onClose();
@@ -226,15 +228,17 @@ export function createCopyAsUpdateItem(
     disabled: !hasRows || !ctx.tableName || !pkCol,
     onClick: () => {
       if (!ctx.tableName || !ctx.selectedRows?.length || !pkCol) return;
-      const tableName = ctx.tableName;
+      const dialect = getDialect(ctx.dbType);
+      const tableRef = dialect.buildTableRef(ctx.tableName, ctx.database);
       const sqls = ctx.selectedRows.map((r) => {
-        const setters = getVisibleColumns(ctx)
-          .filter((c) => c !== pkCol.column_name)
-          .map((c) => `${escapeSqlIdentifier(c, ctx.dbType)} = ${escapeSqlValue(r[c], ctx.dbType)}`)
-          .join(', ');
-        return `UPDATE ${escapeSqlIdentifier(tableName, ctx.dbType)} SET ${setters} WHERE ${escapeSqlIdentifier(pkCol.column_name, ctx.dbType)} = ${escapeSqlValue(r[pkCol.column_name], ctx.dbType)}`;
+        const setters: Record<string, unknown> = {};
+        for (const c of getVisibleColumns(ctx)) {
+          if (c !== pkCol.column_name) setters[c] = r[c];
+        }
+        const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(r[pkCol.column_name])}`;
+        return dialect.buildUpdate(tableRef, setters, where);
       });
-      copyToClipboard(sqls.join('\n'));
+      copyToClipboard(sqls.join(';\n') + ';');
       onClose();
     },
   };
@@ -255,11 +259,13 @@ export function createCopyAsDeleteItem(
     disabled: !hasRows || !ctx.tableName || !pkCol,
     onClick: () => {
       if (!ctx.tableName || !ctx.selectedRows?.length || !pkCol) return;
-      const tableName = ctx.tableName;
+      const dialect = getDialect(ctx.dbType);
+      const tableRef = dialect.buildTableRef(ctx.tableName, ctx.database);
       const sqls = ctx.selectedRows.map((r) => {
-        return `DELETE FROM ${escapeSqlIdentifier(tableName, ctx.dbType)} WHERE ${escapeSqlIdentifier(pkCol.column_name, ctx.dbType)} = ${escapeSqlValue(r[pkCol.column_name], ctx.dbType)}`;
+        const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(r[pkCol.column_name])}`;
+        return dialect.buildDelete(tableRef, where);
       });
-      copyToClipboard(sqls.join('\n'));
+      copyToClipboard(sqls.join(';\n') + ';');
       onClose();
     },
   };

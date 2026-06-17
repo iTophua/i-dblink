@@ -45,6 +45,7 @@
     "cut": "剪切",
     "selectAll": "全选",
     "undo": "撤销",
+    "undoAll": "全部撤销",
     "redo": "重做",
     "cutLabel": "剪切",
     "copyLabel": "复制",
@@ -310,6 +311,12 @@
       "updateFailed": "更新失败",
       "updateConfirm": "确认提交修改？",
       "updateConfirmContent": "确定将 {{count}} 处修改提交到数据库？",
+      "undoAllConfirm": "确定撤销所有修改？此操作不可恢复。",
+      "undoStep": "撤销上一步 (Cmd+Z)",
+      "undoAllTip": "撤销所有未提交的修改",
+      "noPrimaryKeyWarning": "该表没有主键，无法生成 UPDATE/DELETE 语句。",
+      "pendingSql": "待执行 SQL",
+      "noPendingSql": "暂无待执行的 SQL",
       "copyInsert": "已复制 INSERT 语句",
       "copyUpdate": "已复制 UPDATE 语句",
       "editCell": "编辑单元格",
@@ -1427,7 +1434,8 @@
       "copyAsDelete": "复制为 DELETE",
       "copyAsJson": "复制为 JSON",
       "addNewRow": "添加新行",
-      "previewCell": "预览单元格"
+      "previewCell": "预览单元格",
+      "hideColumn": "隐藏此列"
     },
     "cellPreview": {
       "text": "文本",

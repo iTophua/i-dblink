@@ -145,15 +145,16 @@ class MySQLDialect extends BaseDialect implements SqlDialect {
 
   // ── 条件 ──────────────────────────────────────────────────────────────
 
-  buildLikeCondition(field: string, value: string): { condition: string; value: string } {
+  buildLikeCondition(field: string, value: string, negate = false): { condition: string; value: string } {
     // MySQL 默认 \ 是转义字符
     const escaped = value
       .replace(/\\/g, '\\\\')
       .replace(/'/g, "''")
       .replace(/%/g, '\\%')
       .replace(/_/g, '\\_');
+    const op = negate ? 'NOT LIKE' : 'LIKE';
     return {
-      condition: `${this.escapeIdentifier(field)} LIKE ?`,
+      condition: `${this.escapeIdentifier(field)} ${op} ?`,
       value: escaped,
     };
   }

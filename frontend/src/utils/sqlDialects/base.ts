@@ -34,6 +34,16 @@ export abstract class BaseDialect implements SqlDialect {
   }
 
   escapeValue(value: unknown): string {
+    // Symbol 仅用于表示 SQL 关键字占位（如 DEFAULT_MARKER）。
+    // description 必须是合法的 SQL 裸关键字（DEFAULT / NULL / TRUE / FALSE / NOW() 等），
+    // 这里做白名单校验，避免误用导致 SQL 语法错误或注入。
+    if (typeof value === 'symbol') {
+      const kw = value.description ?? 'DEFAULT';
+      if (!/^[A-Z_][A-Z0-9_]*$/i.test(kw)) {
+        throw new Error(`Invalid SQL keyword from symbol description: ${kw}`);
+      }
+      return kw;
+    }
     if (value === null || value === undefined) {
       return 'NULL';
     }
@@ -137,15 +147,16 @@ export abstract class BaseDialect implements SqlDialect {
 
   // ── 条件 ──────────────────────────────────────────────────────────────
 
-  buildLikeCondition(field: string, value: string): { condition: string; value: string } {
+  buildLikeCondition(field: string, value: string, negate = false): { condition: string; value: string } {
     // 默认实现：使用 LIKE + ESCAPE '\'
     const escaped = value
       .replace(/\\/g, '\\\\')
       .replace(/'/g, "''")
       .replace(/%/g, '\\%')
       .replace(/_/g, '\\_');
+    const op = negate ? 'NOT LIKE' : 'LIKE';
     return {
-      condition: `${this.escapeIdentifier(field)} LIKE ? ESCAPE '\\'`,
+      condition: `${this.escapeIdentifier(field)} ${op} ? ESCAPE '\\'`,
       value: escaped,
     };
   }

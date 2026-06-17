@@ -45,6 +45,7 @@
     "cut": "Cut",
     "selectAll": "Select All",
     "undo": "Undo",
+    "undoAll": "Undo All",
     "redo": "Redo",
     "leaveBlankKeepPassword": "Leave blank to keep current password",
     "optional": "Optional",
@@ -294,6 +295,12 @@
       "updateFailed": "Update failed",
       "updateConfirm": "Confirm to submit changes?",
       "updateConfirmContent": "Submit {{count}} change(s) to the database?",
+      "undoAllConfirm": "Are you sure you want to undo all changes? This cannot be undone.",
+      "undoStep": "Undo last edit (Cmd+Z)",
+      "undoAllTip": "Revert all uncommitted changes",
+      "noPrimaryKeyWarning": "This table has no primary key. Cannot generate UPDATE/DELETE statements.",
+      "pendingSql": "Pending SQL",
+      "noPendingSql": "No pending SQL",
       "copyInsert": "INSERT statement copied",
       "copyUpdate": "UPDATE statement copied",
       "editCell": "Edit cell",
@@ -1410,7 +1417,8 @@
       "copyAsDelete": "Copy as DELETE",
       "copyAsJson": "Copy as JSON",
       "addNewRow": "Add New Row",
-      "previewCell": "Preview Cell"
+      "previewCell": "Preview Cell",
+      "hideColumn": "Hide Column"
     },
     "cellPreview": {
       "text": "Text",

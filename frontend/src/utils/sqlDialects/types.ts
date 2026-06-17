@@ -124,8 +124,8 @@ export interface SqlDialect {
   /** 构建 DROP TABLE */
   buildDropTable(tableRef: string, ifExists?: boolean): string;
 
-  /** 构建 LIKE 条件值（包含转义和 ESCAPE 子句） */
-  buildLikeCondition(field: string, value: string): { condition: string; value: string };
+  /** 构建 LIKE / NOT LIKE 条件值（包含转义和 ESCAPE 子句） */
+  buildLikeCondition(field: string, value: string, negate?: boolean): { condition: string; value: string };
 
   /** 构建 EXPLAIN 查询 */
   buildExplainQuery(sql: string): string;

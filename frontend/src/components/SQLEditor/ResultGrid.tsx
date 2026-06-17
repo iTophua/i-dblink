@@ -15,12 +15,13 @@ import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../hooks/useApi';
 import type { QueryResult, DatabaseType, ColumnInfo } from '../../types/api';
 import { exportToExcel } from '../../utils/exportUtils';
-import { escapeSqlValue, escapeSqlIdentifier } from '../../utils/sqlUtils';
+import { getDialect } from '../../utils/sqlDialects';
 import DataEditor from '@glideapps/glide-data-grid';
 import { GlideDataTable, type GlideRow } from '../DataTable/GlideDataTable';
 import { namesToGlideColumns, createResultCellModified } from '../DataTable/adapters/resultAdapter';
 import { useContextMenu } from '../ContextMenu';
 import { ResultGridContextMenu } from './ResultGridContextMenu';
+import { useEditHistory } from '../../hooks/useEditHistory';
 
 // ── Types ──
 interface ResultGridProps {
@@ -39,23 +40,6 @@ function extractTable(sql: string): string | null {
   if (/\bJOIN\b|\bUNION\b|\bINTO\b|(?:\()\s*SELECT\b/i.test(clean)) return null;
   const match = clean.match(/\bFROM\s+(?:[`"']?(\w+)[`"']?\.)?[`"']?(\w+)[`"']?(?:\s+(?:AS\s+)?\w+)?(?:\s*$|\s+(?:WHERE|ORDER|GROUP|HAVING|LIMIT|OFFSET)\b)/i);
   return match ? (match[2] || match[1] || null) : null;
-}
-
-// ── SQL 生成 ──
-function generateInsertSql(tableName: string, cols: string[], rows: unknown[][], dbType?: DatabaseType): string {
-  const tr = escapeSqlIdentifier(tableName, dbType);
-  const cs = cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ');
-  const vals = rows.map((r) => `(${r.map((v) => escapeSqlValue(v, dbType)).join(', ')})`).join(',\n');
-  return `INSERT INTO ${tr} (${cs})\nVALUES\n${vals};`;
-}
-function generateUpdateSql(tableName: string, cols: string[], row: unknown[], pkCol: string, pkIdx: number, dbType?: DatabaseType): string {
-  const tr = escapeSqlIdentifier(tableName, dbType);
-  const ss = cols.map((c, i) => `${escapeSqlIdentifier(c, dbType)} = ${escapeSqlValue(row[i], dbType)}`).filter((_, i) => i !== pkIdx).join(', ');
-  return `UPDATE ${tr} SET ${ss} WHERE ${escapeSqlIdentifier(pkCol, dbType)} = ${escapeSqlValue(row[pkIdx], dbType)}`;
-}
-function generateDeleteSql(tableName: string, pkCol: string, pkValues: unknown[], dbType?: DatabaseType): string {
-  const tr = escapeSqlIdentifier(tableName, dbType);
-  return `DELETE FROM ${tr} WHERE ${escapeSqlIdentifier(pkCol, dbType)} IN (${pkValues.map((v) => escapeSqlValue(v, dbType)).join(', ')});`;
 }
 
 // ── 导出工具 ──
@@ -120,6 +104,7 @@ export function ResultGrid({
     setNewRows([]);
     setSelectedIndices(new Set());
     setOperationSql('');
+    clearEditHistory();
   }, [queryResult]);
 
   // 编辑状态
@@ -177,6 +162,35 @@ export function ResultGrid({
     setSelectedIndices(indices);
   }, [qLen]);
 
+  // 撤销
+  const { record: recordEdit, undo: handleUndoStep, clear: clearEditHistory, hasHistory: hasEditHistory } = useEditHistory({
+    onRestore: useCallback((cells: Array<{ rowId: string; colId: string; value: unknown }>) => {
+      setModifiedRows((prev) => {
+        const grouped = new Map<number, Map<number, unknown>>();
+        for (const c of cells) {
+          const rowIdx = Number(c.rowId);
+          const colIdx = Number(c.colId);
+          if (!grouped.has(rowIdx)) grouped.set(rowIdx, new Map());
+          grouped.get(rowIdx)!.set(colIdx, c.value);
+        }
+        if (grouped.size === 0) return prev;
+        const next = new Map(prev);
+        for (const [rowIdx, cols] of grouped) {
+          const current = next.has(rowIdx) ? [...next.get(rowIdx)!] : [...queryResult.rows[rowIdx]];
+          for (const [colIdx, val] of cols) {
+            current[colIdx] = val;
+          }
+          const originalRow = queryResult.rows[rowIdx];
+          const allSame = originalRow.every((v, i) => v === current[i]);
+          if (allSame) next.delete(rowIdx);
+          else next.set(rowIdx, current);
+        }
+        return next;
+      });
+    }, [queryResult.rows]),
+    enabled: isEditable,
+  });
+
   // 内联编辑
   const handleCellEdited = useCallback((col: number, row: number, newValue: string) => {
     if (!isEditable) return;
@@ -196,15 +210,15 @@ export function ResultGrid({
       return;
     }
 
-    const originalVal = queryResult.rows[rowId][col];
-    const originalStr = originalVal === null ? 'NULL' : String(originalVal);
+    const oldValue = queryResult.rows[rowId][col];
+    const originalStr = oldValue === null ? 'NULL' : String(oldValue);
 
     if (originalStr === newValue) {
       setModifiedRows((prev) => {
         if (!prev.has(rowId)) return prev;
         const next = new Map(prev);
         const current = [...next.get(rowId)!];
-        current[col] = originalVal;
+        current[col] = oldValue;
         const originalRow = queryResult.rows[rowId];
         const allSame = originalRow.every((v, i) => v === current[i]);
         if (allSame) next.delete(rowId);
@@ -214,80 +228,119 @@ export function ResultGrid({
       return;
     }
 
+    const resolvedNew = newValue === 'NULL' ? null : newValue;
+    recordEdit([{ rowId: String(rowId), colId: String(col), oldValue, newValue: resolvedNew }]);
+
     setModifiedRows((prev) => {
       const next = new Map(prev);
       const current = next.get(rowId) ? [...next.get(rowId)!] : [...queryResult.rows[rowId]];
-      current[col] = newValue === 'NULL' ? null : newValue;
+      current[col] = resolvedNew;
       next.set(rowId, current);
       return next;
     });
-  }, [isEditable, queryResult]);
+  }, [isEditable, queryResult, recordEdit]);
+
+  // 范围编辑（批量）
+  const handleCellsEdited = useCallback((edits: Array<{ col: number; row: number; value: string }>) => {
+    for (const edit of edits) {
+      handleCellEdited(edit.col, edit.row, edit.value);
+    }
+  }, [handleCellEdited]);
 
   // 生成操作SQL
   useEffect(() => {
     if (!tableName || !primaryKeyCol) { setOperationSql(''); return; }
     const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
     if (pkIdx < 0) { setOperationSql(''); return; }
+    const dialect = getDialect(dbType);
+    const tableRef = dialect.buildTableRef(tableName, database);
     const lines: string[] = [];
     for (const row of newRows) {
       const cols: string[] = []; const vals: unknown[] = [];
       row.forEach((v, i) => { if (v !== null) { cols.push(queryResult.columns[i]); vals.push(v); } });
       if (cols.length === 0) continue;
-      lines.push(`INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')}) VALUES (${vals.map((v) => escapeSqlValue(v, dbType)).join(', ')});`);
+      lines.push(dialect.buildInsert(tableRef, cols, [vals])[0] + ';');
     }
     for (const [rowId, row] of modifiedRows) {
       if (deletedIndices.has(rowId)) continue;
-      const ss = queryResult.columns.map((c, i) => `${escapeSqlIdentifier(c, dbType)} = ${escapeSqlValue(row[i], dbType)}`).join(', ');
-      lines.push(`UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${ss} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)};`);
+      const setters: Record<string, unknown> = {};
+      const original = queryResult.rows[rowId];
+      queryResult.columns.forEach((c, i) => {
+        const cur = row[i];
+        const orig = original?.[i];
+        if ((cur == null && orig == null) || (cur != null && String(cur) === String(orig ?? ''))) return;
+        setters[c] = cur;
+      });
+      if (Object.keys(setters).length === 0) continue;
+      const where = `${dialect.escapeIdentifier(primaryKeyCol.column_name)} = ${dialect.escapeValue(queryResult.rows[rowId][pkIdx])}`;
+      lines.push(dialect.buildUpdate(tableRef, setters, where) + ';');
     }
     for (const rowId of deletedIndices) {
-      lines.push(`DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)};`);
+      const where = `${dialect.escapeIdentifier(primaryKeyCol.column_name)} = ${dialect.escapeValue(queryResult.rows[rowId][pkIdx])}`;
+      lines.push(dialect.buildDelete(tableRef, where) + ';');
     }
     setOperationSql(lines.join('\n'));
-  }, [modifiedRows, deletedIndices, newRows, tableName, primaryKeyCol, queryResult, dbType]);
+  }, [modifiedRows, deletedIndices, newRows, tableName, primaryKeyCol, queryResult, dbType, database]);
 
   // 提交
   const handleCommit = useCallback(async () => {
     if (!connectionId || !tableName || !primaryKeyCol) return;
     const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
     if (pkIdx < 0) return;
+    const dialect = getDialect(dbType);
+    const tableRef = dialect.buildTableRef(tableName, database);
     try {
       let success = 0, errMsg = '';
       for (const row of newRows) {
         const cols: string[] = []; const vals: unknown[] = [];
         row.forEach((v, i) => { if (v !== null) { cols.push(queryResult.columns[i]); vals.push(v); } });
         if (cols.length === 0) continue;
-        const sql = `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ')}) VALUES (${vals.map((v) => escapeSqlValue(v, dbType)).join(', ')})`;
+        const sql = dialect.buildInsert(tableRef, cols, [vals])[0];
         const res = await executeQuery(connectionId, sql, database);
         if (res.error) { errMsg = res.error; break; } success++;
       }
       if (!errMsg) {
         for (const [rowId, row] of modifiedRows) {
           if (deletedIndices.has(rowId)) continue;
-          const ss = queryResult.columns.map((c, i) => `${escapeSqlIdentifier(c, dbType)} = ${escapeSqlValue(row[i], dbType)}`).join(', ');
-          const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${ss} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)}`;
+          const setters: Record<string, unknown> = {};
+          const original = queryResult.rows[rowId];
+          queryResult.columns.forEach((c, i) => {
+            const cur = row[i];
+            const orig = original?.[i];
+            if ((cur == null && orig == null) || (cur != null && String(cur) === String(orig ?? ''))) return;
+            setters[c] = cur;
+          });
+          if (Object.keys(setters).length === 0) continue;
+          const where = `${dialect.escapeIdentifier(primaryKeyCol.column_name)} = ${dialect.escapeValue(queryResult.rows[rowId][pkIdx])}`;
+          const sql = dialect.buildUpdate(tableRef, setters, where);
           const res = await executeQuery(connectionId, sql, database);
           if (res.error) { errMsg = res.error; break; } success++;
         }
       }
       if (!errMsg) {
         for (const rowId of deletedIndices) {
-          const sql = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(primaryKeyCol.column_name, dbType)} = ${escapeSqlValue(queryResult.rows[rowId][pkIdx], dbType)}`;
+          const where = `${dialect.escapeIdentifier(primaryKeyCol.column_name)} = ${dialect.escapeValue(queryResult.rows[rowId][pkIdx])}`;
+          const sql = dialect.buildDelete(tableRef, where);
           const res = await executeQuery(connectionId, sql, database);
           if (res.error) { errMsg = res.error; break; } success++;
         }
       }
       if (errMsg) message.error(`${t('common.submitFailed')}: ${errMsg}`);
-      else { message.success(`${t('common.submittedSuccessfully')} ${success}`); setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); }
+      else { message.success(`${t('common.submittedSuccessfully')} ${success}`); setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); clearEditHistory(); }
     } catch (err: any) { message.error(`${t('common.submitFailed')}: ${err.message || err}`); }
   }, [connectionId, tableName, primaryKeyCol, modifiedRows, deletedIndices, newRows, queryResult, dbType, database, executeQuery, message, t]);
 
   // 撤销
   const handleUndo = useCallback(() => {
+    if (hasEditHistory) {
+      handleUndoStep();
+      return;
+    }
+    if (modifiedRows.size === 0 && deletedIndices.size === 0 && newRows.length === 0) return;
     Modal.confirm({ title: t('common.undoModifications'), content: t('common.confirmDiscardAllChanges'), transitionName: '', maskTransitionName: '',
       onOk: () => { setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); message.info(t('common.allChangesRevoked')); },
     });
-  }, [message, t]);
+  }, [hasEditHistory, handleUndoStep, modifiedRows, deletedIndices, newRows, message, t]);
 
   // 删除选中（已有行 → 标记删除，新增行 → 直接从 newRows 移除）
   const handleDeleteSelected = useCallback(() => {
@@ -426,6 +479,7 @@ export function ResultGrid({
           scrollToRowIndex={scrollToRowIndex}
           onSelectionChange={handleSelectionChange}
           onCellEdited={handleCellEdited}
+          onCellsEdited={handleCellsEdited}
           onCellContextMenu={(col, row, bounds) => {
             const colName = queryResult.columns[col];
             const rowData = row >= 0 && row < queryResult.rows.length ? queryResult.rows[row] : undefined;
@@ -448,6 +502,7 @@ export function ResultGrid({
         context={{
           dbType,
           tableName: tableName ?? undefined,
+          database,
           columns: tableColumns,
           queryColumns: queryResult.columns,
           isEditable,

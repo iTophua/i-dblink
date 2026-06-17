@@ -1,6 +1,8 @@
 import type { ColumnInfo } from '../../types/api';
 import { getDialect } from '../../utils/sqlDialects';
 
+export const DEFAULT_MARKER = Symbol('DEFAULT');
+
 export interface FilterCondition {
   id: string;
   field: string;
@@ -41,8 +43,8 @@ export function buildSingleCondition(cond: FilterCondition, dbType?: string): st
       return condition.replace('?', dialect.escapeValue(`%${cond.value}%`));
     }
     case 'notContains': {
-      const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}%`);
-      return condition.replace('LIKE', 'NOT LIKE').replace('?', dialect.escapeValue(`%${cond.value}%`));
+      const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}%`, true);
+      return condition.replace('?', dialect.escapeValue(`%${cond.value}%`));
     }
     case 'startsWith': {
       const { condition } = dialect.buildLikeCondition(cond.field, `${cond.value}%`);

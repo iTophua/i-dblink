@@ -11,17 +11,19 @@ import {
 } from 'antd';
 import {
   DownloadOutlined, PlusOutlined, DeleteOutlined,
-  ImportOutlined, FilterOutlined, CopyOutlined,
+  FilterOutlined, CopyOutlined,
   EyeInvisibleOutlined, SearchOutlined,
-  ReloadOutlined,
+  ReloadOutlined, SaveOutlined, UndoOutlined,
+  CloseOutlined, CodeOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useAppStore } from '../stores/appStore';
 import type { ColumnInfo, DatabaseType } from '../types/api';
-import { type RowData, buildQuery, buildCountQuery } from './DataTable/utils';
-import { escapeSqlIdentifier, escapeSqlValue } from '../utils/sqlUtils';
+import { type RowData, buildQuery, buildCountQuery, DEFAULT_MARKER } from './DataTable/utils';
+import { useEditHistory } from '../hooks/useEditHistory';
+import { getDialect } from '../utils/sqlDialects';
 import { exportToExcel } from '../utils/exportUtils';
 import { GlideDataTable, type GlideRow, type GlideColumn } from './DataTable/GlideDataTable';
 import { rowsToGlideRows, tableRowStatus, tableCellModified } from './DataTable/adapters/tableAdapter';
@@ -36,6 +38,13 @@ interface DataTableProps {
   tableName: string;
   database?: string;
   pageSize?: number;
+}
+
+interface PendingSqlItem {
+  id: string;
+  sql: string;
+  type: 'update' | 'insert' | 'delete';
+  source: string;
 }
 
 export const DataTable = memo(function DataTable({
@@ -72,7 +81,66 @@ export const DataTable = memo(function DataTable({
   const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
   const [cellPreview, setCellPreview] = useState<{ open: boolean; value: unknown; columnName: string; rowIndex?: number; colIndex?: number }>({ open: false, value: null, columnName: '' });
 
+  const { record: recordEdit, undo: handleUndo, clear: clearEditHistory, removeByRowId: removeEditHistoryByRowId, hasHistory: hasEditHistory } = useEditHistory({
+    onRestore: useCallback((cells: Array<{ rowId: string; colId: string; value: unknown }>) => {
+      // 撤销时区分三种情况：
+      // 1. colId === '__row__'    → 被删除的新增行重新插回 rowData
+      // 2. colId === '__status__' → 恢复删除标记前的 status（已有行被标记删除时用）
+      // 3. 普通 colId              → 把单元格值写回（普通编辑撤销）
+      const rowRestores = new Map<string, RowData>();
+      const statusRestores = new Map<string, string | undefined>();
+      const cellRestores = new Map<string, Map<string, unknown>>();
+      for (const c of cells) {
+        if (c.colId === '__row__') {
+          rowRestores.set(c.rowId, c.value as RowData);
+        } else if (c.colId === '__status__') {
+          statusRestores.set(c.rowId, c.value as string | undefined);
+        } else {
+          if (!cellRestores.has(c.rowId)) cellRestores.set(c.rowId, new Map());
+          cellRestores.get(c.rowId)!.set(c.colId, c.value);
+        }
+      }
+      setRowData((rows) => {
+        let result = rows.map((r) => {
+          if (!r.__row_id__) return r;
+          if (statusRestores.has(r.__row_id__)) {
+            return { ...r, __status__: statusRestores.get(r.__row_id__) as RowData['__status__'] };
+          }
+          const restores = cellRestores.get(r.__row_id__);
+          if (!restores) return r;
+          const updated = { ...r };
+          for (const [col, oldVal] of restores) {
+            updated[col] = oldVal;
+          }
+          // 判断该行所有被恢复的 cell 是否都等于原始值；若是且当前是 modified 则复位 status
+          let allOriginal = true;
+          for (const [col, oldVal] of restores) {
+            const orig = updated.__original_data__?.[col];
+            const cur = oldVal;
+            const isSame = (orig == null && cur == null) || (orig != null && String(orig) === String(cur ?? ''));
+            if (!isSame) { allOriginal = false; break; }
+          }
+          if (allOriginal && updated.__status__ === 'modified') updated.__status__ = undefined;
+          return updated;
+        });
+        // 把被删除的新增行重新插回（保留原本的行数据）
+        for (const [rowId, row] of rowRestores) {
+          if (!result.find((r) => r.__row_id__ === rowId)) {
+            result = [...result, row];
+          }
+        }
+        return result;
+      });
+    }, []),
+  });
 
+  // rowDataRef 同步保存 rowData 最新值，供 applyEdit/applyBatchEdit 在
+  // setRowData 之前同步读取旧值（避免在 setState updater 内做 side effect）。
+  const rowDataRef = useRef(rowData);
+  rowDataRef.current = rowData;
+
+  // ── SQL Panel visibility ──
+  const [showSqlPanel, setShowSqlPanel] = useState(false);
   // ── Range Edit ──
   // ── Filter Panel ──
   interface FilterCondition {
@@ -89,6 +157,7 @@ export const DataTable = memo(function DataTable({
     { id: 'filter-1', field: '', operator: 'contains', value: '', logic: 'AND' },
   ]);
   const buildWhereClause = useCallback((conditions: FilterCondition[], dbType?: DatabaseType): string => {
+    const dialect = getDialect(dbType);
     const parts: string[] = [];
     for (let i = 0; i < conditions.length; i++) {
       const cond = conditions[i];
@@ -102,39 +171,45 @@ export const DataTable = memo(function DataTable({
       }
       if (!cond.field) continue;
 
-      const col = escapeSqlIdentifier(cond.field, dbType);
+      const col = dialect.escapeIdentifier(cond.field);
+      const val = cond.value;
+      const escVal = () => dialect.escapeValue(val);
+      const likeVal = (pattern: string, negate = false) => {
+        const { condition, value: escaped } = dialect.buildLikeCondition(cond.field, pattern, negate);
+        return condition.replace('?', dialect.escapeValue(escaped));
+      };
       let clause = '';
 
       switch (cond.operator) {
         case 'contains':
-          clause = `${col} LIKE '%${cond.value}%'`;
+          clause = likeVal(`%${val}%`);
           break;
         case 'notContains':
-          clause = `${col} NOT LIKE '%${cond.value}%'`;
+          clause = likeVal(`%${val}%`, true);
           break;
         case 'equals':
-          clause = `${col} = ${escapeSqlValue(cond.value, dbType)}`;
+          clause = `${col} = ${escVal()}`;
           break;
         case 'notEquals':
-          clause = `${col} != ${escapeSqlValue(cond.value, dbType)}`;
+          clause = `${col} != ${escVal()}`;
           break;
         case 'startsWith':
-          clause = `${col} LIKE '${cond.value}%'`;
+          clause = likeVal(`${val}%`);
           break;
         case 'endsWith':
-          clause = `${col} LIKE '%${cond.value}'`;
+          clause = likeVal(`%${val}`);
           break;
         case 'greaterThan':
-          clause = `${col} > ${escapeSqlValue(cond.value, dbType)}`;
+          clause = `${col} > ${escVal()}`;
           break;
         case 'lessThan':
-          clause = `${col} < ${escapeSqlValue(cond.value, dbType)}`;
+          clause = `${col} < ${escVal()}`;
           break;
         case 'greaterOrEqual':
-          clause = `${col} >= ${escapeSqlValue(cond.value, dbType)}`;
+          clause = `${col} >= ${escVal()}`;
           break;
         case 'lessOrEqual':
-          clause = `${col} <= ${escapeSqlValue(cond.value, dbType)}`;
+          clause = `${col} <= ${escVal()}`;
           break;
         case 'isNull':
           clause = `${col} IS NULL`;
@@ -143,13 +218,13 @@ export const DataTable = memo(function DataTable({
           clause = `${col} IS NOT NULL`;
           break;
         case 'in':
-          clause = `${col} IN (${cond.value.split(',').map((v) => escapeSqlValue(v.trim(), dbType)).join(', ')})`;
+          clause = `${col} IN (${val.split(',').map((v) => dialect.escapeValue(v.trim())).join(', ')})`;
           break;
         case 'notIn':
-          clause = `${col} NOT IN (${cond.value.split(',').map((v) => escapeSqlValue(v.trim(), dbType)).join(', ')})`;
+          clause = `${col} NOT IN (${val.split(',').map((v) => dialect.escapeValue(v.trim())).join(', ')})`;
           break;
         default:
-          clause = `${col} = ${escapeSqlValue(cond.value, dbType)}`;
+          clause = `${col} = ${escVal()}`;
       }
 
       if (i > 0 && !cond.isGroupStart) {
@@ -284,140 +359,125 @@ export const DataTable = memo(function DataTable({
     return cols;
   }, [queryColumns, columnOrder, hiddenColumns]);
 
+  // ── Core edit: apply + record history (single cell, creates its own history entry) ──
+  // 必须在 setRowData 之前用 rowDataRef 同步读取旧值，避免在 setState updater 内做 side effect。
+  const applyEdit = useCallback((rowId: string, colId: string, newValue: unknown) => {
+    const prev = rowDataRef.current;
+    const target = prev.find((r) => r.__row_id__ === rowId);
+    if (!target) return;
+    if (target.__status__ === 'deleted') return;
+    const capturedOld = target[colId];
+    setRowData((rows) => rows.map((r) => {
+      if (r.__row_id__ !== rowId) return r;
+      return { ...r, [colId]: newValue, __status__: r.__status__ === 'new' ? 'new' : 'modified' };
+    }));
+    recordEdit([{ rowId, colId, oldValue: capturedOld, newValue }]);
+  }, [recordEdit]);
+
+  // ── Batch edit: apply multiple cells as one atomic history entry ──
+  // 同样用 rowDataRef 同步读取旧值；不在 setState updater 内 push cells 数组。
+  // 用 Map 索引避免 O(n×m) 的嵌套查找（paste/范围填充可能传入大量 edits）。
+  const applyBatchEdit = useCallback((edits: ReadonlyArray<{ rowId: string; colId: string; value: unknown }>) => {
+    if (edits.length === 0) return;
+    const prev = rowDataRef.current;
+    const prevByRowId = new Map<string, RowData>();
+    for (const r of prev) {
+      const rid = r.__row_id__;
+      if (rid) prevByRowId.set(rid, r);
+    }
+    const editsByRow = new Map<string, Array<{ colId: string; oldValue: unknown; newValue: unknown }>>();
+    for (const e of edits) {
+      const target = prevByRowId.get(e.rowId);
+      if (!target) continue;
+      if (target.__status__ === 'deleted') continue;
+      const oldValue = target[e.colId];
+      if (!editsByRow.has(e.rowId)) editsByRow.set(e.rowId, []);
+      editsByRow.get(e.rowId)!.push({ colId: e.colId, oldValue, newValue: e.value });
+    }
+    if (editsByRow.size === 0) return;
+    setRowData((rows) => rows.map((r) => {
+      const rid = r.__row_id__;
+      if (!rid) return r;
+      const rowEdits = editsByRow.get(rid);
+      if (!rowEdits || rowEdits.length === 0) return r;
+      if (r.__status__ === 'deleted') return r;
+      const updated = { ...r };
+      for (const e of rowEdits) {
+        updated[e.colId] = e.newValue;
+      }
+      updated.__status__ = r.__status__ === 'new' ? 'new' : 'modified';
+      return updated;
+    }));
+    const historyCells: Array<{ rowId: string; colId: string; oldValue: unknown; newValue: unknown }> = [];
+    for (const [rowId, rowEdits] of editsByRow) {
+      for (const e of rowEdits) {
+        historyCells.push({ rowId, colId: e.colId, oldValue: e.oldValue, newValue: e.newValue });
+      }
+    }
+    if (historyCells.length > 0) recordEdit(historyCells);
+  }, [recordEdit]);
+
   // ── Edit (inline) ──
   const handleCellEdited = useCallback((col: number, row: number, newValue: string) => {
     const visibleCols = getVisibleColumns();
     const colId = visibleCols[col];
     if (!colId) return;
 
-    // 通过 glide rows（与 GlideDataGrid 行索引对齐）获取行 ID，
-    // 再用 __row_id__ 在 rowData 中精确匹配，避免索引偏移问题。
     const glideRow = filteredRows[row];
     if (!glideRow) return;
     const targetRowId = glideRow.__row_id__ as string | undefined;
     if (!targetRowId) return;
 
-    // 新增行：直接更新本地状态，不弹窗确认
-    if (glideRow.__status__ === 'new') {
-      setRowData((prev) => prev.map((r) => {
-        if (r.__row_id__ !== targetRowId) return r;
-        return { ...r, [colId]: newValue === 'NULL' ? null : newValue };
-      }));
-      return;
-    }
-
-    const targetRow = rowData.find((r) => r.__row_id__ === targetRowId);
-    if (!targetRow) return;
-
-    // 已有行：需要主键才能更新
-    const pkCol = columns.find((c) => c.column_key === 'PRI');
-    if (!pkCol) { message.warning(t('common.tableHasNoPrimaryKeyCannotUpdate')); return; }
-    const origVal = targetRow.__original_data__?.[colId];
-    const normalizedOrig = origVal == null ? 'NULL' : String(origVal);
-    const normalizedNew = newValue == null || newValue === '' || newValue === 'NULL' ? 'NULL' : String(newValue);
-    if (normalizedOrig === normalizedNew) return;
-    const pkValue = targetRow[pkCol.column_name];
-    const vs = newValue === '' || newValue === 'NULL' ? 'NULL' : escapeSqlValue(newValue, dbType);
-    const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = ${vs} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(pkValue, dbType)}`;
-    Modal.confirm({
-      title: t('common.dataGrid.updateConfirm'),
-      content: <pre style={{ fontSize: 11, maxHeight: 160, overflow: 'auto', margin: 0, padding: 8, background: 'var(--bg-code, #f5f5f5)', borderRadius: 4, wordBreak: 'break-all' }}>{sql}</pre>,
-      okText: t('common.confirm'),
-      cancelText: t('common.cancel'),
-      zIndex: 2000,
-      transitionName: '',
-      maskTransitionName: '',
-      centered: true,
-      onOk: async () => {
-        setCurrentSql(sql);
-        try {
-          const res = await executeQuery(connectionId, sql, database || '');
-          if (res.error) { message.error(`${t('common.dataGrid.updateFailed')}: ${res.error}`); }
-          else {
-            setRowData((prev) => prev.map((r) => {
-              if (r.__row_id__ !== targetRow.__row_id__) return r;
-              return { ...r, [colId]: newValue === 'NULL' ? null : newValue, __status__: undefined };
-            }));
-            message.success(t('common.dataGrid.updateSuccess'));
-          }
-        } catch (err) { message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`); }
-      },
-    });
-  }, [columns, getVisibleColumns, filteredRows, rowData, tableName, dbType, connectionId, database, executeQuery, t]);
+    let resolvedValue: unknown;
+    if (newValue === 'NULL') resolvedValue = null;
+    else if (newValue === 'DEFAULT') resolvedValue = DEFAULT_MARKER;
+    else resolvedValue = newValue;
+    applyEdit(targetRowId, colId, resolvedValue);
+  }, [getVisibleColumns, filteredRows, applyEdit]);
 
   // ── Edit (range) ──
   const handleCellsEdited = useCallback((edits: Array<{ col: number; row: number; value: string }>) => {
-    const visibleCols = getVisibleColumns();
-    const newRowEdits: Array<{ rowId: string; colId: string; value: string }> = [];
-    const existingEdits: Array<{ rowId: string; colId: string; value: string; sql: string }> = [];
-
+    const batch: Array<{ rowId: string; colId: string; value: unknown }> = [];
     for (const edit of edits) {
-      const colId = visibleCols[edit.col];
+      const colId = getVisibleColumns()[edit.col];
       if (!colId) continue;
-
-      // 通过 glide rows 获取行 ID，精确匹配，避免索引偏移
       const glideRow = filteredRows[edit.row];
       if (!glideRow) continue;
       const targetRowId = glideRow.__row_id__ as string | undefined;
       if (!targetRowId) continue;
+      let resolved: unknown;
+      if (edit.value === 'NULL') resolved = null;
+      else if (edit.value === 'DEFAULT') resolved = DEFAULT_MARKER;
+      else resolved = edit.value;
+      batch.push({ rowId: targetRowId, colId, value: resolved });
+    }
+    if (batch.length > 0) applyBatchEdit(batch);
+  }, [getVisibleColumns, filteredRows, applyBatchEdit]);
 
-      if (glideRow.__status__ === 'new') {
-        newRowEdits.push({ rowId: targetRowId, colId, value: edit.value });
-        continue;
+  // ── Paste (Ctrl+V) ──
+  const handlePaste = useCallback((target: readonly [number, number], values: readonly (readonly string[])[]): boolean => {
+    const visibleCols = getVisibleColumns();
+    const batch: Array<{ rowId: string; colId: string; value: unknown }> = [];
+    for (let r = 0; r < values.length; r++) {
+      const rowIndex = target[1] + r;
+      const glideRow = filteredRows[rowIndex];
+      if (!glideRow) continue;
+      const targetRowId = glideRow.__row_id__ as string | undefined;
+      if (!targetRowId) continue;
+      for (let c = 0; c < values[r].length; c++) {
+        const colIndex = target[0] + c;
+        const colId = visibleCols[colIndex];
+        if (!colId) continue;
+        let resolved: unknown;
+        if (values[r][c] === 'NULL') resolved = null;
+        else if (values[r][c] === 'DEFAULT') resolved = DEFAULT_MARKER;
+        else resolved = values[r][c];
+        batch.push({ rowId: targetRowId, colId, value: resolved });
       }
-
-      const targetRow = rowData.find((r) => r.__row_id__ === targetRowId);
-      if (!targetRow) continue;
-
-      const origVal = targetRow.__original_data__?.[colId];
-      const normalizedOrig = origVal == null ? 'NULL' : String(origVal);
-      const normalizedNew = edit.value == null || edit.value === '' || edit.value === 'NULL' ? 'NULL' : String(edit.value);
-      if (normalizedOrig === normalizedNew) continue;
-      const pkCol = columns.find((c) => c.column_key === 'PRI');
-      if (!pkCol) continue;
-      const vs = edit.value === '' || edit.value === 'NULL' ? 'NULL' : escapeSqlValue(edit.value, dbType);
-      const sql = `UPDATE ${escapeSqlIdentifier(tableName, dbType)} SET ${escapeSqlIdentifier(colId, dbType)} = ${vs} WHERE ${escapeSqlIdentifier(pkCol.column_name, dbType)} = ${escapeSqlValue(targetRow[pkCol.column_name], dbType)}`;
-      existingEdits.push({ rowId: targetRowId, colId, value: edit.value, sql });
     }
-
-    // 批量更新新增行本地状态
-    if (newRowEdits.length > 0) {
-      setRowData((prev) => prev.map((r) => {
-        const editsForRow = newRowEdits.filter((e) => e.rowId === r.__row_id__);
-        if (editsForRow.length === 0) return r;
-        const updated = { ...r };
-        editsForRow.forEach((e) => { updated[e.colId] = e.value === 'NULL' ? null : e.value; });
-        return updated;
-      }));
-    }
-
-    // 已有行批量更新
-    if (existingEdits.length === 0) return;
-    Modal.confirm({
-      title: t('common.dataGrid.updateConfirm'),
-      content: t('common.dataGrid.updateConfirmContent', { count: existingEdits.length }),
-      okText: t('common.confirm'),
-      cancelText: t('common.cancel'),
-      zIndex: 2000,
-      transitionName: '',
-      maskTransitionName: '',
-      centered: true,
-      onOk: async () => {
-        for (const edit of existingEdits) {
-          setCurrentSql(edit.sql);
-          try {
-            const res = await executeQuery(connectionId, edit.sql, database || '');
-            if (res.error) { message.error(`${t('common.dataGrid.updateFailed')}: ${res.error}`); return; }
-            setRowData((prev) => prev.map((r) => {
-              if (r.__row_id__ !== edit.rowId) return r;
-              return { ...r, [edit.colId]: edit.value === 'NULL' ? null : edit.value, __status__: undefined };
-            }));
-          } catch (err) { message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`); return; }
-        }
-        message.success(t('common.dataGrid.updateSuccess'));
-      },
-    });
-  }, [columns, getVisibleColumns, filteredRows, rowData, tableName, dbType, connectionId, database, executeQuery, t]);
+    if (batch.length > 0) applyBatchEdit(batch);
+    return true;
+  }, [getVisibleColumns, filteredRows, applyBatchEdit]);
 
   // ── Add Row ──
   const [scrollToRowIndex, setScrollToRowIndex] = useState<number | undefined>(undefined);
@@ -432,108 +492,210 @@ export const DataTable = memo(function DataTable({
     });
   }, [columns]);
 
-  // ── Save New Rows ──
+  // ── New rows ──
   const newRows = useMemo(() => rowData.filter((r) => r.__status__ === 'new'), [rowData]);
-  const handleSaveNewRows = useCallback(() => {
-    if (newRows.length === 0) return;
-    const visibleCols = getVisibleColumns();
-    const sqls = newRows.map((row) => {
-      const cols = visibleCols.filter((c) => row[c] !== null && row[c] !== undefined);
-      if (cols.length === 0) return null;
-      const colNames = cols.map((c) => escapeSqlIdentifier(c, dbType)).join(', ');
-      const values = cols.map((c) => escapeSqlValue(row[c], dbType)).join(', ');
-      return `INSERT INTO ${escapeSqlIdentifier(tableName, dbType)} (${colNames}) VALUES (${values});`;
-    }).filter(Boolean) as string[];
+  const modifiedRows = useMemo(() => rowData.filter((r) => r.__status__ === 'modified'), [rowData]);
+  const deletedRows = useMemo(() => rowData.filter((r) => r.__status__ === 'deleted'), [rowData]);
+  const hasChanges = newRows.length > 0 || modifiedRows.length > 0 || deletedRows.length > 0;
 
-    if (sqls.length === 0) { message.warning(t('common.noDataToInsert')); return; }
-
-    Modal.confirm({
-      title: t('common.dataGrid.insertConfirm', { count: sqls.length }),
-      content: (
-        <pre style={{ fontSize: 11, maxHeight: 200, overflow: 'auto', margin: 0, padding: 8, background: 'var(--bg-code, #f5f5f5)', borderRadius: 4, wordBreak: 'break-all' }}>
-          {sqls.join('\n')}
-        </pre>
-      ),
-      okText: t('common.confirm'),
-      cancelText: t('common.cancel'),
-      zIndex: 2000,
-      transitionName: '',
-      maskTransitionName: '',
-      centered: true,
-      onOk: async () => {
-        try {
-          setLoading(true);
-          let success = 0;
-          let errMsg = '';
-          for (const sql of sqls) {
-            setCurrentSql(sql);
-            const res = await executeQuery(connectionId, sql, database || '');
-            if (res.error) { errMsg = res.error; break; }
-            success++;
-          }
-          if (errMsg) {
-            message.error(`${t('common.dataGrid.insertFailed')}: ${errMsg}`);
-          } else {
-            message.success(`${t('common.dataGrid.insertSuccess')} ${success} ${t('common.rows')}`);
-            loadData();
-            loadCount();
-          }
-        } catch (err) {
-          message.error(`${t('common.dataGrid.insertFailed')}: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-          setLoading(false);
-        }
-      },
-    });
-  }, [newRows, getVisibleColumns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, t]);
-
-  // ── Cancel New Rows ──
-  const handleCancelNewRows = useCallback(() => {
-    setRowData((prev) => prev.filter((r) => r.__status__ !== 'new'));
-    message.info(t('common.newRowsCancelled'));
-  }, [t]);
+  useEffect(() => {
+    if (hasChanges) setShowSqlPanel(true);
+  }, [hasChanges]);
 
   // ── Delete ──
+  // 标记已有行为 'deleted' 或移除新增行，同时记录撤销历史：
+  // - 新增行：记录 '__row__' → 完整行数据，撤销时重新插回
+  // - 已有行：记录 '__status__' → 原 status，撤销时恢复
   const handleDeleteRows = useCallback(() => {
     if (selectedRows.length === 0) { message.warning(t('common.pleaseSelectRowsToDelete')); return; }
+    const selIds = new Set(selectedRows.map((r) => r.__row_id__));
+    const prev = rowDataRef.current;
+    const historyCells: Array<{ rowId: string; colId: string; oldValue: unknown; newValue: unknown }> = [];
+    for (const r of prev) {
+      const rid = r.__row_id__;
+      if (!rid || !selIds.has(rid)) continue;
+      if (r.__status__ === 'new') {
+        historyCells.push({ rowId: rid, colId: '__row__', oldValue: { ...r }, newValue: null });
+      } else {
+        historyCells.push({ rowId: rid, colId: '__status__', oldValue: r.__status__, newValue: 'deleted' });
+      }
+    }
+    setRowData((rows) => {
+      return rows
+        .map((r) => {
+          if (!selIds.has(r.__row_id__)) return r;
+          if (r.__status__ === 'new') return r;
+          return { ...r, __status__: 'deleted' as const };
+        })
+        .filter((r) => !(selIds.has(r.__row_id__) && r.__status__ === 'new'));
+    });
+    if (historyCells.length > 0) recordEdit(historyCells);
+    setSelectedRows([]);
+  }, [selectedRows, t, recordEdit]);
+
+  // ── Generate pending SQL from rowData state ──
+  const pendingSqls = useMemo(() => {
+    const items: PendingSqlItem[] = [];
     const pkCol = columns.find((c) => c.column_key === 'PRI');
-    if (!pkCol && selectedRows.some((r) => r.__status__ !== 'new')) { message.warning(t('common.tableHasNoPrimaryKeyCannotDelete')); return; }
+    const dialect = getDialect(dbType);
+    const tableRef = dialect.buildTableRef(tableName, database);
+    const visibleCols = queryColumns;
+
+    for (const row of newRows) {
+      const cols = visibleCols.filter((c) => row[c] !== null && row[c] !== undefined);
+      if (cols.length === 0) continue;
+      const vals = [cols.map((c) => row[c])];
+      const sqls = dialect.buildInsert(tableRef, cols, vals);
+      if (sqls.length > 0) items.push({ id: `ins-${row.__row_id__}`, sql: sqls[0] + ';', type: 'insert', source: row.__row_id__ || '' });
+    }
+
+    for (const row of modifiedRows) {
+      if (!pkCol) continue;
+      const setters: Record<string, unknown> = {};
+      for (const c of visibleCols) {
+        const orig = row.__original_data__?.[c];
+        const cur = row[c];
+        const isSame = (orig == null && cur == null) || (orig != null && String(orig) === String(cur ?? ''));
+        if (!isSame) setters[c] = cur;
+      }
+      if (Object.keys(setters).length === 0) continue;
+      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(row[pkCol.column_name])}`;
+      items.push({ id: `upd-${row.__row_id__}`, sql: dialect.buildUpdate(tableRef, setters, where) + ';', type: 'update', source: row.__row_id__ || '' });
+    }
+
+    for (const row of deletedRows) {
+      if (!pkCol) continue;
+      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(row[pkCol.column_name])}`;
+      items.push({ id: `del-${row.__row_id__}`, sql: dialect.buildDelete(tableRef, where) + ';', type: 'delete', source: row.__row_id__ || '' });
+    }
+
+    return items;
+  }, [newRows, modifiedRows, deletedRows, columns, queryColumns, tableName, dbType, database]);
+
+  // 无主键时 modified/deleted 行无法生成 SQL，单独提示避免用户困惑
+  const noPkWarning = useMemo(() => {
+    const hasPk = columns.some((c) => c.column_key === 'PRI');
+    return !hasPk && (modifiedRows.length > 0 || deletedRows.length > 0);
+  }, [columns, modifiedRows, deletedRows]);
+
+  // ── Remove single pending SQL (revert that row's changes) ──
+  // 只移除该行相关的历史条目（保留其他行的撤销栈），不调用 clearEditHistory。
+  const handleRemovePendingSql = useCallback((sqlId: string) => {
+    const item = pendingSqls.find((s) => s.id === sqlId);
+    if (!item) return;
+    if (item.type === 'insert') {
+      setRowData((prev) => prev.filter((r) => r.__row_id__ !== item.source));
+      removeEditHistoryByRowId(item.source);
+    } else if (item.type === 'update') {
+      setRowData((prev) => prev.map((r) => {
+        if (r.__row_id__ !== item.source) return r;
+        const restored = { ...r, ...r.__original_data__, __status__: undefined };
+        return restored;
+      }));
+      removeEditHistoryByRowId(item.source);
+    } else if (item.type === 'delete') {
+      setRowData((prev) => prev.map((r) => {
+        if (r.__row_id__ !== item.source) return r;
+        return { ...r, __status__: undefined };
+      }));
+      removeEditHistoryByRowId(item.source);
+    }
+  }, [pendingSqls, removeEditHistoryByRowId]);
+
+  // ── Commit all ──
+  // 按顺序执行 pending SQL。成功/失败都 await loadData 把数据库真实状态同步回 UI，
+  // 避免中途失败时 pendingSqls 残留导致用户重试时重复提交已落库的 SQL。
+  const committingRef = useRef(false);
+  const handleCommit = useCallback(async () => {
+    if (committingRef.current) return;  // 防止 Cmd+S 或快速点击重复触发
+    if (pendingSqls.length === 0) return;
+    if (!columns.find((c) => c.column_key === 'PRI') && (modifiedRows.length > 0 || deletedRows.length > 0)) {
+      message.warning(t('common.dataGrid.noPrimaryKeyWarning'));
+      return;
+    }
+    committingRef.current = true;
+    setLoading(true);
+    let errMsg = '';
+    const succeededSources = new Set<string>();
+    try {
+      for (const item of pendingSqls) {
+        setCurrentSql(item.sql);
+        const res = await executeQuery(connectionId, item.sql, database || '');
+        if (res.error) {
+          errMsg = `${item.sql}\n→ ${res.error}`;
+          break;
+        }
+        if (item.source) succeededSources.add(item.source);
+      }
+
+      if (errMsg) {
+        message.error(`${t('common.dataGrid.updateFailed')}: ${errMsg}`);
+      } else {
+        message.success(`${t('common.dataGrid.updateSuccess')} ${pendingSqls.length} ${t('common.rows')}`);
+      }
+
+      // 已落库的行不可再撤销
+      for (const id of succeededSources) removeEditHistoryByRowId(id);
+      if (errMsg) {
+        // 部分成功：保留剩余 pending 的撤销历史；clearEditHistory 只在全部成功时调用
+      } else {
+        clearEditHistory();
+      }
+
+      // 无论成功失败都 await loadData：成功则刷新，失败则把已落库的变更同步回来，
+      // 避免 pendingSqls 残留导致重试时重复执行。
+      await loadData();
+      await loadCount();
+    } catch (err) {
+      message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      committingRef.current = false;
+      setLoading(false);
+    }
+  }, [pendingSqls, modifiedRows, deletedRows, columns, connectionId, database, executeQuery, loadData, loadCount, t, clearEditHistory, removeEditHistoryByRowId]);
+
+  // ── Cmd+S / Ctrl+S commit ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        if (pendingSqls.length > 0) handleCommit();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleCommit, pendingSqls]);
+
+  // ── Undo all ──
+  const handleUndoAll = useCallback(() => {
     Modal.confirm({
-      title: selectedRows.length > 1
-        ? t('common.confirmDeleteSelectedRows', { count: selectedRows.length })
-        : t('common.confirmDeleteSelectedRow'),
-      content: t('common.dataGrid.deleteConfirm'),
-      okType: 'danger',
+      title: t('common.undoModifications'),
+      content: t('common.dataGrid.undoAllConfirm'),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       zIndex: 2000,
       transitionName: '',
       maskTransitionName: '',
       centered: true,
-      onOk: async () => {
-        try {
-          setLoading(true);
-          let success = 0, errMsg = '';
-          for (const row of selectedRows) {
-            if (row.__status__ === 'new') { setRowData((prev) => prev.filter((r) => r.__row_id__ !== row.__row_id__)); success++; continue; }
-            const sql = `DELETE FROM ${escapeSqlIdentifier(tableName, dbType)} WHERE ${escapeSqlIdentifier(pkCol!.column_name, dbType)} = ${escapeSqlValue(row[pkCol!.column_name], dbType)}`;
-            setCurrentSql(sql);
-            const res = await executeQuery(connectionId, sql, database || '');
-            if (res.error) { errMsg = res.error; break; }
-            success++;
-          }
-          if (errMsg) message.error(`${t('common.dataGrid.deleteFailed')}: ${errMsg}`);
-          else { message.success(`${t('common.dataGrid.deleteSuccess')} ${success} ${t('common.rows')}`); setSelectedRows([]); loadData(); loadCount(); }
-        } catch (err) { message.error(`${t('common.dataGrid.deleteFailed')}: ${err instanceof Error ? err.message : String(err)}`); }
-        finally { setLoading(false); }
+      onOk: () => {
+        setRowData((prev) => prev
+          .filter((r) => r.__status__ !== 'new')
+          .map((r): RowData => {
+            if (r.__status__ === 'modified') return { ...r, ...r.__original_data__, __status__: undefined };
+            if (r.__status__ === 'deleted') return { ...r, __status__: undefined };
+            return r;
+          }));
+        clearEditHistory();
+        message.info(t('common.allChangesRevoked'));
       },
     });
-  }, [selectedRows, columns, tableName, dbType, connectionId, database, executeQuery, loadData, loadCount, t]);
+  }, [t]);
 
   // ── Selection ──
   const handleSelectionChange = useCallback((rows: GlideRow[], _selection: any) => {
     setSelectedRows(rows as unknown as RowData[]);
-  }, []);
+    if (menuState.visible) closeMenu();
+  }, [menuState.visible, closeMenu]);
 
   // ── Context Menu ──
   const handleCellContextMenu = useCallback((col: number, row: number, bounds: { x: number; y: number }) => {
@@ -553,6 +715,17 @@ export const DataTable = memo(function DataTable({
       rowData: row >= 0 ? filteredRows[row] : undefined,
     });
   }, [filteredRows, selectedRows, getVisibleColumns, openMenu]);
+
+  // ── Header Context Menu (hide column) ──
+  const handleHeaderContextMenu = useCallback((colIndex: number, bounds: { x: number; y: number }) => {
+    const colId = getVisibleColumns()[colIndex];
+    if (!colId) return;
+    openMenu(bounds.x, bounds.y, {
+      col: colIndex,
+      row: -1,
+      colName: colId,
+    });
+  }, [getVisibleColumns, openMenu]);
 
   // ── Export ──
   const exportColNames = useMemo(() => columns.filter((c) => !hiddenColumns.has(c.column_name)).map((c) => c.column_name), [columns, hiddenColumns]);
@@ -621,17 +794,24 @@ export const DataTable = memo(function DataTable({
       <div style={{ padding: '1px 4px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--background-toolbar)', flexShrink: 0, minHeight: 22 }}>
         <Space size={2} split={<Divider type="vertical" style={{ height: 14, margin: '0 4px', background: 'var(--border-color)' }} />}>
           <Button icon={<PlusOutlined />} onClick={handleAddRow} type="primary" size="small" style={{ height: 20, padding: '0 6px', fontSize: 11 }}>{t('common.addRowLabel')}</Button>
-          {newRows.length > 0 && (
+          <Button icon={<DeleteOutlined />} onClick={handleDeleteRows} disabled={selectedRows.length === 0} danger size="small" style={{ height: 20, padding: '0 6px', fontSize: 11 }}>{t('common.delete')}</Button>
+          {hasChanges && (
             <>
-              <Button type="primary" size="small" onClick={handleSaveNewRows} style={{ height: 20, padding: '0 6px', fontSize: 11 }}>
-                {t('common.save')} ({newRows.length})
+              <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} loading={loading} style={{ height: 20, padding: '0 6px', fontSize: 11 }}>
+                {t('common.submit')} ({pendingSqls.length})
               </Button>
-              <Button size="small" onClick={handleCancelNewRows} style={{ height: 20, padding: '0 6px', fontSize: 11 }}>
-                {t('common.cancel')}
-              </Button>
+              <Tooltip title={t('common.dataGrid.undoStep')}>
+                <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} disabled={!hasEditHistory} style={{ height: 20, padding: '0 6px', fontSize: 11 }}>
+                  {t('common.undo')}
+                </Button>
+              </Tooltip>
+              <Tooltip title={t('common.dataGrid.undoAllTip')}>
+                <Button size="small" danger icon={<CloseOutlined />} onClick={handleUndoAll} style={{ height: 20, padding: '0 6px', fontSize: 11 }}>
+                  {t('common.undoAll')}
+                </Button>
+              </Tooltip>
             </>
           )}
-          <Button icon={<DeleteOutlined />} onClick={handleDeleteRows} disabled={selectedRows.length === 0} danger size="small" style={{ height: 20, padding: '0 6px', fontSize: 11 }}>{t('common.delete')}</Button>
           <Tooltip title={t('common.refreshLabel')}><Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} /></Tooltip>
           <Tooltip title={t('common.dataGrid.filter')}><Button icon={<FilterOutlined />} onClick={() => setShowFilterPanel(!showFilterPanel)} type={showFilterPanel || whereClause ? 'primary' : 'default'} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} /></Tooltip>
           <Popover content={
@@ -878,6 +1058,8 @@ export const DataTable = memo(function DataTable({
             onCellEdited={handleCellEdited}
             onCellsEdited={handleCellsEdited}
             onCellContextMenu={handleCellContextMenu}
+            onPaste={handlePaste}
+            onHeaderContextMenu={handleHeaderContextMenu}
             headerHeight={36} rowHeight={24} editable={true}
           />
         ) : hasLoaded ? (
@@ -895,12 +1077,14 @@ export const DataTable = memo(function DataTable({
         context={{
           dbType,
           tableName,
+          database,
           columns,
           queryColumns: getVisibleColumns(),
           hiddenColumns,
           isEditable: true,
           onCopyToClipboard: (text) => navigator.clipboard.writeText(text),
           onSetWhereClause: (where) => { setWhereClause(where); setCurrentPage(1); loadData(); },
+          onHideColumn: (colName) => setHiddenColumns((prev) => new Set([...prev, colName])),
           onCellEdited: handleCellEdited,
           onPreviewCell: (value, colName, rowIndex, colIndex) => setCellPreview({ open: true, value, columnName: colName, rowIndex, colIndex }),
         }}
@@ -920,11 +1104,46 @@ export const DataTable = memo(function DataTable({
         }}
       />
 
+      {/* ═══ SQL Preview Panel ═══ */}
+      {hasChanges && showSqlPanel && (
+        <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-card)', flexShrink: 0, maxHeight: 160, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--border-color)', background: 'var(--background-toolbar)' }}>
+            <CodeOutlined style={{ fontSize: 11, color: 'var(--color-primary)' }} />
+            <span style={{ fontSize: 11, fontWeight: 500 }}>{t('common.dataGrid.pendingSql')} ({pendingSqls.length})</span>
+            <div style={{ flex: 1 }} />
+            <Button size="small" type="text" icon={<CloseOutlined />} onClick={() => setShowSqlPanel(false)} style={{ height: 18, width: 18, fontSize: 10 }} />
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: '4px 8px' }}>
+            {pendingSqls.map((item, idx) => (
+              <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '1px 0', borderBottom: idx < pendingSqls.length - 1 ? '1px solid var(--border-color)' : undefined }}>
+                <Tag color={item.type === 'insert' ? 'green' : item.type === 'delete' ? 'red' : 'blue'} style={{ margin: 0, fontSize: 9, lineHeight: '14px', height: 16, minWidth: 20, textAlign: 'center', flexShrink: 0 }}>
+                  {item.type === 'insert' ? 'INS' : item.type === 'delete' ? 'DEL' : 'UPD'}
+                </Tag>
+                <code style={{ flex: 1, fontSize: 10, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-primary)' }}>{item.sql}</code>
+                <Button size="small" type="text" danger icon={<CloseOutlined />} onClick={() => handleRemovePendingSql(item.id)} style={{ height: 16, width: 16, fontSize: 9, flexShrink: 0 }} />
+              </div>
+            ))}
+            {pendingSqls.length === 0 && (
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textAlign: 'center', padding: 8 }}>{t('common.dataGrid.noPendingSql')}</div>
+            )}
+            {noPkWarning && (
+              <div style={{ fontSize: 11, color: 'var(--color-warning, #faad14)', textAlign: 'center', padding: '4px 8px', borderTop: '1px solid var(--border-color)' }}>
+                {t('common.dataGrid.noPrimaryKeyWarning')}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ═══ Status Bar ═══ */}
       <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-toolbar)', padding: '1px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, minHeight: 22 }}>
         <Space size={2}>
           <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.refreshLabel')}</Button>
-          <Button icon={<ImportOutlined />} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.import')}</Button>
+          {hasChanges && (
+            <Tooltip title={t('common.dataGrid.pendingSql')}>
+              <Button icon={<CodeOutlined />} size="small" type={showSqlPanel ? 'primary' : 'default'} onClick={() => setShowSqlPanel(!showSqlPanel)} style={{ height: 20, padding: '0 4px', fontSize: 11 }} />
+            </Tooltip>
+          )}
         </Space>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
           <code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontFamily: 'monospace', padding: '2px 6px', background: 'var(--background-toolbar)', borderRadius: 3, border: '1px solid var(--border-color)', maxWidth: 'none' }}>{currentSql}</code>

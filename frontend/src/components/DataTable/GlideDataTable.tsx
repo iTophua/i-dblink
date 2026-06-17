@@ -1,7 +1,8 @@
 /**
  * GlideDataTable — 基于 Glide Data Grid 的通用数据表格组件
  */
-import { useMemo, useCallback, useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useMemo, useCallback, useState, useEffect, useRef, useLayoutEffect, createContext, useContext } from 'react';
+import type { MutableRefObject } from 'react';
 import DataEditor, {
   GridCellKind,
   CompactSelection,
@@ -43,6 +44,8 @@ export interface GlideDataTableProps {
   onCellContextMenu?: (col: number, row: number, bounds: { x: number; y: number }) => void;
   onHeaderClicked?: (colIndex: number) => void;
   onColumnResized?: (col: GridColumn, newWidth: number, colIndex: number) => void;
+  onPaste?: (target: Item, values: readonly (readonly string[])[]) => boolean;
+  onHeaderContextMenu?: (colIndex: number, bounds: { x: number; y: number }) => void;
   /** 设置后自动滚动到该行（索引基于可见行，不含 rowMarker） */
   scrollToRowIndex?: number;
   rowHeight?: number;
@@ -51,6 +54,18 @@ export interface GlideDataTableProps {
 }
 
 const FILLER_COL_ID = '__filler__';
+
+// 范围编辑的运行时状态，通过 React Context 注入到 InlineCellEditor。
+// 每个 GlideDataTable 实例持有独立的一份，避免多实例互相污染。
+interface RangeEditState {
+  editingRange: { x: number; y: number; width: number; height: number } | null;
+  liveRangeEditFn: ((value: string) => void) | null;
+  wasLiveRangeEdit: boolean;
+}
+
+type RangeEditRef = MutableRefObject<RangeEditState>;
+
+const RangeEditContext = createContext<RangeEditRef | null>(null);
 
 function hexWithAlpha(hex: string, alpha: number): string {
   if (hex.startsWith('#') && hex.length === 7) {
@@ -71,6 +86,15 @@ export function buildGridColumns(columns: GlideColumn[], hiddenColumns: Set<stri
 }
 
 export function valueToGridCell(value: unknown, editable: boolean): GridCell {
+  if (typeof value === 'symbol') {
+    return {
+      kind: GridCellKind.Text,
+      data: '',
+      displayData: value.description ?? 'DEFAULT',
+      allowOverlay: editable,
+      readonly: !editable,
+    };
+  }
   if (value === true || value === false) {
     return {
       kind: GridCellKind.Boolean,
@@ -104,10 +128,24 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
   const committedRef = useRef(false);
   const hasFocusedRef = useRef(false);
   const tc = useThemeColors();
+  const rangeEditRef = useContext(RangeEditContext);
   const cellData = (p.value as any).data;
+  const targetKey = `${p.target.x},${p.target.y}`;
+  const [prevKey, setPrevKey] = useState(targetKey);
   const [val, setVal] = useState(p.initialValue ?? String(cellData ?? ''));
   const valRef = useRef(val);
   valRef.current = val;
+
+  if (prevKey !== targetKey) {
+    setPrevKey(targetKey);
+    committedRef.current = false;
+    cancelledRef.current = false;
+    hasFocusedRef.current = false;
+    const newCellData = (p.value as any).data;
+    const synced = p.initialValue ?? String(newCellData ?? '');
+    valRef.current = synced;
+    setVal(synced);
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -118,6 +156,16 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
     }, 0);
     return () => clearTimeout(timer);
   }, []);
+
+  // 进入编辑器时，如果是范围编辑，先把初始值铺满整个范围。
+  // 只在 mounted 且未提交/未取消时执行一次（用 valRef 避免闭包捕获旧值）。
+  const didInitialFillRef = useRef(false);
+  useEffect(() => {
+    if (didInitialFillRef.current) return;
+    didInitialFillRef.current = true;
+    const liveFn = rangeEditRef?.current.liveRangeEditFn;
+    if (liveFn) liveFn(valRef.current);
+  }, [rangeEditRef]);
 
   const commit = useCallback((v: string) => {
     if (committedRef.current || cancelledRef.current) return;
@@ -133,23 +181,36 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
       displayData = v == null || v === '' ? 'NULL' : String(v);
     }
     p.onFinishedEditing({ ...(p.value as any), data, displayData } as any);
-  }, [p]);
+  }, [p, targetKey]);
 
   // 组件卸载时自动提交（兜底：onBlur 在卸载时可能不触发）
-  // hasFocusedRef 用于区分 StrictMode 模拟卸载和真实卸载
+  // hasFocusedRef 用于区分 StrictMode 模拟卸载（focus 前的假卸载）和真实卸载。
+  // 范围编辑状态只在真实卸载时清理，避免 StrictMode 双 mount 导致状态丢失。
   useLayoutEffect(() => {
     return () => {
-      if (hasFocusedRef.current && !committedRef.current && !cancelledRef.current) {
+      const isRealUnmount = hasFocusedRef.current;
+      if (isRealUnmount && !committedRef.current && !cancelledRef.current) {
         commit(valRef.current);
       }
+      if (isRealUnmount) {
+        const rs = rangeEditRef?.current;
+        if (rs && (rs.editingRange !== null || rs.liveRangeEditFn !== null || rs.wasLiveRangeEdit)) {
+          rs.editingRange = null;
+          rs.liveRangeEditFn = null;
+          rs.wasLiveRangeEdit = false;
+        }
+      }
     };
-  }, []);
+  }, [rangeEditRef]);
 
   return (
     <input
       ref={ref}
       value={val}
-      onChange={(e) => setVal(e.target.value)}
+      onChange={(e) => {
+        setVal(e.target.value);
+        rangeEditRef?.current.liveRangeEditFn?.(e.target.value);
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') { e.stopPropagation(); commit(val); }
         if (e.key === 'Escape') { e.stopPropagation(); cancelledRef.current = true; p.onFinishedEditing(); }
@@ -195,6 +256,8 @@ export function GlideDataTable({
   onCellContextMenu,
   onHeaderClicked,
   onColumnResized,
+  onPaste,
+  onHeaderContextMenu,
   scrollToRowIndex,
   rowHeight = 24,
   headerHeight = 28,
@@ -244,7 +307,18 @@ export function GlideDataTable({
   const emptyClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentSelectionRef = useRef(gridSelection);
   currentSelectionRef.current = gridSelection;
+  const lastRangeRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const gridRef = useRef<DataEditorRef>(null);
+  const onCellsEditedRef = useRef(onCellsEdited);
+  onCellsEditedRef.current = onCellsEdited;
+  const gridColumnsRef = useRef(gridColumns);
+  gridColumnsRef.current = gridColumns;
+  // 范围编辑运行时状态，由本组件实例独占，通过 Context 注入到 InlineCellEditor。
+  const rangeEditRef = useRef<RangeEditState>({
+    editingRange: null,
+    liveRangeEditFn: null,
+    wasLiveRangeEdit: false,
+  });
 
   // 自动滚动到指定行
   useEffect(() => {
@@ -373,6 +447,12 @@ export function GlideDataTable({
         emptyClickTimerRef.current = null;
       }
       setGridSelection(newSelection);
+      const range = newSelection.current?.range;
+      if (range && range.width * range.height > 1) {
+        lastRangeRef.current = { x: range.x, y: range.y, width: range.width, height: range.height };
+      } else {
+        lastRangeRef.current = null;
+      }
       if (onSelectionChange) {
         const indices = newSelection.rows.toArray();
         onSelectionChange(indices.map((i) => rows[i]).filter(Boolean), newSelection);
@@ -463,79 +543,95 @@ export function GlideDataTable({
       const hasVal = rawVal !== undefined && rawVal !== null;
       const val = hasVal ? String(rawVal) : (typeof newValue === 'object' && newValue !== null ? '' : String(newValue ?? ''));
       onCellEdited(col, row, String(val));
-
-      const numCols = gridColumns.length;
-      const cells: { cell: Item }[] = [];
-      for (let c = 0; c < numCols; c++) {
-        cells.push({ cell: [c, row] });
-      }
-      requestAnimationFrame(() => {
-        gridRef.current?.updateCells(cells);
-      });
     },
     [onCellEdited, editable, gridColumns]
   );
 
   // ===== 范围编辑 =====
-  // Glide Data Grid 内部协议：先调 onCellsEdited，若返回 true 则不再调 onCellEdited。
-  // 因此单 cell 编辑必须在此主动调用 onCellEdited（更新 React state），
-  // 然后返回 true 阻止 Glide Data Grid 重复调用。
+  // Glide Data Grid 编辑器提交时只传 1 个 cell，不传范围中所有 cell。
+  // 因此用 lastRangeRef（选区变化时保存）来检测范围，将值填充到选区内所有可编辑单元格。
   const handleCellsEdited = useCallback(
     (newValues: readonly { location: Item; value: EditableGridCell }[]) => {
+      const rs = rangeEditRef.current;
+      rs.liveRangeEditFn = null;
+      rs.editingRange = null;
+
+      if (rs.wasLiveRangeEdit) {
+        rs.wasLiveRangeEdit = false;
+        lastRangeRef.current = null;
+        return true;
+      }
+
       if (!onCellsEdited || !editable) return false;
+
+      const savedRange = lastRangeRef.current;
+      const isRange = savedRange !== null && newValues.length === 1;
+
+      const extractVal = (value: EditableGridCell) =>
+        typeof value === 'object' && value !== null ? (value as any).data ?? '' : String(value ?? '');
+
+      if (isRange) {
+        lastRangeRef.current = null;
+        const rawVal = extractVal(newValues[0].value);
+        const edits: Array<{ col: number; row: number; value: string }> = [];
+        for (let x = 0; x < savedRange.width; x++) {
+          for (let y = 0; y < savedRange.height; y++) {
+            const c = savedRange.x + x;
+            const r = savedRange.y + y;
+            if (gridColumns[c]?.id === FILLER_COL_ID) continue;
+            edits.push({ col: c, row: r, value: String(rawVal) });
+          }
+        }
+        if (edits.length === 0) return false;
+        onCellsEdited(edits);
+        return true;
+      }
 
       if (onCellEdited && newValues.length <= 1) {
         const [{ location: [col, row], value }] = newValues;
         if (gridColumns[col]?.id === FILLER_COL_ID) return false;
-        const v = typeof value === 'object' && value !== null ? (value as any).data ?? '' : String(value ?? '');
-        onCellEdited(col, row, String(v));
-
-        // 标记整行为脏（rAF 延迟：等待 React setRowData 批处理完成）
-        const numCols = gridColumns.length;
-        const cells: { cell: Item }[] = [];
-        for (let c = 0; c < numCols; c++) {
-          cells.push({ cell: [c, row] });
-        }
-        requestAnimationFrame(() => {
-          gridRef.current?.updateCells(cells);
-        });
+        onCellEdited(col, row, String(extractVal(value)));
         return true;
       }
       const edits = newValues
         .map(({ location: [col, row], value }) => {
           if (gridColumns[col]?.id === FILLER_COL_ID) return null;
-          const v = typeof value === 'object' && value !== null ? (value as any).data ?? '' : String(value ?? '');
-          return { col, row, value: String(v) };
+          return { col, row, value: String(extractVal(value)) };
         })
         .filter(Boolean) as Array<{ col: number; row: number; value: string }>;
       if (edits.length === 0) return false;
       onCellsEdited(edits);
-
-      // 批量标记受影响的行（去重）为脏，确保同行其他列也刷新，
-      // 必须用 rAF 延迟：等待 React 批处理状态更新完成。
-      const damagedRows = new Set<number>();
-      const cells: { cell: Item }[] = [];
-      const numCols = gridColumns.length;
-      for (const edit of edits) {
-        if (!damagedRows.has(edit.row)) {
-          damagedRows.add(edit.row);
-          for (let c = 0; c < numCols; c++) {
-            cells.push({ cell: [c, edit.row] });
-          }
-        }
-      }
-      requestAnimationFrame(() => {
-        gridRef.current?.updateCells(cells);
-      });
-
       return true;
     },
-    [onCellsEdited, editable, gridColumns]
+    [onCellsEdited, onCellEdited, editable, gridColumns]
   );
 
   // ===== 自定义内联编辑器 =====
   const provideEditor: ProvideEditorCallback<GridCell> = useCallback((cell) => {
     if (cell.kind !== GridCellKind.Text && cell.kind !== GridCellKind.Number) return;
+    const rs = rangeEditRef.current;
+    if (rs.editingRange === null) {
+      const savedRange = lastRangeRef.current;
+      if (savedRange && onCellsEditedRef.current) {
+        rs.editingRange = { x: savedRange.x, y: savedRange.y, width: savedRange.width, height: savedRange.height };
+        rs.wasLiveRangeEdit = true;
+        rs.liveRangeEditFn = (value: string) => {
+          const range = rs.editingRange;
+          if (!range) return;
+          const cols = gridColumnsRef.current;
+          const edits: Array<{ col: number; row: number; value: string }> = [];
+          for (let x = 0; x < range.width; x++) {
+            for (let y = 0; y < range.height; y++) {
+              const c = range.x + x;
+              const r = range.y + y;
+              if (cols[c]?.id === FILLER_COL_ID) continue;
+              edits.push({ col: c, row: r, value });
+            }
+          }
+          if (edits.length > 0) onCellsEditedRef.current?.(edits);
+        };
+      }
+    }
     return {
       editor: InlineCellEditor,
       disablePadding: true,
@@ -550,42 +646,56 @@ export function GlideDataTable({
       const gridCol = gridColumns[cell[0]];
       if (gridCol?.id === FILLER_COL_ID) return;
       event.preventDefault?.();
-      const pos = event?.bounds ?? { x: 0, y: 0 };
-      onCellContextMenu(cell[0], cell[1], { x: pos.x, y: pos.y });
+      // 优先用鼠标坐标，回退到 cell bounds 左上角
+      const x = typeof event?.clientX === 'number' ? event.clientX : (event?.bounds?.x ?? 0);
+      const y = typeof event?.clientY === 'number' ? event.clientY : (event?.bounds?.y ?? 0);
+      onCellContextMenu(cell[0], cell[1], { x, y });
     },
     [onCellContextMenu, gridColumns]
   );
 
   return (
-    <div style={{ position: 'absolute', inset: 0 }} onPointerDown={handleWrapperPointerDown}>
-      <DataEditor
-        ref={gridRef}
-        width="100%"
-        height="100%"
-        columns={gridColumns}
-        rows={rows.length}
-        getCellContent={getCellContent}
-        drawCell={drawCell}
-        drawHeader={drawHeader}
-        gridSelection={gridSelection}
-        onGridSelectionChange={handleSelectionChange}
-        onColumnMoved={handleColumnMoved}
-        onColumnResize={handleColumnResized}
-        onCellEdited={handleCellEdited}
-        onCellsEdited={handleCellsEdited}
-        onCellContextMenu={handleContextMenu}
-        onHeaderClicked={onHeaderClicked}
-        theme={theme}
-        headerHeight={headerHeight}
-        rowHeight={rowHeight}
-        rowMarkers="clickable-number"
-        smoothScrollX
-        smoothScrollY
-        rangeSelect="rect"
-        keybindings={{ search: true, copy: true }}
-        provideEditor={provideEditor}
-      />
-    </div>
+    <RangeEditContext.Provider value={rangeEditRef}>
+      <div style={{ position: 'absolute', inset: 0 }} onPointerDown={handleWrapperPointerDown}>
+        <DataEditor
+          ref={gridRef}
+          width="100%"
+          height="100%"
+          columns={gridColumns}
+          rows={rows.length}
+          getCellContent={getCellContent}
+          drawCell={drawCell}
+          drawHeader={drawHeader}
+          gridSelection={gridSelection}
+          onGridSelectionChange={handleSelectionChange}
+          onColumnMoved={handleColumnMoved}
+          onColumnResize={handleColumnResized}
+          onCellEdited={handleCellEdited}
+          onCellsEdited={handleCellsEdited}
+          onCellContextMenu={handleContextMenu}
+          onHeaderClicked={onHeaderClicked}
+          onHeaderContextMenu={(colIndex, event) => {
+            if (!onHeaderContextMenu) return;
+            // 优先用鼠标坐标，回退到 header cell bounds 左上角
+            const ev = event as any;
+            const x = typeof ev?.clientX === 'number' ? ev.clientX : (ev?.bounds?.x ?? 0);
+            const y = typeof ev?.clientY === 'number' ? ev.clientY : (ev?.bounds?.y ?? 0);
+            onHeaderContextMenu(colIndex, { x, y });
+          }}
+          theme={theme}
+          headerHeight={headerHeight}
+          rowHeight={rowHeight}
+          rowMarkers="clickable-number"
+          smoothScrollX
+          smoothScrollY
+          rangeSelect="rect"
+          keybindings={{ search: true, copy: true, paste: true, selectAll: true }}
+          getCellsForSelection={true}
+          onPaste={onPaste}
+          provideEditor={provideEditor}
+        />
+      </div>
+    </RangeEditContext.Provider>
   );
 }
 

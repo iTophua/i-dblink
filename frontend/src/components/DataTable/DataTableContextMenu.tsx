@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { EyeInvisibleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { ContextMenu } from '../ContextMenu';
 import type { MenuConfigItem, MenuContext } from '../ContextMenu';
@@ -43,6 +44,22 @@ export function DataTableContextMenu({
       col: menuTarget.col,
       selectedRows,
     };
+
+    const isHeaderMenu = menuTarget.row === -1 || menuTarget.row == null;
+
+    if (isHeaderMenu && ctx.colName) {
+      return [
+        {
+          key: 'hide-column',
+          label: t('common.contextMenu.hideColumn'),
+          icon: <EyeInvisibleOutlined />,
+          onClick: () => {
+            if (ctx.onHideColumn && ctx.colName) ctx.onHideColumn(ctx.colName);
+            onClose();
+          },
+        },
+      ];
+    }
 
     return [
       createPreviewCellItem(ctx, t, onClose),
