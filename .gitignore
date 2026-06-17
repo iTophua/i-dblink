@@ -20,31 +20,21 @@ dist-ssr
 .vite/
 *.tsbuildinfo
 
-# Tauri (Rust backend build cache - HUGE, must be ignored)
-src-tauri/target/
+# Wails
+build/
+build/bin/
+frontend/dist/
+frontend/wailsjs/
 
-# Go backend build output
-go-backend/go-backend
-go-backend/*.exe
-go-backend/*.test
-go-backend/vendor/
+# Go build output
+*.exe
+*.dll
+*.so
+*.dylib
+idblink
 
-# Tauri sidecars (compiled Go binaries for each platform)
-src-tauri/sidecars/
-
-# Tauri auto-generated schemas
-src-tauri/gen/
-
-# Development data directory (for iDBLink)
+# Development data directory
 .dev-data
-
-# Certificates (Tauri dev generates these)
-*.pem
-.cargo
-
-# Tauri signing keys
-src-tauri/*.key
-src-tauri/*.key.pub
 
 # Database files
 *.db
@@ -55,7 +45,6 @@ src-tauri/*.key.pub
 # AI tools
 .qwen/
 .lingma/
-.claude/
 .code-review-graph/
 .cursor/
 .copilot/
@@ -104,6 +93,5 @@ e2e/screenshots/
 .env.development
 .env.production
 .env.test
-.gitnexus
 
 

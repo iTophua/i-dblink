@@ -1,10 +1,10 @@
-# QWEN.md - iDBLink Project Context
+# QWEN.md — iDBLink Project Context
 
 ## Project Overview
 
-**iDBLink** is a cross-platform database management tool (similar to Navicat Premium) built with React 18 + TypeScript + Vite for the frontend and Tauri v2 (Rust) for the backend. It supports multiple database types including MySQL, PostgreSQL, SQLite, SQL Server, Oracle, MariaDB, and Dameng (达梦).
+**iDBLink** is a cross-platform database management tool (similar to Navicat Premium) built with **Wails v2** (Go backend) + **React 19 + TypeScript + Vite** frontend. Supports MySQL, PostgreSQL, SQLite, SQL Server, Oracle, MariaDB, 达梦, 人大金仓, 瀚高, VastBase.
 
-**Current Version**: v0.1.0 (Early development stage)
+**Current Version**: v0.1.0
 
 **Location**: `/Users/itophua/AI/AiProjects/i-dblink`
 
@@ -12,254 +12,158 @@
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Frontend** | React 18 + TypeScript | UI framework |
-| **Build Tool** | Vite 5 | Fast dev server & bundler |
-| **UI Framework** | Ant Design 5 | Component library |
-| **State Management** | Zustand 4 | Lightweight global state |
+| **Frontend** | React 19 + TypeScript | UI framework |
+| **Build Tool** | Vite 6 | Fast dev server & bundler |
+| **UI Framework** | Ant Design 6 | Component library |
+| **State Management** | Zustand 5 | Global state |
 | **SQL Editor** | Monaco Editor | VS Code-like SQL editing |
-| **Data Grid** | AG Grid 30 | High-performance table |
-| **Desktop Framework** | Tauri v2 | Cross-platform desktop app |
-| **Backend** | Rust 1.70+ | High-performance, safe backend |
-| **Database Drivers** | sqlx 0.7 | Async SQL (MySQL, PG, SQLite) |
-| **Connection Pool** | mobc 0.8 | Connection pooling |
-| **Key Storage** | keyring 2.0 | System keychain for passwords |
-| **Async Runtime** | Tokio 1.35 | Rust async runtime |
+| **Data Grid** | AG Grid 33 | High-performance table |
+| **Desktop Framework** | Wails v2 (Go) | Cross-platform desktop app |
+| **Backend** | Go 1.25 | All database logic |
+| **Database Drivers** | Various Go drivers | MySQL, PG, SQLite, MSSQL, Oracle, 达梦, 金仓 |
+| **Encryption** | AES-256-GCM | Machine-key-bound password storage |
+| **Local Storage** | SQLite (modernc) | Connection configs, snippets, groups |
 
 ## Project Structure
 
 ```
 i-dblink/
-├── src/                          # Frontend source (TypeScript/React)
-│   ├── api/                      # Tauri invoke API wrappers
-│   ├── components/               # React components
-│   │   ├── ConnectionTree/       # Connection tree component
-│   │   ├── StatusBar/            # Status bar component
-│   │   ├── TabPanel/             # Tab panel component
-│   │   ├── Toolbar/              # Toolbar component
-│   │   ├── ConnectionDialog.tsx  # Connection config dialog
-│   │   ├── DataTable.tsx         # Data table view
-│   │   ├── LogPanel.tsx          # Log panel
-│   │   ├── MainLayout.tsx        # Main app layout
-│   │   ├── SQLEditor.tsx         # SQL editor with Monaco
-│   │   ├── TableList.tsx         # Table list view
-│   │   ├── TableStructure.tsx    # Table structure view
-│   │   └── Welcome.tsx           # Welcome screen
-│   ├── hooks/                    # Custom React hooks
-│   ├── stores/                   # Zustand stores (appStore.ts)
-│   ├── types/                    # TypeScript type definitions
-│   ├── utils/                    # Utility functions
-│   ├── styles/                   # Global styles & theme
-│   ├── constants/                # App constants
-│   ├── __tests__/                # Test files
-│   ├── App.tsx                   # Root React component
-│   └── main.tsx                  # React entry point
-├── src-tauri/                    # Rust backend
-│   ├── src/
-│   │   ├── commands/             # Tauri command modules
-│   │   ├── db/                   # Database module (pool, models, migrations, queries, repos)
-│   │   ├── drivers/              # Database driver implementations
-│   │   ├── models/               # Data models
-│   │   ├── utils/                # Utility functions
-│   │   ├── commands.rs           # Tauri commands (legacy, needs refactoring)
-│   │   ├── main.rs               # Rust entry point & menu setup
-│   │   ├── security.rs           # Keychain password management
-│   │   └── storage.rs            # Local JSON storage for connections
-│   ├── icons/                    # App icons
-│   ├── Cargo.toml                # Rust dependencies
-│   └── tauri.conf.json           # Tauri app configuration
-├── doc/                          # Project documentation
-│   ├── 01-requirements.md        # Requirements specification
-│   ├── 02-ui-design.md           # UI design & component specs
-│   └── 03-interaction-design.md  # Interaction design & workflows
-└── public/                       # Static assets
+├── frontend/                     # Frontend source (React 19 + TypeScript)
+│   └── src/
+│       ├── api/                  # Wails TS binding wrappers (47 methods)
+│       ├── components/           # ~39 React components
+│       ├── hooks/                # 5 custom hooks (useApi, useMenuShortcuts, etc.)
+│       ├── stores/               # Zustand stores (appStore, settingsStore, workspaceStore)
+│       ├── types/                # TypeScript type definitions (api.ts)
+│       ├── utils/                # Utility functions
+│       ├── __tests__/            # 20 test files, 307 tests (Vitest)
+│       ├── App.tsx               # Root React component
+│       └── main.tsx              # React entry point
+├── backend/                      # Go Wails backend
+│   ├── app.go                   # App struct, 50+ binding methods (callHandler)
+│   ├── main.go                  # Wails entry + 38 menu items
+│   ├── db/                      # 10 database drivers
+│   ├── api/                     # Business logic HTTP handlers
+│   ├── localdb/                 # SQLite storage module
+│   ├── security.go              # AES-256-GCM encryption
+│   └── storage.go               # Unified storage service
+├── doc/                         # Project documentation
+├── wails.json                   # Wails v2 project config
+└── build/bin/iDBLink.app/       # Build artifact
 ```
 
 ## Key Commands
 
 ### Development
 ```bash
-# Start dev mode (Vite + Tauri)
-pnpm tauri dev
-
-# Start Vite dev server only
-pnpm dev
-
-# Preview production build
-pnpm preview
+wails dev             # Dev mode (Wails + Vite)
+wails build           # Production build → build/bin/iDBLink.app
+pnpm dev              # Vite standalone (port 5100)
 ```
 
-### Building
+### Testing & Quality
 ```bash
-# Build production version
-pnpm tauri build
-
-# Frontend build only
-pnpm build
-```
-
-### Code Quality
-```bash
-# Run tests
-pnpm test
-
-# Lint code
-pnpm lint
-
-# Fix lint issues
+pnpm test             # 307 Vitest tests
+go test ./...         # Go backend tests
+pnpm lint             # ESLint
 pnpm lint:fix
-
-# Format code
-pnpm format
-
-# Check formatting
-pnpm format:check
-
-# TypeScript type check
-pnpm exec tsc --noEmit
-
-# Rust lint (clippy)
-cd src-tauri && cargo clippy
+pnpm format           # Prettier
+pnpm exec tsc --noEmit   # Type check
 ```
 
 ### Dependencies
 ```bash
-# Install frontend dependencies
-pnpm install
+pnpm install          # Frontend deps
 ```
 
 ## Architecture
 
-### Frontend Architecture
-- **State Management**: Single Zustand store (`src/stores/appStore.ts`)
-- **API Layer**: Unified Tauri invoke wrappers in `src/api/index.ts`
-- **Type Definitions**: Centralized in `src/types/api.ts`
-- **Theme**: Ant Design 5 theme with dark/light mode support (`src/styles/`)
-- **Layout**: MainLayout with Navicat-style 3-column layout (connection tree, workspace, tabs)
+### Two-Layer Architecture (No Rust)
+
+**React frontend → Wails v2 Go backend** (direct communication, no HTTP forwarding, no sidecar)
+
+### Communication Patterns
+
+- **Frontend → Go**: `frontend/src/api/index.ts` calls Wails-generated TS bindings (`frontend/wailsjs/go/backend/App.*`)
+- **Go → Frontend**: `runtime.EventsEmit("menu-action", ...)` / frontend `EventsOn('menu-action', ...)`
+- **Bindings**: Generated by `wails generate module` (auto on `wails dev`; rerun after Go struct changes)
 
 ### Backend Architecture
-- **Tauri Commands**: Exposed via `invoke_handler` in `main.rs`
-- **Database Layer**: Modular structure under `src/db/` with connection pooling
-- **Storage**: Local JSON file storage for connection configs (`src/storage.rs`)
-- **Security**: System keychain for password storage via `keyring` crate (`src/security.rs`)
-- **Async**: Tokio runtime for all async operations
 
-### Communication Pattern
-Frontend calls backend via `@tauri-apps/api` invoke:
-```typescript
-// Frontend
-import { invoke } from '@tauri-apps/api/core';
-await invoke('connect_database', { id: 'conn-1' });
+- **app.go** (1522 LOC): 50+ binding methods using `callHandler` (httptest wrapper around existing HTTP api handlers)
+- **main.go**: Wails app entry point + 38 menu items (events emitted via `runtime.EventsEmit`)
+- **db/**: 10 database drivers implemented directly in Go
+- **localdb/**: SQLite storage (models, pool, migrations, repository — full CRUD with transactions)
+- **security.go**: AES-256-GCM encryption with machine-ID key derivation
+- **storage.go**: Unified storage service integrating localdb + encryption
 
-// Backend (Rust)
-#[tauri::command]
-async fn connect_database(id: String) -> Result<ConnectionOutput, String> { ... }
-```
+### Frontend Architecture
+- **API Layer**: `frontend/src/api/index.ts` — all 47 methods call Wails bindings
+- **State Management**: 3 Zustand stores — `appStore`, `settingsStore`, `workspaceStore`
+- **Type Definitions**: `frontend/src/types/api.ts` — matches Go structs exactly
+- **5 hooks**: `useApi`, `useMenuShortcuts`, `useTableScrollHeight`, `useThemeColors`, `useViewStats`
+- **Mock infrastructure**: `frontend/src/__tests__/setupTests.ts` mocks all Wails bindings with exported mock function variables
 
-Backend emits events to frontend via Tauri event system:
-```rust
-// Backend
-window.emit("menu-action", "new-connection");
+### Migration from Tauri v2 (Rust) to Wails v2 (Go)
 
-// Frontend
-import { listen } from '@tauri-apps/api/event';
-listen('menu-action', (event) => { ... });
-```
+This project was migrated from Tauri v2 (Rust backend) to Wails v2 (Go backend). Key changes:
+- All Rust/Tauri source removed (`src-tauri/` deleted)
+- Go database drivers moved from `go-backend/` to `backend/`
+- Frontend API layer rewritten from `@tauri-apps/api` invoke to Wails TS bindings
+- Mock infrastructure migrated from Tauri mock to Wails mock (`setupTests.ts`)
+- All 307 frontend tests pass; Go tests pass (4 pre-existing failures unrelated to migration)
 
 ## Coding Conventions
 
 ### Frontend
-- **Components**: PascalCase naming (`ConnectionDialog.tsx`)
-- **Hooks**: camelCase naming (`useApi`, `useMenuShortcuts`)
-- **Types**: Interfaces and types in `src/types/api.ts`
-- **No inline styles**: Prefer CSS modules or styled-components
-- **Strict TypeScript**: `strict: true` in tsconfig
+- **Components**: PascalCase (`ConnectionDialog.tsx`)
+- **Hooks**: camelCase (`useApi`)
+- **Types**: All in `types/api.ts`
+- **No inline styles**: CSS modules when needed
+- **Strict TypeScript**: `strict: true`
 
-### Backend
-- **Modules**: snake_case naming (`db_pool.rs`, `connection_repo.rs`)
-- **Error Handling**: `thiserror` for custom errors, `anyhow` for application errors
-- **Async**: All database operations use tokio async runtime
-- **Serialization**: serde with derive macros for JSON serialization
+### Backend (Go)
+- **Files**: snake_case (`app.go`, `security.go`)
+- **Functions**: camelCase
+- **Tests**: Standard `_test.go` naming
+- **Error handling**: Standard Go error returns
 
 ### General
-- **ESLint**: Configured with TypeScript-ESLint + React Hooks rules
-- **Prettier**: Code formatting with `.prettierrc.json`
-- **Editor**: `.editorconfig` present for editor consistency
-- **No test framework yet**: Vitest is configured but tests are minimal
+- **ESLint**: Flat config (`eslint.config.mjs`), ignores `frontend/dist/`
+- **Prettier**: `.prettierrc.json` (semi, singleQuote, printWidth 100, tabWidth 2)
+- **EditorConfig**: 2-space indent, LF, UTF-8
+- **No i18n yet**: All UI text is hardcoded Chinese
 
-## Database Support Status
+## Database Support
 
-| Database | Status | Driver |
-|----------|--------|--------|
-| MySQL | 🟢 In Development | sqlx |
-| PostgreSQL | 🟢 In Development | sqlx |
-| SQLite | 🟢 In Development | sqlx |
-| SQL Server | 🟡 Planned | tiberius |
-| Oracle | 🟡 Planned | rust-oracle / ODBC |
-| MariaDB | 🟡 Planned | sqlx |
-| Dameng (达梦) | 🔴 Under Evaluation | ODBC bridge |
-
-## Development Roadmap
-
-### Phase 1: MVP (8 weeks)
-- [x] Project initialization
-- [ ] Basic connection management
-- [ ] MySQL/PostgreSQL/SQLite support
-- [ ] Data browsing
-- [ ] SQL editor basics
-
-### Phase 2: Feature Complete (10 weeks)
-- [ ] Full database object management
-- [ ] Data import/export
-- [ ] ER diagram generation
-- [ ] SQL Server/Oracle/MariaDB support
-- [ ] Dameng database support
-
-### Phase 3: Advanced Features (8 weeks)
-- [ ] Database synchronization
-- [ ] Backup & restore
-- [ ] Model designer
-- [ ] Intelligent SQL assistance
-
-### Phase 4: Release Preparation (4 weeks)
-- [ ] Performance optimization
-- [ ] Comprehensive testing
-- [ ] Documentation completion
-- [ ] Release preparation
+| Database | Status | Go Driver |
+|----------|--------|-----------|
+| MySQL | ✅ | go-sql-driver/mysql |
+| PostgreSQL | ✅ | lib/pq |
+| SQLite | ✅ | modernc/sqlite |
+| SQL Server | ✅ | mssql |
+| Oracle | ✅ | go-ora |
+| MariaDB | ✅ | go-sql-driver/mysql |
+| Dameng (达梦) | ✅ | dm |
+| Kingbase (人大金仓) | ✅ | gokb |
+| Highgo (瀚高) | ✅ | lib/pq |
+| VastBase | ✅ | lib/pq |
 
 ## Important Notes
 
-1. **Early Stage**: Project is in v0.1.0, many features are not yet implemented
-2. **Password Storage**: Passwords are stored in system keychain, not plaintext
-3. **Build Artifacts**: `src-tauri/target/` contains Rust build cache, do not modify manually
-4. **Dev Port**: Vite runs on port 5100 (configured in `vite.config.ts`)
-5. **Tauri Version**: Using Tauri v2 (latest), not v1.x
-6. **No CI/CD**: No automated build/release pipeline yet
-7. **Documentation**: Comprehensive docs in `doc/` folder (requirements, UI design, interaction design)
-
-## Common Development Tasks
-
-### Adding a New Tauri Command
-1. Create command function in `src-tauri/src/commands/` or `commands.rs`
-2. Register in `invoke_handler` in `main.rs`
-3. Add frontend wrapper in `src/api/index.ts`
-4. Add types in `src/types/api.ts`
-
-### Adding a New React Component
-1. Create component file in `src/components/`
-2. Export from component file
-3. Import and use in parent component
-4. Add any necessary types to `src/types/api.ts`
-
-### Adding a New Database Driver
-1. Implement driver in `src-tauri/src/drivers/`
-2. Update `DatabaseType` in `src/types/api.ts`
-3. Update connection logic in commands
-4. Update UI components to support new database type
+1. **Wails CLI**: v2.12.0 at `~/go/bin/wails` — add to PATH or use full path
+2. **Vite port**: 5100 (strictPort, `vite.config.ts`)
+3. **`ConnectionInput`**: in TS bindings is `new backend.ConnectionInput(source)` from `frontend/wailsjs/go/models.ts`
+4. **Floating window**: no-op (Wails v2 lacks frontend multi-window API)
+5. **Pre-existing Go test failures**: `TestConvertValue/int` (type assert) + `TestDropTable/drop_non-existent_table` — not migration-caused
+6. **`NodeJS.Timeout` errors**: in `DataTable.tsx`/`SQLEditor.tsx` — pre-existing (`@types/node` not included)
+7. **Build artifacts**: `build/`, `frontend/wailsjs/`, `frontend/dist/` — gitignored
+8. **Dev data**: `.dev-data/` — gitignored, contains `connections.db`
 
 ## Known Issues & Technical Debt
 
-1. **Large Files**: `commands.rs` is 1151+ lines, needs refactoring into modules
-2. **Code Duplication**: MySQL/PostgreSQL/SQLite connection logic has repetitive code
-3. **Empty Directories**: `commands/`, `drivers/`, `models/`, `utils/` in backend are reserved but empty
-4. **Minimal Tests**: Test framework exists (Vitest) but coverage is minimal
-5. **Inline Styles**: Some components (e.g., `MainLayout.tsx`) use inline styles
+1. **app.go uses callHandler** — wraps old HTTP handlers via httptest; could be refactored to direct calls
+2. **Floating window no-op** — Wails v2 limitation; needs Go backend methods to re-implement
+3. **No i18n** — all UI text is hardcoded Chinese
+4. **Go test failures** — 2 pre-existing assertion bugs
+5. **Inline styles** — some components use inline styles

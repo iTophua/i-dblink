@@ -1,0 +1,24 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "iDBLink",
+  "outputfilename": "iDBLink",
+  "frontend": {
+    "dir": "./frontend",
+    "install": "pnpm install",
+    "build": "pnpm build",
+    "dev": "pnpm dev",
+    "package": "package.json"
+  },
+  "frontend:dev:serverUrl": "http://localhost:5100",
+  "author": {
+    "name": "iDBLink Team",
+    "email": ""
+  },
+  "info": {
+    "companyName": "iDBLink",
+    "productName": "iDBLink",
+    "productVersion": "0.1.0",
+    "copyright": "",
+    "comments": "A cross-platform database management tool"
+  }
+}

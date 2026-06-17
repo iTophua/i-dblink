@@ -1,0 +1,175 @@
+/* ===== iDBLink UX Enhancements ===== */
+
+/* Global Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeSlideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 4px rgba(82, 196, 26, 0.4); }
+  50% { box-shadow: 0 0 12px rgba(82, 196, 26, 0.8); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Smooth Transitions - baseline for interactive elements */
+button, input, select, textarea,
+.ant-btn, .ant-card, .ant-tabs-tab, .ant-tree-node-content-wrapper,
+.ant-dropdown-menu-item, .ant-tag, .toolbar-btn, .hover-scale {
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Disable browser autocapitalize globally */
+input, textarea, [contenteditable] {
+  auto-capitalize: none !important;
+  auto-complete: off;
+  auto-correct: off;
+  spellcheck: false;
+}
+
+/* Loading skeleton pulse */
+.skeleton-pulse {
+  background: linear-gradient(90deg, var(--background-hover) 0%, var(--background-active) 50%, var(--background-hover) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* SQL Editor Compact Context Menu */
+.sql-ctx-menu .ant-menu-item {
+  height: 26px !important;
+  line-height: 26px !important;
+  padding: 0 10px !important;
+  margin: 0 !important;
+  font-size: 12px !important;
+}
+
+.sql-ctx-menu .ant-menu-item .anticon {
+  font-size: 12px !important;
+  margin-inline-end: 6px !important;
+}
+
+.sql-ctx-menu .ant-menu-item-divider {
+  margin: 2px 8px !important;
+}
+
+/* Quick Actions */
+.quick-action-btn {
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all 0.2s ease;
+}
+
+:hover > .quick-action-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Connection Status Indicator */
+.connection-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.connection-status-dot.connected {
+  background: var(--color-success);
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+.connection-status-dot.connecting {
+  background: var(--color-warning);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.connection-status-dot.error {
+  background: var(--color-error);
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Notification Toast */
+.notification-toast {
+  animation: slideInRight 0.3s ease;
+}
+
+/* Hover Scale Effect */
+.hover-scale {
+  transition: transform 0.2s ease;
+}
+
+.hover-scale:hover {
+  transform: scale(1.02);
+}
+
+/* Shimmer Effect for Loading */
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Print Styles */
+@media print {
+  .no-print { display: none !important; }
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
