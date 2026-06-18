@@ -382,8 +382,15 @@ export const api = {
         reject(new DOMException('Aborted', 'AbortError'));
       }, { once: true });
     });
-    const result = await Promise.race([binding, abortPromise]);
-    return result as unknown as QueryResult;
+    try {
+      const result = await Promise.race([binding, abortPromise]);
+      return result as unknown as QueryResult;
+    } catch (e) {
+      // 若 abort 触发，给后端 binding 注册 catch 避免 unhandled rejection
+      // （binding 仍会 resolve/reject，但结果已无意义）
+      binding.catch(() => {});
+      throw e;
+    }
   },
 
   async executeDDL(

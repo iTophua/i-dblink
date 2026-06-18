@@ -425,11 +425,10 @@ func buildCreateUserSQL(username, password, host, dbType string) (string, error)
 		if host == "" {
 			host = "%"
 		}
-		if err := validateIdentifier(host); err != nil {
-			return "", fmt.Errorf("invalid host: %w", err)
-		}
+		// MySQL 账户名 user@host 用单引号字符串字面量（支持 %、CIDR 等模式），
+		// escapeStringLiteral 已转义单引号，无需字符集校验。
 		return fmt.Sprintf("CREATE USER %s@%s IDENTIFIED BY %s",
-			quoteIdent(username, dbType), quoteIdent(host, dbType), escapeStringLiteral(password)), nil
+			escapeStringLiteral(username), escapeStringLiteral(host), escapeStringLiteral(password)), nil
 	case "postgresql", "kingbase", "highgo", "vastbase":
 		return fmt.Sprintf("CREATE ROLE %s WITH LOGIN PASSWORD %s",
 			quoteIdent(username, dbType), escapeStringLiteral(password)), nil
@@ -494,11 +493,8 @@ func buildDropUserSQL(username, host, dbType string) (string, error) {
 		if host == "" {
 			host = "%"
 		}
-		if err := validateIdentifier(host); err != nil {
-			return "", fmt.Errorf("invalid host: %w", err)
-		}
 		return fmt.Sprintf("DROP USER IF EXISTS %s@%s",
-			quoteIdent(username, dbType), quoteIdent(host, dbType)), nil
+			escapeStringLiteral(username), escapeStringLiteral(host)), nil
 	case "postgresql", "kingbase", "highgo", "vastbase":
 		return fmt.Sprintf("DROP ROLE IF EXISTS %s", quoteIdent(username, dbType)), nil
 	case "sqlserver":
@@ -568,12 +564,9 @@ func buildGrantSQL(req GrantRequest, dbType string) (string, error) {
 		if host == "" {
 			host = "%"
 		}
-		if err := validateIdentifier(host); err != nil {
-			return "", fmt.Errorf("invalid host: %w", err)
-		}
 		if req.DatabaseAll {
 			return fmt.Sprintf("GRANT %s ON *.* TO %s@%s", privileges,
-				quoteIdent(req.Username, dbType), quoteIdent(host, dbType)), nil
+				escapeStringLiteral(req.Username), escapeStringLiteral(host)), nil
 		}
 		if err := validateIdentifier(req.Database); err != nil {
 			return "", fmt.Errorf("invalid database: %w", err)
@@ -583,7 +576,7 @@ func buildGrantSQL(req GrantRequest, dbType string) (string, error) {
 		}
 		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
 		return fmt.Sprintf("GRANT %s ON %s TO %s@%s", privileges, tableRef,
-			quoteIdent(req.Username, dbType), quoteIdent(host, dbType)), nil
+			escapeStringLiteral(req.Username), escapeStringLiteral(host)), nil
 	case "postgresql", "kingbase", "highgo", "vastbase":
 		if req.DatabaseAll {
 			if containsOnlyTablePrivs(req.Privileges) {
@@ -702,12 +695,9 @@ func buildRevokeSQL(req RevokeRequest, dbType string) (string, error) {
 		if host == "" {
 			host = "%"
 		}
-		if err := validateIdentifier(host); err != nil {
-			return "", fmt.Errorf("invalid host: %w", err)
-		}
 		if req.DatabaseAll {
 			return fmt.Sprintf("REVOKE %s ON *.* FROM %s@%s", privileges,
-				quoteIdent(req.Username, dbType), quoteIdent(host, dbType)), nil
+				escapeStringLiteral(req.Username), escapeStringLiteral(host)), nil
 		}
 		if err := validateIdentifier(req.Database); err != nil {
 			return "", fmt.Errorf("invalid database: %w", err)
@@ -717,7 +707,7 @@ func buildRevokeSQL(req RevokeRequest, dbType string) (string, error) {
 		}
 		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
 		return fmt.Sprintf("REVOKE %s ON %s FROM %s@%s", privileges, tableRef,
-			quoteIdent(req.Username, dbType), quoteIdent(host, dbType)), nil
+			escapeStringLiteral(req.Username), escapeStringLiteral(host)), nil
 	case "postgresql", "kingbase", "highgo", "vastbase":
 		if req.DatabaseAll {
 			if containsOnlyTablePrivs(req.Privileges) {

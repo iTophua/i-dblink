@@ -699,9 +699,9 @@ export const useDatabase = () => {
         }
         return result;
       } catch (err) {
-        // abort 不算错误，静默处理
+        // abort 不算错误，重新抛出让上层区分（区分"停止"与"真无数据"）
         if (err instanceof DOMException && err.name === 'AbortError') {
-          return { columns: [], rows: [], execution_time_ms: 0, error: '' } as import('../types/api').QueryResult;
+          throw err;
         }
         const errorMsg = err instanceof Error ? err.message : '执行查询失败';
         setError(errorMsg);

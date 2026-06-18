@@ -350,7 +350,10 @@ func (a *App) ConnectDatabase(connectionID string) error {
 			}
 		}
 		// SSH 凭据：从 connection_ssh_credentials 表获取（与 DB 密码分开加密存储）
-		sshPassword, sshPassphrase, _ := a.storage.GetSSHCredentials(connectionID)
+		sshPassword, sshPassphrase, sshErr := a.storage.GetSSHCredentials(connectionID)
+		if sshErr != nil {
+			runtime.LogWarningf(a.ctx, "failed to load ssh credentials for %s: %v", connectionID, sshErr)
+		}
 		tunnel, err := a.tunnel.StartTunnel(
 			connectionID,
 			*conn.SSHHost,

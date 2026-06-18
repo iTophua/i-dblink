@@ -1371,6 +1371,10 @@ export function SQLEditor({
               }
               return { ...queryResult, executionTime };
             } catch (error: any) {
+              // 用户主动停止查询时静默跳过（不计为错误）
+              if (error instanceof DOMException && error.name === 'AbortError') {
+                return null;
+              }
               msgs.push(t('common.statementFailed', { index: i + index + 1, error: error.message || error }));
               totalErrors++;
               window.__sqlHistoryApi?.addHistory({
