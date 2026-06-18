@@ -8,6 +8,8 @@ import (
 
 	"idblink/backend/db"
 	"idblink/backend/models"
+
+	"github.com/lib/pq"
 )
 
 func postgresGetDatabases(ctx context.Context, dbConn db.Executor) ([]string, error) {
@@ -145,41 +147,104 @@ func postgresGetTablesCategorized(ctx context.Context, dbConn db.Executor, datab
 }
 
 func postgresGetAllColumns(ctx context.Context, dbConn db.Executor, database *string) (models.AllColumnsResult, error) {
-	query := `
-		SELECT n.nspname, c.relname, a.attname,
-			pg_catalog.format_type(a.atttypid, a.atttypmod),
-			CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END,
-			pg_catalog.pg_get_expr(d.adbin, d.adrelid),
-			'', ''
-		FROM pg_catalog.pg_attribute a
-		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+	// 分批策略:避免单查询扫描整库 catalog 触发 PG 锁槽位耗尽(max_locks_per_transaction 默认 64)。
+	// Step 1 先拿所有用户表的 OID(轻量查询,几乎不占锁);Step 2 按每批 50 张表用 OID 数组查列,
+	// 每批是独立 auto-commit 查询,锁立即释放,不会跨批累积。
+	tableRows, err := dbConn.QueryContext(ctx, `
+		SELECT c.oid, n.nspname, c.relname
+		FROM pg_catalog.pg_class c
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-		LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-		WHERE a.attnum > 0 AND NOT a.attisdropped
-			AND c.relkind IN ('r', 'v', 'm')
+		WHERE c.relkind IN ('r', 'v', 'm')
 			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 			AND n.nspname NOT LIKE 'pg_toast%%'
-		ORDER BY n.nspname, c.relname, a.attnum
-	`
-	rows, err := dbConn.QueryContext(ctx, query)
+			AND n.nspname NOT LIKE 'pg_temp%%'
+		ORDER BY n.nspname, c.relname
+	`)
 	if err != nil {
 		return models.AllColumnsResult{}, err
 	}
-	defer rows.Close()
+
+	type tableInfo struct {
+		OID    int64
+		Schema string
+		Name   string
+	}
+	var tables []tableInfo
+	for tableRows.Next() {
+		var ti tableInfo
+		if err := tableRows.Scan(&ti.OID, &ti.Schema, &ti.Name); err != nil {
+			tableRows.Close()
+			return models.AllColumnsResult{}, err
+		}
+		tables = append(tables, ti)
+	}
+	tableRows.Close()
+	if err := tableRows.Err(); err != nil {
+		return models.AllColumnsResult{}, err
+	}
 
 	result := models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}
-	for rows.Next() {
-		var c models.ColumnInfo
-		var schemaName, tableName string
-		var def sql.NullString
-		if err := rows.Scan(&schemaName, &tableName, &c.ColumnName, &c.DataType, &c.IsNullable, &def, &c.Extra, &c.Comment); err != nil {
-			continue
-		}
-		c.ColumnDefault = nullStrEmpty(def)
-		key := schemaName + "." + tableName
-		result.Tables[key] = append(result.Tables[key], c)
+	if len(tables) == 0 {
+		return result, nil
 	}
-	return result, rows.Err()
+
+	// OID -> tableInfo,用于把列扫描结果映射回 schema.table key
+	oidIndex := make(map[int64]tableInfo, len(tables))
+	for _, ti := range tables {
+		oidIndex[ti.OID] = ti
+	}
+
+	// Step 2: 按表分批查列。每批 50 张表(50 张表 ~ 100 个 relation lock,远低于默认 max_locks_per_transaction=64 × 多个并发槽位)。
+	const batchSize = 50
+	for i := 0; i < len(tables); i += batchSize {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		end := i + batchSize
+		if end > len(tables) {
+			end = len(tables)
+		}
+		oids := make([]int64, 0, end-i)
+		for j := i; j < end; j++ {
+			oids = append(oids, tables[j].OID)
+		}
+
+		rows, err := dbConn.QueryContext(ctx, `
+			SELECT a.attrelid,
+			       a.attname,
+			       pg_catalog.format_type(a.atttypid, a.atttypmod),
+			       CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END,
+			       pg_catalog.pg_get_expr(d.adbin, d.adrelid)
+			FROM pg_catalog.pg_attribute a
+			LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+			WHERE a.attnum > 0 AND NOT a.attisdropped
+				AND a.attrelid = ANY($1)
+			ORDER BY a.attrelid, a.attnum
+		`, pq.Array(oids))
+		if err != nil {
+			return result, err
+		}
+
+		for rows.Next() {
+			var oid int64
+			var c models.ColumnInfo
+			var def sql.NullString
+			if err := rows.Scan(&oid, &c.ColumnName, &c.DataType, &c.IsNullable, &def); err != nil {
+				rows.Close()
+				return result, err
+			}
+			c.ColumnDefault = nullStrEmpty(def)
+			ti := oidIndex[oid]
+			key := ti.Schema + "." + ti.Name
+			result.Tables[key] = append(result.Tables[key], c)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return result, err
+		}
+	}
+
+	return result, nil
 }
 
 func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {

@@ -21,24 +21,21 @@ func openPostgres(args ConnectArgs) (*sql.DB, error) {
 		Host:   fmt.Sprintf("%s:%d", args.Host, args.Port),
 		Path:   dbName,
 		RawQuery: url.Values{
-			"sslmode": {sslMode},
+			"sslmode":           {sslMode},
+			"application_name":  {"iDBLink"},
+			"statement_timeout": {"30000"}, // 30s,防止慢查询把 PG 拖死
+			"lock_timeout":      {"10000"}, // 10s,防止锁等待堆积
 		}.Encode(),
 	}
 
 	// SSL/TLS 配置（用户主动启用时才使用）
 	if args.SSL.Enabled {
-		if args.SSL.SkipVerify {
-			dsn.RawQuery = url.Values{
-				"sslmode": {"require"},
-			}.Encode()
-		} else {
-			dsn.RawQuery = url.Values{
-				"sslmode": {"verify-ca"},
-			}.Encode()
-		}
-
-		// 添加 SSL 证书参数
 		query := dsn.Query()
+		if args.SSL.SkipVerify {
+			query.Set("sslmode", "require")
+		} else {
+			query.Set("sslmode", "verify-ca")
+		}
 		if args.SSL.CAPath != "" {
 			query.Set("sslrootcert", args.SSL.CAPath)
 		}

@@ -2,14 +2,13 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "iDBLink",
   "outputfilename": "iDBLink",
-  "frontend": {
-    "dir": "./frontend",
-    "install": "pnpm install",
-    "build": "pnpm build",
-    "dev": "pnpm dev",
-    "package": "package.json"
-  },
-  "frontend:dev:serverUrl": "http://localhost:5100",
+  "frontend:dir": "./frontend",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm build",
+  "frontend:dev:install": "pnpm install",
+  "frontend:dev:build": "pnpm build",
+  "frontend:dev:watcher": "pnpm dev",
+  "frontend:dev:serverUrl": "http://127.0.0.1:5100",
   "author": {
     "name": "iDBLink Team",
     "email": ""
