@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+// isSQLite 判断是否为 SQLite 类型（单文件、写入需串行化）
+func isSQLite(dbType string) bool {
+	return dbType == "sqlite" || dbType == "sqlite3"
+}
+
 // Executor 统一的数据库执行器接口（*sql.DB / *sql.Tx / *sql.Conn 均实现）
 type Executor interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
@@ -97,8 +102,15 @@ func (m *Manager) Connect(connectionID string, req ConnectArgs) error {
 		return err
 	}
 
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
+	// SQLite 单文件写入需要串行化（非 WAL 模式下并发会 database is locked 甚至损坏）
+	// 其他数据库保留合理的连接池大小
+	if isSQLite(req.DbType) {
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+	} else {
+		db.SetMaxOpenConns(10)
+		db.SetMaxIdleConns(5)
+	}
 	db.SetConnMaxLifetime(time.Hour)
 	db.SetConnMaxIdleTime(time.Minute * 10)
 
