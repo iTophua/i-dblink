@@ -2283,8 +2283,12 @@ export function EnhancedConnectionTree({
       }
     }
 
+    // 合并匹配项到现有展开 keys（保留用户手动展开/折叠的其他 key），
+    // 避免异步 connectionDatabases 变化时覆盖用户操作。
     if (expandSet.size > 0) {
-      onExpandKeys(Array.from(expandSet));
+      const merged = new Set(expandedKeysRef.current);
+      for (const k of expandSet) merged.add(k);
+      onExpandKeys(Array.from(merged));
     }
   }, [searchText, filteredConnections, connectionDatabases, onExpandKeys]);
 
