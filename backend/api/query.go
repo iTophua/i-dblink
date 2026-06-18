@@ -6,12 +6,39 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 	"unicode/utf8"
 
 	"idblink/backend/db"
 	"idblink/backend/models"
 )
+
+// isDMLStatement 判断 SQL 是否为 INSERT/UPDATE/DELETE/MERGE（无结果集，需用 ExecContext 获取 RowsAffected）
+func isDMLStatement(sqlStr string) bool {
+	s := strings.TrimSpace(sqlStr)
+	// 去掉前导注释和括号
+	for {
+		s = strings.TrimLeft(s, " \t\n\r(")
+		if strings.HasPrefix(s, "--") {
+			if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+				s = s[idx+1:]
+				continue
+			}
+			return false
+		}
+		break
+	}
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return false
+	}
+	switch strings.ToUpper(fields[0]) {
+	case "INSERT", "UPDATE", "DELETE", "MERGE":
+		return true
+	}
+	return false
+}
 
 var debugEnabled = os.Getenv("IDBLINK_DEBUG") == "1" || os.Getenv("IDBLINK_DEBUG") == "true"
 
@@ -167,6 +194,26 @@ func streamQueryResults(w http.ResponseWriter, ctx context.Context, exec db.Exec
 func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.QueryResult, error) {
 	debugLog("executeSQL start: sql=%s", sqlStr)
 
+	// DML（INSERT/UPDATE/DELETE/MERGE）无结果集，用 ExecContext 获取 RowsAffected
+	if isDMLStatement(sqlStr) {
+		res, err := exec.ExecContext(ctx, sqlStr)
+		if err != nil {
+			debugLog("ExecContext error: %v", err)
+			return nil, err
+		}
+		affected, _ := res.RowsAffected()
+		result := &models.QueryResult{
+			Columns: []string{},
+			Rows:    make([][]interface{}, 0),
+		}
+		if affected >= 0 {
+			n := uint64(affected)
+			result.RowsAffected = &n
+		}
+		debugLog("executeSQL end (DML, affected=%d)", affected)
+		return result, nil
+	}
+
 	rows, err := exec.QueryContext(ctx, sqlStr)
 	if err != nil {
 		debugLog("QueryContext error: %v", err)
@@ -220,14 +267,6 @@ func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.Q
 	if err := rows.Err(); err != nil {
 		debugLog("rows.Err: %v", err)
 		return nil, err
-	}
-
-	// 尝试获取 RowsAffected（仅适用于无结果集的语句）
-	if len(result.Rows) == 0 {
-		// 如果 rows.Next() 没有进入，说明可能是 INSERT/UPDATE/DELETE
-		// 但 database/sql 的 Query 不支持 RowsAffected
-		// 这里返回 nil，让前端不显示
-		result.RowsAffected = nil
 	}
 
 	debugLog("executeSQL end")
