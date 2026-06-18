@@ -47,6 +47,12 @@ func RunMigrations(db *sql.DB) error {
 			password TEXT NOT NULL,
 			FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
 		)`,
+		`CREATE TABLE IF NOT EXISTS connection_ssh_credentials (
+			connection_id TEXT PRIMARY KEY,
+			ssh_password TEXT NOT NULL,
+			ssh_passphrase TEXT NOT NULL,
+			FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
+		)`,
 		`CREATE TABLE IF NOT EXISTS snippets (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,

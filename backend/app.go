@@ -13,6 +13,7 @@ import (
 	goruntime "runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -103,6 +104,7 @@ type App struct {
 	tunnel    *api.TunnelManager
 	handler   *api.Handler
 	activeConns map[string]bool
+	connMu    sync.RWMutex // 保护 activeConns 的并发访问
 }
 
 // NewApp 创建新应用
@@ -110,6 +112,33 @@ func NewApp() *App {
 	return &App{
 		activeConns: make(map[string]bool),
 	}
+}
+
+// isActiveConn / setActiveConn / clearActiveConn 封装对 activeConns 的并发安全访问
+func (a *App) isActiveConn(connID string) bool {
+	a.connMu.RLock()
+	defer a.connMu.RUnlock()
+	return a.activeConns[connID]
+}
+
+func (a *App) setActiveConn(connID string, active bool) {
+	a.connMu.Lock()
+	if active {
+		a.activeConns[connID] = true
+	} else {
+		delete(a.activeConns, connID)
+	}
+	a.connMu.Unlock()
+}
+
+func (a *App) snapshotActiveConns() []string {
+	a.connMu.RLock()
+	defer a.connMu.RUnlock()
+	ids := make([]string, 0, len(a.activeConns))
+	for id := range a.activeConns {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // Startup 应用启动时调用（Wails 生命周期）
@@ -142,8 +171,12 @@ func (a *App) Context() context.Context {
 
 // Shutdown 应用关闭时调用
 func (a *App) Shutdown(ctx context.Context) {
+	// 关闭所有 SSH 隧道（避免 goroutine / sshClient 泄漏）
+	if a.tunnel != nil {
+		a.tunnel.CloseAll()
+	}
 	if a.dbManager != nil {
-		for connID := range a.activeConns {
+		for _, connID := range a.snapshotActiveConns() {
 			_ = a.dbManager.Disconnect(connID)
 		}
 	}
@@ -272,7 +305,7 @@ func (a *App) TestConnection(input ConnectionInput) error {
 
 // ConnectDatabase 连接到数据库（建立并保持连接）
 func (a *App) ConnectDatabase(connectionID string) error {
-	if a.activeConns[connectionID] {
+	if a.isActiveConn(connectionID) {
 		return nil
 	}
 
@@ -308,6 +341,7 @@ func (a *App) ConnectDatabase(connectionID string) error {
 	}
 
 	// SSH 隧道
+	sshTunnelStarted := false
 	if conn.SSHHost != nil && *conn.SSHHost != "" {
 		sshPort := 22
 		if conn.SSHPort != nil {
@@ -315,27 +349,34 @@ func (a *App) ConnectDatabase(connectionID string) error {
 				sshPort = p
 			}
 		}
+		// SSH 凭据：从 connection_ssh_credentials 表获取（与 DB 密码分开加密存储）
+		sshPassword, sshPassphrase, _ := a.storage.GetSSHCredentials(connectionID)
 		tunnel, err := a.tunnel.StartTunnel(
 			connectionID,
 			*conn.SSHHost,
 			sshPort,
 			strVal(conn.SSHUsername),
 			strVal(conn.SSHAuthMethod),
-			"", // 密码从 storage 获取？需要扩展
+			sshPassword,
 			strVal(conn.SSHPrivateKeyPath),
-			"",
+			sshPassphrase,
 			conn.Host,
 			conn.Port,
 		)
 		if err != nil {
 			return fmt.Errorf("SSH tunnel failed: %w", err)
 		}
+		sshTunnelStarted = true
 		connectArgs.Host = "127.0.0.1"
 		connectArgs.Port = tunnel.LocalPort()
 	}
 
 	err = a.dbManager.Connect(connectionID, connectArgs)
 	if err != nil {
+		// DB 连接失败后清理已建立的 SSH 隧道，避免泄漏
+		if sshTunnelStarted {
+			_ = a.tunnel.StopTunnel(connectionID)
+		}
 		// 检测密码错误
 		errStr := err.Error()
 		if strings.Contains(strings.ToLower(errStr), "password") ||
@@ -347,7 +388,7 @@ func (a *App) ConnectDatabase(connectionID string) error {
 		return err
 	}
 
-	a.activeConns[connectionID] = true
+	a.setActiveConn(connectionID, true)
 	_ = a.storage.RecordHistory(connectionID, "connect", true, "")
 	return nil
 }
@@ -356,7 +397,7 @@ func (a *App) ConnectDatabase(connectionID string) error {
 func (a *App) DisconnectDatabase(connectionID string) error {
 	_ = a.tunnel.StopTunnel(connectionID)
 	err := a.dbManager.Disconnect(connectionID)
-	delete(a.activeConns, connectionID)
+	a.setActiveConn(connectionID, false)
 	_ = a.storage.RecordHistory(connectionID, "disconnect", err == nil, "")
 	if err != nil {
 		return fmt.Errorf("connection %s not found or already disconnected", connectionID)
@@ -387,7 +428,7 @@ func (a *App) GetConnections() ([]ConnectionOutput, error) {
 			SSHEnabled: conn.SSHHost != nil,
 			SSLEnabled: conn.SSLEnabled != nil && *conn.SSLEnabled == "true",
 		}
-		if a.activeConns[conn.ID] {
+		if a.isActiveConn(conn.ID) {
 			result[i].Status = "connected"
 		}
 	}
@@ -437,6 +478,21 @@ func (a *App) SaveConnection(input ConnectionInput) (ConnectionOutput, error) {
 		err := a.storage.SaveConnection(conn, input.Password)
 		if err != nil {
 			return output, fmt.Errorf("failed to save connection: %w", err)
+		}
+	}
+
+	// 持久化 SSH 凭据（与 DB 密码分开加密存储）
+	if input.SSHEnabled {
+		sshPass := ""
+		sshPhrase := ""
+		if input.SSHPassword != nil {
+			sshPass = *input.SSHPassword
+		}
+		if input.SSHPassphrase != nil {
+			sshPhrase = *input.SSHPassphrase
+		}
+		if err := a.storage.SaveSSHCredentials(conn.ID, sshPass, sshPhrase); err != nil {
+			return output, fmt.Errorf("failed to save ssh credentials: %w", err)
 		}
 	}
 
@@ -616,7 +672,7 @@ func callHandlerRaw(handlerFunc func(http.ResponseWriter, *http.Request), reqBod
 
 // ensureConnected 确保指定连接已建立
 func (a *App) ensureConnected(connectionID string) error {
-	if a.activeConns[connectionID] {
+	if a.isActiveConn(connectionID) {
 		return nil
 	}
 	return a.ConnectDatabase(connectionID)

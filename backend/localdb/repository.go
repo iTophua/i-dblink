@@ -193,6 +193,48 @@ func (r *ConnectionRepository) DeletePassword(connectionID string) error {
 	return nil
 }
 
+// GetSSHCredentials 获取连接的 SSH 密码和口令（均已加密存储）
+func (r *ConnectionRepository) GetSSHCredentials(connectionID string) (sshPassword, sshPassphrase string, err error) {
+	err = r.db.QueryRow(
+		"SELECT ssh_password, ssh_passphrase FROM connection_ssh_credentials WHERE connection_id = ?",
+		connectionID,
+	).Scan(&sshPassword, &sshPassphrase)
+	if err == sql.ErrNoRows {
+		return "", "", nil
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get ssh credentials: %w", err)
+	}
+	return sshPassword, sshPassphrase, nil
+}
+
+// SaveSSHCredentials 保存连接的 SSH 密码和口令（调用方负责加密）
+func (r *ConnectionRepository) SaveSSHCredentials(connectionID, sshPassword, sshPassphrase string) error {
+	_, err := r.db.Exec(`
+		INSERT INTO connection_ssh_credentials (connection_id, ssh_password, ssh_passphrase)
+		VALUES (?, ?, ?)
+		ON CONFLICT(connection_id) DO UPDATE SET
+			ssh_password = excluded.ssh_password,
+			ssh_passphrase = excluded.ssh_passphrase
+	`, connectionID, sshPassword, sshPassphrase)
+	if err != nil {
+		return fmt.Errorf("failed to save ssh credentials: %w", err)
+	}
+	return nil
+}
+
+// DeleteSSHCredentials 删除连接的 SSH 凭据
+func (r *ConnectionRepository) DeleteSSHCredentials(connectionID string) error {
+	_, err := r.db.Exec(
+		"DELETE FROM connection_ssh_credentials WHERE connection_id = ?",
+		connectionID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete ssh credentials: %w", err)
+	}
+	return nil
+}
+
 // GroupRepository 连接分组仓库
 type GroupRepository struct {
 	db *sql.DB

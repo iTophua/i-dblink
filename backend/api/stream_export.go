@@ -29,34 +29,11 @@ func (h *Handler) StreamExport(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
-	// 根据数据库类型选择标识符引号
-	quote := "`"
-	switch dbType {
-	case "postgresql", "kingbase", "highgo", "vastbase", "oracle", "dameng":
-		quote = `"`
-	case "sqlserver":
-		quote = `[` // SQL Server 使用方括号，关闭时用 ]
-	}
+	// 构建表引用（用 quoteIdent 正确转义，避免注入）
+	tableRef := buildTableRef(req.TableName, req.Database, dbType)
 
-	// 构建表引用（带数据库/Schema 限定）
-	tableRef := req.TableName
-	if req.Database != "" {
-		if dbType == "sqlserver" {
-			tableRef = fmt.Sprintf("[%s].[%s]", req.Database, req.TableName)
-		} else if dbType == "postgresql" || dbType == "kingbase" || dbType == "highgo" || dbType == "vastbase" || dbType == "oracle" || dbType == "dameng" {
-			tableRef = fmt.Sprintf(`"%s"."%s"`, req.Database, req.TableName)
-		} else {
-			tableRef = fmt.Sprintf("`%s`.`%s`", req.Database, req.TableName)
-		}
-	} else {
-		tableRef = fmt.Sprintf("%s%s%s", quote, req.TableName, quote)
-		if dbType == "sqlserver" {
-			tableRef = fmt.Sprintf("[%s]", req.TableName)
-		}
-	}
-
-	// 构建查询语句（不带 LIMIT）
-	sql := fmt.Sprintf("SELECT * FROM %s", tableRef)
+	// 仅查列名，不加载全表数据（避免大表锁定/内存占用）
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE 1=0", tableRef)
 
 	rows, err := exec.QueryContext(ctx, sql)
 	if err != nil {
@@ -83,7 +60,9 @@ func (h *Handler) StreamExport(w http.ResponseWriter, r *http.Request) {
 		"columns": columns,
 	})
 
-	// 分批查询数据
+	// 分批查询数据（基于真实数据查询 SQL，而非 metadata 查询）
+	dataSQL := fmt.Sprintf("SELECT * FROM %s", tableRef)
+
 	batchSize := req.BatchSize
 	if batchSize <= 0 {
 		batchSize = 1000
@@ -94,7 +73,7 @@ func (h *Handler) StreamExport(w http.ResponseWriter, r *http.Request) {
 
 	for {
 		// 根据数据库类型构建带分页的查询
-		pagedSQL := buildPagedQuery(sql, dbType, batchSize, offset)
+		pagedSQL := buildPagedQuery(dataSQL, dbType, batchSize, offset)
 
 		pagedRows, err := exec.QueryContext(ctx, pagedSQL)
 		if err != nil {

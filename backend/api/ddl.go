@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"idblink/backend/models"
 )
@@ -26,12 +27,52 @@ func buildTableRef(tableName, database, dbType string) string {
 	if database != "" {
 		db := quoteIdent(database, dbType)
 		tbl := quoteIdent(tableName, dbType)
-		if dbType == "sqlserver" {
-			return fmt.Sprintf("[%s].[%s]", database, tableName)
-		}
 		return fmt.Sprintf("%s.%s", db, tbl)
 	}
 	return quoteIdent(tableName, dbType)
+}
+
+// escapeStringLiteral 把字符串转义为 SQL 字符串字面量（含首尾单引号）。
+// 用于 DDL/DCL 中无法用参数化占位符的场景（如 CREATE USER ... IDENTIFIED BY '...'）。
+func escapeStringLiteral(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// validateIdentifier 校验标识符只含安全字符，防止 quoteIdent 之后仍可能被滥用的场景。
+// 允许：字母、数字、下划线、点（schema.table）、短横线、中文等 Unicode 字母。
+func validateIdentifier(name string) error {
+	if name == "" {
+		return fmt.Errorf("identifier is empty")
+	}
+	for _, r := range name {
+		if r == '.' || r == '_' || r == '-' {
+			continue
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+		return fmt.Errorf("identifier %q contains illegal character %q", name, r)
+	}
+	return nil
+}
+
+// validatePrivileges 校验权限列表只含合法关键字字符（防注入）。
+// 权限名不允许含引号、分号、括号、点等可能破坏 SQL 结构的字符。
+func validatePrivileges(privs []string) error {
+	for _, p := range privs {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		// 只允许字母、数字、下划线、空格、逗号（用于 ALL PRIVILEGES 等）
+		for _, r := range p {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == ' ' || r == ',' {
+				continue
+			}
+			return fmt.Errorf("privilege %q contains illegal character", p)
+		}
+	}
+	return nil
 }
 
 // ExecuteDDL 执行任意 DDL SQL 语句(CREATE/ALTER/DROP/TRUNCATE 等)

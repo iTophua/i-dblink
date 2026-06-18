@@ -392,7 +392,11 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sql := buildCreateUserSQL(req.Username, req.Password, req.Host, dbType)
+	sql, err := buildCreateUserSQL(req.Username, req.Password, req.Host, dbType)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
 	if sql == "" {
 		writeJSONError(w, fmt.Sprintf("CREATE USER 操作不支持 %s 数据库", dbType))
 		return
@@ -412,23 +416,34 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildCreateUserSQL 构建创建用户 SQL
-func buildCreateUserSQL(username, password, host, dbType string) string {
+func buildCreateUserSQL(username, password, host, dbType string) (string, error) {
+	if err := validateIdentifier(username); err != nil {
+		return "", fmt.Errorf("invalid username: %w", err)
+	}
 	switch dbType {
 	case "mysql", "mariadb":
 		if host == "" {
 			host = "%"
 		}
-		return fmt.Sprintf("CREATE USER '%s'@'%s' IDENTIFIED BY '%s'", username, host, password)
+		if err := validateIdentifier(host); err != nil {
+			return "", fmt.Errorf("invalid host: %w", err)
+		}
+		return fmt.Sprintf("CREATE USER %s@%s IDENTIFIED BY %s",
+			quoteIdent(username, dbType), quoteIdent(host, dbType), escapeStringLiteral(password)), nil
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		return fmt.Sprintf("CREATE ROLE %s WITH LOGIN PASSWORD '%s'", username, password)
+		return fmt.Sprintf("CREATE ROLE %s WITH LOGIN PASSWORD %s",
+			quoteIdent(username, dbType), escapeStringLiteral(password)), nil
 	case "sqlserver":
-		return fmt.Sprintf("CREATE LOGIN [%s] WITH PASSWORD = '%s'", username, password)
+		return fmt.Sprintf("CREATE LOGIN %s WITH PASSWORD = %s",
+			quoteIdent(username, dbType), escapeStringLiteral(password)), nil
 	case "oracle":
-		return fmt.Sprintf("CREATE USER %s IDENTIFIED BY \"%s\"", username, password)
+		return fmt.Sprintf("CREATE USER %s IDENTIFIED BY %s",
+			quoteIdent(username, dbType), escapeStringLiteral(password)), nil
 	case "dameng":
-		return fmt.Sprintf("CREATE USER \"%s\" IDENTIFIED BY \"%s\"", username, password)
+		return fmt.Sprintf("CREATE USER %s IDENTIFIED BY %s",
+			quoteIdent(username, dbType), escapeStringLiteral(password)), nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 
@@ -446,7 +461,11 @@ func (h *Handler) DropUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sql := buildDropUserSQL(req.Username, req.Host, dbType)
+	sql, err := buildDropUserSQL(req.Username, req.Host, dbType)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
 	if sql == "" {
 		writeJSONError(w, fmt.Sprintf("DROP USER 操作不支持 %s 数据库", dbType))
 		return
@@ -466,23 +485,30 @@ func (h *Handler) DropUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildDropUserSQL 构建删除用户 SQL
-func buildDropUserSQL(username, host, dbType string) string {
+func buildDropUserSQL(username, host, dbType string) (string, error) {
+	if err := validateIdentifier(username); err != nil {
+		return "", fmt.Errorf("invalid username: %w", err)
+	}
 	switch dbType {
 	case "mysql", "mariadb":
 		if host == "" {
 			host = "%"
 		}
-		return fmt.Sprintf("DROP USER IF EXISTS '%s'@'%s'", username, host)
+		if err := validateIdentifier(host); err != nil {
+			return "", fmt.Errorf("invalid host: %w", err)
+		}
+		return fmt.Sprintf("DROP USER IF EXISTS %s@%s",
+			quoteIdent(username, dbType), quoteIdent(host, dbType)), nil
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		return fmt.Sprintf("DROP ROLE IF EXISTS %s", username)
+		return fmt.Sprintf("DROP ROLE IF EXISTS %s", quoteIdent(username, dbType)), nil
 	case "sqlserver":
-		return fmt.Sprintf("DROP LOGIN IF EXISTS [%s]", username)
+		return fmt.Sprintf("DROP LOGIN IF EXISTS %s", quoteIdent(username, dbType)), nil
 	case "oracle":
-		return fmt.Sprintf("DROP USER %s CASCADE", username)
+		return fmt.Sprintf("DROP USER %s CASCADE", quoteIdent(username, dbType)), nil
 	case "dameng":
-		return fmt.Sprintf("DROP USER \"%s\" CASCADE", username)
+		return fmt.Sprintf("DROP USER %s CASCADE", quoteIdent(username, dbType)), nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 
@@ -500,7 +526,11 @@ func (h *Handler) GrantPrivilege(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sql := buildGrantSQL(req, dbType)
+	sql, err := buildGrantSQL(req, dbType)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
 	if sql == "" {
 		writeJSONError(w, fmt.Sprintf("GRANT 操作不支持 %s 数据库", dbType))
 		return
@@ -520,7 +550,13 @@ func (h *Handler) GrantPrivilege(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildGrantSQL 构建授予权限 SQL
-func buildGrantSQL(req GrantRequest, dbType string) string {
+func buildGrantSQL(req GrantRequest, dbType string) (string, error) {
+	if err := validateIdentifier(req.Username); err != nil {
+		return "", fmt.Errorf("invalid username: %w", err)
+	}
+	if err := validatePrivileges(req.Privileges); err != nil {
+		return "", err
+	}
 	privileges := strings.Join(req.Privileges, ", ")
 	if privileges == "" {
 		privileges = "ALL"
@@ -532,40 +568,67 @@ func buildGrantSQL(req GrantRequest, dbType string) string {
 		if host == "" {
 			host = "%"
 		}
-		if req.DatabaseAll {
-			return fmt.Sprintf("GRANT %s ON *.* TO '%s'@'%s'", privileges, req.Username, host)
+		if err := validateIdentifier(host); err != nil {
+			return "", fmt.Errorf("invalid host: %w", err)
 		}
-		tableRef := fmt.Sprintf("`%s`.`%s`", req.Database, req.Table)
-		return fmt.Sprintf("GRANT %s ON %s TO '%s'@'%s'", privileges, tableRef, req.Username, host)
+		if req.DatabaseAll {
+			return fmt.Sprintf("GRANT %s ON *.* TO %s@%s", privileges,
+				quoteIdent(req.Username, dbType), quoteIdent(host, dbType)), nil
+		}
+		if err := validateIdentifier(req.Database); err != nil {
+			return "", fmt.Errorf("invalid database: %w", err)
+		}
+		if err := validateIdentifier(req.Table); err != nil {
+			return "", fmt.Errorf("invalid table: %w", err)
+		}
+		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
+		return fmt.Sprintf("GRANT %s ON %s TO %s@%s", privileges, tableRef,
+			quoteIdent(req.Username, dbType), quoteIdent(host, dbType)), nil
 	case "postgresql", "kingbase", "highgo", "vastbase":
 		if req.DatabaseAll {
 			if containsOnlyTablePrivs(req.Privileges) {
-				return fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA public TO %s", privileges, req.Username)
+				return fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA public TO %s", privileges,
+					quoteIdent(req.Username, dbType)), nil
 			}
-			return fmt.Sprintf("GRANT %s TO %s", privileges, req.Username)
+			return fmt.Sprintf("GRANT %s TO %s", privileges, quoteIdent(req.Username, dbType)), nil
 		}
-		tableRef := fmt.Sprintf("\"%s\".\"%s\"", req.Database, req.Table)
-		return fmt.Sprintf("GRANT %s ON %s TO %s", privileges, tableRef, req.Username)
+		if err := validateIdentifier(req.Database); err != nil {
+			return "", fmt.Errorf("invalid database: %w", err)
+		}
+		if err := validateIdentifier(req.Table); err != nil {
+			return "", fmt.Errorf("invalid table: %w", err)
+		}
+		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
+		return fmt.Sprintf("GRANT %s ON %s TO %s", privileges, tableRef,
+			quoteIdent(req.Username, dbType)), nil
 	case "sqlserver":
 		if req.DatabaseAll {
-			return fmt.Sprintf("GRANT %s TO [%s]", privileges, req.Username)
+			return fmt.Sprintf("GRANT %s TO %s", privileges, quoteIdent(req.Username, dbType)), nil
 		}
-		tableRef := fmt.Sprintf("[%s].[%s]", req.Database, req.Table)
-		return fmt.Sprintf("GRANT %s ON %s TO [%s]", privileges, tableRef, req.Username)
-	case "oracle":
+		if err := validateIdentifier(req.Database); err != nil {
+			return "", fmt.Errorf("invalid database: %w", err)
+		}
+		if err := validateIdentifier(req.Table); err != nil {
+			return "", fmt.Errorf("invalid table: %w", err)
+		}
+		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
+		return fmt.Sprintf("GRANT %s ON %s TO %s", privileges, tableRef,
+			quoteIdent(req.Username, dbType)), nil
+	case "oracle", "dameng":
 		if req.DatabaseAll {
-			return fmt.Sprintf("GRANT %s TO \"%s\"", privileges, req.Username)
+			return fmt.Sprintf("GRANT %s TO %s", privileges, quoteIdent(req.Username, dbType)), nil
 		}
-		tableRef := fmt.Sprintf("\"%s\".\"%s\"", req.Database, req.Table)
-		return fmt.Sprintf("GRANT %s ON %s TO \"%s\"", privileges, tableRef, req.Username)
-	case "dameng":
-		if req.DatabaseAll {
-			return fmt.Sprintf("GRANT %s TO \"%s\"", privileges, req.Username)
+		if err := validateIdentifier(req.Database); err != nil {
+			return "", fmt.Errorf("invalid database: %w", err)
 		}
-		tableRef := fmt.Sprintf("\"%s\".\"%s\"", req.Database, req.Table)
-		return fmt.Sprintf("GRANT %s ON %s TO \"%s\"", privileges, tableRef, req.Username)
+		if err := validateIdentifier(req.Table); err != nil {
+			return "", fmt.Errorf("invalid table: %w", err)
+		}
+		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
+		return fmt.Sprintf("GRANT %s ON %s TO %s", privileges, tableRef,
+			quoteIdent(req.Username, dbType)), nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 
@@ -597,7 +660,11 @@ func (h *Handler) RevokePrivilege(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sql := buildRevokeSQL(req, dbType)
+	sql, err := buildRevokeSQL(req, dbType)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
 	if sql == "" {
 		writeJSONError(w, fmt.Sprintf("REVOKE 操作不支持 %s 数据库", dbType))
 		return
@@ -617,7 +684,13 @@ func (h *Handler) RevokePrivilege(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildRevokeSQL 构建撤销权限 SQL
-func buildRevokeSQL(req RevokeRequest, dbType string) string {
+func buildRevokeSQL(req RevokeRequest, dbType string) (string, error) {
+	if err := validateIdentifier(req.Username); err != nil {
+		return "", fmt.Errorf("invalid username: %w", err)
+	}
+	if err := validatePrivileges(req.Privileges); err != nil {
+		return "", err
+	}
 	privileges := strings.Join(req.Privileges, ", ")
 	if privileges == "" {
 		privileges = "ALL"
@@ -629,40 +702,67 @@ func buildRevokeSQL(req RevokeRequest, dbType string) string {
 		if host == "" {
 			host = "%"
 		}
-		if req.DatabaseAll {
-			return fmt.Sprintf("REVOKE %s ON *.* FROM '%s'@'%s'", privileges, req.Username, host)
+		if err := validateIdentifier(host); err != nil {
+			return "", fmt.Errorf("invalid host: %w", err)
 		}
-		tableRef := fmt.Sprintf("`%s`.`%s`", req.Database, req.Table)
-		return fmt.Sprintf("REVOKE %s ON %s FROM '%s'@'%s'", privileges, tableRef, req.Username, host)
+		if req.DatabaseAll {
+			return fmt.Sprintf("REVOKE %s ON *.* FROM %s@%s", privileges,
+				quoteIdent(req.Username, dbType), quoteIdent(host, dbType)), nil
+		}
+		if err := validateIdentifier(req.Database); err != nil {
+			return "", fmt.Errorf("invalid database: %w", err)
+		}
+		if err := validateIdentifier(req.Table); err != nil {
+			return "", fmt.Errorf("invalid table: %w", err)
+		}
+		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
+		return fmt.Sprintf("REVOKE %s ON %s FROM %s@%s", privileges, tableRef,
+			quoteIdent(req.Username, dbType), quoteIdent(host, dbType)), nil
 	case "postgresql", "kingbase", "highgo", "vastbase":
 		if req.DatabaseAll {
 			if containsOnlyTablePrivs(req.Privileges) {
-				return fmt.Sprintf("REVOKE %s ON ALL TABLES IN SCHEMA public FROM %s", privileges, req.Username)
+				return fmt.Sprintf("REVOKE %s ON ALL TABLES IN SCHEMA public FROM %s", privileges,
+					quoteIdent(req.Username, dbType)), nil
 			}
-			return fmt.Sprintf("REVOKE %s FROM %s", privileges, req.Username)
+			return fmt.Sprintf("REVOKE %s FROM %s", privileges, quoteIdent(req.Username, dbType)), nil
 		}
-		tableRef := fmt.Sprintf("\"%s\".\"%s\"", req.Database, req.Table)
-		return fmt.Sprintf("REVOKE %s ON %s FROM %s", privileges, tableRef, req.Username)
+		if err := validateIdentifier(req.Database); err != nil {
+			return "", fmt.Errorf("invalid database: %w", err)
+		}
+		if err := validateIdentifier(req.Table); err != nil {
+			return "", fmt.Errorf("invalid table: %w", err)
+		}
+		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
+		return fmt.Sprintf("REVOKE %s ON %s FROM %s", privileges, tableRef,
+			quoteIdent(req.Username, dbType)), nil
 	case "sqlserver":
 		if req.DatabaseAll {
-			return fmt.Sprintf("REVOKE %s FROM [%s]", privileges, req.Username)
+			return fmt.Sprintf("REVOKE %s FROM %s", privileges, quoteIdent(req.Username, dbType)), nil
 		}
-		tableRef := fmt.Sprintf("[%s].[%s]", req.Database, req.Table)
-		return fmt.Sprintf("REVOKE %s ON %s FROM [%s]", privileges, tableRef, req.Username)
-	case "oracle":
+		if err := validateIdentifier(req.Database); err != nil {
+			return "", fmt.Errorf("invalid database: %w", err)
+		}
+		if err := validateIdentifier(req.Table); err != nil {
+			return "", fmt.Errorf("invalid table: %w", err)
+		}
+		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
+		return fmt.Sprintf("REVOKE %s ON %s FROM %s", privileges, tableRef,
+			quoteIdent(req.Username, dbType)), nil
+	case "oracle", "dameng":
 		if req.DatabaseAll {
-			return fmt.Sprintf("REVOKE %s FROM \"%s\"", privileges, req.Username)
+			return fmt.Sprintf("REVOKE %s FROM %s", privileges, quoteIdent(req.Username, dbType)), nil
 		}
-		tableRef := fmt.Sprintf("\"%s\".\"%s\"", req.Database, req.Table)
-		return fmt.Sprintf("REVOKE %s ON %s FROM \"%s\"", privileges, tableRef, req.Username)
-	case "dameng":
-		if req.DatabaseAll {
-			return fmt.Sprintf("REVOKE %s FROM \"%s\"", privileges, req.Username)
+		if err := validateIdentifier(req.Database); err != nil {
+			return "", fmt.Errorf("invalid database: %w", err)
 		}
-		tableRef := fmt.Sprintf("\"%s\".\"%s\"", req.Database, req.Table)
-		return fmt.Sprintf("REVOKE %s ON %s FROM \"%s\"", privileges, tableRef, req.Username)
+		if err := validateIdentifier(req.Table); err != nil {
+			return "", fmt.Errorf("invalid table: %w", err)
+		}
+		tableRef := fmt.Sprintf("%s.%s", quoteIdent(req.Database, dbType), quoteIdent(req.Table, dbType))
+		return fmt.Sprintf("REVOKE %s ON %s FROM %s", privileges, tableRef,
+			quoteIdent(req.Username, dbType)), nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 

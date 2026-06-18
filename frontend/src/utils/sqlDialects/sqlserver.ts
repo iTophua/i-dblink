@@ -127,8 +127,10 @@ class SQLServerDialect extends BaseDialect implements SqlDialect {
         }
         case 'rename':
           if (change.oldName) {
+            // sp_rename 的参数是字符串字面量，转义单引号防止注入
+            const escStr = (s: string) => s.replace(/'/g, "''");
             statements.push(
-              `EXEC sp_rename '${tableName}.${change.oldName}', '${change.column.name}', 'COLUMN';`
+              `EXEC sp_rename '${escStr(tableName)}.${escStr(change.oldName)}', '${escStr(change.column.name)}', 'COLUMN';`
             );
           }
           break;

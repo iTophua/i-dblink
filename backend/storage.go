@@ -81,6 +81,46 @@ func (s *Storage) GetConnectionWithPassword(id string) (*localdb.DbConnection, *
 	return conn, password, nil
 }
 
+// GetSSHCredentials 获取连接的 SSH 密码和口令（解密后返回明文）
+// 任一未设置则返回空字符串。
+func (s *Storage) GetSSHCredentials(id string) (sshPassword, sshPassphrase string, err error) {
+	encPass, encPhrase, err := s.connectionRepo.GetSSHCredentials(id)
+	if err != nil {
+		return "", "", err
+	}
+	if encPass != "" {
+		if dec, e := DecryptPassword(encPass); e == nil {
+			sshPassword = dec
+		}
+	}
+	if encPhrase != "" {
+		if dec, e := DecryptPassword(encPhrase); e == nil {
+			sshPassphrase = dec
+		}
+	}
+	return sshPassword, sshPassphrase, nil
+}
+
+// SaveSSHCredentials 保存连接的 SSH 密码和口令（空字符串清除已有值）
+func (s *Storage) SaveSSHCredentials(id, sshPassword, sshPassphrase string) error {
+	encPass, encPhrase := "", ""
+	if sshPassword != "" {
+		enc, err := EncryptPassword(sshPassword)
+		if err != nil {
+			return fmt.Errorf("encryption error: %w", err)
+		}
+		encPass = enc
+	}
+	if sshPassphrase != "" {
+		enc, err := EncryptPassword(sshPassphrase)
+		if err != nil {
+			return fmt.Errorf("encryption error: %w", err)
+		}
+		encPhrase = enc
+	}
+	return s.connectionRepo.SaveSSHCredentials(id, encPass, encPhrase)
+}
+
 // SaveConnection 保存连接
 func (s *Storage) SaveConnection(conn *localdb.DbConnection, password *string) error {
 	if err := s.connectionRepo.Save(conn); err != nil {
