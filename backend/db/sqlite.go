@@ -18,8 +18,9 @@ func openSQLite(args ConnectArgs) (*sql.DB, error) {
 	if dbPath == ":memory:" {
 		dsn = ":memory:"
 	} else {
-		encodedPath := url.PathEscape(dbPath)
-		dsn = fmt.Sprintf("file:%s?mode=rwc", encodedPath)
+		// 用 url.URL 构造 DSN，避免 PathEscape 把 / 转义成 %2F 导致绝对路径打不开
+		u := &url.URL{Path: dbPath}
+		dsn = fmt.Sprintf("file:%s?mode=rwc", u.String())
 	}
 
 	return sql.Open("sqlite", dsn)

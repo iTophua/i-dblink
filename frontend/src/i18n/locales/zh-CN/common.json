@@ -567,7 +567,6 @@
       "successCount": "成功",
       "failedCount": "失败",
       "errorLog": "错误日志",
-      "sqlPreview": "SQL 预览",
       "totalStatements": "总语句数",
       "otherStatements": "其他语句",
       "execMode": "执行模式",
@@ -691,7 +690,10 @@
       "functions": "函数",
       "comments": "注释"
     },
-    "viewDefinition": "视图定义",
+    "viewDefinition": {
+      "title": "视图定义",
+      "ddl": "DDL 定义"
+    },
     "snippetManager": {
       "title": "代码片段",
       "snippetName": "片段名称",
@@ -1208,12 +1210,12 @@
     "closeRelatedTabsTitle": "关闭关联标签页",
     "closeRelatedTabsContent1": "该数据库下还有 {{count}} 个数据表标签页处于打开状态，关闭数据库时是否一并关闭？",
     "closeRelatedTabsContent2": "该连接下还有 {{desc}} 标签页处于打开状态，断开连接时是否一并关闭？",
-     "closeAndCloseDatabase": "关闭并关闭数据库",
-     "closeDatabaseTabsContent": "关闭数据库将关闭以下标签页：{{tabs}}",
-     "closeDatabaseOnly": "仅关闭数据库",
+    "closeAndCloseDatabase": "关闭并关闭数据库",
+    "closeDatabaseTabsContent": "关闭数据库将关闭以下标签页：{{tabs}}",
+    "closeDatabaseOnly": "仅关闭数据库",
     "closeAndDisconnect": "关闭并断开",
-     "disconnectOnly": "仅断开",
-     "disconnectTabsContent": "断开连接将关闭以下标签页：{{tabs}}",
+    "disconnectOnly": "仅断开",
+    "disconnectTabsContent": "断开连接将关闭以下标签页：{{tabs}}",
     "unknownConnection": "未知连接",
     "loadDatabaseListFailed": "加载数据库列表失败",
     "dataTableCount": "{{count}} 个数据表",
@@ -1744,6 +1746,23 @@
       "selectAtLeastOne": "请至少选择一个连接",
       "noConnections": "暂无连接",
       "searchPlaceholder": "搜索连接..."
-    }
+    },
+    "autoMappedFields": "自动映射的字段",
+    "confirmMarkRowsForDeletion": "确认标记选中的 {{count}} 行为删除？",
+    "confirmSubmit": "确认提交修改？",
+    "currentDbTypeNotSupported": "当前数据库类型不支持此操作",
+    "dataType": "数据类型",
+    "deleteUserConfirm": "确定删除用户 {{name}}？此操作不可恢复。",
+    "enterParameterValue": "请输入参数 {{param}} 的值",
+    "executingStatements": "正在执行 {{count}} 条语句...",
+    "failedToBackupOrRestore": "{{mode}} 失败",
+    "floatingWindowNotSupported": "当前环境不支持浮动窗口",
+    "importDataIntoTable": "导入数据到表",
+    "matchByPrimaryKey": "按主键匹配",
+    "onlyShowingFirst5Rows": "仅显示前 5 行",
+    "oracleCreateDatabaseWarning": "Oracle 使用用户名作为数据库隔离单位，创建后需重新连接",
+    "pleaseEnterParameterValue": "请输入参数值",
+    "preparingToImportRows": "准备导入 {{count}} 行",
+    "willExportMaxRecords": "将导出最多 {{count}} 条记录"
   }
 }

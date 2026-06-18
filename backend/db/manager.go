@@ -24,8 +24,11 @@ type connInfo struct {
 
 // txInfo 保存活跃事务
 type txInfo struct {
-	conn *sql.Conn
-	tx   *sql.Tx
+	conn    *sql.Conn
+	tx      *sql.Tx
+	started time.Time
+	// done 在 Commit/Rollback/超时回收后 close，用于停止看门狗 goroutine
+	done chan struct{}
 }
 
 // Manager 管理所有数据库连接池
@@ -123,6 +126,7 @@ func (m *Manager) Disconnect(connectionID string) error {
 	// 如果有活跃事务，先回滚
 	if txInfo, txOk := m.txs[connectionID]; txOk {
 		delete(m.txs, connectionID)
+		close(txInfo.done) // 通知看门狗停止
 		_ = txInfo.tx.Rollback()
 		_ = txInfo.conn.Close()
 	}
@@ -309,7 +313,36 @@ func (m *Manager) BeginTransaction(connectionID string) error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	m.txs[connectionID] = &txInfo{conn: conn, tx: tx}
+	done := make(chan struct{})
+	txEntry := &txInfo{
+		conn:    conn,
+		tx:      tx,
+		started: time.Now(),
+		done:    done,
+	}
+	m.txs[connectionID] = txEntry
+
+	// 看门狗：事务超过 5 分钟未提交/回滚则自动回滚，避免连接被永久占用
+	// （用户关闭查询 Tab 或前端崩溃时的事务兜底）
+	go func() {
+		timer := time.NewTimer(5 * time.Minute)
+		defer timer.Stop()
+		select {
+		case <-done:
+			return // 已正常结束
+		case <-timer.C:
+			m.mu.Lock()
+			// 确认仍是同一个事务（避免 commit 后又被新事务占用槽位导致误回滚）
+			if cur, ok := m.txs[connectionID]; ok && cur == txEntry {
+				delete(m.txs, connectionID)
+				_ = cur.tx.Rollback()
+				_ = cur.conn.Close()
+				close(cur.done)
+			}
+			m.mu.Unlock()
+		}
+	}()
+
 	return nil
 }
 
@@ -323,6 +356,9 @@ func (m *Manager) CommitTransaction(connectionID string) error {
 	if !exists {
 		return fmt.Errorf("no active transaction for connection %s", connectionID)
 	}
+
+	// 通知看门狗停止
+	close(txInfo.done)
 
 	err := txInfo.tx.Commit()
 	_ = txInfo.conn.Close()
@@ -342,6 +378,9 @@ func (m *Manager) RollbackTransaction(connectionID string) error {
 	if !exists {
 		return fmt.Errorf("no active transaction for connection %s", connectionID)
 	}
+
+	// 通知看门狗停止
+	close(txInfo.done)
 
 	err := txInfo.tx.Rollback()
 	_ = txInfo.conn.Close()

@@ -768,17 +768,17 @@ func (a *App) GetColumns(connectionID string, tableName string, database *string
 		return nil, err
 	}
 
-	// 检查错误
+	// 检查错误：向上传递，而非吞成空数组（否则前端误以为无数据）
 	var errResp struct {
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
-		return []models.ColumnInfo{}, nil
+		return nil, fmt.Errorf("%s", errResp.Error)
 	}
 
 	var result []models.ColumnInfo
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return []models.ColumnInfo{}, nil
+		return nil, fmt.Errorf("failed to parse columns response: %w", err)
 	}
 	return result, nil
 }
@@ -799,12 +799,12 @@ func (a *App) GetAllColumns(connectionID string, database *string) (models.AllCo
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
-		return models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}, nil
+		return models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}, fmt.Errorf("%s", errResp.Error)
 	}
 
 	var result models.AllColumnsResult
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}, nil
+		return models.AllColumnsResult{Tables: make(map[string][]models.ColumnInfo)}, fmt.Errorf("failed to parse all columns response: %w", err)
 	}
 	if result.Tables == nil {
 		result.Tables = make(map[string][]models.ColumnInfo)
@@ -828,12 +828,12 @@ func (a *App) GetIndexes(connectionID string, tableName string, database *string
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
-		return []models.IndexInfo{}, nil
+		return nil, fmt.Errorf("%s", errResp.Error)
 	}
 
 	var result []models.IndexInfo
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return []models.IndexInfo{}, nil
+		return nil, fmt.Errorf("failed to parse indexes response: %w", err)
 	}
 	return result, nil
 }
@@ -854,12 +854,12 @@ func (a *App) GetForeignKeys(connectionID string, tableName string, database *st
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
-		return []models.ForeignKeyInfo{}, nil
+		return nil, fmt.Errorf("%s", errResp.Error)
 	}
 
 	var result []models.ForeignKeyInfo
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return []models.ForeignKeyInfo{}, nil
+		return nil, fmt.Errorf("failed to parse foreign keys response: %w", err)
 	}
 	return result, nil
 }

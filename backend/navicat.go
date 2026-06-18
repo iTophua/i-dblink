@@ -69,15 +69,21 @@ func decryptNavicatAES(encryptedHex string) (string, error) {
 	if len(ciphertext)%aes.BlockSize != 0 {
 		return "", fmt.Errorf("ciphertext not multiple of block size")
 	}
+	if len(ciphertext) == 0 {
+		return "", nil
+	}
 
 	mode := cipher.NewCBCDecrypter(block, iv)
 	plaintext := make([]byte, len(ciphertext))
 	mode.CryptBlocks(plaintext, ciphertext)
 
+	// PKCS#7 去填充：校验 padLen 合法性，避免越界 panic
 	padLen := int(plaintext[len(plaintext)-1])
-	if padLen > 0 && padLen <= aes.BlockSize {
-		plaintext = plaintext[:len(plaintext)-padLen]
+	if padLen == 0 || padLen > aes.BlockSize || padLen > len(plaintext) {
+		// 非法 padding（可能密码为空或数据损坏），返回原文
+		return string(plaintext), nil
 	}
+	plaintext = plaintext[:len(plaintext)-padLen]
 
 	return string(plaintext), nil
 }

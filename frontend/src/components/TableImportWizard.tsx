@@ -22,6 +22,7 @@ import { UploadOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import { api } from '../api';
 import type { ColumnInfo, DatabaseType } from '../types/api';
+import { parseSqlStatements, type SqlParseResult } from '../utils/parseSql';
 
 export type ImportFileType = 'csv' | 'excel' | 'json' | 'xml' | 'sql';
 type ImportMode = 'append' | 'replace' | 'update' | 'upsert';
@@ -33,11 +34,6 @@ interface ParsedData {
   fileType: ImportFileType;
   sheetName?: string;
   totalRows?: number;
-}
-
-interface SqlParseResult {
-  statements: string[];
-  stats: { creates: number; inserts: number; updates: number; deletes: number; others: number };
 }
 
 interface FormatOptions {
@@ -80,70 +76,6 @@ const DEFAULT_FORMAT_OPTIONS: FormatOptions = {
 };
 
 const BATCH_SIZE = 500;
-
-function parseSqlStatements(sql: string): SqlParseResult {
-  const statements: string[] = [];
-  let current = '';
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inBacktick = false;
-  let i = 0;
-
-  while (i < sql.length) {
-    const ch = sql[i];
-    const next = sql[i + 1];
-
-    if (ch === '-' && next === '-' && !inSingleQuote && !inDoubleQuote && !inBacktick) {
-      while (i < sql.length && sql[i] !== '\n') i++;
-      continue;
-    }
-    if (ch === '/' && next === '*' && !inSingleQuote && !inDoubleQuote && !inBacktick) {
-      i += 2;
-      while (i < sql.length - 1 && !(sql[i] === '*' && sql[i + 1] === '/')) i++;
-      i += 2;
-      continue;
-    }
-
-    if (ch === "'" && !inDoubleQuote && !inBacktick) {
-      if (inSingleQuote && next === "'") {
-        current += "''";
-        i += 2;
-        continue;
-      }
-      inSingleQuote = !inSingleQuote;
-    } else if (ch === '"' && !inSingleQuote && !inBacktick) {
-      inDoubleQuote = !inDoubleQuote;
-    } else if (ch === '`' && !inSingleQuote && !inDoubleQuote) {
-      inBacktick = !inBacktick;
-    }
-
-    if (ch === ';' && !inSingleQuote && !inDoubleQuote && !inBacktick) {
-      const trimmed = current.trim();
-      if (trimmed) statements.push(trimmed);
-      current = '';
-      i++;
-      continue;
-    }
-
-    current += ch;
-    i++;
-  }
-
-  const trimmed = current.trim();
-  if (trimmed) statements.push(trimmed);
-
-  const stats = { creates: 0, inserts: 0, updates: 0, deletes: 0, others: 0 };
-  for (const s of statements) {
-    const upper = s.trimStart().toUpperCase();
-    if (upper.startsWith('CREATE')) stats.creates++;
-    else if (upper.startsWith('INSERT')) stats.inserts++;
-    else if (upper.startsWith('UPDATE')) stats.updates++;
-    else if (upper.startsWith('DELETE')) stats.deletes++;
-    else stats.others++;
-  }
-
-  return { statements, stats };
-}
 
 function parseCSV(text: string, options: FormatOptions): ParsedData {
   const lines = text.trim().split(/\r?\n/);

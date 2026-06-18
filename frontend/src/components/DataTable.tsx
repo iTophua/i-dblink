@@ -605,6 +605,7 @@ export const DataTable = memo(function DataTable({
   // ── Commit all ──
   // 按顺序执行 pending SQL。成功/失败都 await loadData 把数据库真实状态同步回 UI，
   // 避免中途失败时 pendingSqls 残留导致用户重试时重复提交已落库的 SQL。
+  // 含 DELETE 时弹二次确认（防止误按 Cmd+S 删数据）。
   const committingRef = useRef(false);
   const handleCommit = useCallback(async () => {
     if (committingRef.current) return;  // 防止 Cmd+S 或快速点击重复触发
@@ -613,6 +614,28 @@ export const DataTable = memo(function DataTable({
       message.warning(t('common.dataGrid.noPrimaryKeyWarning'));
       return;
     }
+
+    // 含 DELETE 类操作时要求二次确认
+    const hasDestructive = pendingSqls.some((p) => p.type === 'delete');
+    if (hasDestructive) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: t('common.confirmSubmit'),
+          content: t('common.dataGrid.deleteConfirm'),
+          okText: t('common.confirm'),
+          cancelText: t('common.cancel'),
+          okType: 'danger',
+          zIndex: 2000,
+          transitionName: '',
+          maskTransitionName: '',
+          centered: true,
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!confirmed) return;
+    }
+
     committingRef.current = true;
     setLoading(true);
     let errMsg = '';
@@ -1158,7 +1181,7 @@ export const DataTable = memo(function DataTable({
           <span style={{ fontSize: 11, color: 'var(--text-secondary)', userSelect: 'none' }}>/ {Math.ceil(totalCount / pageSize) || 1}</span>
           <Button size="small" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(currentPage + 1)} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }}>›</Button>
           <Button size="small" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize))} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }} title={t('common.lastPage')}>»</Button>
-          <AutoComplete value={String(pageSize)} onChange={(val) => { const n = parseInt(val); if (n > 0) { setPageSizeState(n); setCurrentPage(1); } }}
+          <AutoComplete value={String(pageSize)} onChange={(val) => { const n = parseInt(val); if (n > 0 && n <= 10000) { setPageSizeState(n); setCurrentPage(1); } else if (n > 10000) { setPageSizeState(10000); setCurrentPage(1); } }}
             size="small" style={{ width: 56, fontSize: 11 }} options={[{ value: '50' }, { value: '100' }, { value: '500' }, { value: '1000' }]}
             popupClassName="page-size-dropdown"
           />

@@ -674,7 +674,10 @@
       "functions": "Functions",
       "comments": "Comments"
     },
-    "viewDefinition": "View Definition",
+    "viewDefinition": {
+      "title": "View Definition",
+      "ddl": "DDL Definition"
+    },
     "snippetManager": {
       "title": "Code Snippets",
       "snippetName": "Snippet name",
@@ -1195,8 +1198,8 @@
     "closeDatabaseTabsContent": "Closing the database will close the following tabs: {{tabs}}",
     "closeDatabaseOnly": "Close Database Only",
     "closeAndDisconnect": "Close and Disconnect",
-     "disconnectOnly": "Disconnect Only",
-     "disconnectTabsContent": "Disconnecting will close the following tabs: {{tabs}}",
+    "disconnectOnly": "Disconnect Only",
+    "disconnectTabsContent": "Disconnecting will close the following tabs: {{tabs}}",
     "unknownConnection": "Unknown Connection",
     "loadDatabaseListFailed": "Failed to load database list",
     "dataTableCount": "{{count}} data tables",
@@ -1732,6 +1735,23 @@
       "selectAtLeastOne": "Please select at least one connection",
       "noConnections": "No connections",
       "searchPlaceholder": "Search connections..."
-    }
+    },
+    "autoMappedFields": "Auto-mapped fields",
+    "confirmMarkRowsForDeletion": "Mark {{count}} selected row(s) for deletion?",
+    "confirmSubmit": "Confirm to submit changes?",
+    "currentDbTypeNotSupported": "Current database type does not support this action",
+    "dataType": "Data Type",
+    "deleteUserConfirm": "Delete user {{name}}? This cannot be undone.",
+    "enterParameterValue": "Enter value for parameter {{param}}",
+    "executingStatements": "Executing {{count}} statement(s)...",
+    "failedToBackupOrRestore": "{{mode}} failed",
+    "floatingWindowNotSupported": "Floating windows are not supported in this environment",
+    "importDataIntoTable": "Import data into table",
+    "matchByPrimaryKey": "Match by primary key",
+    "onlyShowingFirst5Rows": "Showing first 5 rows only",
+    "oracleCreateDatabaseWarning": "Oracle uses the username as the database isolation unit; reconnect after creating",
+    "pleaseEnterParameterValue": "Please enter the parameter value",
+    "preparingToImportRows": "Preparing to import {{count}} rows",
+    "willExportMaxRecords": "Will export up to {{count}} records"
   }
 }

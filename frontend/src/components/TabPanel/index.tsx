@@ -25,6 +25,7 @@ import { TableStructure } from '../TableStructure';
 import { TableDesigner } from '../TableDesigner';
 import { ViewDefinition } from '../ViewDefinition';
 import { TableImportWizard } from '../TableImportWizard';
+import { parseSqlStatements } from '../../utils/parseSql';
 import { TableExportWizard } from '../TableExportWizard';
 import { DumpDialog } from '../DumpDialog';
 import { CopyTableDialog } from '../CopyTableDialog';
@@ -1067,15 +1068,15 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             dbType={getDbType(designerTab.connectionId)}
             onSave={async (sql: string) => {
               try {
-                const statements = sql.split(';').filter((s) => s.trim());
+                // 用 parseSqlStatements 正确切分（处理字符串/注释内的分号），
+                // 避免简单 split(';') 破坏 DEFAULT 'a;b' 或触发器体
+                const { statements } = parseSqlStatements(sql);
                 for (const stmt of statements) {
-                  if (stmt.trim()) {
-                    await api.executeDDL(
-                      designerTab.connectionId,
-                      stmt.trim(),
-                      designerTab.database
-                    );
-                  }
+                  await api.executeDDL(
+                    designerTab.connectionId,
+                    stmt,
+                    designerTab.database
+                  );
                 }
                 message.success(
                   designerTab.isNewTable
