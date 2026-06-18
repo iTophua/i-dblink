@@ -112,6 +112,10 @@ function App() {
     const root = document.documentElement;
 
     const applyVars = () => {
+      // 启用主题过渡 class（CSS 里针对 .theme-transitioning 加 color transition），
+      // 300ms 后移除，避免影响日常 hover/动画
+      root.classList.add('theme-transitioning');
+
       Object.entries(themeConfig.colors).forEach(([key, value]) => {
         root.style.setProperty(`--color-${key}`, value);
       });
@@ -141,6 +145,10 @@ function App() {
 
       root.setAttribute('data-theme', effectiveMode);
       root.setAttribute('data-theme-preset', themePreset);
+
+      window.setTimeout(() => {
+        root.classList.remove('theme-transitioning');
+      }, 300);
     };
 
     requestAnimationFrame(() => {

@@ -15,6 +15,7 @@ import {
   AppstoreOutlined,
   HomeOutlined,
   CloseOutlined,
+  CopyOutlined,
   EyeOutlined,
 
 } from '@ant-design/icons';
@@ -887,6 +888,48 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           setActiveKey('objects');
           message.success(t('common.closeAllTabs'));
           break;
+
+        case 'copySql': {
+          // 复制 SQL Tab 的初始内容到剪贴板（编辑器内当前内容需用 Ctrl+A/Ctrl+C）
+          const sqlTab = openedSqlTabs.find((x) => x.key === tabKey);
+          const content = sqlTab?.defaultQuery || '';
+          if (content) {
+            navigator.clipboard.writeText(content).then(
+              () => message.success(t('common.copiedToClipboard')),
+              () => message.error(t('common.copyFailed'))
+            );
+          } else {
+            message.info(t('common.noContentToCopy'));
+          }
+          break;
+        }
+
+        case 'copyTableName': {
+          // 复制 data Tab 的表名
+          const dataTab = openedTables.find((x) => getDataTabKey(x) === tabKey);
+          const name = dataTab?.name || '';
+          if (name) {
+            navigator.clipboard.writeText(name).then(
+              () => message.success(t('common.copiedToClipboard')),
+              () => message.error(t('common.copyFailed'))
+            );
+          }
+          break;
+        }
+
+        case 'duplicateSql': {
+          // 复制 SQL Tab 为新 Tab
+          const src = openedSqlTabs.find((x) => x.key === tabKey);
+          if (src) {
+            const newKey = `sql-${Date.now()}`;
+            setOpenedSqlTabs((prev) => [
+              ...prev,
+              { ...src, key: newKey, title: `${src.title} ${t('common.copySuffix')}`, _createdAt: Date.now() },
+            ]);
+            setActiveKey(newKey);
+          }
+          break;
+        }
       }
     },
     [handleCloseTab, openedTables, openedSqlTabs]
@@ -1326,6 +1369,21 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               { key: 'closeOthers', label: t('common.closeOthersTabMenu') },
               { key: 'closeRight', label: t('common.closeRightTabMenu') },
               { type: 'divider' },
+              // SQL Tab 专属：复制 SQL、复制 Tab
+              ...(contextMenu.tabKey.startsWith('sql-')
+                ? [
+                    { key: 'copySql', label: t('common.copySqlContent'), icon: <CopyOutlined /> },
+                    { key: 'duplicateSql', label: t('common.duplicateTab'), icon: <CopyOutlined /> },
+                    { type: 'divider' as const },
+                  ]
+                : []),
+              // data Tab 专属：复制表名
+              ...(contextMenu.tabKey.endsWith('-data')
+                ? [
+                    { key: 'copyTableName', label: t('common.copyTableName'), icon: <CopyOutlined /> },
+                    { type: 'divider' as const },
+                  ]
+                : []),
               { key: 'closeAll', label: t('common.closeAllTabMenu'), danger: true },
             ]}
             onClick={({ key }) => handleContextMenuAction(key, contextMenu.tabKey)}

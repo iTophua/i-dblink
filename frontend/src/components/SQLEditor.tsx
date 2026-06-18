@@ -375,6 +375,11 @@ export function SQLEditor({
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
   const [transactionActive, setTransactionActive] = useState(false);
   const [paramDialogOpen, setParamDialogOpen] = useState(false);
+
+  // 执行状态条：实时显示已用时间和已返回行数
+  const [execElapsed, setExecElapsed] = useState(0);
+  const execTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const returnedRowsRef = useRef(0);
   const [paramDialogParams, setParamDialogParams] = useState<string[]>([]);
   const [pendingSql, setPendingSql] = useState<string>('');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -459,6 +464,9 @@ export function SQLEditor({
     console.log('Format not implemented');
   }, []);
 
+  // formatSQL 在下方定义，这里用 ref 让快捷键能调用最新版本（避免依赖循环）
+  const formatSQLRef = useRef<() => void>(() => {});
+
   const onStop = useCallback(() => {
     console.log('Stop not implemented');
     if (abortControllerRef.current) {
@@ -509,7 +517,7 @@ export function SQLEditor({
   } | null>(null);
 
   // 用于在 handleEditorMount 中引用最新的 handleExecuteQuery，避免闭包陷阱
-  const handleExecuteQueryRef = useRef<() => void>(() => {});
+  const handleExecuteQueryRef = useRef<(explicitSql?: string) => void>(() => {});
 
   // 同步 dbType 到 ref，供 Monaco 补全使用
   useEffect(() => {
@@ -1128,7 +1136,7 @@ export function SQLEditor({
       { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, action: () => editor.getAction('actions.find')?.run() },
       { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, action: () => editor.getAction('editor.action.startFindActionReplace')?.run() },
       { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyD, action: () => editor.getAction('editor.action.duplicateSelection')?.run() },
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyK, action: () => onFormat?.() },
+      { key: monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyK, action: () => formatSQLRef.current() },
       { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, action: () => handleExecuteQueryRef.current() },
       { key: monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter, action: () => {
         const position = editor.getPosition();
@@ -1285,6 +1293,13 @@ export function SQLEditor({
     // }
 
     requestStartTimeRef.current = Date.now();
+    returnedRowsRef.current = 0;
+    setExecElapsed(0);
+    // 启动实时计时器（每 100ms 更新已用时间）
+    if (execTimerRef.current) clearInterval(execTimerRef.current);
+    execTimerRef.current = setInterval(() => {
+      setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
+    }, 100);
     try {
       setLoading(true);
       setMessages([]);
@@ -1492,6 +1507,12 @@ export function SQLEditor({
       setLoading(false);
       abortControllerRef.current = null;
       onQueryStatusChange?.(false);
+      // 停止执行计时器
+      if (execTimerRef.current) {
+        clearInterval(execTimerRef.current);
+        execTimerRef.current = null;
+      }
+      setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
     }
   }, [sql, connectionId, database, executeQueryApi]);
 
@@ -1523,6 +1544,12 @@ export function SQLEditor({
       // 清理所有 pending 的防抖定时器，避免卸载后对已卸载组件 setState
       editorDebounceTimersRef.current.forEach((t) => clearTimeout(t));
       editorDebounceTimersRef.current.clear();
+
+      // 清理执行状态条计时器
+      if (execTimerRef.current) {
+        clearInterval(execTimerRef.current);
+        execTimerRef.current = null;
+      }
 
       // 保存编辑器状态以便恢复
       if (editorRef.current) {
@@ -1645,6 +1672,9 @@ export function SQLEditor({
       message.error(`${t('common.formattingFailed')}: ${e.message || e}`);
     }
   }, [sql, dbType]);
+
+  // 同步 formatSQL 到 ref，供上方快捷键调用
+  formatSQLRef.current = formatSQL;
 
   const handleBeginTransaction = useCallback(async () => {
     if (!connectionId) {
@@ -2015,6 +2045,18 @@ export function SQLEditor({
           >
             {t('common.stopButton')}
           </Button>
+
+          {/* 执行状态条：loading 时实时显示已用时间；非 loading 显示上次查询耗时 */}
+          {loading ? (
+            <span style={{ fontSize: 11, color: tc.primary, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>
+              <LoadingOutlined style={{ marginRight: 4 }} />
+              {t('common.executingLabel')} {execElapsed.toFixed(1)}s
+            </span>
+          ) : execElapsed > 0 ? (
+            <span style={{ fontSize: 11, color: tc.textTertiary, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>
+              {execElapsed.toFixed(2)}s
+            </span>
+          ) : null}
 
           <div
             style={{
@@ -2482,6 +2524,12 @@ export function SQLEditor({
           onSelect={(selectedSql) => {
             setSql(selectedSql);
             setHistoryPanelVisible(false);
+          }}
+          onRerun={(sql) => {
+            setSql(sql);
+            setHistoryPanelVisible(false);
+            // 等待 state 更新后触发执行
+            setTimeout(() => handleExecuteQueryRef.current(sql), 0);
           }}
           maxHistory={50}
           storageKey={`sql-history-${connectionId || 'global'}${database ? `-${database}` : ''}`}

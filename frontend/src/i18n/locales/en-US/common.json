@@ -1758,6 +1758,13 @@
     "connectionSuccess": "Connected",
     "connectionDisconnected": "Disconnected",
     "groupDeleted": "Group deleted",
-    "deleteConnectionFailed": "Failed to delete connection"
+    "deleteConnectionFailed": "Failed to delete connection",
+    "copySqlContent": "Copy SQL",
+    "duplicateTab": "Duplicate Tab",
+    "copyTableName": "Copy Table Name",
+    "copiedToClipboard": "Copied to clipboard",
+    "copyFailed": "Copy failed",
+    "noContentToCopy": "No content to copy",
+    "rerun": "Rerun"
   }
 }

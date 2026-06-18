@@ -112,6 +112,26 @@
   padding: 0;
 }
 
+/* ==================== 主题切换过渡 ==================== */
+/* 仅在 .theme-transitioning 期间启用颜色过渡，避免影响日常 hover/动画性能。
+   App.tsx 在主题变化时添加该 class，300ms 后移除。 */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.25s ease, border-color 0.25s ease,
+    color 0.25s ease, fill 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-transitioning,
+  html.theme-transitioning *,
+  html.theme-transitioning *::before,
+  html.theme-transitioning *::after {
+    transition: none !important;
+  }
+}
+
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
