@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { theme } from 'antd';
 import { useSettingsStore } from '../stores/settingsStore';
 import { getThemeConfig } from '../styles/theme';
@@ -61,51 +62,55 @@ export function useThemeColors(): ThemeColors {
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : themeMode;
 
-  const config = getThemeConfig(effectiveMode, themePreset);
-  const isDark = effectiveMode === 'dark';
-  const n = config.neutralColors;
-  const c = config.colors;
+  // 用 useMemo 缓存返回对象，避免每次渲染产生新引用破坏下游 useMemo/useEffect
+  // （否则 Monaco defineTheme 等会在每次按键时被反复触发）
+  return useMemo<ThemeColors>(() => {
+    const config = getThemeConfig(effectiveMode, themePreset);
+    const isDark = effectiveMode === 'dark';
+    const n = config.neutralColors;
+    const c = config.colors;
 
-  return {
-    isDark,
-    primary: c.primary,
-    primaryHover: c.primaryHover,
-    primaryActive: c.primaryActive,
-    success: c.success,
-    warning: c.warning,
-    error: c.error,
-    info: c.info,
-    textPrimary: n.textPrimary,
-    textSecondary: n.textSecondary,
-    textTertiary: n.textTertiary,
-    textDisabled: n.textDisabled,
-    background: n.background,
-    backgroundCard: n.backgroundCard,
-    backgroundToolbar: n.backgroundToolbar,
-    backgroundHover: n.backgroundHover,
-    backgroundActive: n.backgroundActive,
-    surfaceElevated: n.surfaceElevated,
-    border: n.border,
-    borderLight: n.borderLight,
-    rowHoverBg: n.rowHoverBg,
-    rowSelectedBg: n.rowSelectedBg,
-    rowStripeBg: n.rowStripeBg,
-    headerBg: n.headerBg,
-    scrollbarThumb: n.scrollbarThumb,
-    scrollbarTrack: n.scrollbarTrack,
-    dbMysql: config.dbTypeColors.mysql,
-    dbPostgresql: config.dbTypeColors.postgresql,
-    dbSqlite: config.dbTypeColors.sqlite,
-    dbSqlserver: config.dbTypeColors.sqlserver,
-    dbOracle: config.dbTypeColors.oracle,
-    dbMariadb: config.dbTypeColors.mariadb,
-    dbDameng: config.dbTypeColors.dameng,
-    dbKingbase: config.dbTypeColors.kingbase,
-    dbHighgo: config.dbTypeColors.highgo,
-    dbVastbase: config.dbTypeColors.vastbase,
-    logError: c.error,
-    logWarn: c.warning,
-    logOk: c.success,
-    logInfo: c.info,
-  };
+    return {
+      isDark,
+      primary: c.primary,
+      primaryHover: c.primaryHover,
+      primaryActive: c.primaryActive,
+      success: c.success,
+      warning: c.warning,
+      error: c.error,
+      info: c.info,
+      textPrimary: n.textPrimary,
+      textSecondary: n.textSecondary,
+      textTertiary: n.textTertiary,
+      textDisabled: n.textDisabled,
+      background: n.background,
+      backgroundCard: n.backgroundCard,
+      backgroundToolbar: n.backgroundToolbar,
+      backgroundHover: n.backgroundHover,
+      backgroundActive: n.backgroundActive,
+      surfaceElevated: n.surfaceElevated,
+      border: n.border,
+      borderLight: n.borderLight,
+      rowHoverBg: n.rowHoverBg,
+      rowSelectedBg: n.rowSelectedBg,
+      rowStripeBg: n.rowStripeBg,
+      headerBg: n.headerBg,
+      scrollbarThumb: n.scrollbarThumb,
+      scrollbarTrack: n.scrollbarTrack,
+      dbMysql: config.dbTypeColors.mysql,
+      dbPostgresql: config.dbTypeColors.postgresql,
+      dbSqlite: config.dbTypeColors.sqlite,
+      dbSqlserver: config.dbTypeColors.sqlserver,
+      dbOracle: config.dbTypeColors.oracle,
+      dbMariadb: config.dbTypeColors.mariadb,
+      dbDameng: config.dbTypeColors.dameng,
+      dbKingbase: config.dbTypeColors.kingbase,
+      dbHighgo: config.dbTypeColors.highgo,
+      dbVastbase: config.dbTypeColors.vastbase,
+      logError: c.error,
+      logWarn: c.warning,
+      logOk: c.success,
+      logInfo: c.info,
+    };
+  }, [effectiveMode, themePreset]);
 }

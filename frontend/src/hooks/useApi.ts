@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { App } from 'antd';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
 import type { ConnectionInput, GroupInput } from '../types/api';
@@ -424,6 +425,8 @@ const tableLoadingPromises = new Map<string, Promise<import('../types/api').Tabl
 
 export const useDatabase = () => {
   const { message } = App.useApp();
+  // 用 useShallow 只在 action 引用变化时重渲染（action 是稳定的，不会触发），
+  // 避免 useAppStore() 无 selector 订阅整个 store 导致所有组件重渲染。
   const {
     setLoading,
     setError,
@@ -431,8 +434,16 @@ export const useDatabase = () => {
     setTableDataLoading,
     setTableDataFailed,
     getTableData,
-
-  } = useAppStore();
+  } = useAppStore(
+    useShallow((s) => ({
+      setLoading: s.setLoading,
+      setError: s.setError,
+      setTableData: s.setTableData,
+      setTableDataLoading: s.setTableDataLoading,
+      setTableDataFailed: s.setTableDataFailed,
+      getTableData: s.getTableData,
+    }))
+  );
 
   const getTables = useCallback(
     async (connectionId: string, database?: string, forceRefresh = false, search?: string) => {
@@ -678,15 +689,19 @@ export const useDatabase = () => {
   );
 
   const executeQuery = useCallback(
-    async (connectionId: string, sql: string, database?: string) => {
+    async (connectionId: string, sql: string, database?: string, signal?: AbortSignal) => {
       try {
         setLoading(true);
-        const result = await api.executeQuery(connectionId, sql, database);
+        const result = await api.executeQuery(connectionId, sql, database, signal);
         if (result.error) {
           message.error(result.error);
         }
         return result;
       } catch (err) {
+        // abort 不算错误，静默处理
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return { columns: [], rows: [], execution_time_ms: 0, error: '' } as import('../types/api').QueryResult;
+        }
         const errorMsg = err instanceof Error ? err.message : '执行查询失败';
         setError(errorMsg);
         message.error(errorMsg);

@@ -444,6 +444,9 @@ export function SQLEditor({
   // 缺失的 ref 定义（修复类型错误）
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const cleanupDisposablesRef = useRef<any[]>([]);
+  // Monaco 编辑器内防抖定时器（contentChange/cursorChange/selectionChange/resize）
+  // 用 Set 收集，卸载时统一清理，避免对已卸载组件 setState
+  const editorDebounceTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const savedEditorStateRef = useRef<{ value: string; selections: any; position: any; modelUri: string } | null>(null);
   const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1144,19 +1147,20 @@ export function SQLEditor({
     });
 
     // 监听编辑器内容变化（使用防抖以减少频繁更新）
-    let contentChangeTimeout: NodeJS.Timeout;
+    let contentChangeTimeout: ReturnType<typeof setTimeout> | undefined;
     const disposable = editor.onDidChangeModelContent(() => {
-      clearTimeout(contentChangeTimeout);
+      if (contentChangeTimeout) clearTimeout(contentChangeTimeout);
       contentChangeTimeout = setTimeout(() => {
         const value = editor.getValue();
         setSql(value);
       }, 100); // 100ms 防抖
+      editorDebounceTimersRef.current.add(contentChangeTimeout);
     });
 
     // 监听光标位置变化（使用节流以减少频繁更新）
-    let cursorChangeTimeout: NodeJS.Timeout;
+    let cursorChangeTimeout: ReturnType<typeof setTimeout> | undefined;
     const cursorDisposable = editor.onDidChangeCursorPosition(() => {
-      clearTimeout(cursorChangeTimeout);
+      if (cursorChangeTimeout) clearTimeout(cursorChangeTimeout);
       cursorChangeTimeout = setTimeout(() => {
         const position = editor.getPosition();
         if (position) {
@@ -1167,12 +1171,13 @@ export function SQLEditor({
           }
         }
       }, 50); // 50ms 节流
+      editorDebounceTimersRef.current.add(cursorChangeTimeout);
     });
 
     // 监听选择变化（使用节流）
-    let selectionChangeTimeout: NodeJS.Timeout;
+    let selectionChangeTimeout: ReturnType<typeof setTimeout> | undefined;
     const selectionDisposable = editor.onDidChangeCursorSelection(() => {
-      clearTimeout(selectionChangeTimeout);
+      if (selectionChangeTimeout) clearTimeout(selectionChangeTimeout);
       selectionChangeTimeout = setTimeout(() => {
         const selection = editor.getSelection();
         if (selection) {
@@ -1180,18 +1185,20 @@ export function SQLEditor({
           setSelectedText?.(selectedText || '');
         }
       }, 50);
+      editorDebounceTimersRef.current.add(selectionChangeTimeout);
     });
 
     // 监听窗口大小变化（使用防抖）
-    let resizeTimeout: NodeJS.Timeout;
+    let resizeTimeout: ReturnType<typeof setTimeout> | undefined;
     const handleResize = () => {
-      clearTimeout(resizeTimeout);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
         if (containerRef.current) {
           const rect = containerRef.current.getBoundingClientRect();
           editor.layout({ width: rect.width, height: rect.height });
         }
       }, 100);
+      editorDebounceTimersRef.current.add(resizeTimeout);
     };
 
     resizeObserverRef.current = new ResizeObserver(handleResize);
@@ -1314,7 +1321,7 @@ export function SQLEditor({
             if (abortControllerRef.current?.signal.aborted) return null;
             
             try {
-              const queryResult = await executeQueryApi(connectionId, stmt, database);
+              const queryResult = await executeQueryApi(connectionId, stmt, database, abortControllerRef.current?.signal);
               const executionTime = queryResult.execution_time_ms ?? 0;
 
               const truncated = queryResult.rows.length > maxRows;
@@ -1407,7 +1414,7 @@ export function SQLEditor({
         }
       } else {
         // 单语句执行（原有逻辑）
-        const queryResult = await executeQueryApi(connectionId, sqlToExecute, database);
+        const queryResult = await executeQueryApi(connectionId, sqlToExecute, database, abortControllerRef.current?.signal);
         const executionTime = queryResult.execution_time_ms ?? 0;
         const totalTime = Date.now() - requestStartTimeRef.current;
 
@@ -1497,7 +1504,22 @@ export function SQLEditor({
         completionProviderRef.current.dispose();
         completionProviderRef.current = null;
       }
-      
+
+      // 清理编辑器注册的 disposable（onDidChangeModelContent 等）
+      // 虽然 editor.dispose() 会隐式清理，显式 dispose 更稳妥
+      cleanupDisposablesRef.current.forEach((d) => {
+        try {
+          d?.dispose?.();
+        } catch {
+          // ignore
+        }
+      });
+      cleanupDisposablesRef.current = [];
+
+      // 清理所有 pending 的防抖定时器，避免卸载后对已卸载组件 setState
+      editorDebounceTimersRef.current.forEach((t) => clearTimeout(t));
+      editorDebounceTimersRef.current.clear();
+
       // 保存编辑器状态以便恢复
       if (editorRef.current) {
         const model = editorRef.current.getModel();

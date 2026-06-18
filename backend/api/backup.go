@@ -237,10 +237,11 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("-u%s", args.Username),
 			req.Database,
 		}
-		if args.Password != "" {
-			cmdArgs = append(cmdArgs, fmt.Sprintf("-p%s", args.Password))
-		}
 		cmd = exec.Command(toolPath, cmdArgs...)
+		// 密码通过环境变量传递，避免出现在命令行（ps 可见）
+		if args.Password != "" {
+			cmd.Env = append(os.Environ(), fmt.Sprintf("MYSQL_PWD=%s", args.Password))
+		}
 		inFile, err := os.Open(req.FilePath)
 		if err != nil {
 			writeJSONError(w, fmt.Sprintf("打开备份文件失败: %v", err))

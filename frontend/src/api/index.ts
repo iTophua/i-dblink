@@ -363,9 +363,26 @@ export const api = {
   async executeQuery(
     connectionId: string,
     sql: string,
-    database?: string
+    database?: string,
+    signal?: AbortSignal
   ): Promise<QueryResult> {
-    const result = await ExecuteQuery(connectionId, sql, database ?? null);
+    // Wails binding 调用本身无法被 abort；用 Promise.race 让 UI 在 abort 时立即响应，
+    // 后端查询仍会继续到完成（结果被丢弃）。真正的后端取消需要扩展 binding 接口。
+    const binding = ExecuteQuery(connectionId, sql, database ?? null);
+    if (!signal) {
+      const result = await binding;
+      return result as unknown as QueryResult;
+    }
+    const abortPromise = new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      signal.addEventListener('abort', () => {
+        reject(new DOMException('Aborted', 'AbortError'));
+      }, { once: true });
+    });
+    const result = await Promise.race([binding, abortPromise]);
     return result as unknown as QueryResult;
   },
 
