@@ -1752,6 +1752,12 @@
     "oracleCreateDatabaseWarning": "Oracle uses the username as the database isolation unit; reconnect after creating",
     "pleaseEnterParameterValue": "Please enter the parameter value",
     "preparingToImportRows": "Preparing to import {{count}} rows",
-    "willExportMaxRecords": "Will export up to {{count}} records"
+    "willExportMaxRecords": "Will export up to {{count}} records",
+    "featureNotImplemented": "Feature not yet implemented",
+    "connectionDeleted": "Connection deleted",
+    "connectionSuccess": "Connected",
+    "connectionDisconnected": "Disconnected",
+    "groupDeleted": "Group deleted",
+    "deleteConnectionFailed": "Failed to delete connection"
   }
 }

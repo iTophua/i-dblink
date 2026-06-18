@@ -3,6 +3,7 @@ import { App } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../stores/appStore';
 import { api } from '../api';
+import i18n from '../i18n';
 import type { ConnectionInput, GroupInput } from '../types/api';
 
 import { getDialect } from '../utils/sqlDialects';
@@ -253,7 +254,7 @@ export const useConnections = () => {
         await api.deleteConnection(id);
         setConnections((prev) => prev.filter((c) => c.id !== id));
         setActiveConnection((current) => (current === id ? null : current));
-        message.success('连接已删除');
+        message.success(i18n.t('common.connectionDeleted'));
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '删除连接失败';
         setError(errorMsg);
@@ -278,7 +279,7 @@ export const useConnections = () => {
       try {
         setLoading(true);
         const result = await api.testConnection(dbType, host, port, username, password, database);
-        message.success('连接测试成功');
+        message.success(i18n.t('common.connectionTestSuccess'));
         return result;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '连接测试失败';
@@ -300,7 +301,7 @@ export const useConnections = () => {
         setConnections((prev) =>
           prev.map((c) => (c.id === connectionId ? { ...c, status: 'connected' as const } : c))
         );
-        message.success('连接成功');
+        message.success(i18n.t('common.connectionSuccess'));
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         // 检查是否是密码错误（后端返回 PASSWORD_REQUIRED）
@@ -334,7 +335,7 @@ export const useConnections = () => {
         setConnections((prev) =>
           prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
         );
-        message.success('已断开连接');
+        message.success(i18n.t('common.connectionDisconnected'));
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '断开连接失败';
         setError(errorMsg);
@@ -399,7 +400,7 @@ export const useGroups = () => {
         setLoading(true);
         await api.deleteGroup(id);
         setGroups((prev) => prev.filter((g) => g.id !== id));
-        message.success('分组已删除');
+        message.success(i18n.t('common.groupDeleted'));
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '删除分组失败';
         setError(errorMsg);

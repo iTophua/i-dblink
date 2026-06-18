@@ -857,7 +857,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           setConnectionDialogOpen(true);
           break;
         case 'open-connection':
-          message.info('打开连接功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'import-connections':
         case 'export-connections':
@@ -898,7 +898,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'save' } }));
           break;
         case 'save-as':
-          message.info('另存为功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'import':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'import' } }));
@@ -962,28 +962,28 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
           window.dispatchEvent(new CustomEvent('app-action', { detail: { action } }));
           break;
         case 'data-sync':
-          message.info('数据同步功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'favorites':
           setFavoritesOpen(true);
           break;
         case 'backup':
-          message.info('备份数据库功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'restore':
-          message.info('恢复数据库功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'model-designer':
-          message.info('模型设计器功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'cascade':
-          message.info('层叠窗口功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'tile-horizontally':
-          message.info('水平平铺窗口功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'tile-vertically':
-          message.info('垂直平铺窗口功能尚未实现');
+          message.info(t('common.featureNotImplemented'));
           break;
         case 'operation-log':
           setOperationLogOpen(true);

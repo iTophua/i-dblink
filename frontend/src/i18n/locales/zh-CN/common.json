@@ -1763,6 +1763,12 @@
     "oracleCreateDatabaseWarning": "Oracle 使用用户名作为数据库隔离单位，创建后需重新连接",
     "pleaseEnterParameterValue": "请输入参数值",
     "preparingToImportRows": "准备导入 {{count}} 行",
-    "willExportMaxRecords": "将导出最多 {{count}} 条记录"
+    "willExportMaxRecords": "将导出最多 {{count}} 条记录",
+    "featureNotImplemented": "功能尚未实现",
+    "connectionDeleted": "连接已删除",
+    "connectionSuccess": "连接成功",
+    "connectionDisconnected": "已断开连接",
+    "groupDeleted": "分组已删除",
+    "deleteConnectionFailed": "删除连接失败"
   }
 }
