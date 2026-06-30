@@ -22,8 +22,6 @@ dist-ssr
 
 # Wails
 build/
-build/bin/
-frontend/dist/
 frontend/wailsjs/
 frontend/package.json.md5
 
@@ -44,13 +42,16 @@ idblink
 *.sqlite3
 
 # AI tools
-.qwen/
-.lingma/
+.claude/
+.codegraph/
 .code-review-graph/
-.cursor/
 .copilot/
+.cursor/
 .kiro/
 .qoder/
+.qwen/
+.lingma/
+.reasonix/
 
 # Editor directories and files
 .vscode/
@@ -94,5 +95,3 @@ e2e/screenshots/
 .env.development
 .env.production
 .env.test
-
-
