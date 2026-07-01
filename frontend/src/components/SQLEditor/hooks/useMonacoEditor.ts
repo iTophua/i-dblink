@@ -74,6 +74,7 @@ export function useMonacoEditor({
   const dbTypeRef = useRef<DatabaseType | undefined>(dbType);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const cleanupDisposablesRef = useRef<any[]>([]);
+  const idleCallbackIdsRef = useRef<Set<number>>(new Set());
   const editorDebounceTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const savedEditorStateRef = useRef<{ value: string; selections: any; position: any; modelUri: string } | null>(null);
   const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -247,7 +248,8 @@ export function useMonacoEditor({
 
       // 大数据集分批处理
       if (tables.length > 100) {
-        requestIdleCallback(processTables);
+        const id = requestIdleCallback(processTables);
+        idleCallbackIdsRef.current.add(id);
       } else {
         processTables();
       }
@@ -293,9 +295,10 @@ export function useMonacoEditor({
       };
 
       // 使用 requestIdleCallback 预生成 suggestions
-      requestIdleCallback(() => {
+      const id = requestIdleCallback(() => {
         completionCacheRef.current = generateCommonSuggestions();
       });
+      idleCallbackIdsRef.current.add(id);
 
       const endTime = performance.now();
       console.log(`Schema fetch completed in ${endTime - startTime}ms`);
@@ -800,6 +803,10 @@ export function useMonacoEditor({
       // 清理所有 pending 的防抖定时器
       editorDebounceTimersRef.current.forEach((t) => clearTimeout(t));
       editorDebounceTimersRef.current.clear();
+
+      // 清理所有 pending 的 requestIdleCallback
+      idleCallbackIdsRef.current.forEach((id) => cancelIdleCallback(id));
+      idleCallbackIdsRef.current.clear();
 
       // 保存编辑器状态以便恢复
       if (editorRef.current) {

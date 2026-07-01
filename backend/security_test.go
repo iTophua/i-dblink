@@ -20,9 +20,18 @@ func TestEncryptDecrypt(t *testing.T) {
 }
 
 func TestSameMachineSameKey(t *testing.T) {
-	key1 := getKey()
-	key2 := getKey()
+	key1, err := getKey()
+	if err != nil {
+		t.Fatalf("getKey() first call failed: %v", err)
+	}
+	key2, err := getKey()
+	if err != nil {
+		t.Fatalf("getKey() second call failed: %v", err)
+	}
 
+	if len(key1) != len(key2) {
+		t.Fatalf("key length mismatch: %d vs %d", len(key1), len(key2))
+	}
 	for i := range key1 {
 		if key1[i] != key2[i] {
 			t.Error("key mismatch on same machine")

@@ -93,8 +93,11 @@ export function SQLEditor({
   const formatSQLRef = useRef<() => void>(() => {});
 
   // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
+  // 使用 ref 避免初始渲染时的同步 setState
+  const defaultQueryRef = useRef(defaultQuery);
   useEffect(() => {
-    if (defaultQuery) {
+    if (defaultQuery && defaultQuery !== defaultQueryRef.current) {
+      defaultQueryRef.current = defaultQuery;
       setSql(defaultQuery);
     }
   }, [defaultQuery]);
@@ -259,7 +262,9 @@ export function SQLEditor({
   }, [sql, dbType]);
 
   // 同步 formatSQL 到 ref，供 Monaco 快捷键调用
-  formatSQLRef.current = formatSQL;
+  useEffect(() => {
+    formatSQLRef.current = formatSQL;
+  }, [formatSQL]);
 
   // Editor utility actions
   const clearEditor = useCallback(() => {

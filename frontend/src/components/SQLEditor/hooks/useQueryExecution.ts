@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../../hooks/useApi';
@@ -52,6 +52,12 @@ export function useQueryExecution({
   const { t } = useTranslation();
   const { message } = App.useApp();
   const { executeQuery: executeQueryApi } = useDatabase();
+
+  // 用 ref 包装外部传入的函数，避免 useCallback 闭包过期
+  const highlightErrorRef = useRef(highlightError);
+  const clearErrorMarkersRef = useRef(clearErrorMarkers);
+  useEffect(() => { highlightErrorRef.current = highlightError; }, [highlightError]);
+  useEffect(() => { clearErrorMarkersRef.current = clearErrorMarkers; }, [clearErrorMarkers]);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResultWithTiming | null>(null);
@@ -130,7 +136,7 @@ export function useQueryExecution({
 
       setResults([]);
       setExplainPlan([]);
-      clearErrorMarkers();
+      clearErrorMarkersRef.current();
       
       // 取消之前的请求
       if (abortControllerRef.current) {
@@ -172,7 +178,7 @@ export function useQueryExecution({
               if (queryResult.error) {
                 msgs.push(t('common.statementFailed', { index: i + index + 1, error: queryResult.error }));
                 totalErrors++;
-                highlightError(queryResult.error);
+                highlightErrorRef.current(queryResult.error);
                 window.__sqlHistoryApi?.addHistory({
                   sql: stmt,
                   success: false,
@@ -265,7 +271,7 @@ export function useQueryExecution({
           setMessages([`✗ ${t('common.error')}: ${queryResult.error}`]);
           setActiveTab('messages');
           message.error(`${t('common.sqlExecutionFailed')}: ${queryResult.error}`);
-          highlightError(queryResult.error);
+          highlightErrorRef.current(queryResult.error);
           setResult({ ...queryResult, executionTime, totalTime, executedSql: sqlToExecute });
           window.__sqlHistoryApi?.addHistory({
             sql: sqlToExecute,
@@ -281,7 +287,7 @@ export function useQueryExecution({
 
           setResult({ ...queryResult, rows: truncatedRows, executionTime, totalTime, executedSql: sqlToExecute });
 
-          clearErrorMarkers();
+          clearErrorMarkersRef.current();
 
           if (rowCount > 0) {
             let msg = `✓ ${t('common.querySuccess')}, ${rowCount} ${t('common.records')}, ${t('common.executionTime')} ${executionTime}ms`;
@@ -323,7 +329,7 @@ export function useQueryExecution({
       setMessages([`✗ ${t('common.error')}: ${error.message || error}`]);
       setActiveTab('messages');
       message.error(`${t('common.sqlExecutionFailed')}: ${error.message || error}`);
-      highlightError(error.message || error);
+      highlightErrorRef.current(error.message || error);
     } finally {
       setLoading(false);
       abortControllerRef.current = null;
