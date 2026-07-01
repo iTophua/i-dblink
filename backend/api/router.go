@@ -82,6 +82,7 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 
 	// 服务器信息
 	mux.HandleFunc("POST /server-info", recoverMiddleware(h.GetServerInfo))
+	mux.HandleFunc("POST /server-status", recoverMiddleware(h.GetServerStatus))
 
 	// 触发器/事件
 	mux.HandleFunc("POST /triggers", recoverMiddleware(h.GetTriggers))

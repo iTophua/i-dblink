@@ -16,6 +16,7 @@ import {
   MinusOutlined,
   InfoCircleOutlined,
   DashboardOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 import React from 'react';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
@@ -41,6 +42,8 @@ interface DialogSetters {
   setSchemaCompareOpen: (open: boolean) => void;
   setProcessListOpen: (open: boolean) => void;
   setProcessListTarget: (target: { connId: string; database?: string } | null) => void;
+  setServerStatusOpen: (open: boolean) => void;
+  setServerStatusTarget: (target: { connId: string } | null) => void;
   setCreateDatabaseTarget: (target: { connId: string; dbType?: string } | null) => void;
   setCreateDatabaseOpen: (open: boolean) => void;
   setPropertiesType: (type: 'connection' | 'table' | 'view' | 'procedure' | 'function' | 'trigger' | 'group') => void;
@@ -343,6 +346,7 @@ export function useContextMenuMenus(
         { key: 'user-management', label: t('common.userPrivileges') },
         { key: 'schema-compare', label: t('common.schemaCompare') },
         { key: 'process-list', label: t('common.processList.title'), icon: <DashboardOutlined /> },
+        { key: 'server-status', label: t('common.serverStatus.title'), icon: <CloudServerOutlined /> },
         { type: 'divider' },
         { key: 'run-sql-file', label: t('common.runSqlFile') },
         { type: 'divider' },
@@ -388,6 +392,9 @@ export function useContextMenuMenus(
         } else if (key === 'process-list') {
           dialogSetters.setProcessListTarget({ connId, database: dbName });
           dialogSetters.setProcessListOpen(true);
+        } else if (key === 'server-status') {
+          dialogSetters.setServerStatusTarget({ connId });
+          dialogSetters.setServerStatusOpen(true);
         } else if (key === 'run-sql-file') {
           dialogSetters.setRunSqlTarget({ connId, database: dbName });
           dialogSetters.setRunSqlDialogOpen(true);

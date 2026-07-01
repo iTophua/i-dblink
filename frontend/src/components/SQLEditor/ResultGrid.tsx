@@ -9,7 +9,7 @@ import { Button, Space, Empty, Tag, App, Modal, Dropdown } from 'antd';
 import {
   DeleteOutlined, SaveOutlined, UndoOutlined, CodeOutlined,
   PlusOutlined, DownloadOutlined,
-  ExclamationCircleOutlined,
+  ExclamationCircleOutlined, BgColorsOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../hooks/useApi';
@@ -22,6 +22,7 @@ import { namesToGlideColumns, createResultCellModified } from '../DataTable/adap
 import { useContextMenu } from '../ContextMenu';
 import { ResultGridContextMenu } from './ResultGridContextMenu';
 import { useEditHistory } from '../../hooks/useEditHistory';
+import { ConditionalFormattingPanel, type FormatRule } from '../DataTable/ConditionalFormattingPanel';
 
 // ── Types ──
 interface ResultGridProps {
@@ -117,6 +118,10 @@ export function ResultGrid({
   const [operationSql, setOperationSql] = useState('');
   const [scrollToRowIndex, setScrollToRowIndex] = useState<number | undefined>(undefined);
   const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
+
+  // Conditional formatting
+  const [formatRules, setFormatRules] = useState<FormatRule[]>([]);
+  const [formatPanelVisible, setFormatPanelVisible] = useState(false);
 
   // 行数据
   const allRows = useMemo(() => {
@@ -444,6 +449,15 @@ export function ResultGrid({
         ]}}>
           <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 11, height: 22 }}>{t('common.export')}</Button>
         </Dropdown>
+        <Button
+          size="small"
+          icon={<BgColorsOutlined />}
+          onClick={() => setFormatPanelVisible((v) => !v)}
+          style={{ fontSize: 11, height: 22 }}
+          type={formatRules.length > 0 ? 'primary' : 'default'}
+        >
+          {t('common.dataGrid.conditionalFormatting')}
+        </Button>
         {isEditable && hasChanges && (
           <Space size={4}>
             <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 11, height: 22 }}>{t('common.submit')}</Button>
@@ -495,6 +509,14 @@ export function ResultGrid({
           }}
           editable={isEditable}
           enableFindReplace
+          formatRules={formatRules}
+        />
+        <ConditionalFormattingPanel
+          visible={formatPanelVisible}
+          onClose={() => setFormatPanelVisible(false)}
+          rules={formatRules}
+          onRulesChange={setFormatRules}
+          columns={queryResult.columns}
         />
       </div>
 

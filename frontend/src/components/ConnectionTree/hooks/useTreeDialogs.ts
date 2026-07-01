@@ -62,6 +62,12 @@ export function useTreeDialogs(
     database?: string;
   } | null>(null);
 
+  // Server status dialog
+  const [serverStatusOpen, setServerStatusOpen] = useState(false);
+  const [serverStatusTarget, setServerStatusTarget] = useState<{
+    connId: string;
+  } | null>(null);
+
   // Schema compare dialog
   const [schemaCompareOpen, setSchemaCompareOpen] = useState(false);
 
@@ -153,6 +159,12 @@ export function useTreeDialogs(
     setProcessListOpen,
     processListTarget,
     setProcessListTarget,
+
+    // Server status dialog
+    serverStatusOpen,
+    setServerStatusOpen,
+    serverStatusTarget,
+    setServerStatusTarget,
 
     // Schema compare dialog
     schemaCompareOpen,

@@ -21,6 +21,7 @@ import '@glideapps/glide-data-grid/dist/index.css';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { buildGlideTheme } from './glide-theme';
 import { FindReplaceBar, type FindMatch, type FindOptions } from './FindReplaceBar';
+import type { FormatRule } from './ConditionalFormattingPanel';
 
 export type GlideRow = Record<string, unknown>;
 
@@ -57,9 +58,73 @@ export interface GlideDataTableProps {
   /** 外部控制查找栏显隐 */
   findReplaceVisible?: boolean;
   onFindReplaceVisibleChange?: (visible: boolean) => void;
+  /** 条件格式化规则 */
+  formatRules?: FormatRule[];
 }
 
 const FILLER_COL_ID = '__filler__';
+
+// ── Conditional Formatting helpers ──
+
+/** Check if a cell value matches a format rule's condition. */
+function matchFormatRule(
+  value: unknown,
+  rule: FormatRule,
+  duplicateSet: Set<string> | undefined,
+): boolean {
+  const { condition } = rule;
+  switch (condition) {
+    case 'isNull':
+      return value == null || value === '';
+    case 'isNotNull':
+      return value != null && value !== '';
+    case 'equals': {
+      if (rule.value === '__DUPLICATES__') {
+        if (!duplicateSet) return false;
+        return duplicateSet.has(String(value ?? ''));
+      }
+      const target = String(rule.value ?? '');
+      return String(value ?? '') === target;
+    }
+    case 'contains': {
+      const needle = String(rule.value ?? '').toLowerCase();
+      return String(value ?? '').toLowerCase().includes(needle);
+    }
+    case 'greaterThan': {
+      const num = Number(value);
+      const threshold = Number(rule.value);
+      return !isNaN(num) && !isNaN(threshold) && num > threshold;
+    }
+    case 'lessThan': {
+      const num = Number(value);
+      const threshold = Number(rule.value);
+      return !isNaN(num) && !isNaN(threshold) && num < threshold;
+    }
+    case 'between': {
+      const num = Number(value);
+      const lo = Number(rule.value);
+      const hi = Number(rule.value2);
+      return !isNaN(num) && !isNaN(lo) && !isNaN(hi) && num >= lo && num <= hi;
+    }
+    default:
+      return false;
+  }
+}
+
+/** Build a set of duplicate string values for a given column. */
+function buildDuplicateSet(rows: GlideRow[], colId: string): Set<string> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const v = row[colId];
+    const key = String(v ?? '');
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const dupes = new Set<string>();
+  for (const [key, count] of counts) {
+    if (count > 1 && key !== '') dupes.add(key);
+  }
+  return dupes;
+}
 
 // 范围编辑的运行时状态，通过 React Context 注入到 InlineCellEditor。
 // 每个 GlideDataTable 实例持有独立的一份，避免多实例互相污染。
@@ -271,6 +336,7 @@ export function GlideDataTable({
   enableFindReplace = false,
   findReplaceVisible: findReplaceVisibleProp,
   onFindReplaceVisibleChange,
+  formatRules,
 }: GlideDataTableProps) {
   const tc = useThemeColors();
   const isDark = tc.isDark;
@@ -447,6 +513,40 @@ export function GlideDataTable({
     return s;
   }, [findMatches]);
 
+  // ── Conditional Formatting: pre-compute duplicate sets per column ──
+  const duplicateSets = useMemo(() => {
+    if (!formatRules || formatRules.length === 0) return new Map<string, Set<string>>();
+    const hasDuplicate = formatRules.some(
+      (r) => r.condition === 'equals' && r.value === '__DUPLICATES__'
+    );
+    if (!hasDuplicate) return new Map<string, Set<string>>();
+    const sets = new Map<string, Set<string>>();
+    // Build for wildcard columns
+    const wildcardCols = gridColumns
+      .filter((gc) => gc.id && gc.id !== FILLER_COL_ID)
+      .map((gc) => gc.id as string);
+    const specificCols = formatRules
+      .filter((r) => r.value === '__DUPLICATES__' && r.column !== '*')
+      .map((r) => r.column);
+    const colsToCheck = new Set<string>([...wildcardCols, ...specificCols]);
+    for (const colId of colsToCheck) {
+      sets.set(colId, buildDuplicateSet(rows, colId));
+    }
+    return sets;
+  }, [formatRules, rows, gridColumns]);
+
+  // Index format rules by column for fast lookup: '*' rules + per-column rules
+  const rulesByColumn = useMemo(() => {
+    if (!formatRules || formatRules.length === 0) return null;
+    const map = new Map<string, FormatRule[]>();
+    for (const rule of formatRules) {
+      const key = rule.column;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(rule);
+    }
+    return map;
+  }, [formatRules]);
+
   // 自动滚动到指定行
   useEffect(() => {
     if (scrollToRowIndex != null && scrollToRowIndex >= 0 && gridRef.current) {
@@ -549,32 +649,60 @@ export function GlideDataTable({
         ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       }
 
+      // Conditional formatting: check rules and apply bg/text color overrides
+      let formatBg: string | undefined;
+      let formatFg: string | undefined;
+      if (rulesByColumn && gridCol.id) {
+        const colId = gridCol.id;
+        const cellValue = dataVal ?? (display === 'NULL' ? null : display);
+        // Check '*' (all columns) rules first, then column-specific rules
+        const wildcardRules = rulesByColumn.get('*');
+        const columnRules = rulesByColumn.get(colId);
+        const allRules = wildcardRules
+          ? columnRules ? [...wildcardRules, ...columnRules] : wildcardRules
+          : columnRules;
+        if (allRules) {
+          for (const rule of allRules) {
+            const dupSet = duplicateSets.get(colId);
+            if (matchFormatRule(cellValue, rule, dupSet)) {
+              formatBg = rule.backgroundColor;
+              formatFg = rule.textColor;
+              break; // first match wins
+            }
+          }
+        }
+        if (formatBg) {
+          ctx.fillStyle = formatBg;
+          ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        }
+      }
+
       // 删除
       if (status === 'deleted') {
-        ctx.fillStyle = t.textLight; ctx.font = '12px sans-serif';
+        ctx.fillStyle = formatFg ?? t.textLight; ctx.font = '12px sans-serif';
         ctx.fillText(display || 'NULL', rect.x + 8, centerY);
-        ctx.strokeStyle = t.textLight; ctx.beginPath(); ctx.moveTo(rect.x + 8, centerY);
+        ctx.strokeStyle = formatFg ?? t.textLight; ctx.beginPath(); ctx.moveTo(rect.x + 8, centerY);
         ctx.lineTo(rect.x + 8 + ctx.measureText(display || 'NULL').width, centerY); ctx.stroke();
         return;
       }
       // Bool
       if (cell.kind === GridCellKind.Boolean) {
-        ctx.fillStyle = t.textDark; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillStyle = formatFg ?? t.textDark; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
         ctx.fillText(dataVal ? '✓' : '✗', rect.x + rect.width / 2, centerY); ctx.textAlign = 'start'; return;
       }
       // NULL
       if (display === 'NULL' || display === '') {
-        ctx.fillStyle = t.textLight; ctx.font = 'italic 12px sans-serif'; ctx.fillText('NULL', rect.x + 8, centerY); return;
+        ctx.fillStyle = formatFg ?? t.textLight; ctx.font = 'italic 12px sans-serif'; ctx.fillText('NULL', rect.x + 8, centerY); return;
       }
       // 数值左对齐
       if (cell.kind === GridCellKind.Number || (typeof dataVal === 'number')) {
-        ctx.fillStyle = t.textDark; ctx.font = '12px sans-serif';
+        ctx.fillStyle = formatFg ?? t.textDark; ctx.font = '12px sans-serif';
         ctx.fillText(display, rect.x + 8, centerY); return;
       }
       // 文本
-      ctx.fillStyle = t.textDark; ctx.font = '12px sans-serif'; ctx.fillText(display, rect.x + 8, centerY);
+      ctx.fillStyle = formatFg ?? t.textDark; ctx.font = '12px sans-serif'; ctx.fillText(display, rect.x + 8, centerY);
     },
-    [gridColumns, rows, rowStatus, isCellModified, isDark, getRowColor, matchSet, findMatches, currentMatchIndex]
+    [gridColumns, rows, rowStatus, isCellModified, isDark, getRowColor, matchSet, findMatches, currentMatchIndex, rulesByColumn, duplicateSets]
   );
 
   // ===== 选择变化 =====

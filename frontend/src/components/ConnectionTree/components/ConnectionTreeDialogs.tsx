@@ -9,6 +9,7 @@ import { UserManagementDialog } from '../../UserManagementDialog';
 import { SchemaCompareDialog } from '../../SchemaCompareDialog';
 import { CreateDatabaseDialog } from '../CreateDatabaseDialog';
 import { ProcessListPanel } from '../../ProcessListPanel';
+import { ServerStatusPanel } from '../../ServerStatusPanel';
 
 interface ConnectionTreeDialogsProps {
   // GroupDialog (always shown)
@@ -59,6 +60,11 @@ interface ConnectionTreeDialogsProps {
   processListTarget?: { connId: string; database?: string } | null;
   onProcessListClose?: () => void;
 
+  // ServerStatusPanel (optional)
+  serverStatusOpen?: boolean;
+  serverStatusTarget?: { connId: string } | null;
+  onServerStatusClose?: () => void;
+
   // CreateDatabaseDialog (optional)
   createDatabaseOpen?: boolean;
   createDatabaseTarget?: { connId: string; dbType?: string } | null;
@@ -102,6 +108,9 @@ export const ConnectionTreeDialogs: React.FC<ConnectionTreeDialogsProps> = ({
   processListOpen = false,
   processListTarget = null,
   onProcessListClose = noop,
+  serverStatusOpen = false,
+  serverStatusTarget = null,
+  onServerStatusClose = noop,
   createDatabaseOpen = false,
   createDatabaseTarget = null,
   onCreateDatabaseCancel = noop,
@@ -176,6 +185,12 @@ export const ConnectionTreeDialogs: React.FC<ConnectionTreeDialogsProps> = ({
         connectionId={processListTarget?.connId || ''}
         database={processListTarget?.database}
         onClose={onProcessListClose}
+      />
+
+      <ServerStatusPanel
+        open={serverStatusOpen}
+        connectionId={serverStatusTarget?.connId || ''}
+        onClose={onServerStatusClose}
       />
 
       <CreateDatabaseDialog

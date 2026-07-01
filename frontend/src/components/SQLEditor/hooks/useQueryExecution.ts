@@ -63,7 +63,7 @@ export function useQueryExecution({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResultWithTiming | null>(null);
   const [results, setResults] = useState<QueryResultWithTiming[]>([]);
-  const [activeTab, setActiveTab] = useState<'result' | 'messages' | 'explain'>('result');
+  const [activeTab, setActiveTab] = useState<'result' | 'messages' | 'explain' | 'chart'>('result');
   const [resultViewMode, setResultViewMode] = useState<'auto' | 'all' | 'single'>('auto');
   const [messages, setMessages] = useState<string[]>([]);
   const [explainPlan, setExplainPlan] = useState<any[]>([]);

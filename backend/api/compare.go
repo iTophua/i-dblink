@@ -243,7 +243,7 @@ func (h *Handler) getTableMetadata(
 		}
 
 	default:
-		return nil, nil, nil, fmt.Errorf("不支持的数据库类型: %s", dbType)
+		return nil, nil, nil, fmt.Errorf("unsupported database type: %s", dbType)
 	}
 
 	return columns, indexes, foreignKeys, nil
@@ -522,7 +522,7 @@ func (h *Handler) getTablesForCompare(ctx context.Context, exec interface{ Query
 			tables = append(tables, name)
 		}
 	default:
-		return nil, fmt.Errorf("不支持的数据库类型: %s", dbType)
+		return nil, fmt.Errorf("unsupported database type: %s", dbType)
 	}
 
 	sort.Strings(tables)

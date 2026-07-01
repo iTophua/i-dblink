@@ -34,6 +34,7 @@ import {
   GetProcedures,
   GetRoutines,
   GetServerInfo,
+  GetServerStatus,
   GetSnippets,
   GetTableDDL,
   GetTablePrivileges,
@@ -486,6 +487,27 @@ export const api = {
       collation?: string;
       uptime?: string;
       max_connections?: number;
+    };
+  },
+
+  async getServerStatus(
+    connectionId: string
+  ): Promise<{
+    version: string;
+    uptime: string;
+    connections: { current: number; max: number; active: number; idle: number };
+    memory?: { used: string; total: string; bufferPool?: string };
+    variables?: Record<string, string>;
+    error?: string;
+  }> {
+    const result = await GetServerStatus(connectionId);
+    return result as unknown as {
+      version: string;
+      uptime: string;
+      connections: { current: number; max: number; active: number; idle: number };
+      memory?: { used: string; total: string; bufferPool?: string };
+      variables?: Record<string, string>;
+      error?: string;
     };
   },
 

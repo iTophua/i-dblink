@@ -2,6 +2,7 @@ package backend
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"idblink/backend/api"
 )
@@ -51,6 +52,31 @@ func (a *App) GetTableDDL(connectionID string, tableName string, database *strin
 		return nil, err
 	}
 	return result.DDLs, nil
+}
+
+// GetServerStatus 获取综合服务器状态
+func (a *App) GetServerStatus(connectionID string) (api.ServerStatus, error) {
+	req := api.ServerStatusRequest{
+		ConnectionID: connectionID,
+	}
+
+	respBytes, err := callHandlerRaw(a.handler.GetServerStatus, req)
+	if err != nil {
+		return api.ServerStatus{}, err
+	}
+
+	var errResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
+		return api.ServerStatus{}, fmt.Errorf("%s", errResp.Error)
+	}
+
+	var result api.ServerStatus
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return api.ServerStatus{}, fmt.Errorf("failed to parse server status response: %w", err)
+	}
+	return result, nil
 }
 
 // GetDatabaseDDL 获取建库语句
