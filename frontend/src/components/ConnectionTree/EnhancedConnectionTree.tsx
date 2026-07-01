@@ -113,6 +113,8 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       setServerStatusTarget: dialogs.setServerStatusTarget,
       setCreateDatabaseTarget: dialogs.setCreateDatabaseTarget,
       setCreateDatabaseOpen: dialogs.setCreateDatabaseOpen,
+      setDataGeneratorTarget: dialogs.setDataGeneratorTarget,
+      setDataGeneratorOpen: dialogs.setDataGeneratorOpen,
       setPropertiesType: dialogs.setPropertiesType,
       setPropertiesTarget: dialogs.setPropertiesTarget,
       setPropertiesOpen: dialogs.setPropertiesOpen,
@@ -234,6 +236,9 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
           groupDialogOpen={dialogs.groupDialogOpen} editingGroup={dialogs.editingGroup}
           parentGroupId={dialogs.parentGroupId} onGroupDialogCancel={handleGroupCancel}
           onGroupSave={dialogs.handleGroupSave} connections={connections} connectionDatabases={connectionDatabases}
+          dataGeneratorOpen={dialogs.dataGeneratorOpen} dataGeneratorTarget={dialogs.dataGeneratorTarget}
+          onDataGeneratorCancel={() => { dialogs.setDataGeneratorOpen(false); dialogs.setDataGeneratorTarget(null); }}
+          onDataGeneratorSuccess={() => { dialogs.setDataGeneratorOpen(false); dialogs.setDataGeneratorTarget(null); }}
         />
       </div>
     );
@@ -309,6 +314,9 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
         onCreateDatabaseCancel={() => { dialogs.setCreateDatabaseOpen(false); dialogs.setCreateDatabaseTarget(null); }}
         onCreateDatabaseSuccess={() => { dialogs.setCreateDatabaseOpen(false); if (dialogs.createDatabaseTarget?.connId) onLoadDatabases?.(dialogs.createDatabaseTarget.connId); dialogs.setCreateDatabaseTarget(null); }}
         onLoadDatabases={onLoadDatabases}
+        dataGeneratorOpen={dialogs.dataGeneratorOpen} dataGeneratorTarget={dialogs.dataGeneratorTarget}
+        onDataGeneratorCancel={() => { dialogs.setDataGeneratorOpen(false); dialogs.setDataGeneratorTarget(null); }}
+        onDataGeneratorSuccess={() => { dialogs.setDataGeneratorOpen(false); const tgt = dialogs.dataGeneratorTarget; dialogs.setDataGeneratorTarget(null); if (tgt?.database) onDatabaseRefresh?.(tgt.connId, tgt.database); }}
       />
     </div>
   );

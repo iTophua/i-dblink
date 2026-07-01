@@ -31,6 +31,7 @@ import { useThemeColors } from '../../../hooks/useThemeColors';
 import { formatShortcutForDisplay, getEffectiveShortcut } from '../../../constants/menuShortcuts';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import type { DatabaseType } from '../../../types/api';
+import type { RecentDatabaseEntry } from '../../../stores/workspaceStore';
 
 export interface SQLEditorToolbarProps {
   // Execution
@@ -62,6 +63,7 @@ export interface SQLEditorToolbarProps {
   // Database selection
   database?: string;
   availableDatabases?: string[];
+  recentDatabases?: RecentDatabaseEntry[];
   onDatabaseChange?: (database: string) => void;
 
   // Fullscreen
@@ -91,6 +93,7 @@ export function SQLEditorToolbar({
   setSnippetManagerOpen,
   database,
   availableDatabases,
+  recentDatabases,
   onDatabaseChange,
   isFullscreen,
   setIsFullscreen,
@@ -324,12 +327,33 @@ export function SQLEditorToolbar({
               placeholder={t('common.selectDatabasePlaceholder')}
               showSearch
               optionFilterProp="label"
-              filterOption={(input, option) =>
-                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
+              filterOption={(input, option) => {
+                const lbl = typeof option?.label === 'string' ? option.label : String(option?.label ?? '');
+                return lbl.toLowerCase().includes(input.toLowerCase());
+              }}
               style={{ minWidth: 140 }}
               size="small"
-              options={availableDatabases.map((db) => ({ label: db, value: db }))}
+              options={(() => {
+                const recentList = (recentDatabases || [])
+                  .filter((r) => r.connectionId === connectionId && availableDatabases.includes(r.database))
+                  .slice(0, 5);
+                if (recentList.length > 0) {
+                  return [
+                    {
+                      label: t('common.recentDatabases'),
+                      options: recentList.map((r) => ({
+                        label: `${r.connectionName} · ${r.database}`,
+                        value: r.database,
+                      })),
+                    },
+                    {
+                      label: t('common.allDatabases'),
+                      options: availableDatabases.map((db) => ({ label: db, value: db })),
+                    },
+                  ];
+                }
+                return availableDatabases.map((db) => ({ label: db, value: db }));
+              })() as any}
             />
           ) : (
             <span

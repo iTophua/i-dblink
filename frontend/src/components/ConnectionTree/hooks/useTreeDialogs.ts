@@ -71,6 +71,14 @@ export function useTreeDialogs(
   // Schema compare dialog
   const [schemaCompareOpen, setSchemaCompareOpen] = useState(false);
 
+  // Data generator dialog
+  const [dataGeneratorOpen, setDataGeneratorOpen] = useState(false);
+  const [dataGeneratorTarget, setDataGeneratorTarget] = useState<{
+    connId: string;
+    database?: string;
+    tableName?: string;
+  } | null>(null);
+
   // Properties modal
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [propertiesType, setPropertiesType] = useState<
@@ -169,6 +177,12 @@ export function useTreeDialogs(
     // Schema compare dialog
     schemaCompareOpen,
     setSchemaCompareOpen,
+
+    // Data generator dialog
+    dataGeneratorOpen,
+    setDataGeneratorOpen,
+    dataGeneratorTarget,
+    setDataGeneratorTarget,
 
     // Properties modal
     propertiesOpen,

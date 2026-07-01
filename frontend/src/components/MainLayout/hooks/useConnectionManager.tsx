@@ -8,6 +8,7 @@ import type { TableInfo, ColumnInfo, IndexInfo } from '../../../types/api';
 import type { ConnectionFormData } from '../../ConnectionDialog';
 import type { Connection } from '../../../stores/appStore';
 import { useAppStore } from '../../../stores/appStore';
+import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { api } from '../../../api';
 import { EventsOn } from '../../../../wailsjs/runtime/runtime';
 
@@ -351,6 +352,16 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
 
       // 检查连接状态
       const conn = connections.find((c) => c.id === connectionId);
+
+      // Track recent database
+      if (conn) {
+        useWorkspaceStore.getState().addRecentDatabase({
+          connectionId,
+          connectionName: conn.name,
+          database,
+        });
+      }
+
       if (!conn || conn.status !== 'connected') {
         return;
       }

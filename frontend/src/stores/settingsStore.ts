@@ -18,8 +18,9 @@ export interface AppSettings {
   themeMode: ThemeMode;
   themePreset: ThemePreset;
   language: 'zh-CN' | 'en-US';
-  settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts';
+  settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor';
   shortcuts: Record<string, string>; // id -> keys
+  liveTemplatesEnabled: boolean;
 }
 
 interface SettingsState {
@@ -35,6 +36,7 @@ const defaultSettings: AppSettings = {
   themePreset: 'default',
   language: 'zh-CN',
   shortcuts: {},
+  liveTemplatesEnabled: true,
 };
 
 const VERSION = 1;

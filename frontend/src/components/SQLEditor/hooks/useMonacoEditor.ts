@@ -5,6 +5,8 @@ import { useDatabase } from '../../../hooks/useApi';
 import { useThemeColors } from '../../../hooks/useThemeColors';
 import { SQL_KEYWORDS, filterKeywordsByDbType } from '../../../constants/sqlKeywords';
 import { SQL_FUNCTIONS, filterFunctionsByDbType } from '../../../constants/sqlFunctions';
+import { SQL_LIVE_TEMPLATES } from '../../../constants/sqlLiveTemplates';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import type { DatabaseType } from '../../../types/api';
 import {
   getCurrentStatement,
@@ -677,6 +679,27 @@ export function useMonacoEditor({
               range,
               detail: t('common.dataType'),
               sortText: '0',
+            });
+          }
+        }
+
+        // 5. Live template suggestions (SQL code snippets with tab-stop placeholders)
+        const liveTemplatesEnabled = useSettingsStore.getState().settings.liveTemplatesEnabled;
+        if (liveTemplatesEnabled !== false) {
+          for (const template of SQL_LIVE_TEMPLATES) {
+            // Skip if restricted to DB types that don't match
+            if (template.dbTypes && currentDbType && !template.dbTypes.includes(currentDbType)) {
+              continue;
+            }
+            suggestions.push({
+              label: template.trigger,
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: template.body,
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              detail: t(`common.liveTemplates.${template.nameKey}`),
+              documentation: t(`common.liveTemplates.${template.descriptionKey}`),
+              range,
+              sortText: '2',
             });
           }
         }

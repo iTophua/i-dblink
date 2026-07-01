@@ -17,6 +17,7 @@ import {
   InfoCircleOutlined,
   DashboardOutlined,
   CloudServerOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons';
 import React from 'react';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
@@ -47,6 +48,8 @@ interface DialogSetters {
   setServerStatusTarget: (target: { connId: string } | null) => void;
   setCreateDatabaseTarget: (target: { connId: string; dbType?: string } | null) => void;
   setCreateDatabaseOpen: (open: boolean) => void;
+  setDataGeneratorTarget: (target: { connId: string; database?: string; tableName?: string } | null) => void;
+  setDataGeneratorOpen: (open: boolean) => void;
   setPropertiesType: (type: 'connection' | 'table' | 'view' | 'procedure' | 'function' | 'trigger' | 'group') => void;
   setPropertiesTarget: (target: { connId: string; name: string; database?: string; data?: any } | null) => void;
   setPropertiesOpen: (open: boolean) => void;
@@ -496,6 +499,8 @@ export function useContextMenuMenus(
         { key: 'truncate-table', label: t('common.clearTable'), danger: true },
         { key: 'drop-table', label: t('common.dropTable'), danger: true },
         { type: 'divider' },
+        { key: 'generate-data', label: t('common.dataGenerator.title'), icon: <ExperimentOutlined /> },
+        { type: 'divider' },
         {
           key: 'table-maintenance',
           label: t('common.tableMaintenance'),
@@ -527,6 +532,9 @@ export function useContextMenuMenus(
         } else if (key === 'dump-table') {
           dialogSetters.setDumpTarget({ tableName, database, connId });
           dialogSetters.setDumpDialogOpen(true);
+        } else if (key === 'generate-data') {
+          dialogSetters.setDataGeneratorTarget({ connId, database, tableName });
+          dialogSetters.setDataGeneratorOpen(true);
         } else if (key === 'import-csv') {
           callbacks.onTableOpen(tableName, database);
         } else if (key === 'truncate-table') {

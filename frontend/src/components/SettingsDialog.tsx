@@ -22,6 +22,7 @@ import {
   formatShortcutForDisplay,
   getEffectiveShortcut,
 } from '../constants/menuShortcuts';
+import { SQL_LIVE_TEMPLATES } from '../constants/sqlLiveTemplates';
 import { useTranslation } from 'react-i18next';
 
 interface SettingsDialogProps {
@@ -29,13 +30,14 @@ interface SettingsDialogProps {
   onCancel: () => void;
 }
 
-type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts';
+type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor';
 
 const MENU_ITEMS = [
   { key: 'general', labelKey: 'common.general' },
   { key: 'appearance', labelKey: 'common.appearance' },
   { key: 'language', labelKey: 'common.language' },
   { key: 'shortcuts', labelKey: 'common.shortcuts' },
+  { key: 'editor', labelKey: 'common.editor' },
 ];
 
 export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
@@ -228,6 +230,8 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
             )}
 
             {activeTab === 'shortcuts' && <ShortcutsSettings />}
+
+            {activeTab === 'editor' && <EditorSettings />}
           </Form>
         </div>
       </div>
@@ -467,6 +471,107 @@ function ShortcutsSettings() {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+const LIVE_TEMPLATE_CATEGORIES: Record<string, string> = {
+  dml: 'DML',
+  ddl: 'DDL',
+  dcl: 'DCL',
+  common: 'Common',
+};
+
+function EditorSettings() {
+  const settings = useSettingsStore((s) => s.settings);
+  const updateSettings = useSettingsStore((s) => s.updateSettings);
+  const { t } = useTranslation();
+
+  const liveTemplatesEnabled = settings.liveTemplatesEnabled !== false;
+
+  // Group templates by category
+  const grouped = SQL_LIVE_TEMPLATES.reduce<Record<string, typeof SQL_LIVE_TEMPLATES>>((acc, tpl) => {
+    if (!acc[tpl.category]) acc[tpl.category] = [];
+    acc[tpl.category].push(tpl);
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+              {t('common.liveTemplates.title')}
+            </div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+              {t('common.liveTemplates.description')}
+            </div>
+          </div>
+          <Switch
+            checked={liveTemplatesEnabled}
+            onChange={(checked) => updateSettings({ liveTemplatesEnabled: checked })}
+          />
+        </div>
+      </div>
+
+      {liveTemplatesEnabled &&
+        Object.entries(grouped).map(([category, templates]) => (
+          <div key={category} style={{ marginBottom: 20 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)', fontSize: 13 }}>
+              {LIVE_TEMPLATE_CATEGORIES[category] || category}
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {templates.map((tpl) => (
+                <div
+                  key={tpl.trigger}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 12px',
+                    background: 'var(--background-active)',
+                    borderRadius: 6,
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--color-primary)',
+                        background: 'var(--color-primary-alpha-15)',
+                        padding: '1px 8px',
+                        borderRadius: 4,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {tpl.trigger}
+                    </span>
+                    <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+                      {t(`common.liveTemplates.${tpl.nameKey}`)}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-tertiary)',
+                      fontFamily: 'monospace',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: 300,
+                    }}
+                  >
+                    {t(`common.liveTemplates.${tpl.descriptionKey}`)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
     </div>
   );
 }

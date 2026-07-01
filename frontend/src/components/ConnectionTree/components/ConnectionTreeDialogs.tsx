@@ -10,6 +10,7 @@ import { SchemaCompareDialog } from '../../SchemaCompareDialog';
 import { CreateDatabaseDialog } from '../CreateDatabaseDialog';
 import { ProcessListPanel } from '../../ProcessListPanel';
 import { ServerStatusPanel } from '../../ServerStatusPanel';
+import { DataGeneratorDialog } from '../../DataGeneratorDialog';
 
 interface ConnectionTreeDialogsProps {
   // GroupDialog (always shown)
@@ -65,6 +66,12 @@ interface ConnectionTreeDialogsProps {
   serverStatusTarget?: { connId: string } | null;
   onServerStatusClose?: () => void;
 
+  // DataGeneratorDialog (optional)
+  dataGeneratorOpen?: boolean;
+  dataGeneratorTarget?: { connId: string; database?: string; tableName?: string } | null;
+  onDataGeneratorCancel?: () => void;
+  onDataGeneratorSuccess?: () => void;
+
   // CreateDatabaseDialog (optional)
   createDatabaseOpen?: boolean;
   createDatabaseTarget?: { connId: string; dbType?: string } | null;
@@ -111,6 +118,10 @@ export const ConnectionTreeDialogs: React.FC<ConnectionTreeDialogsProps> = ({
   serverStatusOpen = false,
   serverStatusTarget = null,
   onServerStatusClose = noop,
+  dataGeneratorOpen = false,
+  dataGeneratorTarget = null,
+  onDataGeneratorCancel = noop,
+  onDataGeneratorSuccess = noop,
   createDatabaseOpen = false,
   createDatabaseTarget = null,
   onCreateDatabaseCancel = noop,
@@ -191,6 +202,15 @@ export const ConnectionTreeDialogs: React.FC<ConnectionTreeDialogsProps> = ({
         open={serverStatusOpen}
         connectionId={serverStatusTarget?.connId || ''}
         onClose={onServerStatusClose}
+      />
+
+      <DataGeneratorDialog
+        open={dataGeneratorOpen}
+        connectionId={dataGeneratorTarget?.connId || ''}
+        database={dataGeneratorTarget?.database}
+        initialTable={dataGeneratorTarget?.tableName}
+        onCancel={onDataGeneratorCancel}
+        onSuccess={onDataGeneratorSuccess}
       />
 
       <CreateDatabaseDialog

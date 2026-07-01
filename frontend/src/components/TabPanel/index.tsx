@@ -19,7 +19,9 @@ import {
   EyeOutlined,
   PushpinOutlined,
   PushpinFilled,
-
+  ColumnWidthOutlined,
+  ColumnHeightOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
@@ -37,6 +39,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAppStore } from '../../stores/appStore';
 import { api } from '../../api';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { SplitView } from './SplitView';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
@@ -180,6 +183,21 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const [activeKey, setActiveKey] = useState('objects');
   const isRestoredRef = useRef(false);
 
+  // Split view state
+  const [splitMode, setSplitMode] = useState<'none' | 'horizontal' | 'vertical'>(
+    () => useWorkspaceStore.getState().splitMode || 'none'
+  );
+  const [splitRatio, setSplitRatio] = useState(
+    () => useWorkspaceStore.getState().splitRatio || 0.5
+  );
+  const [secondaryActiveKey, setSecondaryActiveKey] = useState(
+    () => useWorkspaceStore.getState().secondaryActiveKey || ''
+  );
+  const [activePane, setActivePane] = useState<'primary' | 'secondary'>('primary');
+  const [secondaryTabKeys, setSecondaryTabKeys] = useState<string[]>(() =>
+    (useWorkspaceStore.getState().secondaryTabKeys || []).filter(Boolean)
+  );
+
   const [importWizardOpen, setImportWizardOpen] = useState(false);
   const [exportWizardOpen, setExportWizardOpen] = useState(false);
   const [dumpDialogOpen, setDumpDialogOpen] = useState(false);
@@ -251,10 +269,64 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         openedDesignerTabs,
         openedViewDefTabs: openedViewDefTabs.map(({ key: _k, ...rest }) => rest),
         activeKey,
+        splitMode,
+        splitRatio,
+        secondaryActiveKey,
+        secondaryTabKeys,
       });
     }, 500);
     return () => clearTimeout(timer);
-  }, [openedTables, openedSqlTabs, openedDesignerTabs, activeKey]);
+  }, [openedTables, openedSqlTabs, openedDesignerTabs, activeKey, splitMode, splitRatio, secondaryActiveKey, secondaryTabKeys]);
+
+  // 清理 secondaryTabKeys 中已关闭的标签
+  useEffect(() => {
+    if (secondaryTabKeys.length === 0) return;
+    const allKeys = new Set([
+      ...openedTables.map((t) => getDataTabKey(t)),
+      ...openedSqlTabs.map((t) => t.key),
+      ...openedDesignerTabs.map((t) => t.key),
+      ...openedViewDefTabs.map((t) => t.key),
+    ]);
+    const stale = secondaryTabKeys.filter((k) => !allKeys.has(k));
+    if (stale.length > 0) {
+      setSecondaryTabKeys((prev) => prev.filter((k) => allKeys.has(k)));
+      if (stale.includes(secondaryActiveKey)) {
+        setSecondaryActiveKey('');
+        setActivePane('primary');
+      }
+    }
+  }, [openedTables, openedSqlTabs, openedDesignerTabs, openedViewDefTabs, secondaryTabKeys, secondaryActiveKey, getDataTabKey]);
+
+  // 键盘快捷键：Cmd+\ 切换分屏，Cmd+Shift+\ 切换方向
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // 切换分屏方向
+          setSplitMode((prev) => {
+            if (prev === 'none') return 'vertical';
+            if (prev === 'horizontal') return 'vertical';
+            return 'horizontal';
+          });
+        } else {
+          // 切换分屏
+          setSplitMode((prev) => (prev === 'none' ? 'vertical' : 'none'));
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // 监听 pane-focus 事件
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ pane: 'primary' | 'secondary' }>) => {
+      setActivePane(e.detail.pane);
+    };
+    window.addEventListener('pane-focus', handler as EventListener);
+    return () => window.removeEventListener('pane-focus', handler as EventListener);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     openDesignerTab: (tableName?: string) => {
@@ -999,18 +1071,52 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           // 复制 SQL Tab 为新 Tab
           const src = openedSqlTabs.find((x) => x.key === tabKey);
           if (src) {
-            const newKey = `sql-${Date.now()}`;
+            const newKey = `sql-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             setOpenedSqlTabs((prev) => [
               ...prev,
-              { ...src, key: newKey, title: `${src.title} ${t('common.copySuffix')}`, _createdAt: Date.now() },
+              { ...src, key: newKey, title: `${src.title} ${t('common.copySuffix')}`, createdAt: Date.now() },
             ]);
             setActiveKey(newKey);
           }
           break;
         }
+
+        case 'moveToOtherPane': {
+          const isSecondary = secondaryTabKeys.includes(tabKey);
+          if (isSecondary) {
+            setSecondaryTabKeys((prev) => prev.filter((k) => k !== tabKey));
+            if (secondaryActiveKey === tabKey) {
+              const remaining = secondaryTabKeys.filter((k) => k !== tabKey);
+              setSecondaryActiveKey(remaining.length > 0 ? remaining[0] : '');
+            }
+          } else {
+            setSecondaryTabKeys((prev) => [...prev, tabKey]);
+            setSecondaryActiveKey(tabKey);
+          }
+          break;
+        }
+
+        case 'splitHorizontal':
+          setSecondaryTabKeys([tabKey]);
+          setSecondaryActiveKey(tabKey);
+          setSplitMode('horizontal');
+          break;
+
+        case 'splitVertical':
+          setSecondaryTabKeys([tabKey]);
+          setSecondaryActiveKey(tabKey);
+          setSplitMode('vertical');
+          break;
+
+        case 'unsplit':
+          setSecondaryTabKeys([]);
+          setSecondaryActiveKey('');
+          setSplitMode('none');
+          setActivePane('primary');
+          break;
       }
     },
-    [handleCloseTab, openedTables, openedSqlTabs, toggleTabPin]
+    [handleCloseTab, openedTables, openedSqlTabs, toggleTabPin, secondaryTabKeys, secondaryActiveKey]
   );
 
   // 关闭 Tab
@@ -1034,13 +1140,56 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             createdAt: Date.now(),
           },
         ]);
-        setActiveKey(newSqlKey);
+        // 根据活跃面板分配新标签
+        if (splitMode !== 'none' && activePane === 'secondary') {
+          setSecondaryTabKeys((prev) => [...prev, newSqlKey]);
+          setSecondaryActiveKey(newSqlKey);
+        } else {
+          setActiveKey(newSqlKey);
+        }
       } else if (action === 'remove') {
         const key = typeof targetKey === 'string' ? targetKey : '';
         handleCloseTab(key);
       }
     },
-    [activeKey, openedTables, openedSqlTabs, handleCloseTab]
+    [activeKey, openedTables, openedSqlTabs, handleCloseTab, splitMode, activePane]
+  );
+
+  // Secondary pane 的 onEdit 处理
+  const handleSecondaryPaneEdit = useCallback(
+    (targetKey: React.MouseEvent | React.KeyboardEvent | string, action: 'add' | 'remove') => {
+      if (action === 'add') {
+        const rand = Math.random().toString(36).slice(2, 8);
+        const newSqlKey = `sql-${Date.now()}-${rand}`;
+        const connName = selectedConnectionId
+          ? connections.find((c) => c.id === selectedConnectionId)?.name || selectedConnectionId
+          : undefined;
+        setOpenedSqlTabs((prev) => [
+          ...prev,
+          {
+            key: newSqlKey,
+            title: t('common.sqlQuery'),
+            connectionId: selectedConnectionId ?? undefined,
+            connectionName: connName,
+            database: selectedDatabase ?? undefined,
+            createdAt: Date.now(),
+          },
+        ]);
+        setSecondaryTabKeys((prev) => [...prev, newSqlKey]);
+        setSecondaryActiveKey(newSqlKey);
+        setActivePane('secondary');
+      } else if (action === 'remove') {
+        const key = typeof targetKey === 'string' ? targetKey : '';
+        handleCloseTab(key);
+        if (key === secondaryActiveKey) {
+          const remaining = secondaryTabKeys.filter((k) => k !== key);
+          const nextActive = remaining.length > 0 ? remaining[remaining.length - 1] : '';
+          setSecondaryActiveKey(nextActive);
+          if (!nextActive) setActivePane('primary');
+        }
+      }
+    },
+    [handleCloseTab, secondaryActiveKey, secondaryTabKeys, selectedConnectionId, selectedDatabase]
   );
 
   // 动态 Tab：合并并按 createdAt 排序（固定标签排前面）
@@ -1163,10 +1312,22 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   ? connectionDatabases[sqlTab.connectionId || selectedConnectionId || ''].map((db) => db.database)
                   : []
               }
+              recentDatabases={useWorkspaceStore.getState().recentDatabases || []}
               onDatabaseChange={(database) => {
                 setOpenedSqlTabs((prev) =>
                   prev.map((t) => (t.key === sqlTab.key ? { ...t, database } : t))
                 );
+                const connId = sqlTab.connectionId || selectedConnectionId;
+                if (connId) {
+                  const conn = connections.find((c) => c.id === connId);
+                  if (conn) {
+                    useWorkspaceStore.getState().addRecentDatabase({
+                      connectionId: connId,
+                      connectionName: conn.name,
+                      database,
+                    });
+                  }
+                }
               }}
               onQueryStatusChange={onQueryStatusChange}
             />
@@ -1414,21 +1575,31 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     ...dynamicTabItems,
   ];
 
-  return (
+  // Split view: compute pane-specific tab items
+  const isSecondaryTabKey = new Set(secondaryTabKeys);
+  const primaryTabItems =
+    splitMode !== 'none'
+      ? tabItems.filter(
+          (item) => !isSecondaryTabKey.has(item.key as string)
+        )
+      : tabItems;
+  const secondaryTabItems =
+    splitMode !== 'none'
+      ? tabItems.filter((item) =>
+          isSecondaryTabKey.has(item.key as string)
+        )
+      : [];
+
+  const renderPrimaryPane = (
     <div
-      style={{
-        flex: 1,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0,
-      }}
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}
+      onClick={() => setActivePane('primary')}
     >
       <Tabs
         type="editable-card"
         size="small"
         activeKey={activeKey}
-        onChange={setActiveKey}
+        onChange={(key) => { setActivePane('primary'); setActiveKey(key); }}
         hideAdd
         style={{
           flex: 1,
@@ -1439,11 +1610,80 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         }}
         tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
         tabBarGutter={2}
-        items={tabItems}
+        items={primaryTabItems}
         onEdit={handleTabEdit}
         renderTabBar={renderDraggableTabBar}
-        data-testid="tab-panel"
+        data-testid="tab-panel-primary"
       />
+    </div>
+  );
+
+  const renderSecondaryPane =
+    secondaryTabItems.length > 0 ? (
+      <div
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}
+        onClick={() => setActivePane('secondary')}
+      >
+        <Tabs
+          type="editable-card"
+          size="small"
+          activeKey={secondaryActiveKey}
+          onChange={(key) => { setActivePane('secondary'); setSecondaryActiveKey(key); }}
+          hideAdd
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}
+          tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
+          tabBarGutter={2}
+          items={secondaryTabItems}
+          onEdit={handleSecondaryPaneEdit}
+          renderTabBar={renderDraggableTabBar}
+          data-testid="tab-panel-secondary"
+        />
+      </div>
+    ) : (
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--text-tertiary)',
+          fontSize: 13,
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        <StopOutlined style={{ fontSize: 24, opacity: 0.4 }} />
+        <span>{t('common.dropTabsHere')}</span>
+      </div>
+    );
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+      }}
+    >
+      {splitMode !== 'none' ? (
+        <SplitView
+          direction={splitMode}
+          ratio={splitRatio}
+          onRatioChange={setSplitRatio}
+          primary={renderPrimaryPane}
+          secondary={renderSecondaryPane}
+        />
+      ) : (
+        renderPrimaryPane
+      )}
 
       {/* 右键菜单 */}
       {contextMenu.visible && (
@@ -1489,6 +1729,25 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 ? [
                     { key: 'copyTableName', label: t('common.copyTableName'), icon: <CopyOutlined /> },
                     { type: 'divider' as const },
+                  ]
+                : []),
+              // Split view 选项
+              ...(contextMenu.tabKey !== 'objects'
+                ? [
+                    { type: 'divider' as const },
+                    ...(splitMode === 'none'
+                      ? [
+                          { key: 'splitHorizontal', label: t('common.splitHorizontal'), icon: <ColumnWidthOutlined /> },
+                          { key: 'splitVertical', label: t('common.splitVertical'), icon: <ColumnHeightOutlined /> },
+                        ]
+                      : [
+                          {
+                            key: 'moveToOtherPane',
+                            label: t('common.moveToOtherPane'),
+                            icon: <ColumnWidthOutlined />,
+                          },
+                          { key: 'unsplit', label: t('common.unsplit'), icon: <StopOutlined /> },
+                        ]),
                   ]
                 : []),
               { key: 'closeAll', label: t('common.closeAllTabMenu'), danger: true },

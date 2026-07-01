@@ -9,6 +9,7 @@ const defaultSettings: AppSettings = {
   themePreset: 'default',
   language: 'zh-CN',
   shortcuts: {},
+  liveTemplatesEnabled: true,
 };
 
 describe('settingsStore', () => {

@@ -36,6 +36,7 @@ import { useSqlDialectDetection } from './SQLEditor/hooks/useSqlDialectDetection
 import { SQLEditorToolbar } from './SQLEditor/components/SQLEditorToolbar';
 import { SQLEditorContextMenu } from './SQLEditor/components/SQLEditorContextMenu';
 import { getErrorMessage } from '../utils/getErrorMessage';
+import type { RecentDatabaseEntry } from '../stores/workspaceStore';
 
 interface QueryResultWithTiming {
   executionTime?: number;
@@ -53,6 +54,7 @@ interface SQLEditorProps {
   database?: string;
   defaultQuery?: string;
   availableDatabases?: string[];
+  recentDatabases?: RecentDatabaseEntry[];
   onDatabaseChange?: (database: string) => void;
   dbType?: DatabaseType;
   onQueryStatusChange?: (isQuerying: boolean) => void;
@@ -63,6 +65,7 @@ export function SQLEditor({
   database,
   defaultQuery,
   availableDatabases,
+  recentDatabases,
   onDatabaseChange,
   dbType: propDbType,
   onQueryStatusChange,
@@ -579,6 +582,7 @@ export function SQLEditor({
         setSnippetManagerOpen={setSnippetManagerOpen}
         database={database}
         availableDatabases={availableDatabases}
+        recentDatabases={recentDatabases}
         onDatabaseChange={onDatabaseChange}
         isFullscreen={isFullscreen}
         setIsFullscreen={setIsFullscreen}
