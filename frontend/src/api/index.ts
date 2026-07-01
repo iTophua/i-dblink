@@ -65,6 +65,8 @@ import {
   ExportConnectionsByID,
   ImportConnections,
   ImportNavicatConnections,
+  GetProcessList,
+  KillProcess,
 } from '../../wailsjs/go/backend/App';
 import { backend } from '../../wailsjs/go/models';
 const ConnectionInput = backend.ConnectionInput;
@@ -768,6 +770,23 @@ export const api = {
       total_count: number;
       last_error?: string;
     };
+  },
+
+  async getProcessList(
+    connectionId: string,
+    database?: string
+  ): Promise<any[]> {
+    const result = await GetProcessList(connectionId, database ?? null);
+    return result as unknown as any[];
+  },
+
+  async killProcess(
+    connectionId: string,
+    database: string,
+    processId: string,
+    serial?: string
+  ): Promise<void> {
+    await KillProcess(connectionId, database, processId, serial ?? '');
   },
 
   async quitApp(): Promise<void> {

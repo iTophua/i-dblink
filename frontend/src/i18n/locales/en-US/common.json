@@ -199,6 +199,23 @@
     "deleteLabel": "Delete",
     "selectAllLabel": "Select all",
     "findReplaceLabel": "Find/Replace",
+    "findReplaceBar": {
+      "noResults": "No results",
+      "find": "Find...",
+      "previous": "Previous (Shift+Enter)",
+      "next": "Next (Enter)",
+      "caseSensitive": "Case Sensitive",
+      "useRegex": "Use Regex",
+      "wholeWord": "Whole Word",
+      "hideReplace": "Hide Replace",
+      "showReplace": "Show Replace",
+      "close": "Close (Escape)",
+      "replace": "Replace...",
+      "replaceCurrent": "Replace Current Match",
+      "replaceAll": "Replace All Matches",
+      "replaceBtn": "Replace",
+      "all": "All"
+    },
     "refreshLabel": "Refresh",
     "zoomInLabel": "Zoom In",
     "zoomOutLabel": "Zoom Out",
@@ -1766,6 +1783,25 @@
     "copiedToClipboard": "Copied to clipboard",
     "copyFailed": "Copy failed",
     "noContentToCopy": "No content to copy",
-    "rerun": "Rerun"
+    "rerun": "Rerun",
+    "processList": {
+      "title": "Process List",
+      "user": "User",
+      "host": "Host",
+      "database": "Database",
+      "command": "Command",
+      "time": "Time (s)",
+      "state": "State",
+      "info": "SQL Info",
+      "action": "Action",
+      "kill": "Kill",
+      "autoRefresh": "Auto Refresh (5s)",
+      "noProcesses": "No active processes",
+      "confirmKillTitle": "Kill Process",
+      "confirmKillContent": "Are you sure you want to kill process #{{id}} (user: {{user}})? Query: {{query}}",
+      "killSuccess": "Process #{{id}} killed successfully",
+      "killFailed": "Failed to kill process",
+      "fetchFailed": "Failed to fetch process list"
+    }
   }
 }

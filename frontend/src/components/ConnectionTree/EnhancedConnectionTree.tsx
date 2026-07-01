@@ -107,6 +107,8 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       setUserManagementTarget: dialogs.setUserManagementTarget,
       setUserManagementOpen: dialogs.setUserManagementOpen,
       setSchemaCompareOpen: dialogs.setSchemaCompareOpen,
+      setProcessListOpen: dialogs.setProcessListOpen,
+      setProcessListTarget: dialogs.setProcessListTarget,
       setCreateDatabaseTarget: dialogs.setCreateDatabaseTarget,
       setCreateDatabaseOpen: dialogs.setCreateDatabaseOpen,
       setPropertiesType: dialogs.setPropertiesType,
@@ -297,6 +299,8 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
         userManagementOpen={dialogs.userManagementOpen} userManagementTarget={dialogs.userManagementTarget}
         onUserManagementClose={() => { dialogs.setUserManagementOpen(false); dialogs.setUserManagementTarget(null); }}
         schemaCompareOpen={dialogs.schemaCompareOpen} onSchemaCompareClose={() => dialogs.setSchemaCompareOpen(false)}
+        processListOpen={dialogs.processListOpen} processListTarget={dialogs.processListTarget}
+        onProcessListClose={() => { dialogs.setProcessListOpen(false); dialogs.setProcessListTarget(null); }}
         createDatabaseOpen={dialogs.createDatabaseOpen} createDatabaseTarget={dialogs.createDatabaseTarget}
         onCreateDatabaseCancel={() => { dialogs.setCreateDatabaseOpen(false); dialogs.setCreateDatabaseTarget(null); }}
         onCreateDatabaseSuccess={() => { dialogs.setCreateDatabaseOpen(false); if (dialogs.createDatabaseTarget?.connId) onLoadDatabases?.(dialogs.createDatabaseTarget.connId); dialogs.setCreateDatabaseTarget(null); }}

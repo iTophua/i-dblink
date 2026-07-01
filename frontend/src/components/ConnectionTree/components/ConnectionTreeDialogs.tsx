@@ -8,6 +8,7 @@ import { BackupRestoreDialog } from '../../BackupRestoreDialog';
 import { UserManagementDialog } from '../../UserManagementDialog';
 import { SchemaCompareDialog } from '../../SchemaCompareDialog';
 import { CreateDatabaseDialog } from '../CreateDatabaseDialog';
+import { ProcessListPanel } from '../../ProcessListPanel';
 
 interface ConnectionTreeDialogsProps {
   // GroupDialog (always shown)
@@ -53,6 +54,11 @@ interface ConnectionTreeDialogsProps {
   schemaCompareOpen?: boolean;
   onSchemaCompareClose?: () => void;
 
+  // ProcessListPanel (optional)
+  processListOpen?: boolean;
+  processListTarget?: { connId: string; database?: string } | null;
+  onProcessListClose?: () => void;
+
   // CreateDatabaseDialog (optional)
   createDatabaseOpen?: boolean;
   createDatabaseTarget?: { connId: string; dbType?: string } | null;
@@ -93,6 +99,9 @@ export const ConnectionTreeDialogs: React.FC<ConnectionTreeDialogsProps> = ({
   onUserManagementClose = noop,
   schemaCompareOpen = false,
   onSchemaCompareClose = noop,
+  processListOpen = false,
+  processListTarget = null,
+  onProcessListClose = noop,
   createDatabaseOpen = false,
   createDatabaseTarget = null,
   onCreateDatabaseCancel = noop,
@@ -160,6 +169,13 @@ export const ConnectionTreeDialogs: React.FC<ConnectionTreeDialogsProps> = ({
         open={schemaCompareOpen}
         connections={connections}
         onClose={onSchemaCompareClose}
+      />
+
+      <ProcessListPanel
+        open={processListOpen}
+        connectionId={processListTarget?.connId || ''}
+        database={processListTarget?.database}
+        onClose={onProcessListClose}
       />
 
       <CreateDatabaseDialog

@@ -5,6 +5,7 @@ import { useDatabase } from '../../../hooks/useApi';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { extractParams } from '../../../utils/sqlParams';
 import { splitSqlStatements } from '../../../utils/sqlUtils';
+import { getDialect } from '../../../utils/sqlDialects';
 import type { QueryResult, DatabaseType } from '../../../types/api';
 
 interface QueryResultWithTiming extends QueryResult {
@@ -262,8 +263,22 @@ export function useQueryExecution({
           setActiveTab('messages');
         }
       } else {
-        // 单语句执行（原有逻辑）
-        const queryResult = await executeQueryApi(connectionId, sqlToExecute, database, abortControllerRef.current?.signal);
+        // 单语句执行（含连接断开自动重试）
+        const isConnectionError = (msg: string) => {
+          const lower = msg.toLowerCase();
+          return lower.includes('connection') || lower.includes('closed') ||
+            lower.includes('eof') || lower.includes('broken pipe') ||
+            lower.includes('reset by peer') || lower.includes('bad connection');
+        };
+
+        let queryResult = await executeQueryApi(connectionId, sqlToExecute, database, abortControllerRef.current?.signal);
+        // 如果查询因连接问题失败，等待 1 秒后重试一次
+        if (queryResult.error && isConnectionError(queryResult.error)) {
+          message.info(t('common.connectionLostReconnecting', { defaultValue: 'Connection lost, attempting to reconnect...' }));
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          queryResult = await executeQueryApi(connectionId, sqlToExecute, database, abortControllerRef.current?.signal);
+        }
+
         const executionTime = queryResult.execution_time_ms ?? 0;
         const totalTime = Date.now() - requestStartTimeRef.current;
 
@@ -366,6 +381,11 @@ export function useQueryExecution({
       return;
     }
 
+    if (!database) {
+      message.warning(t('common.pleaseSelectADatabase'));
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -374,15 +394,23 @@ export function useQueryExecution({
         trimmedSQL = trimmedSQL.slice(0, -1).trim();
       }
 
-      const explainSQL = `EXPLAIN ${trimmedSQL}`;
+      const dialect = getDialect(dbType);
+      const explainSQL = dialect.buildExplainQuery(trimmedSQL);
       const result = await executeQueryApi(connectionId, explainSQL, database);
 
       if (result.error) {
         message.error(`${t('common.failedToGenerateExplainPlan')}: ${result.error}`);
       } else {
+        // SQL Server SHOWPLAN_XML returns plan as XML in result rows;
+        // if no rows, the plan may be in messages — show a notice.
+        if (result.rows.length === 0) {
+          message.info(t('common.explainPlanGenerated') + ': ' + (t('common.noExplainPlanData') || 'No tabular data returned (XML plan may be in messages).'));
+        }
         setExplainPlan(result.rows as unknown[]);
         setActiveTab('explain');
-        message.success(t('common.explainPlanGenerated'));
+        if (result.rows.length > 0) {
+          message.success(t('common.explainPlanGenerated'));
+        }
       }
     } catch (error: any) {
       console.error('Explain plan error:', error);
@@ -390,7 +418,7 @@ export function useQueryExecution({
     } finally {
       setLoading(false);
     }
-  }, [sql, connectionId, database, executeQueryApi]);
+  }, [sql, connectionId, database, dbType, executeQueryApi]);
 
   // Cleanup on unmount
   const cleanup = useCallback(() => {

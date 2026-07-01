@@ -109,6 +109,10 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 
 	// 批量导入
 	mux.HandleFunc("POST /batch-import", recoverMiddleware(h.BatchImport))
+
+	// 进程管理
+	mux.HandleFunc("POST /process-list", recoverMiddleware(h.GetProcessList))
+	mux.HandleFunc("POST /kill-process", recoverMiddleware(h.KillProcess))
 }
 
 // Handler HTTP 处理器

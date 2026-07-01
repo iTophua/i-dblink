@@ -45,7 +45,9 @@ function extractTable(sql: string): string | null {
 // ── 导出工具 ──
 function downloadBlob(content: string, name: string, type: string) {
   const blob = new Blob([content], { type }); const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  const url = URL.createObjectURL(blob);
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 function exportToCsv(cols: string[], rows: unknown[][]): string {
   const esc = (v: unknown) => { const s = v == null ? '' : String(v); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -492,6 +494,7 @@ export function ResultGrid({
             });
           }}
           editable={isEditable}
+          enableFindReplace
         />
       </div>
 
@@ -531,16 +534,228 @@ export function ResultGrid({
 }
 
 // ── ExplainPlanGrid ──
+// Color-coding helpers for explain plan rows (MySQL `type` column values)
+const ACCESS_TYPE_COLORS: Record<string, { bg: string; fg: string; level: 'good' | 'moderate' | 'bad' }> = {
+  system:   { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
+  const:    { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
+  eq_ref:   { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
+  ref:      { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
+  range:    { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
+  index:    { bg: '#fff8c5', fg: '#9a6700', level: 'moderate' },
+  ALL:      { bg: '#ffebe9', fg: '#cf222e', level: 'bad' },
+  fulltext: { bg: '#fff8c5', fg: '#9a6700', level: 'moderate' },
+  ref_or_null: { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
+  index_merge: { bg: '#fff8c5', fg: '#9a6700', level: 'moderate' },
+  unique_subquery: { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
+  index_subquery:  { bg: '#fff8c5', fg: '#9a6700', level: 'moderate' },
+};
+
+function getRowColor(data: Record<string, unknown>): { bg: string; fg: string } | null {
+  // MySQL: check `type` column (access type)
+  const accessType = data.type ?? data.access_type;
+  if (typeof accessType === 'string') {
+    const match = ACCESS_TYPE_COLORS[accessType];
+    if (match) return { bg: match.bg, fg: match.fg };
+  }
+
+  // Check `Extra` column for warning signals
+  const extra = typeof data.Extra === 'string' ? data.Extra : '';
+  if (/Using filesort|Using temporary/i.test(extra)) {
+    return { bg: '#ffebe9', fg: '#cf222e' };
+  }
+
+  // PostgreSQL: color based on cost (if present)
+  if (typeof data['Total Cost'] === 'number') {
+    const cost = data['Total Cost'] as number;
+    if (cost < 100) return { bg: '#e6ffed', fg: '#1a7f37' };
+    if (cost < 10000) return { bg: '#fff8c5', fg: '#9a6700' };
+    return { bg: '#ffebe9', fg: '#cf222e' };
+  }
+
+  return null;
+}
+
+// Detect MySQL-style explain output (has `id`, `select_type` columns)
+function isMySQLExplain(columns: string[]): boolean {
+  return columns.includes('id') || columns.includes('select_type');
+}
+
+// Detect PostgreSQL explain output (has `QUERY PLAN` or `query plan` column)
+function isPGExplain(columns: string[]): boolean {
+  return columns.some(c => c.toLowerCase().includes('query plan'));
+}
+
+// Compute indent level from MySQL row data
+function getMySQLIndent(row: Record<string, unknown>): number {
+  const id = row.id;
+  if (typeof id === 'number') return Math.max(0, id - 1);
+  return 0;
+}
+
+// Compute indent level from PG text (count leading spaces / arrows)
+function getPGIndent(text: string): number {
+  // Count leading spaces or arrow markers (→)
+  const match = text.match(/^(\s*(?:->\s*)*)/);
+  if (!match) return 0;
+  // Count the number of "-> " markers as indent levels
+  const arrows = (match[1].match(/->/g) || []).length;
+  return arrows;
+}
+
+// Dark-mode aware color overrides
+function adjustColor(color: string, isDark: boolean): string {
+  if (!isDark) return color;
+  // Simple dark-mode adjustments
+  const darkMap: Record<string, string> = {
+    '#e6ffed': '#1a3a2a',
+    '#fff8c5': '#3a3520',
+    '#ffebe9': '#3a2020',
+    '#1a7f37': '#56d364',
+    '#9a6700': '#e3b341',
+    '#cf222e': '#f85149',
+  };
+  return darkMap[color] || color;
+}
+
 export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean }) {
   const { t } = useTranslation();
-  if (!data || data.length === 0) return <Empty description={t('common.noExplainPlanData')} />;
-  const colNames = Object.keys(data[0]);
-  const columns = colNames.map((n) => ({ id: n, title: n, width: 150, grow: 1 }));
-  const rows = data.map((r) => { const o: Record<string, unknown> = {}; colNames.forEach((c) => { o[c] = r[c]; }); return o; });
-  const getCellContent = ([col, row]: readonly [number, number]) => ({
-    kind: 'text' as 'text', data: rows[row]?.[colNames[col]] == null ? '' : String(rows[row]?.[colNames[col]]),
-    displayData: rows[row]?.[colNames[col]] == null ? 'NULL' : String(rows[row]?.[colNames[col]]),
-    allowOverlay: false, readonly: true,
-  } as any);
-  return <DataEditor columns={columns} rows={rows.length} getCellContent={getCellContent} headerHeight={32} rowHeight={28} rowMarkers="number" smoothScrollX smoothScrollY width="100%" height="100%" />;
+
+  if (!data || data.length === 0) {
+    return <Empty description={t('common.noExplainPlanData')} />;
+  }
+
+  const columns = Object.keys(data[0]);
+  const isMySQL = isMySQLExplain(columns);
+  const isPG = isPGExplain(columns);
+
+  // For PG explain, show a single-column text view with indentation
+  if (isPG && columns.length === 1) {
+    const pgCol = columns[0];
+    return (
+      <div style={{ height: '100%', overflow: 'auto', fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace", fontSize: 12 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'var(--background-toolbar)', position: 'sticky', top: 0, zIndex: 1 }}>
+              <th style={{ textAlign: 'left', padding: '6px 12px', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 11 }}>{pgCol}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row, i) => {
+              const text = String(row[pgCol] ?? '');
+              const indent = getPGIndent(text);
+              const cleanText = text.replace(/^\s*(?:->\s*)*/, '');
+              const isPlanLine = /^\s*->/.test(text);
+              const bg = isPlanLine ? (i % 2 === 0 ? 'var(--background-elevated)' : 'transparent') : 'transparent';
+              return (
+                <tr key={i} style={{ background: bg }}>
+                  <td style={{
+                    padding: '3px 12px 3px ' + (12 + indent * 20) + 'px',
+                    borderBottom: '1px solid var(--border-subtle, #f0f0f0)',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    color: isPlanLine ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  }}>
+                    {isPlanLine && <span style={{ color: 'var(--color-primary)', marginRight: 4, userSelect: 'none' }}>→</span>}
+                    {cleanText}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // MySQL / generic table-style explain
+  // Prioritize important columns first, then the rest
+  const priorityCols = ['id', 'select_type', 'table', 'type', 'possible_keys', 'key', 'key_len', 'ref', 'rows', 'filtered', 'Extra'];
+  const orderedCols = isMySQL
+    ? [...priorityCols.filter(c => columns.includes(c)), ...columns.filter(c => !priorityCols.includes(c))]
+    : columns;
+
+  return (
+    <div style={{ height: '100%', overflow: 'auto', fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace", fontSize: 12 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ background: 'var(--background-toolbar)', position: 'sticky', top: 0, zIndex: 1 }}>
+            {orderedCols.map(col => (
+              <th key={col} style={{
+                textAlign: 'left',
+                padding: '6px 10px',
+                borderBottom: '1px solid var(--border)',
+                fontWeight: 600,
+                fontSize: 11,
+                whiteSpace: 'nowrap',
+                color: 'var(--text-secondary)',
+                borderRight: '1px solid var(--border-subtle, #f0f0f0)',
+              }}>
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, rowIdx) => {
+            const color = getRowColor(row as Record<string, unknown>);
+            const indent = isMySQL ? getMySQLIndent(row as Record<string, unknown>) : 0;
+            const bg = color
+              ? adjustColor(color.bg, isDark)
+              : (rowIdx % 2 === 0 ? 'transparent' : 'var(--background-elevated)');
+
+            return (
+              <tr key={rowIdx} style={{ background: bg }}>
+                {orderedCols.map((col, colIdx) => {
+                  const val = row[col];
+                  const display = val == null ? 'NULL' : String(val);
+                  const isNull = val == null;
+                  const isIndentCol = isMySQL && colIdx === 0; // indent on first column
+                  const isTypeCol = col === 'type' || col === 'access_type';
+                  const isExtraCol = col === 'Extra';
+                  const isKeyCol = col === 'key';
+
+                  // Highlight bad signals in Extra
+                  let cellColor: string | undefined;
+                  if (isTypeCol && color) {
+                    cellColor = adjustColor(color.fg, isDark);
+                  }
+                  if (isExtraCol && /Using filesort|Using temporary/i.test(display)) {
+                    cellColor = adjustColor('#cf222e', isDark);
+                  }
+                  if (isKeyCol && display === 'NULL') {
+                    cellColor = adjustColor('#cf222e', isDark);
+                  }
+
+                  return (
+                    <td key={col} style={{
+                      padding: '4px 10px',
+                      borderBottom: '1px solid var(--border-subtle, #f0f0f0)',
+                      borderRight: '1px solid var(--border-subtle, #f0f0f0)',
+                      whiteSpace: 'nowrap',
+                      color: isNull ? 'var(--text-tertiary, #999)' : cellColor,
+                      fontStyle: isNull ? 'italic' : 'normal',
+                      paddingLeft: isIndentCol ? (10 + indent * 24) + 'px' : undefined,
+                    }}>
+                      {isIndentCol && indent > 0 && (
+                        <span style={{
+                          display: 'inline-block',
+                          width: indent * 24,
+                          marginRight: 4,
+                          userSelect: 'none',
+                          color: 'var(--text-tertiary, #999)',
+                        }}>
+                          {'└' + '─'.repeat(Math.max(0, indent - 1))}
+                        </span>
+                      )}
+                      {display}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }

@@ -368,10 +368,18 @@ func (a *App) DeleteGroup(id string) error {
 	return a.storage.DeleteGroup(id)
 }
 
-// ensureConnected 确保指定连接已建立
+// ensureConnected 确保指定连接已建立（含自动 ping + 重连）
 func (a *App) ensureConnected(connectionID string) error {
 	if a.isActiveConn(connectionID) {
-		return nil
+		// 连接标记为活跃，但需验证实际连通性
+		pingErr := a.dbManager.Ping(connectionID)
+		if pingErr == nil {
+			return nil
+		}
+		// Ping 失败，尝试断开后重连
+		runtime.LogWarningf(a.ctx, "connection %s ping failed, attempting reconnect: %v", connectionID, pingErr)
+		_ = a.dbManager.Disconnect(connectionID)
+		a.setActiveConn(connectionID, false)
 	}
 	return a.ConnectDatabase(connectionID)
 }

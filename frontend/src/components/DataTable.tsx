@@ -1084,6 +1084,7 @@ export const DataTable = memo(function DataTable({
             onPaste={handlePaste}
             onHeaderContextMenu={handleHeaderContextMenu}
             headerHeight={36} rowHeight={24} editable={true}
+            enableFindReplace
           />
         ) : hasLoaded ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

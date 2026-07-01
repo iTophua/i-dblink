@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, Form } from 'antd';
 import { useConnections, useDatabase, useGroups } from '../../../hooks/useApi';
@@ -9,6 +9,7 @@ import type { ConnectionFormData } from '../../ConnectionDialog';
 import type { Connection } from '../../../stores/appStore';
 import { useAppStore } from '../../../stores/appStore';
 import { api } from '../../../api';
+import { EventsOn } from '../../../../wailsjs/runtime/runtime';
 
 interface UseConnectionManagerParams {
   tabPanelRef: React.RefObject<TabPanelRef | null>;
@@ -50,6 +51,15 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
   );
   const [passwordForm] = Form.useForm();
   const closingDbModalRef = useRef(false);
+
+  // 监听连接状态变化事件（后端发送）
+  useEffect(() => {
+    const cleanup = EventsOn('connection-status-changed', (data: { connectionId: string; status: string }) => {
+      const { updateConnection } = useAppStore.getState();
+      updateConnection(data.connectionId, { status: data.status as any });
+    });
+    return cleanup;
+  }, []);
 
   const {
     connections,

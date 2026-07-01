@@ -20,6 +20,7 @@ import DataEditor, {
 import '@glideapps/glide-data-grid/dist/index.css';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { buildGlideTheme } from './glide-theme';
+import { FindReplaceBar, type FindMatch, type FindOptions } from './FindReplaceBar';
 
 export type GlideRow = Record<string, unknown>;
 
@@ -51,6 +52,11 @@ export interface GlideDataTableProps {
   rowHeight?: number;
   headerHeight?: number;
   editable?: boolean;
+  /** 启用查找替换功能（Ctrl+F / Cmd+F 打开查找栏） */
+  enableFindReplace?: boolean;
+  /** 外部控制查找栏显隐 */
+  findReplaceVisible?: boolean;
+  onFindReplaceVisibleChange?: (visible: boolean) => void;
 }
 
 const FILLER_COL_ID = '__filler__';
@@ -262,6 +268,9 @@ export function GlideDataTable({
   rowHeight = 24,
   headerHeight = 28,
   editable = false,
+  enableFindReplace = false,
+  findReplaceVisible: findReplaceVisibleProp,
+  onFindReplaceVisibleChange,
 }: GlideDataTableProps) {
   const tc = useThemeColors();
   const isDark = tc.isDark;
@@ -319,6 +328,124 @@ export function GlideDataTable({
     liveRangeEditFn: null,
     wasLiveRangeEdit: false,
   });
+
+  // ===== Find/Replace =====
+  const [findInternalVisible, setFindInternalVisible] = useState(false);
+  const findVisible = findReplaceVisibleProp ?? findInternalVisible;
+  const setFindVisible = useCallback((v: boolean) => {
+    if (onFindReplaceVisibleChange) onFindReplaceVisibleChange(v);
+    else setFindInternalVisible(v);
+  }, [onFindReplaceVisibleChange]);
+
+  const [findMatches, setFindMatches] = useState<FindMatch[]>([]);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const findOptionsRef = useRef<FindOptions>({ caseSensitive: false, useRegex: false, wholeWord: false });
+  const findTextRef = useRef('');
+  const findDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Ctrl+F / Cmd+F keyboard handler
+  useEffect(() => {
+    if (!enableFindReplace) return;
+    const el = wrapperRef.current;
+    if (!el) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        e.stopPropagation();
+        setFindVisible(true);
+      }
+    };
+    el.addEventListener('keydown', handler, { capture: true });
+    return () => el.removeEventListener('keydown', handler, { capture: true });
+  }, [enableFindReplace, setFindVisible]);
+
+  // Scan rows/cells for matches (debounced 200ms)
+  const doSearch = useCallback((searchText: string, options: FindOptions) => {
+    if (!searchText) {
+      setFindMatches([]);
+      setCurrentMatchIndex(0);
+      return;
+    }
+    const visibleCols = gridColumns.filter((c) => c.id !== FILLER_COL_ID);
+    const results: FindMatch[] = [];
+    try {
+      let regex: RegExp | null = null;
+      if (options.useRegex) {
+        regex = new RegExp(searchText, options.caseSensitive ? '' : 'i');
+      } else {
+        const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = options.wholeWord ? `\\b${escaped}\\b` : escaped;
+        regex = new RegExp(pattern, options.caseSensitive ? '' : 'i');
+      }
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        for (let c = 0; c < visibleCols.length; c++) {
+          const col = visibleCols[c];
+          if (!col.id) continue;
+          const value = row[col.id];
+          const str = value == null ? '' : String(value);
+          if (regex.test(str)) {
+            // Map visible col index back to gridColumns index (accounting for filler)
+            const gridColIdx = gridColumns.findIndex((gc) => gc.id === col.id);
+            if (gridColIdx >= 0) {
+              results.push({ row: r, col: gridColIdx });
+            }
+          }
+        }
+      }
+    } catch {
+      // Invalid regex, show no results
+    }
+    setFindMatches(results);
+    setCurrentMatchIndex(results.length > 0 ? 0 : -1);
+    // Scroll to first match
+    if (results.length > 0) {
+      gridRef.current?.scrollTo(results[0].col, results[0].row, 'both');
+    }
+  }, [rows, gridColumns]);
+
+  const handleSearchChange = useCallback((searchText: string, options: FindOptions) => {
+    findTextRef.current = searchText;
+    findOptionsRef.current = options;
+    if (findDebounceRef.current) clearTimeout(findDebounceRef.current);
+    if (!searchText) {
+      doSearch(searchText, options);
+      return;
+    }
+    findDebounceRef.current = setTimeout(() => {
+      doSearch(searchText, options);
+    }, 200);
+  }, [doSearch]);
+
+  const handleFindNavigate = useCallback((direction: 'next' | 'prev') => {
+    if (findMatches.length === 0) return;
+    let nextIdx: number;
+    if (direction === 'next') {
+      nextIdx = (currentMatchIndex + 1) % findMatches.length;
+    } else {
+      nextIdx = (currentMatchIndex - 1 + findMatches.length) % findMatches.length;
+    }
+    setCurrentMatchIndex(nextIdx);
+    const match = findMatches[nextIdx];
+    gridRef.current?.scrollTo(match.col, match.row, 'both');
+  }, [findMatches, currentMatchIndex]);
+
+  const handleFindClose = useCallback(() => {
+    setFindVisible(false);
+    setFindMatches([]);
+    setCurrentMatchIndex(0);
+    findTextRef.current = '';
+  }, [setFindVisible]);
+
+  // Build a Set of matched cells for fast lookup in drawCell
+  const matchSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const m of findMatches) {
+      s.add(`${m.col},${m.row}`);
+    }
+    return s;
+  }, [findMatches]);
 
   // 自动滚动到指定行
   useEffect(() => {
@@ -411,6 +538,17 @@ export function GlideDataTable({
       else if (status === 'modified') { ctx.fillStyle = hexWithAlpha(tc.primary, 0.1); ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
       if (isCellModified?.(rowItem, gridCol.id)) { ctx.fillStyle = hexWithAlpha(tc.primary, 0.06); ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
 
+      // Find/Replace match highlight
+      const isCurrentMatch = findMatches.length > 0 && currentMatchIndex >= 0 && findMatches[currentMatchIndex]?.col === col && findMatches[currentMatchIndex]?.row === drawRow;
+      const isAnyMatch = matchSet.has(`${col},${drawRow}`);
+      if (isCurrentMatch) {
+        ctx.fillStyle = hexWithAlpha(tc.warning, 0.35);
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      } else if (isAnyMatch) {
+        ctx.fillStyle = hexWithAlpha(tc.warning, 0.15);
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      }
+
       // 删除
       if (status === 'deleted') {
         ctx.fillStyle = t.textLight; ctx.font = '12px sans-serif';
@@ -436,7 +574,7 @@ export function GlideDataTable({
       // 文本
       ctx.fillStyle = t.textDark; ctx.font = '12px sans-serif'; ctx.fillText(display, rect.x + 8, centerY);
     },
-    [gridColumns, rows, rowStatus, isCellModified, isDark, getRowColor]
+    [gridColumns, rows, rowStatus, isCellModified, isDark, getRowColor, matchSet, findMatches, currentMatchIndex]
   );
 
   // ===== 选择变化 =====
@@ -656,7 +794,18 @@ export function GlideDataTable({
 
   return (
     <RangeEditContext.Provider value={rangeEditRef}>
-      <div style={{ position: 'absolute', inset: 0 }} onPointerDown={handleWrapperPointerDown}>
+      <div ref={wrapperRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }} onPointerDown={handleWrapperPointerDown}>
+        {enableFindReplace && (
+          <FindReplaceBar
+            visible={findVisible}
+            onClose={handleFindClose}
+            matches={findMatches}
+            currentMatchIndex={currentMatchIndex}
+            onNavigate={handleFindNavigate}
+            onSearchChange={handleSearchChange}
+          />
+        )}
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <DataEditor
           ref={gridRef}
           width="100%"
@@ -689,11 +838,12 @@ export function GlideDataTable({
           smoothScrollX
           smoothScrollY
           rangeSelect="rect"
-          keybindings={{ search: true, copy: true, paste: true, selectAll: true }}
+          keybindings={{ search: !enableFindReplace, copy: true, paste: true, selectAll: true }}
           getCellsForSelection={true}
           onPaste={onPaste}
           provideEditor={provideEditor}
         />
+        </div>
       </div>
     </RangeEditContext.Provider>
   );

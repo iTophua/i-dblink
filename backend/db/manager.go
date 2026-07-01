@@ -151,6 +151,19 @@ func (m *Manager) Disconnect(connectionID string) error {
 	return info.db.Close()
 }
 
+// Ping 检测数据库连接是否存活
+func (m *Manager) Ping(connID string) error {
+	m.mu.RLock()
+	info, ok := m.pools[connID]
+	m.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("connection %s not found", connID)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return info.db.PingContext(ctx)
+}
+
 // Get 获取已存在的连接池
 func (m *Manager) Get(connectionID string) (*sql.DB, error) {
 	m.mu.RLock()

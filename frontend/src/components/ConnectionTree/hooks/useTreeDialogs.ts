@@ -55,6 +55,13 @@ export function useTreeDialogs(
     dbType?: string;
   } | null>(null);
 
+  // Process list dialog
+  const [processListOpen, setProcessListOpen] = useState(false);
+  const [processListTarget, setProcessListTarget] = useState<{
+    connId: string;
+    database?: string;
+  } | null>(null);
+
   // Schema compare dialog
   const [schemaCompareOpen, setSchemaCompareOpen] = useState(false);
 
@@ -140,6 +147,12 @@ export function useTreeDialogs(
     setCreateDatabaseOpen,
     createDatabaseTarget,
     setCreateDatabaseTarget,
+
+    // Process list dialog
+    processListOpen,
+    setProcessListOpen,
+    processListTarget,
+    setProcessListTarget,
 
     // Schema compare dialog
     schemaCompareOpen,

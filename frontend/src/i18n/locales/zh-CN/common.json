@@ -53,6 +53,23 @@
     "deleteLabel": "删除",
     "selectAllLabel": "全选",
     "findReplace": "查找/替换",
+    "findReplaceBar": {
+      "noResults": "无结果",
+      "find": "查找...",
+      "previous": "上一个 (Shift+Enter)",
+      "next": "下一个 (Enter)",
+      "caseSensitive": "区分大小写",
+      "useRegex": "使用正则",
+      "wholeWord": "全词匹配",
+      "hideReplace": "隐藏替换",
+      "showReplace": "显示替换",
+      "close": "关闭 (Escape)",
+      "replace": "替换...",
+      "replaceCurrent": "替换当前匹配",
+      "replaceAll": "替换全部匹配",
+      "replaceBtn": "替换",
+      "all": "全部"
+    },
     "zoomIn": "放大",
     "zoomOut": "缩小",
     "actualSize": "实际大小",
@@ -1778,6 +1795,25 @@
     "copiedToClipboard": "已复制到剪贴板",
     "copyFailed": "复制失败",
     "noContentToCopy": "没有可复制的内容",
-    "rerun": "重跑"
+    "rerun": "重跑",
+    "processList": {
+      "title": "进程列表",
+      "user": "用户",
+      "host": "主机",
+      "database": "数据库",
+      "command": "命令",
+      "time": "时间 (秒)",
+      "state": "状态",
+      "info": "SQL 信息",
+      "action": "操作",
+      "kill": "终止",
+      "autoRefresh": "自动刷新 (5秒)",
+      "noProcesses": "暂无活跃进程",
+      "confirmKillTitle": "终止进程",
+      "confirmKillContent": "确定要终止进程 #{{id}} (用户: {{user}}) 吗？查询: {{query}}",
+      "killSuccess": "进程 #{{id}} 已终止",
+      "killFailed": "终止进程失败",
+      "fetchFailed": "获取进程列表失败"
+    }
   }
 }

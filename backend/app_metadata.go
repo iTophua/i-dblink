@@ -308,3 +308,53 @@ func (a *App) GetRoutines(connectionID string, database *string) (models.Routine
 	}
 	return result, nil
 }
+
+// GetProcessList 获取数据库进程列表
+func (a *App) GetProcessList(connectionID string, database *string) ([]api.ProcessInfo, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return nil, err
+	}
+
+	req := api.ProcessListRequest{ConnectionID: connectionID, Database: database}
+	respBytes, err := callHandlerRaw(a.handler.GetProcessList, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var errResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
+		return nil, fmt.Errorf("%s", errResp.Error)
+	}
+
+	var result []api.ProcessInfo
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse process list response: %w", err)
+	}
+	return result, nil
+}
+
+// KillProcess 终止数据库进程
+func (a *App) KillProcess(connectionID string, database string, processID string, serial string) (models.GenericResponse, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return models.GenericResponse{Error: err.Error()}, err
+	}
+
+	req := api.KillProcessRequest{
+		ConnectionID: connectionID,
+		Database:     database,
+		ProcessID:    processID,
+		Serial:       serial,
+	}
+	respBytes, err := callHandler(a.handler.KillProcess, req)
+	if err != nil {
+		return models.GenericResponse{Error: err.Error()}, err
+	}
+
+	var result models.GenericResponse
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return models.GenericResponse{}, err
+	}
+	return result, nil
+}
