@@ -7,6 +7,7 @@ import { extractParams } from '../../../utils/sqlParams';
 import { splitSqlStatements } from '../../../utils/sqlUtils';
 import { getDialect } from '../../../utils/sqlDialects';
 import type { QueryResult, DatabaseType } from '../../../types/api';
+import { getErrorMessage } from '../../../utils/getErrorMessage';
 
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;
@@ -216,12 +217,12 @@ export function useQueryExecution({
                 });
               }
               return { ...queryResult, executionTime };
-            } catch (error: any) {
+            } catch (error: unknown) {
               // 用户主动停止查询时静默跳过（不计为错误）
               if (error instanceof DOMException && error.name === 'AbortError') {
                 return null;
               }
-              msgs.push(t('common.statementFailed', { index: i + index + 1, error: error.message || error }));
+              msgs.push(t('common.statementFailed', { index: i + index + 1, error: getErrorMessage(error) }));
               totalErrors++;
               window.__sqlHistoryApi?.addHistory({
                 sql: stmt,
@@ -332,7 +333,7 @@ export function useQueryExecution({
           });
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 检查是否是取消操作
       if (error instanceof DOMException && error.name === 'AbortError') {
         console.log('Query was aborted');
@@ -341,10 +342,10 @@ export function useQueryExecution({
       }
       
       console.error('SQL execution error:', error);
-      setMessages([`✗ ${t('common.error')}: ${error.message || error}`]);
+      setMessages([`✗ ${t('common.error')}: ${getErrorMessage(error)}`]);
       setActiveTab('messages');
-      message.error(`${t('common.sqlExecutionFailed')}: ${error.message || error}`);
-      highlightErrorRef.current(error.message || error);
+      message.error(`${t('common.sqlExecutionFailed')}: ${getErrorMessage(error)}`);
+      highlightErrorRef.current(getErrorMessage(error));
     } finally {
       setLoading(false);
       abortControllerRef.current = null;
@@ -412,9 +413,9 @@ export function useQueryExecution({
           message.success(t('common.explainPlanGenerated'));
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Explain plan error:', error);
-      message.error(`${t('common.failedToGenerateExplainPlan')}: ${error.message || error}`);
+      message.error(`${t('common.failedToGenerateExplainPlan')}: ${getErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }

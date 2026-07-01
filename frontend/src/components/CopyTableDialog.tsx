@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Form, Input, Radio, message, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface CopyTableDialogProps {
   open: boolean;
@@ -102,8 +103,8 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
 
       message.success(`${t('common.tableCopied')}: "${sourceTable}" → "${targetTable}"`);
       onSuccess();
-    } catch (err: any) {
-      message.error(`${t('common.copyTable.copyFailed')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.copyTable.copyFailed')}: ${getErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }

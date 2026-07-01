@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { api } from '../api';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 const { Text } = Typography;
 
@@ -51,8 +52,8 @@ export const ProcessListPanel: React.FC<ProcessListPanelProps> = ({
     try {
       const result = await api.getProcessList(connectionId, database);
       setProcesses(result || []);
-    } catch (err: any) {
-      message.error(t('common.processList.fetchFailed') + ': ' + (err.message || err));
+    } catch (err: unknown) {
+      message.error(t('common.processList.fetchFailed') + ': ' + getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -104,8 +105,8 @@ export const ProcessListPanel: React.FC<ProcessListPanelProps> = ({
             await api.killProcess(connectionId, database || '', record.id, record.serial || '');
             message.success(t('common.processList.killSuccess', { id: record.id }));
             fetchProcesses();
-          } catch (err: any) {
-            message.error(t('common.processList.killFailed') + ': ' + (err.message || err));
+          } catch (err: unknown) {
+            message.error(t('common.processList.killFailed') + ': ' + getErrorMessage(err));
           }
         },
       });

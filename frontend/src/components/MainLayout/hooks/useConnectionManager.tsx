@@ -258,9 +258,9 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
           [connectionId]: dbList,
         }));
         setExpandedKeys((prev) => [...prev, connectionId]);
-      } catch (err: any) {
+      } catch (err: unknown) {
         // 检查是否是密码错误，需要弹框输入密码
-        if (err?.code === 'PASSWORD_REQUIRED') {
+        if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'PASSWORD_REQUIRED') {
           const conn = connections.find((c) => c.id === connectionId);
           setPasswordDialogConn({
             id: connectionId,
@@ -610,7 +610,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
       if (conn.status !== 'connected') {
         try {
           await handleConnect(connectionId);
-        } catch (err: any) {
+        } catch (err: unknown) {
           // 连接失败时，handleConnect 会处理密码弹框，不需要再处理
           return;
         }

@@ -3,6 +3,7 @@ import { App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
 import { api } from '../../../api';
+import { getErrorMessage } from '../../../utils/getErrorMessage';
 
 export function useConnectionActions(
   connections: Connection[],
@@ -29,8 +30,8 @@ export function useConnectionActions(
         };
         await onSaveConnection(copyData);
         message.success(t('common.connectionConfigCopied'));
-      } catch (error: any) {
-        message.error(t('common.copyConnectionFailed') + ': ' + (error.message || error));
+      } catch (error: unknown) {
+        message.error(t('common.copyConnectionFailed') + ': ' + getErrorMessage(error));
       }
     },
     [onSaveConnection]
@@ -48,8 +49,8 @@ export function useConnectionActions(
         });
         const group = groups.find((g) => g.id === targetGroupId);
         message.success(t('common.movedToGroup', { name: group?.name || t('common.ungrouped') }));
-      } catch (error: any) {
-        message.error(t('common.moveFailed') + ': ' + (error.message || error));
+      } catch (error: unknown) {
+        message.error(t('common.moveFailed') + ': ' + getErrorMessage(error));
       }
     },
     [connections, groups, onSaveConnection]
@@ -81,8 +82,8 @@ export function useConnectionActions(
         await api.reorderConnections(orders);
         onRefreshConnections?.();
         message.success(t('common.connectionReordered'));
-      } catch (error: any) {
-        message.error(t('common.reorderFailed') + ': ' + (error.message || error));
+      } catch (error: unknown) {
+        message.error(t('common.reorderFailed') + ': ' + getErrorMessage(error));
       }
     },
     [connections, onRefreshConnections]

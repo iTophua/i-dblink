@@ -21,6 +21,7 @@ import {
 import React from 'react';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
 import { api } from '../../../api';
+import { getErrorMessage } from '../../../utils/getErrorMessage';
 
 interface DialogSetters {
   setGroupDialogOpen: (open: boolean) => void;
@@ -453,8 +454,8 @@ export function useContextMenuMenus(
                 await api.createSchema(connId, database, inputVal.trim());
                 message.success(t('common.schemaCreated', { name: inputVal.trim() }));
                 callbacks.onDatabaseRefresh?.(connId, database);
-              } catch (err: any) {
-                message.error(t('common.createSchemaFailed') + ': ' + (err.message || err));
+              } catch (err: unknown) {
+                message.error(t('common.createSchemaFailed') + ': ' + getErrorMessage(err));
               }
             },
           });
@@ -472,8 +473,8 @@ export function useContextMenuMenus(
                 await api.dropSchema(connId, database, schemaName);
                 message.success(t('common.schemaDropped', { name: schemaName }));
                 callbacks.onDatabaseRefresh?.(connId, database);
-              } catch (err: any) {
-                message.error(t('common.dropSchemaFailed') + ': ' + (err.message || err));
+              } catch (err: unknown) {
+                message.error(t('common.dropSchemaFailed') + ': ' + getErrorMessage(err));
               }
             },
           });
@@ -542,8 +543,8 @@ export function useContextMenuMenus(
                 await api.truncateTable(connId, tableName, database);
                 message.success(t('common.tableTruncated', { name: tableName }));
                 callbacks.onDatabaseRefresh?.(connId, database || '');
-              } catch (err: any) {
-                message.error(t('common.truncateTableFailed') + ': ' + err.message);
+              } catch (err: unknown) {
+                message.error(t('common.truncateTableFailed') + ': ' + getErrorMessage(err));
               }
             },
           });
@@ -561,8 +562,8 @@ export function useContextMenuMenus(
                 await api.dropTable(connId, tableName, database);
                 message.success(t('common.tableDeleted', { name: tableName }));
                 callbacks.onDatabaseRefresh?.(connId, database || '');
-              } catch (err: any) {
-                message.error(t('common.deleteTableFailed') + ': ' + err.message);
+              } catch (err: unknown) {
+                message.error(t('common.deleteTableFailed') + ': ' + getErrorMessage(err));
               }
             },
           });
@@ -570,22 +571,22 @@ export function useContextMenuMenus(
           try {
             await api.maintainTable(connId, tableName, 'optimize', database);
             message.success(t('common.tableOptimized', { name: tableName }));
-          } catch (err: any) {
-            message.error(t('common.optimizeTableFailed') + ': ' + err.message);
+          } catch (err: unknown) {
+            message.error(t('common.optimizeTableFailed') + ': ' + getErrorMessage(err));
           }
         } else if (key === 'analyze-table') {
           try {
             await api.maintainTable(connId, tableName, 'analyze', database);
             message.success(t('common.tableAnalyzed', { name: tableName }));
-          } catch (err: any) {
-            message.error(t('common.analyzeTableFailed') + ': ' + err.message);
+          } catch (err: unknown) {
+            message.error(t('common.analyzeTableFailed') + ': ' + getErrorMessage(err));
           }
         } else if (key === 'repair-table') {
           try {
             await api.maintainTable(connId, tableName, 'repair', database);
             message.success(t('common.tableRepaired', { name: tableName }));
-          } catch (err: any) {
-            message.error(t('common.repairTableFailed') + ': ' + err.message);
+          } catch (err: unknown) {
+            message.error(t('common.repairTableFailed') + ': ' + getErrorMessage(err));
           }
         }
       },
@@ -614,8 +615,8 @@ export function useContextMenuMenus(
           try {
             const ddl = await api.getTableDDL(connId, viewName, database);
             dialogSetters.setPropertiesContent(Array.isArray(ddl) ? ddl.join('\n') : ddl);
-          } catch (err: any) {
-            dialogSetters.setPropertiesContent(t('common.loadFailed') + ': ' + err.message);
+          } catch (err: unknown) {
+            dialogSetters.setPropertiesContent(t('common.loadFailed') + ': ' + getErrorMessage(err));
           } finally {
             dialogSetters.setPropertiesLoading(false);
           }
@@ -637,8 +638,8 @@ export function useContextMenuMenus(
                 await api.dropView(connId, viewName, database);
                 message.success(t('common.viewDeleted', { name: viewName }));
                 callbacks.onDatabaseRefresh?.(connId, database || '');
-              } catch (err: any) {
-                message.error(t('common.deleteViewFailed') + ': ' + err.message);
+              } catch (err: unknown) {
+                message.error(t('common.deleteViewFailed') + ': ' + getErrorMessage(err));
               }
             },
           });
@@ -665,8 +666,8 @@ export function useContextMenuMenus(
           try {
             const body = await api.getProcedureBody(connId, procedureName, database);
             dialogSetters.setPropertiesContent(body);
-          } catch (err: any) {
-            dialogSetters.setPropertiesContent(t('common.loadFailed') + ': ' + err.message);
+          } catch (err: unknown) {
+            dialogSetters.setPropertiesContent(t('common.loadFailed') + ': ' + getErrorMessage(err));
           } finally {
             dialogSetters.setPropertiesLoading(false);
           }
@@ -693,8 +694,8 @@ export function useContextMenuMenus(
           try {
             const body = await api.getFunctionBody(connId, functionName, database);
             dialogSetters.setPropertiesContent(body);
-          } catch (err: any) {
-            dialogSetters.setPropertiesContent(t('common.loadFailed') + ': ' + err.message);
+          } catch (err: unknown) {
+            dialogSetters.setPropertiesContent(t('common.loadFailed') + ': ' + getErrorMessage(err));
           } finally {
             dialogSetters.setPropertiesLoading(false);
           }

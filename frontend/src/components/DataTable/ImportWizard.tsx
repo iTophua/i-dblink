@@ -23,6 +23,7 @@ import i18n from '../../i18n';
 import { UploadOutlined, FileExcelOutlined, FileTextOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import type { ColumnInfo } from '../../types/api';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 interface ImportWizardProps {
   open: boolean;
@@ -95,9 +96,9 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
         message.success(
           `${t('common.parsedSuccessfully')} ${parsed.rows.length} ${t('common.rows')}`
         );
-      } catch (e: any) {
-        setParseError(e.message || t('common.fileParseFailed'));
-        message.error(e.message || t('common.fileParseFailed'));
+      } catch (e: unknown) {
+        setParseError(getErrorMessage(e) || t('common.fileParseFailed'));
+        message.error(getErrorMessage(e) || t('common.fileParseFailed'));
       }
       return false; // 阻止 Upload 自动上传
     },
@@ -121,8 +122,8 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       onClose();
       setCurrentStep(0);
       setParsedFile(null);
-    } catch (e: any) {
-      message.error(`${t('common.importExport.importFailed')}: ${e.message || e}`);
+    } catch (e: unknown) {
+      message.error(`${t('common.importExport.importFailed')}: ${getErrorMessage(e)}`);
     } finally {
       setImporting(false);
     }

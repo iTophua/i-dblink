@@ -6,6 +6,7 @@ import type { Connection } from '../../stores/appStore';
 import { useAppStore } from '../../stores/appStore';
 import { api } from '../../api';
 import { useMenuShortcuts } from '../../hooks/useMenuShortcuts';
+import { useTranslation } from 'react-i18next';
 
 // Placeholder for ConnectionDialog - import the real one if needed
 const ConnectionDialogPlaceholder: React.FC<{
@@ -55,6 +56,7 @@ export const ConnectionTree: React.FC<ConnectionTreeProps> = ({
 }) => {
   const { connections, groups } = useAppStore();
   const { registerShortcut } = useMenuShortcuts();
+  const { t } = useTranslation();
 
   const [showConnectionDialog, setShowConnectionDialog] = useState(false);
   const [showEditConnectionDialog, setShowEditConnectionDialog] = useState(false);
@@ -255,9 +257,9 @@ export const ConnectionTree: React.FC<ConnectionTreeProps> = ({
     if (connectionToDelete) {
       try {
         await api.deleteConnection(connectionToDelete);
-        message.success('Connection deleted successfully');
+        message.success(t('common.connectionDeleted'));
       } catch (error) {
-        message.error('Failed to delete connection');
+        message.error(t('common.deleteConnectionFailed'));
       }
     }
     setConfirmModalVisible(false);
@@ -267,18 +269,18 @@ export const ConnectionTree: React.FC<ConnectionTreeProps> = ({
   const handleConnect = useCallback(async (connectionId: string) => {
     try {
       await api.connectConnection(connectionId);
-      message.success('Connection established');
+      message.success(t('common.connectionSuccess'));
     } catch (error) {
-      message.error('Failed to connect');
+      message.error(t('common.connectFailed'));
     }
   }, []);
 
   const handleDisconnect = useCallback(async (connectionId: string) => {
     try {
       await api.disconnectConnection(connectionId);
-      message.success('Connection disconnected');
+      message.success(t('common.connectionDisconnected'));
     } catch (error) {
-      message.error('Failed to disconnect');
+      message.error(t('common.disconnectFailed'));
     }
   }, []);
 

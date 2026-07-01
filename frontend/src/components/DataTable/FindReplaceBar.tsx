@@ -6,6 +6,7 @@
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Input, Button, Tooltip, Space } from 'antd';
+import type { InputRef } from 'antd';
 import {
   UpOutlined,
   DownOutlined,
@@ -49,7 +50,7 @@ export function FindReplaceBar({
 }: FindReplaceBarProps) {
   const tc = useThemeColors();
   const { t } = useTranslation();
-  const searchRef = useRef<any>(null);
+  const searchRef = useRef<InputRef>(null);
   const [searchText, setSearchText] = useState('');
   const [replaceText, setReplaceText] = useState('');
   const [replaceVisible, setReplaceVisible] = useState(false);

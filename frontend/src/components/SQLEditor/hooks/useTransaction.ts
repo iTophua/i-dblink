@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api';
+import { getErrorMessage } from '../../../utils/getErrorMessage';
 
 export function useTransaction(connectionId?: string | null) {
   const { t } = useTranslation();
@@ -17,8 +18,8 @@ export function useTransaction(connectionId?: string | null) {
       await api.beginTransaction(connectionId);
       setTransactionActive(true);
       message.success(t('common.transactionStarted'));
-    } catch (err: any) {
-      message.error(`${t('common.failedToBeginTransaction')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.failedToBeginTransaction')}: ${getErrorMessage(err)}`);
     }
   }, [connectionId]);
 
@@ -28,8 +29,8 @@ export function useTransaction(connectionId?: string | null) {
       await api.commitTransaction(connectionId);
       setTransactionActive(false);
       message.success(t('common.transactionCommitted'));
-    } catch (err: any) {
-      message.error(`${t('common.failedToCommitTransaction')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.failedToCommitTransaction')}: ${getErrorMessage(err)}`);
     }
   }, [connectionId]);
 
@@ -39,8 +40,8 @@ export function useTransaction(connectionId?: string | null) {
       await api.rollbackTransaction(connectionId);
       setTransactionActive(false);
       message.success(t('common.transactionRolledBack'));
-    } catch (err: any) {
-      message.error(`${t('common.failedToRollbackTransaction')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.failedToRollbackTransaction')}: ${getErrorMessage(err)}`);
     }
   }, [connectionId]);
 

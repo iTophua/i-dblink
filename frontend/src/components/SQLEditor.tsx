@@ -35,6 +35,7 @@ import { useSqlDialectDetection } from './SQLEditor/hooks/useSqlDialectDetection
 // Extracted components
 import { SQLEditorToolbar } from './SQLEditor/components/SQLEditorToolbar';
 import { SQLEditorContextMenu } from './SQLEditor/components/SQLEditorContextMenu';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface QueryResultWithTiming {
   executionTime?: number;
@@ -257,8 +258,8 @@ export function SQLEditor({
       });
       setSql(formatted);
       message.success(t('common.sqlEditor.sqlFormatted'));
-    } catch (e: any) {
-      message.error(`${t('common.formattingFailed')}: ${e.message || e}`);
+    } catch (e: unknown) {
+      message.error(`${t('common.formattingFailed')}: ${getErrorMessage(e)}`);
     }
   }, [sql, dbType]);
 

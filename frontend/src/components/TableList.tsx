@@ -23,7 +23,6 @@ import {
 } from '@ant-design/icons';
 import { useAppStore } from '../stores/appStore';
 import { useDatabase } from '../hooks/useApi';
-import { useThemeColors } from '../hooks/useThemeColors';
 
 const VIEW_MODE_STORAGE_KEY = 'tablelist-viewmode';
 const SHOW_DETAIL_STORAGE_KEY = 'tablelist-show-detail';
@@ -602,7 +601,7 @@ function TableListComponent({
     try {
       setLocalLoading(true);
       await getTables(connectionId, database, true, undefined);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (isMountedRef.current) {
         console.error('Failed to refresh tables:', error);
         message.error(`${t('common.failedToRefreshTableList')}: ${error}`);

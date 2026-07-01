@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { getDialect } from '../utils/sqlDialects';
 import type { DatabaseType } from '../types/api';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface DumpDialogProps {
   open: boolean;
@@ -80,8 +81,8 @@ export function DumpDialog({
 
       message.success(t('common.sqlFileExportedSuccessfully'));
       onSuccess();
-    } catch (err: any) {
-      message.error(`${t('common.importExport.exportFailed')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.importExport.exportFailed')}: ${getErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }

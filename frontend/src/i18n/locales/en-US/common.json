@@ -1827,6 +1827,8 @@
     "connectionDisconnected": "Disconnected",
     "groupDeleted": "Group deleted",
     "deleteConnectionFailed": "Failed to delete connection",
+    "connectFailed": "Failed to connect",
+    "disconnectFailed": "Failed to disconnect",
     "copySqlContent": "Copy SQL",
     "duplicateTab": "Duplicate Tab",
     "copyTableName": "Copy Table Name",

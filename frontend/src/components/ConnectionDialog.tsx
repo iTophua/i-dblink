@@ -31,6 +31,7 @@ import { DB_TYPE_COLORS } from '../styles/theme';
 import type { FormInstance } from 'antd';
 import { api } from '../api';
 import i18n from '../i18n';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface FileInputConfig {
   form: FormInstance;
@@ -251,10 +252,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       if (testCancelledRef.current) return;
 
       message.success(t('common.connectionTestSuccess'));
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (testCancelledRef.current) return;
-      if (error.errorFields) return;
-      message.error(`${t('common.connectionTestFailed')}: ${error}`);
+      if (error && typeof error === 'object' && 'errorFields' in error) return;
+      message.error(`${t('common.connectionTestFailed')}: ${getErrorMessage(error)}`);
     } finally {
       setTesting(false);
     }
@@ -297,9 +298,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         sslKeyPath: values.ssl_client_key,
         sslSkipVerify: false,
       });
-    } catch (error: any) {
-      if (error.errorFields) return;
-      message.error(`${t('common.operationFailed')}: ${error}`);
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'errorFields' in error) return;
+      message.error(`${t('common.operationFailed')}: ${getErrorMessage(error)}`);
     } finally {
       setSaving(false);
     }

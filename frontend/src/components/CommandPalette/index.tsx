@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Input, List, Empty } from 'antd';
+import type { InputRef } from 'antd';
 import { SearchOutlined, MacCommandOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -22,7 +23,7 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<any>(null);
+  const inputRef = useRef<InputRef>(null);
 
   const filteredCommands = useMemo(() => {
     if (!search.trim()) return commands;

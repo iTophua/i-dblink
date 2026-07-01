@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Modal, Button, Progress, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface RunSqlFileDialogProps {
   open: boolean;
@@ -118,9 +119,9 @@ export function RunSqlFileDialog({
         try {
           await api.executeDDL(connectionId, sql, database);
           success++;
-        } catch (err: any) {
+        } catch (err: unknown) {
           failed++;
-          errors.push(`${t('common.statement')} ${i + 1}: ${err.message || err}`);
+          errors.push(`${t('common.statement')} ${i + 1}: ${getErrorMessage(err)}`);
         }
         setProgress(Math.round(((i + 1) / statements.length) * 100));
       }
@@ -137,8 +138,8 @@ export function RunSqlFileDialog({
       }
 
       onSuccess();
-    } catch (err: any) {
-      message.error(`${t('common.executionFailed')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.executionFailed')}: ${getErrorMessage(err)}`);
     } finally {
       setLoading(false);
       setProgress(0);

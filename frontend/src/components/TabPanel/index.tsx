@@ -36,6 +36,7 @@ import type { TableInfo, DatabaseType, ColumnInfo } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAppStore } from '../../stores/appStore';
 import { api } from '../../api';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
@@ -1221,8 +1222,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                     detail: { connectionId: designerTab.connectionId },
                   })
                 );
-              } catch (err: any) {
-                message.error(t('common.sqlEditor.executeFailed') + ': ' + (err.message || err));
+              } catch (err: unknown) {
+                message.error(t('common.sqlEditor.executeFailed') + ': ' + getErrorMessage(err));
               }
             }}
             onCancel={() => {
@@ -1353,8 +1354,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                         detail: { connectionId: selectedConnectionId },
                       })
                     );
-                  } catch (e: any) {
-                    message.error(t('common.deleteTableFailed') + ': ' + (e.message || e));
+                  } catch (e: unknown) {
+                    message.error(t('common.deleteTableFailed') + ': ' + getErrorMessage(e));
                   }
                 }}
                 onTableTruncate={async (tableName, db) => {
@@ -1366,8 +1367,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                         detail: { connectionId: selectedConnectionId },
                       })
                     );
-                  } catch (e: any) {
-                    message.error(t('common.truncateTableFailed') + ': ' + (e.message || e));
+                  } catch (e: unknown) {
+                    message.error(t('common.truncateTableFailed') + ': ' + getErrorMessage(e));
                   }
                 }}
                 onTableCopy={(tableName) => {

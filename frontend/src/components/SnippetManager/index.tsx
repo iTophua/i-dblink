@@ -3,6 +3,7 @@ import { Drawer, Form, Input, Button, List, Tag, Space, Typography, App, Modal }
 import { PlusOutlined, EditOutlined, DeleteOutlined, CodeOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 const { Text } = Typography;
 
@@ -44,8 +45,8 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
       setLoading(true);
       const data = await api.getSnippets();
       setSnippets(data);
-    } catch (err: any) {
-      message.error(`${t('common.erDiagram.loadFailed')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.erDiagram.loadFailed')}: ${getErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }
@@ -62,8 +63,8 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
       form.resetFields();
       setEditingId(undefined);
       await loadSnippets();
-    } catch (err: any) {
-      message.error(`${t('common.saveFailed')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.saveFailed')}: ${getErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }
@@ -94,8 +95,8 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
           await api.deleteSnippet(id);
           message.success(t('common.deleteSuccess'));
           await loadSnippets();
-        } catch (err: any) {
-          message.error(`${t('common.dataGrid.deleteFailed')}: ${err.message || err}`);
+        } catch (err: unknown) {
+          message.error(`${t('common.dataGrid.deleteFailed')}: ${getErrorMessage(err)}`);
         }
       },
     });

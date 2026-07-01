@@ -13,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { ConnectionGroup } from '../../stores/appStore';
 import { GlobalInput } from '../GlobalInput';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 interface GroupDialogProps {
   open: boolean;
@@ -93,9 +94,9 @@ export function GroupDialog({
         color: values.color,
         parent_id: parentGroupId || undefined,
       });
-    } catch (error: any) {
-      if (error.errorFields) return;
-      message.error(`${t('common.operationFailed')}: ${error}`);
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'errorFields' in error) return;
+      message.error(`${t('common.operationFailed')}: ${getErrorMessage(error)}`);
     } finally {
       setSaving(false);
     }

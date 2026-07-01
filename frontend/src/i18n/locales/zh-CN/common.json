@@ -1839,6 +1839,8 @@
     "connectionDisconnected": "已断开连接",
     "groupDeleted": "分组已删除",
     "deleteConnectionFailed": "删除连接失败",
+    "connectFailed": "连接失败",
+    "disconnectFailed": "断开连接失败",
     "copySqlContent": "复制 SQL",
     "duplicateTab": "复制标签页",
     "copyTableName": "复制表名",

@@ -25,6 +25,7 @@ import dagre from 'dagre';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 import type { TableInfo, ForeignKeyInfo, ColumnInfo } from '../../types/api';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 interface ERDiagramProps {
   connectionId: string;
@@ -167,8 +168,8 @@ function ExportButton() {
       a.download = 'er-diagram.png';
       a.click();
       message.success(t('common.erDiagramExported'));
-    } catch (err: any) {
-      message.error(`${t('common.importExport.exportFailed')}: ${err.message || err}`);
+    } catch (err: unknown) {
+      message.error(`${t('common.importExport.exportFailed')}: ${getErrorMessage(err)}`);
     }
   };
 
@@ -217,8 +218,8 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
       setForeignKeys(fkMap);
       setTableColumns(colMap);
       message.success(`${t('common.loaded')} ${allTables.length} ${t('common.dumpDialog.tables')}`);
-    } catch (error: any) {
-      message.error(`${t('common.erDiagram.loadFailed')}: ${error.message || error}`);
+    } catch (error: unknown) {
+      message.error(`${t('common.erDiagram.loadFailed')}: ${getErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }

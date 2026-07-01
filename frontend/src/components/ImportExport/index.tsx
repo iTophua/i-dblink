@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 import { useAppStore } from '../../stores/appStore';
 import { escapeSqlIdentifier } from '../../utils/sqlUtils';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 const { TextArea } = Input;
 
@@ -164,8 +165,8 @@ export function ImportExportModal({
       message.success(
         `${t('common.importExport.exportSuccess')}: ${rows.length} ${t('common.records')}`
       );
-    } catch (error: any) {
-      message.error(`${t('common.importExport.exportFailed')}: ${error.message || error}`);
+    } catch (error: unknown) {
+      message.error(`${t('common.importExport.exportFailed')}: ${getErrorMessage(error)}`);
     } finally {
       setExportLoading(false);
       setProgress(0);
@@ -194,8 +195,8 @@ export function ImportExportModal({
         `${t('common.importExport.importSuccess')}: ${affected} ${t('common.rowsAffected')}`
       );
       setImportSql('');
-    } catch (error: any) {
-      message.error(`${t('common.importExport.importFailed')}: ${error.message || error}`);
+    } catch (error: unknown) {
+      message.error(`${t('common.importExport.importFailed')}: ${getErrorMessage(error)}`);
     } finally {
       setImportLoading(false);
     }

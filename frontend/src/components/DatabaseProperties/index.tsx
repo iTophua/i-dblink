@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 import { DDLViewer } from '../DDLViewer';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 const { Text } = Typography;
 
@@ -140,8 +141,8 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
       try {
         const result = await api.getDatabaseDDL(connectionId, databaseName);
         setDdl(result);
-      } catch (err: any) {
-        setDdlError(err.message || String(err));
+      } catch (err: unknown) {
+        setDdlError(getErrorMessage(err));
       } finally {
         setDdlLoading(false);
       }

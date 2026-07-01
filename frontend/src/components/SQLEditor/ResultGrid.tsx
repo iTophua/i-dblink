@@ -23,6 +23,7 @@ import { useContextMenu } from '../ContextMenu';
 import { ResultGridContextMenu } from './ResultGridContextMenu';
 import { useEditHistory } from '../../hooks/useEditHistory';
 import { ConditionalFormattingPanel, type FormatRule } from '../DataTable/ConditionalFormattingPanel';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 // ── Types ──
 interface ResultGridProps {
@@ -334,7 +335,7 @@ export function ResultGrid({
       }
       if (errMsg) message.error(`${t('common.submitFailed')}: ${errMsg}`);
       else { message.success(`${t('common.submittedSuccessfully')} ${success}`); setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); clearEditHistory(); }
-    } catch (err: any) { message.error(`${t('common.submitFailed')}: ${err.message || err}`); }
+    } catch (err: unknown) { message.error(`${t('common.submitFailed')}: ${getErrorMessage(err)}`); }
   }, [connectionId, tableName, primaryKeyCol, modifiedRows, deletedIndices, newRows, queryResult, dbType, database, executeQuery, message, t]);
 
   // 撤销
