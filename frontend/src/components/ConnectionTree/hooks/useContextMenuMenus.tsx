@@ -405,16 +405,75 @@ export function useContextMenuMenus(
         { key: 'new-query', label: t('common.sqlEditor.newQuery'), icon: <PlayCircleOutlined /> },
         { type: 'divider' },
         { key: 'refresh-schema', label: t('common.refresh'), icon: <ReloadOutlined /> },
+        { type: 'divider' },
+        { key: 'create-schema', label: t('common.createSchema'), icon: <PlusOutlined /> },
+        { key: 'drop-schema', label: t('common.dropSchema'), icon: <DeleteOutlined />, danger: true },
       ],
       onClick: ({ key: action }) => {
         if (action === 'new-query') {
           callbacks.onNewQuery(connId);
         } else if (action === 'refresh-schema') {
           callbacks.onDatabaseRefresh?.(connId, database);
+        } else if (action === 'create-schema') {
+          let inputVal = '';
+          Modal.confirm({
+            title: t('common.createSchemaTitle'),
+            content: (
+              <div style={{ marginTop: 8 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>{t('common.schemaName')}</label>
+                <input
+                  autoFocus
+                  placeholder={t('common.pleaseEnterSchemaName')}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 4,
+                    background: 'var(--background)',
+                    color: 'var(--text)',
+                  }}
+                  onChange={(e) => { inputVal = e.target.value; }}
+                />
+              </div>
+            ),
+            okText: t('common.confirm'),
+            cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
+            onOk: async () => {
+              if (!inputVal.trim()) return;
+              try {
+                await api.createSchema(connId, database, inputVal.trim());
+                message.success(t('common.schemaCreated', { name: inputVal.trim() }));
+                callbacks.onDatabaseRefresh?.(connId, database);
+              } catch (err: any) {
+                message.error(t('common.createSchemaFailed') + ': ' + (err.message || err));
+              }
+            },
+          });
+        } else if (action === 'drop-schema') {
+          Modal.confirm({
+            title: t('common.confirmDropSchemaTitle'),
+            content: t('common.confirmDropSchemaContent', { name: schemaName }),
+            okText: t('common.delete'),
+            okType: 'danger',
+            cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
+            onOk: async () => {
+              try {
+                await api.dropSchema(connId, database, schemaName);
+                message.success(t('common.schemaDropped', { name: schemaName }));
+                callbacks.onDatabaseRefresh?.(connId, database);
+              } catch (err: any) {
+                message.error(t('common.dropSchemaFailed') + ': ' + (err.message || err));
+              }
+            },
+          });
         }
       },
     }),
-    [callbacks]
+    [callbacks, t, message]
   );
 
   const getTableMenu = useCallback(

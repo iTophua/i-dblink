@@ -358,3 +358,164 @@ func (a *App) KillProcess(connectionID string, database string, processID string
 	}
 	return result, nil
 }
+
+// GetSequences 获取序列列表
+func (a *App) GetSequences(connectionID string, database *string) ([]models.SequenceInfo, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return nil, err
+	}
+
+	req := api.MetadataRequest{ConnectionID: connectionID, Database: database}
+	respBytes, err := callHandlerRaw(a.handler.GetSequences, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var errResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
+		return nil, fmt.Errorf("%s", errResp.Error)
+	}
+
+	var result []models.SequenceInfo
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse sequences response: %w", err)
+	}
+	return result, nil
+}
+
+// ResetSequence 重置序列值
+func (a *App) ResetSequence(connectionID string, database string, sequenceName string, value int64) (models.GenericResponse, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return models.GenericResponse{Error: err.Error()}, err
+	}
+
+	req := struct {
+		ConnectionID string `json:"connection_id"`
+		Database     string `json:"database,omitempty"`
+		SequenceName string `json:"sequence_name"`
+		Value        int64  `json:"value"`
+	}{
+		ConnectionID: connectionID,
+		Database:     database,
+		SequenceName: sequenceName,
+		Value:        value,
+	}
+	respBytes, err := callHandler(a.handler.ResetSequence, req)
+	if err != nil {
+		return models.GenericResponse{Error: err.Error()}, err
+	}
+
+	var result models.GenericResponse
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return models.GenericResponse{}, err
+	}
+	return result, nil
+}
+
+// GetSchemas 获取 Schema 列表
+func (a *App) GetSchemas(connectionID string, database *string) ([]string, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return nil, err
+	}
+
+	req := api.MetadataRequest{ConnectionID: connectionID, Database: database}
+	respBytes, err := callHandlerRaw(a.handler.GetSchemas, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var errResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
+		return nil, fmt.Errorf("%s", errResp.Error)
+	}
+
+	var result []string
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse schemas response: %w", err)
+	}
+	return result, nil
+}
+
+// CreateSchema 创建 Schema
+func (a *App) CreateSchema(connectionID string, database string, schemaName string) (models.GenericResponse, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return models.GenericResponse{Error: err.Error()}, err
+	}
+
+	req := struct {
+		ConnectionID string `json:"connection_id"`
+		Database     string `json:"database,omitempty"`
+		SchemaName   string `json:"schema_name"`
+	}{
+		ConnectionID: connectionID,
+		Database:     database,
+		SchemaName:   schemaName,
+	}
+	respBytes, err := callHandler(a.handler.CreateSchema, req)
+	if err != nil {
+		return models.GenericResponse{Error: err.Error()}, err
+	}
+
+	var result models.GenericResponse
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return models.GenericResponse{}, err
+	}
+	return result, nil
+}
+
+// DropSchema 删除 Schema
+func (a *App) DropSchema(connectionID string, database string, schemaName string) (models.GenericResponse, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return models.GenericResponse{Error: err.Error()}, err
+	}
+
+	req := struct {
+		ConnectionID string `json:"connection_id"`
+		Database     string `json:"database,omitempty"`
+		SchemaName   string `json:"schema_name"`
+	}{
+		ConnectionID: connectionID,
+		Database:     database,
+		SchemaName:   schemaName,
+	}
+	respBytes, err := callHandler(a.handler.DropSchema, req)
+	if err != nil {
+		return models.GenericResponse{Error: err.Error()}, err
+	}
+
+	var result models.GenericResponse
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return models.GenericResponse{}, err
+	}
+	return result, nil
+}
+
+// GetCheckConstraints 获取 CHECK 约束列表
+func (a *App) GetCheckConstraints(connectionID string, tableName string, database *string) ([]models.CheckConstraintInfo, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return nil, err
+	}
+
+	req := api.MetadataRequest{ConnectionID: connectionID, Database: database, TableName: &tableName}
+	respBytes, err := callHandlerRaw(a.handler.GetCheckConstraints, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var errResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &errResp); err == nil && errResp.Error != "" {
+		return nil, fmt.Errorf("%s", errResp.Error)
+	}
+
+	var result []models.CheckConstraintInfo
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse check constraints response: %w", err)
+	}
+	return result, nil
+}

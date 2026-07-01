@@ -62,6 +62,9 @@ func (h *Handler) StreamExport(w http.ResponseWriter, r *http.Request) {
 
 	// 分批查询数据（基于真实数据查询 SQL，而非 metadata 查询）
 	dataSQL := fmt.Sprintf("SELECT * FROM %s", tableRef)
+	if req.WhereClause != "" {
+		dataSQL += " WHERE " + req.WhereClause
+	}
 
 	batchSize := req.BatchSize
 	if batchSize <= 0 {

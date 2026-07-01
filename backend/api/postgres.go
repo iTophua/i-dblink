@@ -422,3 +422,112 @@ func postgresGetRoutineBody(ctx context.Context, dbConn db.Executor, database, r
 	}
 	return def.String, nil
 }
+
+func postgresGetSequences(ctx context.Context, dbConn db.Executor, database *string) ([]models.SequenceInfo, error) {
+	query := `SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
+		FROM information_schema.sequences
+		WHERE sequence_schema = 'public'
+		ORDER BY sequence_name`
+	rows, err := dbConn.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("postgresGetSequences query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var result []models.SequenceInfo
+	for rows.Next() {
+		var s models.SequenceInfo
+		if err := rows.Scan(&s.SequenceName, &s.DataType, &s.StartValue, &s.MinValue, &s.MaxValue, &s.Increment, &s.CycleOption); err != nil {
+			return nil, fmt.Errorf("postgresGetSequences scan failed: %w", err)
+		}
+		result = append(result, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgresGetSequences rows error: %w", err)
+	}
+	if result == nil {
+		result = []models.SequenceInfo{}
+	}
+	return result, nil
+}
+
+func postgresResetSequence(ctx context.Context, dbConn db.Executor, sequenceName string, value int64) error {
+	// Validate sequence name to prevent SQL injection
+	sanitized := strings.ReplaceAll(sequenceName, "'", "''")
+	query := fmt.Sprintf("ALTER SEQUENCE %s RESTART WITH %d", sanitized, value)
+	_, err := dbConn.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("postgresResetSequence failed: %w", err)
+	}
+	return nil
+}
+
+func postgresGetSchemas(ctx context.Context, dbConn db.Executor, database *string) ([]string, error) {
+	query := `SELECT schema_name FROM information_schema.schemata ORDER BY schema_name`
+	rows, err := dbConn.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("postgresGetSchemas query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var result []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("postgresGetSchemas scan failed: %w", err)
+		}
+		result = append(result, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgresGetSchemas rows error: %w", err)
+	}
+	if result == nil {
+		result = []string{}
+	}
+	return result, nil
+}
+
+func postgresCreateSchema(ctx context.Context, dbConn db.Executor, schemaName string) error {
+	sanitized := strings.ReplaceAll(schemaName, "'", "''")
+	query := fmt.Sprintf("CREATE SCHEMA %s", sanitized)
+	_, err := dbConn.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("postgresCreateSchema failed: %w", err)
+	}
+	return nil
+}
+
+func postgresDropSchema(ctx context.Context, dbConn db.Executor, schemaName string) error {
+	sanitized := strings.ReplaceAll(schemaName, "'", "''")
+	query := fmt.Sprintf("DROP SCHEMA %s CASCADE", sanitized)
+	_, err := dbConn.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("postgresDropSchema failed: %w", err)
+	}
+	return nil
+}
+
+func postgresGetCheckConstraints(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.CheckConstraintInfo, error) {
+	query := `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE contype = 'c' AND conrelid = $1::regclass`
+	rows, err := dbConn.QueryContext(ctx, query, tableName)
+	if err != nil {
+		return nil, fmt.Errorf("postgresGetCheckConstraints query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var result []models.CheckConstraintInfo
+	for rows.Next() {
+		var c models.CheckConstraintInfo
+		if err := rows.Scan(&c.ConstraintName, &c.CheckClause); err != nil {
+			return nil, fmt.Errorf("postgresGetCheckConstraints scan failed: %w", err)
+		}
+		result = append(result, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgresGetCheckConstraints rows error: %w", err)
+	}
+	if result == nil {
+		result = []models.CheckConstraintInfo{}
+	}
+	return result, nil
+}

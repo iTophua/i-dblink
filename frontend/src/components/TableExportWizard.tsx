@@ -280,24 +280,27 @@ export function TableExportWizard({
           }
           if (sqlOptions.includeData) {
             const tableRef = dialect.buildTableRef(tbl, database);
-            const exportResult = await api.streamExportTable(connectionId, tbl, database, 1000);
-            if (exportResult?.rows && exportResult.columns) {
-              const cols = (exportResult.columns as string[]).map((c: string) => dialect.escapeIdentifier(c));
-              let prefix = 'INSERT INTO';
-              if (sqlOptions.insertSyntax === 'insertIgnore') prefix = 'INSERT IGNORE INTO';
-              if (sqlOptions.insertSyntax === 'replace') prefix = 'REPLACE INTO';
-              const filteredCols = fields.length > 0
-                ? cols.filter((_: string, i: number) => fields.includes((exportResult.columns as string[])[i]))
-                : cols;
-              const filteredColStr = filteredCols.join(', ');
-              for (const row of exportResult.rows) {
-                const vals = (exportResult.columns as string[])
-                  .filter((_: string, i: number) => fields.length === 0 || fields.includes((exportResult.columns as string[])[i]))
-                  .map((col: string) => dialect.escapeValue((row as Record<string, unknown>)[col]));
-                sqlContent += `${prefix} ${tableRef} (${filteredColStr}) VALUES (${vals.join(', ')});\n`;
-              }
-              totalRows += exportResult.rows.length;
+            const dataSql = buildQuery(tbl, fields);
+            const result = await api.executeQuery(connectionId, dataSql, database);
+            if (result.error) throw new Error(result.error);
+            const columns = (result.columns as string[]) || [];
+            const rows = (result.rows || []) as unknown[][];
+
+            const colIndices = fields.length > 0
+              ? columns.map((col, i) => fields.includes(col) ? i : -1).filter((i) => i >= 0)
+              : columns.map((_, i) => i);
+            const colIdents = colIndices.map((i) => dialect.escapeIdentifier(columns[i]));
+            const colStr = colIdents.join(', ');
+
+            let prefix = 'INSERT INTO';
+            if (sqlOptions.insertSyntax === 'insertIgnore') prefix = 'INSERT IGNORE INTO';
+            if (sqlOptions.insertSyntax === 'replace') prefix = 'REPLACE INTO';
+
+            for (const row of rows) {
+              const vals = colIndices.map((i) => dialect.escapeValue(row[i]));
+              sqlContent += `${prefix} ${tableRef} (${colStr}) VALUES (${vals.join(', ')});\n`;
             }
+            totalRows += rows.length;
           }
           setProgress(Math.round(((ti + 1) / totalTables) * 90));
         }
@@ -539,14 +542,16 @@ export function TableExportWizard({
             </Radio>
             <Radio value="where">
               {t('common.importExport.customWhere')}
-              <Input
+            </Radio>
+            {dataRange.mode === 'where' && (
+              <Input.TextArea
                 value={dataRange.whereClause}
                 onChange={(e) => setDataRange((prev) => ({ ...prev, whereClause: e.target.value }))}
-                placeholder="status = 1"
-                style={{ width: 350, marginLeft: 8 }}
-                disabled={dataRange.mode !== 'where'}
+                placeholder={t('common.importExport.wherePlaceholder')}
+                autoSize={{ minRows: 2, maxRows: 4 }}
+                style={{ marginLeft: 24, width: 'calc(100% - 24px)' }}
               />
-            </Radio>
+            )}
           </Space>
         </Radio.Group>
       </Space>

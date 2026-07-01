@@ -34,6 +34,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
         procedures?: string[];
         functions?: string[];
         triggers?: import('../../../types/api').TriggerInfo[];
+        sequences?: import('../../../types/api').SequenceInfo[];
         routinesLoaded?: boolean;
       }[]
     >
@@ -194,10 +195,11 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
 
   const loadDatabaseRoutines = useCallback(async (connectionId: string, database: string) => {
     try {
-      const [procedures, functions, triggers] = await Promise.all([
+      const [procedures, functions, triggers, sequences] = await Promise.all([
         api.getProcedures(connectionId, database),
         api.getFunctions(connectionId, database),
         api.getTriggers(connectionId, database),
+        api.getSequences(connectionId, database).catch(() => []),
       ]);
 
       setConnectionDatabases((prev) => {
@@ -211,6 +213,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
             procedures,
             functions,
             triggers,
+            sequences,
             routinesLoaded: true,
           };
           return {

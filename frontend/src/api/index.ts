@@ -67,6 +67,12 @@ import {
   ImportNavicatConnections,
   GetProcessList,
   KillProcess,
+  GetSequences,
+  ResetSequence,
+  GetSchemas,
+  CreateSchema,
+  DropSchema,
+  GetCheckConstraints,
 } from '../../wailsjs/go/backend/App';
 import { backend } from '../../wailsjs/go/models';
 const ConnectionInput = backend.ConnectionInput;
@@ -575,13 +581,15 @@ export const api = {
     connectionId: string,
     tableName: string,
     database?: string,
-    batchSize?: number
+    batchSize?: number,
+    whereClause?: string
   ): Promise<any> {
     return await StreamExportTable(
       connectionId,
       tableName,
       database ?? null,
-      batchSize ?? null
+      batchSize ?? null,
+      whereClause ?? null
     );
   },
 
@@ -819,5 +827,54 @@ export const api = {
 
   async importNavicatConnections(ncxContent: string, overwrite: boolean): Promise<number> {
     return await ImportNavicatConnections(ncxContent, overwrite);
+  },
+
+  async getSequences(
+    connectionId: string,
+    database?: string
+  ): Promise<any[]> {
+    const result = await GetSequences(connectionId, database ?? null);
+    return result as unknown as any[];
+  },
+
+  async resetSequence(
+    connectionId: string,
+    database: string,
+    sequenceName: string,
+    value: number
+  ): Promise<void> {
+    await ResetSequence(connectionId, database, sequenceName, value);
+  },
+
+  async getSchemas(
+    connectionId: string,
+    database?: string
+  ): Promise<string[]> {
+    return await GetSchemas(connectionId, database ?? null);
+  },
+
+  async createSchema(
+    connectionId: string,
+    database: string,
+    schemaName: string
+  ): Promise<void> {
+    await CreateSchema(connectionId, database, schemaName);
+  },
+
+  async dropSchema(
+    connectionId: string,
+    database: string,
+    schemaName: string
+  ): Promise<void> {
+    await DropSchema(connectionId, database, schemaName);
+  },
+
+  async getCheckConstraints(
+    connectionId: string,
+    tableName: string,
+    database?: string
+  ): Promise<{ constraint_name: string; check_clause: string }[]> {
+    const result = await GetCheckConstraints(connectionId, tableName, database ?? null);
+    return result as unknown as { constraint_name: string; check_clause: string }[];
   },
 };

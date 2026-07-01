@@ -438,3 +438,37 @@ func formatNullTime(t sql.NullTime) *string {
 	}
 	return nil
 }
+
+func mysqlGetCheckConstraints(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.CheckConstraintInfo, error) {
+	dbName := ""
+	if database != nil {
+		dbName = *database
+	}
+	query := `SELECT cc.CONSTRAINT_NAME, cc.CHECK_CLAUSE
+		FROM information_schema.CHECK_CONSTRAINTS cc
+		JOIN information_schema.TABLE_CONSTRAINTS tc
+		  ON cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME AND cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+		WHERE tc.TABLE_NAME = ? AND tc.CONSTRAINT_SCHEMA = ?
+		ORDER BY cc.CONSTRAINT_NAME`
+	rows, err := dbConn.QueryContext(ctx, query, tableName, dbName)
+	if err != nil {
+		return nil, fmt.Errorf("mysqlGetCheckConstraints query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var result []models.CheckConstraintInfo
+	for rows.Next() {
+		var c models.CheckConstraintInfo
+		if err := rows.Scan(&c.ConstraintName, &c.CheckClause); err != nil {
+			return nil, fmt.Errorf("mysqlGetCheckConstraints scan failed: %w", err)
+		}
+		result = append(result, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("mysqlGetCheckConstraints rows error: %w", err)
+	}
+	if result == nil {
+		result = []models.CheckConstraintInfo{}
+	}
+	return result, nil
+}

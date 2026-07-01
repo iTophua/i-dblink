@@ -702,3 +702,263 @@ func (h *Handler) resolvePGExec(exec db.Executor, connectionID string, dbType st
 	}
 	return exec, nil
 }
+
+// GetSequences 获取序列列表
+func (h *Handler) GetSequences(w http.ResponseWriter, r *http.Request) {
+	var req MetadataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var sequences []models.SequenceInfo
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		sequences, err = postgresGetSequences(ctx, exec, req.Database)
+	default:
+		sequences = []models.SequenceInfo{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(sequences)
+}
+
+// ResetSequence 重置序列值
+func (h *Handler) ResetSequence(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ConnectionID string `json:"connection_id"`
+		Database     string `json:"database,omitempty"`
+		SequenceName string `json:"sequence_name"`
+		Value        int64  `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	if req.Database != "" {
+		switch dbType {
+		case "postgresql", "kingbase", "highgo", "vastbase":
+			exec, err = h.mgr.GetExecutor(req.ConnectionID, req.Database)
+			if err != nil {
+				writeJSONError(w, err.Error())
+				return
+			}
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		err = postgresResetSequence(ctx, exec, req.SequenceName, req.Value)
+	default:
+		err = fmt.Errorf("unsupported db type for sequence reset: %s", dbType)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// GetSchemas 获取 Schema 列表
+func (h *Handler) GetSchemas(w http.ResponseWriter, r *http.Request) {
+	var req MetadataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var schemas []string
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		schemas, err = postgresGetSchemas(ctx, exec, req.Database)
+	default:
+		schemas = []string{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(schemas)
+}
+
+// CreateSchema 创建 Schema
+func (h *Handler) CreateSchema(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ConnectionID string `json:"connection_id"`
+		Database     string `json:"database,omitempty"`
+		SchemaName   string `json:"schema_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	if req.Database != "" {
+		switch dbType {
+		case "postgresql", "kingbase", "highgo", "vastbase":
+			exec, err = h.mgr.GetExecutor(req.ConnectionID, req.Database)
+			if err != nil {
+				writeJSONError(w, err.Error())
+				return
+			}
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		err = postgresCreateSchema(ctx, exec, req.SchemaName)
+	default:
+		err = fmt.Errorf("unsupported db type for schema creation: %s", dbType)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// DropSchema 删除 Schema
+func (h *Handler) DropSchema(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ConnectionID string `json:"connection_id"`
+		Database     string `json:"database,omitempty"`
+		SchemaName   string `json:"schema_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	if req.Database != "" {
+		switch dbType {
+		case "postgresql", "kingbase", "highgo", "vastbase":
+			exec, err = h.mgr.GetExecutor(req.ConnectionID, req.Database)
+			if err != nil {
+				writeJSONError(w, err.Error())
+				return
+			}
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		err = postgresDropSchema(ctx, exec, req.SchemaName)
+	default:
+		err = fmt.Errorf("unsupported db type for schema drop: %s", dbType)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// GetCheckConstraints 获取 CHECK 约束列表
+func (h *Handler) GetCheckConstraints(w http.ResponseWriter, r *http.Request) {
+	var req MetadataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "invalid request body")
+		return
+	}
+
+	if req.TableName == nil {
+		writeJSONError(w, "table_name is required")
+		return
+	}
+
+	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	exec, err = h.resolvePGExec(exec, req.ConnectionID, dbType, req.Database)
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var constraints []models.CheckConstraintInfo
+	switch dbType {
+	case "mysql", "mariadb":
+		constraints, err = mysqlGetCheckConstraints(ctx, exec, *req.TableName, req.Database)
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		constraints, err = postgresGetCheckConstraints(ctx, exec, *req.TableName, req.Database)
+	default:
+		constraints = []models.CheckConstraintInfo{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		writeJSONError(w, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(constraints)
+}

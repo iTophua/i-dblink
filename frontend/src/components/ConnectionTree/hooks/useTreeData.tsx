@@ -10,6 +10,7 @@ import {
   CodeOutlined,
   FunctionOutlined,
   ThunderboltOutlined,
+  SortAscendingOutlined,
 } from '@ant-design/icons';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
 import type { TableInfo } from '../../../types/api';
@@ -179,6 +180,7 @@ export function useTreeData({
         procedures?: string[];
         functions?: string[];
         triggers?: import('../../../types/api').TriggerInfo[];
+        sequences?: import('../../../types/api').SequenceInfo[];
         routinesLoaded?: boolean;
       },
       allTableItems: TableInfo[] | undefined,
@@ -398,6 +400,68 @@ export function useTreeData({
         };
       })();
 
+      const sequencesNode = (() => {
+        const folderKey = `sequences::${connId}::${db.database}`;
+        return {
+          key: folderKey,
+          title: db.routinesLoaded ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
+              <SortAscendingOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
+              <span>{t('common.sequences', { count: db.sequences?.length || 0 })}</span>
+            </span>
+          ) : isDbExpanded ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)' }}>
+              <Spin size="small" />
+              <span>{t('common.sequencesLoading')}</span>
+            </span>
+          ) : (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
+              <SortAscendingOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
+              <span>{t('common.sequences', { count: 0 })}</span>
+            </span>
+          ),
+          isLeaf: false,
+          children: !db.routinesLoaded
+            ? [
+                {
+                  key: `init-sequences::${connId}::${db.database}`,
+                  title: (
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                      {t('common.clickToLoadSequences')}
+                    </span>
+                  ),
+                  isLeaf: true,
+                  selectable: false,
+                },
+              ]
+            : db.sequences && db.sequences.length > 0
+              ? expandedKeys.includes(folderKey)
+                ? db.sequences.map((seq) => ({
+                    key: `seq::${connId}::${db.database}::${seq.sequence_name}`,
+                    isLeaf: true,
+                    title: (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <SortAscendingOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
+                        <span style={{ fontSize: 13 }}>{seq.sequence_name}</span>
+                      </span>
+                    ),
+                  }))
+                : []
+              : [
+                  {
+                    key: `no-sequences::${connId}::${db.database}`,
+                    title: (
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                        {t('common.noSequences')}
+                      </span>
+                    ),
+                    isLeaf: true,
+                    selectable: false,
+                  },
+                ],
+        };
+      })();
+
       // ── Unified database title node ──
       const dbNodeTitle = (
         <div
@@ -565,7 +629,7 @@ export function useTreeData({
           });
         }
 
-        const dbChildren = [...schemaNodes, proceduresNode, functionsNode, triggersNode];
+        const dbChildren = [...schemaNodes, proceduresNode, functionsNode, triggersNode, sequencesNode];
 
         return {
           key: `db::${connId}::${db.database}`,
@@ -735,8 +799,9 @@ export function useTreeData({
             proceduresNode,
             functionsNode,
             triggersNode,
+            sequencesNode,
           ]
-        : [tablesNode, viewsNode, proceduresNode, functionsNode, triggersNode];
+        : [tablesNode, viewsNode, proceduresNode, functionsNode, triggersNode, sequencesNode];
 
       return {
         key: `db::${connId}::${db.database}`,

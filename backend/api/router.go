@@ -113,6 +113,18 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 	// 进程管理
 	mux.HandleFunc("POST /process-list", recoverMiddleware(h.GetProcessList))
 	mux.HandleFunc("POST /kill-process", recoverMiddleware(h.KillProcess))
+
+	// 序列管理
+	mux.HandleFunc("POST /sequences", recoverMiddleware(h.GetSequences))
+	mux.HandleFunc("POST /reset-sequence", recoverMiddleware(h.ResetSequence))
+
+	// Schema 管理
+	mux.HandleFunc("POST /schemas", recoverMiddleware(h.GetSchemas))
+	mux.HandleFunc("POST /create-schema", recoverMiddleware(h.CreateSchema))
+	mux.HandleFunc("POST /drop-schema", recoverMiddleware(h.DropSchema))
+
+	// CHECK 约束
+	mux.HandleFunc("POST /check-constraints", recoverMiddleware(h.GetCheckConstraints))
 }
 
 // Handler HTTP 处理器

@@ -142,9 +142,9 @@ export function useTreeHandlers(
         }
       }
 
-      // Handle procedures/functions/triggers folder expand
+      // Handle procedures/functions/triggers/sequences folder expand
       if (
-        (parsed.type === 'procedures-folder' || parsed.type === 'functions-folder' || parsed.type === 'triggers-folder') &&
+        (parsed.type === 'procedures-folder' || parsed.type === 'functions-folder' || parsed.type === 'triggers-folder' || parsed.type === 'sequences-folder') &&
         info.expanded &&
         parsed.connectionId &&
         parsed.database

@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useDatabase } from '../hooks/useApi';
 import { api } from '../api';
-import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../types/api';
+import type { ColumnInfo, IndexInfo, ForeignKeyInfo, CheckConstraintInfo } from '../types/api';
 import { DDLViewer } from './DDLViewer';
 
 interface TableInfo {
@@ -36,13 +36,14 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
   const [indexes, setIndexes] = useState<IndexInfo[]>([]);
   const [foreignKeys, setForeignKeys] = useState<ForeignKeyInfo[]>([]);
+  const [checkConstraints, setCheckConstraints] = useState<CheckConstraintInfo[]>([]);
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null);
   const [ddl, setDdl] = useState<string>('');
 
   const loadStructure = useCallback(async () => {
     setLoading(true);
     try {
-      const [cols, idxs, fks, info, ddlResult] = await Promise.all([
+      const [cols, idxs, fks, info, ddlResult, ccs] = await Promise.all([
         getColumns(connectionId, tableName, database).catch((err) => {
           console.error('Failed to load columns:', err);
           return [] as ColumnInfo[];
@@ -57,12 +58,14 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
         }),
         getTableInfo(connectionId, tableName, database).catch(() => null),
         api.getTableDDL(connectionId, tableName, database).catch(() => []),
+        api.getCheckConstraints(connectionId, tableName, database).catch(() => []),
       ]);
       setColumns(cols);
       setIndexes(idxs);
       setForeignKeys(fks);
       setTableInfo(info);
       setDdl(Array.isArray(ddlResult) ? ddlResult.join('\n') : String(ddlResult));
+      setCheckConstraints(ccs);
     } catch (error) {
       console.error('Failed to load table structure:', error);
       message.error(t('common.failedToLoadTableStructure'));
@@ -226,6 +229,21 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
     },
   ];
 
+  const checkConstraintDefs: ColumnsType<CheckConstraintInfo> = [
+    {
+      title: t('common.constraintName'),
+      dataIndex: 'constraint_name',
+      key: 'constraint_name',
+      width: 200,
+    },
+    {
+      title: t('common.checkConstraints'),
+      dataIndex: 'check_clause',
+      key: 'check_clause',
+      render: (text: string) => <code style={{ fontSize: 12 }}>{text}</code>,
+    },
+  ];
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 40 }}>
@@ -301,6 +319,24 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                 />
               ) : (
                 <Empty description={t('common.noForeignKeys')} />
+              ),
+          },
+          {
+            key: 'check_constraints',
+            label: `${t('common.checkConstraints')} (${checkConstraints.length})`,
+            children:
+              checkConstraints.length > 0 ? (
+                <Table
+                  columns={checkConstraintDefs}
+                  dataSource={checkConstraints}
+                  rowKey={(record, index) => `${record.constraint_name}-${index}`}
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: 'max-content' }}
+                  className="table-compact"
+                />
+              ) : (
+                <Empty description={t('common.noCheckConstraints')} />
               ),
           },
           {

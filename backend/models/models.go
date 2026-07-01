@@ -201,6 +201,7 @@ type StreamExportRequest struct {
 	Database     string `json:"database,omitempty"`
 	TableName    string `json:"table_name"`
 	BatchSize    int    `json:"batch_size"`
+	WhereClause  string `json:"where_clause,omitempty"`
 }
 
 // ExecuteDDLRequest DDL 执行请求
@@ -255,4 +256,26 @@ type BatchImportResponse struct {
 // AllColumnsResult 批量获取所有表列信息响应
 type AllColumnsResult struct {
 	Tables map[string][]ColumnInfo `json:"tables"`
+}
+
+// SequenceInfo 序列信息
+type SequenceInfo struct {
+	SequenceName string `json:"sequence_name"`
+	DataType     string `json:"data_type"`
+	StartValue   string `json:"start_value"`
+	MinValue     string `json:"minimum_value"`
+	MaxValue     string `json:"maximum_value"`
+	Increment    string `json:"increment"`
+	CycleOption  string `json:"cycle_option"`
+}
+
+// CheckConstraintInfo CHECK 约束信息
+type CheckConstraintInfo struct {
+	ConstraintName string `json:"constraint_name"`
+	CheckClause    string `json:"check_clause"`
+}
+
+// SchemaInfo Schema 信息
+type SchemaInfo struct {
+	SchemaName string `json:"schema_name"`
 }

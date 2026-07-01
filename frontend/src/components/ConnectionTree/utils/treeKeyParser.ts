@@ -13,6 +13,8 @@ export type TreeKeyType =
   | 'procedures-folder'
   | 'functions-folder'
   | 'triggers-folder'
+  | 'sequence'
+  | 'sequences-folder'
   | 'unknown';
 
 export interface ParsedTreeKey {
@@ -139,6 +141,19 @@ export function parseTreeKey(key: string): ParsedTreeKey {
     case 'triggers':
       return {
         type: 'triggers-folder',
+        connectionId: parts[1],
+        database: parts[2],
+      };
+    case 'seq':
+      return {
+        type: 'sequence',
+        connectionId: parts[1],
+        database: parts[2],
+        name: parts[3],
+      };
+    case 'sequences':
+      return {
+        type: 'sequences-folder',
         connectionId: parts[1],
         database: parts[2],
       };

@@ -9,7 +9,7 @@ import (
 // ==================== 流式导出 ====================
 
 // StreamExportTable 流式导出完整表数据
-func (a *App) StreamExportTable(connectionID string, tableName string, database *string, batchSize *int) (map[string]interface{}, error) {
+func (a *App) StreamExportTable(connectionID string, tableName string, database *string, batchSize *int, whereClause *string) (map[string]interface{}, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return nil, err
 	}
@@ -24,6 +24,9 @@ func (a *App) StreamExportTable(connectionID string, tableName string, database 
 	}
 	if batchSize != nil {
 		req.BatchSize = *batchSize
+	}
+	if whereClause != nil {
+		req.WhereClause = *whereClause
 	}
 
 	respBytes, err := callHandler(a.handler.StreamExport, req)

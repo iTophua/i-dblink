@@ -115,6 +115,21 @@ export interface TriggerInfo {
   table: string;
 }
 
+export interface SequenceInfo {
+  sequence_name: string;
+  data_type: string;
+  start_value: string;
+  minimum_value: string;
+  maximum_value: string;
+  increment: string;
+  cycle_option: string;
+}
+
+export interface CheckConstraintInfo {
+  constraint_name: string;
+  check_clause: string;
+}
+
 export interface QueryResult {
   columns: string[];
   rows: unknown[][];

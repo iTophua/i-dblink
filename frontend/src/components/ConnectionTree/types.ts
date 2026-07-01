@@ -28,6 +28,7 @@ export type ConnectionTreeProps = {
       procedures?: string[];
       functions?: string[];
       triggers?: import('../../types/api').TriggerInfo[];
+      sequences?: import('../../types/api').SequenceInfo[];
       routinesLoaded?: boolean;
     }[]
   >;

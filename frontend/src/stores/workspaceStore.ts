@@ -6,6 +6,7 @@ export interface SavedTableTab {
   connectionId: string;
   connectionName: string;
   database?: string;
+  pinned?: boolean;
 }
 
 export interface SavedSqlTab {
@@ -14,6 +15,7 @@ export interface SavedSqlTab {
   connectionId?: string;
   database?: string;
   content?: string;
+  pinned?: boolean;
 }
 
 export interface SavedDesignerTab {
@@ -23,6 +25,7 @@ export interface SavedDesignerTab {
   database?: string;
   tableName?: string;
   isNewTable?: boolean;
+  pinned?: boolean;
 }
 
 export interface SavedViewDefTab {
@@ -31,6 +34,7 @@ export interface SavedViewDefTab {
   connectionId: string;
   database?: string;
   viewName: string;
+  pinned?: boolean;
 }
 
 export interface WorkspaceSnapshot {

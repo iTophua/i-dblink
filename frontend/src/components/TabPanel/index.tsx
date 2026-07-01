@@ -17,6 +17,8 @@ import {
   CloseOutlined,
   CopyOutlined,
   EyeOutlined,
+  PushpinOutlined,
+  PushpinFilled,
 
 } from '@ant-design/icons';
 import { SQLEditor } from '../SQLEditor';
@@ -73,6 +75,7 @@ interface OpenedTable {
   database?: string;
   isDirty?: boolean;
   isView?: boolean;
+  pinned?: boolean;
   createdAt: number;
 }
 
@@ -85,6 +88,7 @@ interface OpenedSqlTab {
   defaultQuery?: string;
   isFloating?: boolean;
   floatingWindowId?: string;
+  pinned?: boolean;
   createdAt: number;
 }
 
@@ -95,6 +99,7 @@ interface OpenedDesignerTab {
   database?: string;
   tableName?: string;
   isNewTable?: boolean;
+  pinned?: boolean;
   createdAt: number;
 }
 
@@ -104,6 +109,7 @@ interface OpenedViewDefTab {
   connectionId: string;
   database?: string;
   viewName: string;
+  pinned?: boolean;
   createdAt: number;
 }
 
@@ -748,9 +754,60 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     [getDataTabKey]
   );
 
+  // 切换 Tab 固定状态
+  const toggleTabPin = useCallback(
+    (key: string) => {
+      if (key.endsWith('-data')) {
+        setOpenedTables((prev) =>
+          prev.map((t) =>
+            getDataTabKey(t) === key ? { ...t, pinned: !t.pinned } : t
+          )
+        );
+      } else if (key.startsWith('sql-')) {
+        setOpenedSqlTabs((prev) =>
+          prev.map((t) => (t.key === key ? { ...t, pinned: !t.pinned } : t))
+        );
+      } else if (key.startsWith('designer-')) {
+        setOpenedDesignerTabs((prev) =>
+          prev.map((t) => (t.key === key ? { ...t, pinned: !t.pinned } : t))
+        );
+      } else if (key.startsWith('viewdef-')) {
+        setOpenedViewDefTabs((prev) =>
+          prev.map((t) => (t.key === key ? { ...t, pinned: !t.pinned } : t))
+        );
+      }
+    },
+    [getDataTabKey]
+  );
+
+  // 检查 Tab 是否已固定
+  const isTabPinned = useCallback(
+    (key: string): boolean => {
+      if (key === 'objects') return false;
+      if (key.endsWith('-data')) {
+        const table = openedTables.find((t) => getDataTabKey(t) === key);
+        return !!table?.pinned;
+      }
+      if (key.startsWith('sql-')) {
+        return !!openedSqlTabs.find((t) => t.key === key)?.pinned;
+      }
+      if (key.startsWith('designer-')) {
+        return !!openedDesignerTabs.find((t) => t.key === key)?.pinned;
+      }
+      if (key.startsWith('viewdef-')) {
+        return !!openedViewDefTabs.find((t) => t.key === key)?.pinned;
+      }
+      return false;
+    },
+    [openedTables, openedSqlTabs, openedDesignerTabs, openedViewDefTabs, getDataTabKey]
+  );
+
   // 关闭单个 Tab
   const handleCloseTab = useCallback(
     (key: string) => {
+      // 固定的标签页不允许关闭
+      if (isTabPinned(key)) return;
+
       if (key.endsWith('-data')) {
         // 检查 dirty 状态
         const table = openedTables.find((t) => getDataTabKey(t) === key);
@@ -804,7 +861,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         }
       }
     },
-    [activeKey, openedTables]
+    [activeKey, openedTables, isTabPinned]
   );
 
   // 右键菜单处理
@@ -841,50 +898,70 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       setContextMenu((prev) => ({ ...prev, visible: false }));
 
       switch (action) {
+        case 'pin':
+          toggleTabPin(tabKey);
+          break;
+
         case 'close':
           handleCloseTab(tabKey);
           break;
 
         case 'closeOthers':
-          // 关闭其他所有 Tab
-          if (tabKey.endsWith('-data')) {
-            setOpenedTables((prev) =>
-              prev.filter((t) => getDataTabKey(t) === tabKey)
-            );
-          } else if (tabKey.startsWith('sql-')) {
-            setOpenedSqlTabs((prev) => prev.filter((t) => t.key === tabKey));
-          }
+          // 关闭其他所有 Tab（保留固定标签）
+          setOpenedTables((prev) =>
+            prev.filter((t) => getDataTabKey(t) === tabKey || t.pinned)
+          );
+          setOpenedSqlTabs((prev) =>
+            prev.filter((t) => t.key === tabKey || t.pinned)
+          );
+          setOpenedDesignerTabs((prev) =>
+            prev.filter((t) => t.key === tabKey || t.pinned)
+          );
+          setOpenedViewDefTabs((prev) =>
+            prev.filter((t) => t.key === tabKey || t.pinned)
+          );
           setActiveKey(tabKey);
           message.success(t('common.closeOtherTabs'));
           break;
 
-        case 'closeRight':
-          // 关闭右侧所有 Tab
-          if (tabKey.endsWith('-data')) {
-            const allDataKeys = openedTables.map((t) => getDataTabKey(t));
-            const currentIndex = allDataKeys.indexOf(tabKey);
-            if (currentIndex >= 0) {
-              const keysToClose = allDataKeys.slice(currentIndex + 1);
-              setOpenedTables((prev) =>
-                prev.filter((t) => !keysToClose.includes(getDataTabKey(t)))
-              );
-            }
-          } else if (tabKey.startsWith('sql-')) {
-            const sqlKeys = openedSqlTabs.map((t) => t.key);
-            const currentIndex = sqlKeys.indexOf(tabKey);
-            if (currentIndex >= 0) {
-              const keysToClose = sqlKeys.slice(currentIndex + 1);
-              setOpenedSqlTabs((prev) => prev.filter((t) => !keysToClose.includes(t.key)));
-            }
+        case 'closeRight': {
+          // 关闭右侧所有 Tab（保留固定标签）
+          const allItems: { key: string; createdAt: number; pinned: boolean }[] = [
+            ...openedTables.map((t) => ({ key: getDataTabKey(t), createdAt: t.createdAt, pinned: !!t.pinned })),
+            ...openedSqlTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: !!t.pinned })),
+            ...openedDesignerTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: !!t.pinned })),
+            ...openedViewDefTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: !!t.pinned })),
+          ].sort((a, b) => a.createdAt - b.createdAt);
+
+          const currentIdx = allItems.findIndex((i) => i.key === tabKey);
+          if (currentIdx >= 0) {
+            const keysToClose = new Set(
+              allItems.slice(currentIdx + 1).filter((i) => !i.pinned).map((i) => i.key)
+            );
+            setOpenedTables((prev) =>
+              prev.filter((t) => !keysToClose.has(getDataTabKey(t)))
+            );
+            setOpenedSqlTabs((prev) =>
+              prev.filter((t) => !keysToClose.has(t.key))
+            );
+            setOpenedDesignerTabs((prev) =>
+              prev.filter((t) => !keysToClose.has(t.key))
+            );
+            setOpenedViewDefTabs((prev) =>
+              prev.filter((t) => !keysToClose.has(t.key))
+            );
           }
           setActiveKey(tabKey);
           message.success(t('common.closeRightTabs'));
           break;
+        }
 
         case 'closeAll':
-          // 关闭所有 Tab
-          setOpenedTables([]);
-          setOpenedSqlTabs([]);
+          // 关闭所有 Tab（保留固定标签）
+          setOpenedTables((prev) => prev.filter((t) => t.pinned));
+          setOpenedSqlTabs((prev) => prev.filter((t) => t.pinned));
+          setOpenedDesignerTabs((prev) => prev.filter((t) => t.pinned));
+          setOpenedViewDefTabs((prev) => prev.filter((t) => t.pinned));
           setActiveKey('objects');
           message.success(t('common.closeAllTabs'));
           break;
@@ -932,7 +1009,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         }
       }
     },
-    [handleCloseTab, openedTables, openedSqlTabs]
+    [handleCloseTab, openedTables, openedSqlTabs, toggleTabPin]
   );
 
   // 关闭 Tab
@@ -965,7 +1042,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     [activeKey, openedTables, openedSqlTabs, handleCloseTab]
   );
 
-  // 动态 Tab：合并并按 createdAt 排序
+  // 动态 Tab：合并并按 createdAt 排序（固定标签排前面）
   const dynamicTabItems: TabsProps['items'] = [
     ...openedTables.flatMap((table) => {
       const dataTabKey = getDataTabKey(table);
@@ -987,6 +1064,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   maxWidth: 160,
                 }}
               >
+                {table.pinned && (
+                  <PushpinFilled style={{ marginRight: 2, flexShrink: 0, fontSize: 10, color: 'var(--color-primary)' }} />
+                )}
                 {table.isView ? (
                   <EyeOutlined style={{ marginRight: 4, flexShrink: 0 }} />
                 ) : (
@@ -1014,8 +1094,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               />
             </div>
           ),
-          closable: true,
+          closable: !table.pinned,
           _createdAt: table.createdAt ?? 0,
+          _pinned: !!table.pinned,
         },
       ];
     }),
@@ -1061,6 +1142,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 });
               }}
             >
+              {sqlTab.pinned && (
+                <PushpinFilled style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }} />
+              )}
               <DatabaseOutlined style={{ marginRight: 4 }} />
               {sqlTab.title}
             </span>
@@ -1087,8 +1171,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             />
           </div>
         ),
-        closable: true,
+        closable: !sqlTab.pinned,
         _createdAt: sqlTab.createdAt ?? 0,
+        _pinned: !!sqlTab.pinned,
       };
     }),
     ...openedDesignerTabs.map((designerTab) => ({
@@ -1098,6 +1183,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           onContextMenu={(e) => handleTabContextMenu(e, designerTab.key)}
           style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
         >
+          {designerTab.pinned && (
+            <PushpinFilled style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }} />
+          )}
           <TableOutlined style={{ marginRight: 4 }} />
           {designerTab.title}
         </span>
@@ -1144,8 +1232,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           />
         </div>
       ),
-      closable: true,
+      closable: !designerTab.pinned,
       _createdAt: designerTab.createdAt ?? 0,
+      _pinned: !!designerTab.pinned,
     })),
     ...openedViewDefTabs.map((viewDefTab) => ({
       key: viewDefTab.key,
@@ -1154,6 +1243,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           onContextMenu={(e) => handleTabContextMenu(e, viewDefTab.key)}
           style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
         >
+          {viewDefTab.pinned && (
+            <PushpinFilled style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }} />
+          )}
           <EyeOutlined style={{ marginRight: 4 }} />
           {viewDefTab.title}
         </span>
@@ -1167,10 +1259,16 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           />
         </div>
       ),
-      closable: true,
+      closable: !viewDefTab.pinned,
       _createdAt: viewDefTab.createdAt ?? 0,
+      _pinned: !!viewDefTab.pinned,
     })),
-  ].sort((a: any, b: any) => a._createdAt - b._createdAt);
+  ].sort((a: any, b: any) => {
+    // 固定标签排前面
+    if (a._pinned && !b._pinned) return -1;
+    if (!a._pinned && b._pinned) return 1;
+    return a._createdAt - b._createdAt;
+  });
 
   const tabItems: TabsProps['items'] = [
     {
@@ -1365,7 +1463,15 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         >
           <Menu
             items={[
-              { key: 'close', label: t('common.closeTabMenu'), icon: <CloseOutlined /> },
+              {
+                key: 'pin',
+                label: isTabPinned(contextMenu.tabKey)
+                  ? t('common.unpinTab')
+                  : t('common.pinTab'),
+                icon: isTabPinned(contextMenu.tabKey) ? <PushpinOutlined /> : <PushpinFilled />,
+              },
+              { type: 'divider' },
+              { key: 'close', label: t('common.closeTabMenu'), icon: <CloseOutlined />, disabled: isTabPinned(contextMenu.tabKey) },
               { key: 'closeOthers', label: t('common.closeOthersTabMenu') },
               { key: 'closeRight', label: t('common.closeRightTabMenu') },
               { type: 'divider' },
