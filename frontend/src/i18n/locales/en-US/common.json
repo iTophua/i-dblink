@@ -415,6 +415,7 @@
       "upperSQL": "Uppercase",
       "lowerSQL": "Lowercase",
       "sqlFormatted": "SQL formatted",
+    "dialectConverted": "SQL converted from {{source}} to {{target}} dialect",
       "sqlCommented": "Commented",
       "sqlUncommented": "Uncommented",
       "sqlUppercased": "Uppercased",

@@ -56,6 +56,9 @@ import { SQL_KEYWORDS, filterKeywordsByDbType } from '../constants/sqlKeywords';
 import { SQL_FUNCTIONS, filterFunctionsByDbType } from '../constants/sqlFunctions';
 import { api } from '../api';
 import type { QueryResult, DatabaseType } from '../types/api';
+import { detectSqlDialect, type DialectDetection } from '../utils/sqlDialects/detectDialect';
+import { convertByRules } from '../utils/sqlDialects/convertRules';
+import { SqlDialectBanner } from './SqlDialectBanner';
 
 interface QueryResultWithTiming extends QueryResult {
   executionTime?: number;
@@ -356,12 +359,50 @@ export function SQLEditor({
   const contextMenuMeasuredRef = useRef(false);
   const contextMenuSelectedSqlRef = useRef<string>('');
 
+  // SQL 方言检测状态
+  const [dialectMismatch, setDialectMismatch] = useState<DialectDetection | null>(null);
+  const [dialectDismissed, setDialectDismissed] = useState(false);
+  const dialectDetectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
   useEffect(() => {
     if (defaultQuery) {
       setSql(defaultQuery);
     }
   }, [defaultQuery]);
+
+  // SQL 方言检测（debounce 500ms）
+  useEffect(() => {
+    if (dialectDetectTimerRef.current) {
+      clearTimeout(dialectDetectTimerRef.current);
+    }
+
+    if (dialectDismissed || !sql || !dbType) {
+      setDialectMismatch(null);
+      return;
+    }
+
+    dialectDetectTimerRef.current = setTimeout(() => {
+      const detection = detectSqlDialect(sql);
+      if (detection && detection.dialect !== dbType) {
+        setDialectMismatch(detection);
+      } else {
+        setDialectMismatch(null);
+      }
+    }, 500);
+
+    return () => {
+      if (dialectDetectTimerRef.current) {
+        clearTimeout(dialectDetectTimerRef.current);
+      }
+    };
+  }, [sql, dbType, dialectDismissed]);
+
+  // 切换连接时重置方言检测
+  useEffect(() => {
+    setDialectDismissed(false);
+    setDialectMismatch(null);
+  }, [connectionId]);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResultWithTiming | null>(null);
@@ -1721,6 +1762,25 @@ export function SQLEditor({
     message.success(t('common.editorCleared'));
   }, []);
 
+  // SQL 方言快速转换（规则引擎）
+  const handleQuickConvert = useCallback(() => {
+    if (!dialectMismatch || !dbType) return;
+    const converted = convertByRules(sql, {
+      sourceDialect: dialectMismatch.dialect,
+      targetDialect: dbType,
+    });
+    setSql(converted);
+    setDialectMismatch(null);
+    setDialectDismissed(true);
+    message.success(t('common.sqlEditor.dialectConverted', { source: dialectMismatch.dialect, target: dbType }));
+  }, [sql, dbType, dialectMismatch]);
+
+  // SQL 方言转换忽略
+  const handleDismissDialectBanner = useCallback(() => {
+    setDialectDismissed(true);
+    setDialectMismatch(null);
+  }, []);
+
   const saveSQL = useCallback(() => {
     const now = new Date();
     const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
@@ -2250,6 +2310,17 @@ export function SQLEditor({
           />
         </Space>
       </div>
+
+      {/* SQL 方言转换提示 Banner */}
+      {dialectMismatch && dbType && (
+        <SqlDialectBanner
+          sourceDialect={dialectMismatch.dialect}
+          targetDialect={dbType}
+          matchedFeatures={dialectMismatch.matchedFeatures}
+          onQuickConvert={handleQuickConvert}
+          onDismiss={handleDismissDialectBanner}
+        />
+      )}
 
       {/* 编辑器区域 — 无结果时占满，有结果时按 editorRatio 分配 */}
       <div
