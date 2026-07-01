@@ -1,141 +1,72 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WindowSetTitle } from '../../wailsjs/runtime/runtime';
-import { Layout, theme, Modal, Form, Input, message } from 'antd';
+import { Layout, Form, Input, Modal } from 'antd';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
 import { Favorites } from './Favorites';
-import { useConnections, useDatabase, useGroups, useInitApp } from '../hooks/useApi';
-import { useMenuShortcuts } from '../hooks/useMenuShortcuts';
+import { useInitApp } from '../hooks/useApi';
 import { Toolbar } from './Toolbar';
 
 import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
-import { DatabaseProperties } from './DatabaseProperties';
-import { TabPanel, type TabPanelRef, type ActiveTabInfo } from './TabPanel';
+import { TabPanel, type TabPanelRef } from './TabPanel';
 import { StatusBar } from './StatusBar';
 import { ConnectionDialog } from './ConnectionDialog';
 import { ConnectionExportDialog } from './ConnectionExportDialog';
 import { BatchManageDialog } from './ConnectionTree/BatchManageDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { OperationLog } from './OperationLog';
-import type { TableInfo, ColumnInfo, IndexInfo } from '../types/api';
-import type { ConnectionFormData } from './ConnectionDialog';
-import type { Connection } from '../stores/appStore';
 import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useWorkspaceStore } from '../stores/workspaceStore';
 import { api } from '../api';
-import { getMainLayoutStyles } from './MainLayout/styles';
+import { useConnectionManager } from './MainLayout/hooks/useConnectionManager';
+import { useTabManager } from './MainLayout/hooks/useTabManager';
+import { useLayoutActions } from './MainLayout/hooks/useLayoutActions';
 
 const { Sider, Content } = Layout;
 
-interface MainLayoutProps {
-  children?: React.ReactNode;
-}
-
-function MainLayoutComponent({ children }: MainLayoutProps) {
+function MainLayoutComponent() {
   const { t } = useTranslation();
-  const [collapsed, setCollapsed] = useState(false);
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
-  const [selectedTable, setSelectedTable] = useState<string | null>(null);
-  const [selectedDatabase, setSelectedDatabase] = useState<string | undefined>();
-  const [selectedSchema, setSelectedSchema] = useState<string | undefined>();
-  const [selectedObjectType, setSelectedObjectType] = useState<'table' | 'view' | 'all'>('all');
-  // 双击表时触发，用于在 TabPanel 中打开新 Tab
-  const [tableToOpen, setTableToOpen] = useState<{
-    name: string;
-    database?: string;
-    isView?: boolean;
-  } | null>(null);
-  const [sqlTabCount, setSqlTabCount] = useState(0);
-  const [searchText, setSearchText] = useState('');
-  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
-  const [connectionDatabases, setConnectionDatabases] = useState<
-    Record<
-      string,
-      {
-        database: string;
-        tables: TableInfo[];
-        loaded: boolean;
-        loadFailed?: boolean;
-        procedures?: string[];
-        functions?: string[];
-        triggers?: import('../types/api').TriggerInfo[];
-        routinesLoaded?: boolean;
-      }[]
-    >
-  >({});
-  const [tableStructures, setTableStructures] = useState<
-    Record<string, { columns: ColumnInfo[]; indexes: IndexInfo[]; loaded: boolean }>
-  >({});
-  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
-  const [editingConnection, setEditingConnection] = useState<ConnectionFormData | undefined>();
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [connectionExportOpen, setConnectionExportOpen] = useState(false);
-  const [batchManageOpen, setBatchManageOpen] = useState(false);
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [passwordDialogConn, setPasswordDialogConn] = useState<{ id: string; name: string } | null>(
-    null
-  );
-  const [passwordForm] = Form.useForm();
+
+  useInitApp();
+
+  // Create shared ref in parent to break circular dependency between hooks
   const tabPanelRef = useRef<TabPanelRef>(null);
-  const workspaceRestoredRef = useRef(false);
-  const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo>({
-    type: 'objects',
-    title: t('common.objectListTitle'),
+
+  // Connection management hook
+  const connMgr = useConnectionManager({ tabPanelRef });
+
+  // Tab management hook
+  const tabMgr = useTabManager({
+    selectedConnectionId: connMgr.selectedConnectionId,
+    connections: connMgr.connections,
   });
-  const [transactionActive, setTransactionActive] = useState(false);
-  const [currentResultRows, setCurrentResultRows] = useState<number>(0);
-  const [currentExecutionTime, setCurrentExecutionTime] = useState<number>(0);
-  const [isQuerying, setIsQuerying] = useState(false);
-  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
-  const [favoritesOpen, setFavoritesOpen] = useState(false);
-  const [operationLogOpen, setOperationLogOpen] = useState(false);
 
-  // 恢复侧边栏工作区状态
-  useEffect(() => {
-    if (workspaceRestoredRef.current) return;
-    const ws = useWorkspaceStore.getState();
-    setCollapsed(ws.sidebarCollapsed);
-    // 应用重启后不恢复连接展开状态，保持所有连接收起
-    setExpandedKeys([]);
-    workspaceRestoredRef.current = true;
-  }, []);
-
-  // 保存侧边栏状态
-  useEffect(() => {
-    if (!workspaceRestoredRef.current) return;
-    useWorkspaceStore.getState().updateWorkspace({
-      sidebarCollapsed: collapsed,
-      expandedKeys,
-    });
-  }, [collapsed, expandedKeys]);
-
-  const { token } = theme.useToken();
-  const isDarkMode = token.colorBgLayout === '#1f1f1f';
-  const styles = useMemo(() => getMainLayoutStyles(), []);
-
-  const {
-    connections,
-    isLoading,
-    setActiveConnection,
-    saveConnection,
-    deleteConnection,
-    connect,
-    disconnect,
-  } = useConnections();
-
-  const { groups, saveGroup, deleteGroup } = useGroups();
+  // Layout actions hook
+  const layout = useLayoutActions({
+    selectedConnectionId: connMgr.selectedConnectionId,
+    selectedDatabase: connMgr.selectedDatabase,
+    expandedKeys: connMgr.expandedKeys,
+    setExpandedKeys: connMgr.setExpandedKeys,
+    connectionDatabases: connMgr.connectionDatabases,
+    connections: connMgr.connections,
+    loadDatabaseTables: connMgr.loadDatabaseTables,
+    handleConnect: connMgr.handleConnect,
+    handleDisconnect: connMgr.handleDisconnect,
+    handleNewQuery: connMgr.handleNewQuery,
+    setConnectionDialogOpen: connMgr.setConnectionDialogOpen,
+    setConnectionExportOpen: connMgr.setConnectionExportOpen,
+  });
 
   // 动态更新窗口标题
   useEffect(() => {
-    const connectionName = selectedConnectionId
-      ? connections.find((c) => c.id === selectedConnectionId)?.name
+    const connectionName = connMgr.selectedConnectionId
+      ? connMgr.connections.find((c) => c.id === connMgr.selectedConnectionId)?.name
       : undefined;
     const parts: string[] = [];
     if (connectionName) parts.push(connectionName);
-    if (activeTabInfo.database) parts.push(activeTabInfo.database);
-    if (activeTabInfo.title && activeTabInfo.type !== 'objects') parts.push(activeTabInfo.title);
+    if (tabMgr.activeTabInfo.database) parts.push(tabMgr.activeTabInfo.database);
+    if (tabMgr.activeTabInfo.title && tabMgr.activeTabInfo.type !== 'objects') parts.push(tabMgr.activeTabInfo.title);
     const title = parts.length > 0 ? `${parts.join(' > ')} - iDBLink` : 'iDBLink';
     document.title = title;
 
@@ -147,970 +78,102 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         // fallback silently
       }
     }
-  }, [selectedConnectionId, connections, activeTabInfo]);
-
-  // 监听活跃 Tab 变化，更新状态栏信息
-  useEffect(() => {
-    if (activeTabInfo.type === 'sql') {
-      // 查询 Tab：监听事务状态
-      if (selectedConnectionId) {
-        api
-          .getTransactionStatus(selectedConnectionId)
-          .then(setTransactionActive)
-          .catch(() => {});
-      } else {
-        setTransactionActive(false);
-      }
-      setCurrentResultRows(0);
-      setCurrentExecutionTime(0);
-    } else if (activeTabInfo.type === 'data') {
-      // 数据 Tab：重置事务状态
-      setTransactionActive(false);
-      setCurrentResultRows(0);
-      setCurrentExecutionTime(0);
-    } else {
-      setTransactionActive(false);
-      setCurrentResultRows(0);
-      setCurrentExecutionTime(0);
-    }
-  }, [activeTabInfo.type, activeTabInfo.connectionId, selectedConnectionId]);
-
-  const { getTables, refreshTables, getDatabases, getColumns, getIndexes } = useDatabase();
-
-  useInitApp();
-
-  const menuActions = useMemo(
-    () => ({
-      onNewConnection: () => setConnectionDialogOpen(true),
-      onSave: () => {},
-      onSaveAs: () => {},
-      onImport: () => setConnectionExportOpen(true),
-      onExport: () => setConnectionExportOpen(true),
-      onQuit: () => {},
-      onUndo: () => {},
-      onRedo: () => {},
-      onCut: () => {},
-      onCopy: () => {},
-      onPaste: () => {},
-      onDelete: () => {},
-      onSelectAll: () => {},
-      onFind: () => {},
-      onRefresh: () => {
-        if (selectedConnectionId && selectedDatabase) {
-          loadDatabaseTables(selectedConnectionId, selectedDatabase, true);
-        }
-      },
-      onZoomIn: () => {},
-      onZoomOut: () => {},
-      onZoomReset: () => {},
-      onFullscreen: () => {
-        const elem = document.fullscreenElement
-          ? document.exitFullscreen()
-          : document.documentElement.requestFullscreen();
-        elem.catch(() => {});
-      },
-      onConnectSelected: () => {
-        if (selectedConnectionId) {
-          handleConnect(selectedConnectionId);
-        }
-      },
-      onDisconnect: () => {
-        if (selectedConnectionId) {
-          handleDisconnect(selectedConnectionId);
-        }
-      },
-      onNewQuery: () => {
-        if (selectedConnectionId) {
-          handleNewQuery(selectedConnectionId);
-        }
-      },
-      onExecuteQuery: () => {
-        window.dispatchEvent(
-          new CustomEvent('tab-action', { detail: { action: 'execute-query' } })
-        );
-      },
-      onOptions: () => setSettingsDialogOpen(true),
-      onSearch: () => setGlobalSearchOpen(true),
-      onNewTab: () => {
-        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } }));
-      },
-      onCloseTab: () => {
-        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'close-tab' } }));
-      },
-      onNextTab: () => {
-        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'next-tab' } }));
-      },
-      onPrevTab: () => {
-        window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'prev-tab' } }));
-      },
-      onDocumentation: () => {},
-    }),
-    [selectedConnectionId, selectedDatabase]
-  );
-
-  useMenuShortcuts(menuActions);
-
-  // Debounced search (500ms)
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // 性能优化：缓存搜索结果
-  const filteredConnections = useMemo(() => {
-    if (!debouncedSearch.trim()) return connections;
-    const lower = debouncedSearch.toLowerCase();
-    return connections.filter(
-      (conn) => conn.name.toLowerCase().includes(lower) || conn.host?.toLowerCase().includes(lower)
-    );
-  }, [connections, debouncedSearch]);
-
-  // 性能优化：缓存连接统计
-  const connectionStats = useMemo(() => {
-    return {
-      total: connections.length,
-      connected: connections.filter((c) => c.status === 'connected').length,
-      filtered: filteredConnections.length,
-    };
-  }, [connections, filteredConnections]);
-
-  // 性能优化：缓存数据库列表
-  const allDatabases = useMemo(() => {
-    return Object.values(connectionDatabases).flatMap((dbs) => dbs.map((db) => db.database));
-  }, [connectionDatabases]);
-
-  const handleSearchChange = useCallback((value: string | undefined) => {
-    const newValue = value ?? '';
-    setSearchText(newValue);
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = setTimeout(() => {
-      setDebouncedSearch(newValue);
-    }, 500);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    };
-  }, []);
-
-  // Handler wrappers for ConnectionTree
-  const handleSaveConnection = useCallback(
-    async (data: any) => {
-      await saveConnection({
-        id: data.id,
-        name: data.name,
-        db_type: data.db_type,
-        host: data.host,
-        port: data.port,
-        username: data.username,
-        password: data.password,
-        database: data.database,
-        group_id: data.group_id,
-      });
-    },
-    [saveConnection]
-  );
-
-  const handleSaveGroup = useCallback(
-    (data: { id?: string; name: string; icon: string; color: string; parent_id?: string }) => {
-      saveGroup({
-        id: data.id,
-        name: data.name,
-        icon: data.icon,
-        color: data.color,
-        parent_id: data.parent_id,
-      });
-    },
-    [saveGroup]
-  );
-
-  const handleDeleteGroup = useCallback(
-    (id: string) => {
-      deleteGroup(id);
-    },
-    [deleteGroup]
-  );
-
-  const handleDialogSave = useCallback(
-    async (data: ConnectionFormData) => {
-      try {
-        await saveConnection({
-          id: data.id,
-          name: data.name,
-          db_type: data.dbType,
-          host: data.host,
-          port: data.port,
-          username: data.username,
-          password: data.password,
-          database: data.database,
-          group_id: data.group_id,
-        });
-        setConnectionDialogOpen(false);
-      } catch (error) {
-        console.error('Failed to save connection:', error);
-        throw error;
-      }
-    },
-    [saveConnection]
-  );
-
-// ConnectionTree handles connection expansion internally
-
-  const loadDatabaseTables = useCallback(
-    async (connectionId: string, database: string, forceRefresh = false) => {
-      const cacheKey = `${connectionId}::${database || ''}`;
-      const { setTableDataLoading } = useAppStore.getState();
-
-      setTableDataLoading(cacheKey, true);
-
-      try {
-        const tables = await getTables(connectionId, database, forceRefresh);
-
-        setConnectionDatabases((prev) => {
-          const dbList = prev[connectionId] || [];
-          const dbIndex = dbList.findIndex((db) => db.database === database);
-
-          if (dbIndex >= 0) {
-            const newDbList = [...dbList];
-            newDbList[dbIndex] = { ...newDbList[dbIndex], tables, loaded: true, loadFailed: false };
-            return {
-              ...prev,
-              [connectionId]: newDbList,
-            };
-          } else {
-            return {
-              ...prev,
-              [connectionId]: [...dbList, { database, tables, loaded: true, loadFailed: false }],
-            };
-          }
-        });
-      } catch {
-        setConnectionDatabases((prev) => {
-          const dbList = prev[connectionId] || [];
-          const dbIndex = dbList.findIndex((db) => db.database === database);
-
-          if (dbIndex >= 0) {
-            const newDbList = [...dbList];
-            newDbList[dbIndex] = { ...newDbList[dbIndex], loaded: true, loadFailed: true };
-            return {
-              ...prev,
-              [connectionId]: newDbList,
-            };
-          } else {
-            return {
-              ...prev,
-              [connectionId]: [...dbList, { database, tables: [], loaded: true, loadFailed: true }],
-            };
-          }
-        });
-      } finally {
-        setTableDataLoading(cacheKey, false);
-      }
-    },
-    [getTables]
-  );
-
-  const loadDatabaseRoutines = useCallback(async (connectionId: string, database: string) => {
-    try {
-      const [procedures, functions, triggers] = await Promise.all([
-        api.getProcedures(connectionId, database),
-        api.getFunctions(connectionId, database),
-        api.getTriggers(connectionId, database),
-      ]);
-
-      setConnectionDatabases((prev) => {
-        const dbList = prev[connectionId] || [];
-        const dbIndex = dbList.findIndex((db) => db.database === database);
-
-        if (dbIndex >= 0) {
-          const newDbList = [...dbList];
-          newDbList[dbIndex] = {
-            ...newDbList[dbIndex],
-            procedures,
-            functions,
-            triggers,
-            routinesLoaded: true,
-          };
-          return {
-            ...prev,
-            [connectionId]: newDbList,
-          };
-        }
-        return prev;
-      });
-    } catch (err) {
-      console.error('Failed to load routines:', err);
-      // 即使加载失败也标记为已加载，避免一直显示 loading
-      setConnectionDatabases((prev) => {
-        const dbList = prev[connectionId] || [];
-        const dbIndex = dbList.findIndex((db) => db.database === database);
-        if (dbIndex >= 0) {
-          const newDbList = [...dbList];
-          newDbList[dbIndex] = {
-            ...newDbList[dbIndex],
-            routinesLoaded: true,
-          };
-          return { ...prev, [connectionId]: newDbList };
-        }
-        return prev;
-      });
-    }
-  }, []);
-
-  // ConnectionTree handles table selection internally
-
-  // ConnectionTree handles connection selection internally
-
-  const handleConnect = useCallback(
-    async (connectionId: string) => {
-      const { setLoading, clearTableData, setConnections, setError } = useAppStore.getState();
-      try {
-        await connect(connectionId);
-        const databases = (await getDatabases(connectionId)) || [];
-        const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
-        setConnectionDatabases((prev) => ({
-          ...prev,
-          [connectionId]: dbList,
-        }));
-        setExpandedKeys((prev) => [...prev, connectionId]);
-      } catch (err: any) {
-        // 检查是否是密码错误，需要弹框输入密码
-        if (err?.code === 'PASSWORD_REQUIRED') {
-          const conn = connections.find((c) => c.id === connectionId);
-          setPasswordDialogConn({
-            id: connectionId,
-            name: conn?.name || t('common.unknownConnection'),
-          });
-          setPasswordDialogOpen(true);
-          return;
-        }
-        // 连接失败时，彻底清理所有相关状态
-        setConnectionDatabases((prev) => {
-          const next = { ...prev };
-          delete next[connectionId];
-          return next;
-        });
-        // 清理表数据缓存（包括 loading 状态）
-        clearTableData(connectionId);
-        // 重置连接状态为断开
-        setConnections((prev) =>
-          prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
-        );
-        // 确保全局 loading 状态被重置
-        setLoading(false);
-        setError(null);
-        throw err;
-      }
-    },
-    [connect, getDatabases, connections]
-  );
-
-  const handlePasswordSubmit = async () => {
-    try {
-      const values = await passwordForm.validateFields();
-      setPasswordDialogOpen(false);
-      passwordForm.resetFields();
-
-      if (!passwordDialogConn) return;
-
-      // 保存密码到存储
-      await api.updateConnectionPassword(passwordDialogConn.id, values.password);
-
-      // 重试连接
-      const { setLoading, clearTableData, setConnections, setError } = useAppStore.getState();
-      try {
-        await connect(passwordDialogConn.id);
-        const databases = (await getDatabases(passwordDialogConn.id)) || [];
-        const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
-        setConnectionDatabases((prev) => {
-          const next = { ...prev };
-          // 清除之前连接失败的状态
-          if (next[passwordDialogConn.id]) {
-            next[passwordDialogConn.id] = next[passwordDialogConn.id].map((db) => ({
-              ...db,
-              loadFailed: false,
-            }));
-          }
-          return {
-            ...next,
-            [passwordDialogConn.id]: dbList,
-          };
-        });
-        setExpandedKeys((prev) => [...prev, passwordDialogConn.id]);
-      } catch (err) {
-        setConnectionDatabases((prev) => {
-          const next = { ...prev };
-          delete next[passwordDialogConn.id];
-          return next;
-        });
-        clearTableData(passwordDialogConn.id);
-        setConnections((prev) =>
-          prev.map((c) =>
-            c.id === passwordDialogConn.id ? { ...c, status: 'disconnected' as const } : c
-          )
-        );
-        setLoading(false);
-        setError(null);
-        throw err;
-      }
-    } catch (err) {
-      // 表单验证失败或其他错误
-      console.error('Password prompt error:', err);
-    }
-  };
-
-  const handleDatabaseExpand = useCallback(
-    async (connectionId: string, database: string) => {
-      setSelectedConnectionId(connectionId);
-      setSelectedDatabase(database);
-
-      // 检查连接状态
-      const conn = connections.find((c) => c.id === connectionId);
-      if (!conn || conn.status !== 'connected') {
-        return;
-      }
-
-      // 检查是否已加载失败，避免不断重试导致错误提示
-      const dbList = connectionDatabases[connectionId] || [];
-      const db = dbList.find((d) => d.database === database);
-      if (db?.loadFailed) return;
-
-      // 始终强制刷新，因为展开数据库时需要最新数据
-      await loadDatabaseTables(connectionId, database, true);
-      await loadDatabaseRoutines(connectionId, database);
-    },
-    [loadDatabaseTables, loadDatabaseRoutines, connectionDatabases, connections]
-  );
-
-  const handleDatabaseRefresh = useCallback(
-    async (connectionId: string, database: string) => {
-      await loadDatabaseTables(connectionId, database, true); // Force refresh
-    },
-    [loadDatabaseTables]
-  );
-
-  const closingDbModalRef = useRef(false);
-
-  const handleDatabaseProperties = useCallback((connectionId: string, databaseName: string) => {
-    Modal.info({
-      title: `${t('common.databasePropertiesTitle')}: ${databaseName}`,
-      width: 800,
-      transitionName: '',
-      maskTransitionName: '',
-      content: <DatabaseProperties connectionId={connectionId} databaseName={databaseName} />,
-      okText: t('common.close'),
-    });
-  }, []);
-
-  const handleDatabaseClose = useCallback(
-    (connectionId: string, database: string) => {
-      if (closingDbModalRef.current) return;
-
-      const hasTabs = tabPanelRef.current?.hasDatabaseTabs(connectionId, database);
-      const tabInfo = tabPanelRef.current?.getDatabaseTabInfo(connectionId, database);
-
-      const doClose = () => {
-        setConnectionDatabases((prev) => {
-          const newData = { ...prev };
-          if (newData[connectionId]) {
-            newData[connectionId] = newData[connectionId].map((db) =>
-              db.database === database ? { ...db, loaded: false, tables: [] } : db
-            );
-          }
-          return newData;
-        });
-        setExpandedKeys((prev) =>
-          prev.filter(
-            (key) =>
-              !key.startsWith(`db::${connectionId}::${database}`) &&
-              !key.startsWith(`tables::${connectionId}::${database}`) &&
-              !key.startsWith(`views::${connectionId}::${database}`) &&
-              !key.startsWith(`table::${connectionId}::${database}`) &&
-              !key.startsWith(`view::${connectionId}::${database}`)
-          )
-        );
-        setTableStructures((prev) => {
-          const newData = { ...prev };
-          const keysToDelete = Object.keys(newData).filter((key) =>
-            key.startsWith(`${connectionId}::${database}::`)
-          );
-          keysToDelete.forEach((key) => delete newData[key]);
-          return newData;
-        });
-        if (selectedConnectionId === connectionId && selectedDatabase === database) {
-          setSelectedTable(null);
-          setSelectedDatabase(undefined);
-          setSelectedSchema(undefined);
-        }
-      };
-
-      if (hasTabs && tabInfo && (tabInfo.dataTabCount > 0 || tabInfo.sqlTabCount > 0)) {
-        closingDbModalRef.current = true;
-        const tabDesc = [
-          tabInfo.dataTabCount > 0
-            ? t('common.dataTableCount', { count: tabInfo.dataTabCount })
-            : '',
-          tabInfo.sqlTabCount > 0 ? t('common.sqlQueryCount', { count: tabInfo.sqlTabCount }) : '',
-        ]
-          .filter(Boolean)
-          .join(t('common.enumerationSeparator'));
-        Modal.confirm({
-          title: t('common.closeRelatedTabsTitle'),
-          content: t('common.closeDatabaseTabsContent', { tabs: tabDesc }),
-          okText: t('common.closeAndCloseDatabase'),
-          cancelText: t('common.closeDatabaseOnly'),
-          transitionName: '',
-          maskTransitionName: '',
-          onOk: () => {
-            closingDbModalRef.current = false;
-            tabPanelRef.current?.closeDatabaseTabs(connectionId, database);
-            doClose();
-          },
-          onCancel: () => {
-            closingDbModalRef.current = false;
-            doClose();
-          },
-        });
-      } else {
-        doClose();
-      }
-    },
-    [selectedConnectionId, selectedDatabase]
-  );
-
-  const handleLoadDatabases = useCallback(
-    async (connectionId: string) => {
-      try {
-        const databases = await getDatabases(connectionId);
-        const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
-        setConnectionDatabases((prev) => ({
-          ...prev,
-          [connectionId]: dbList,
-        }));
-      } catch (error) {
-        console.error('加载数据库列表失败:', error);
-      }
-    },
-    [getDatabases]
-  );
-
-  const handleTableExpand = useCallback(
-    async (connectionId: string, database: string, tableName: string) => {
-      const tableKey = `${connectionId}::${database}::${tableName}`;
-
-      // 如果已经加载过，跳过
-      if (tableStructures[tableKey]?.loaded) return;
-
-      try {
-        const [columns, indexes] = await Promise.all([
-          getColumns(connectionId, tableName, database),
-          getIndexes(connectionId, tableName, database),
-        ]);
-
-        setTableStructures((prev) => ({
-          ...prev,
-          [tableKey]: { columns, indexes, loaded: true },
-        }));
-      } catch (error) {
-        console.error('Failed to load table structure:', error);
-        // 即使失败也标记为 loaded，避免重复请求
-        setTableStructures((prev) => ({
-          ...prev,
-          [tableKey]: { columns: [], indexes: [], loaded: true },
-        }));
-      }
-    },
-    [tableStructures, getColumns, getIndexes]
-  );
-
-  const handleDisconnect = useCallback(
-    (connectionId: string) => {
-      const tabInfo = tabPanelRef.current?.getConnectionTabInfo(connectionId);
-      const hasTabs = tabPanelRef.current?.hasConnectionTabs(connectionId);
-
-      const doDisconnect = () => {
-        setConnectionDatabases((prev) => {
-          const next = { ...prev };
-          delete next[connectionId];
-          return next;
-        });
-        setExpandedKeys((prev) =>
-          prev.filter((k) => {
-            if (k === connectionId) return false;
-            if (k.startsWith(`db::${connectionId}::`)) return false;
-            if (k.startsWith(`tables::${connectionId}::`)) return false;
-            if (k.startsWith(`views::${connectionId}::`)) return false;
-            if (k.startsWith(`table::${connectionId}::`)) return false;
-            if (k.startsWith(`view::${connectionId}::`)) return false;
-            if (k.startsWith(`procedures::${connectionId}::`)) return false;
-            if (k.startsWith(`functions::${connectionId}::`)) return false;
-            return true;
-          })
-        );
-        setTableStructures((prev) => {
-          const next = { ...prev };
-          const keysToDelete = Object.keys(next).filter((key) =>
-            key.startsWith(`${connectionId}::`)
-          );
-          keysToDelete.forEach((key) => delete next[key]);
-          return next;
-        });
-        if (selectedConnectionId === connectionId) {
-          setSelectedConnectionId(null);
-          setSelectedTable(null);
-          setSelectedDatabase(undefined);
-          setSelectedSchema(undefined);
-          setActiveConnection(null);
-        }
-        disconnect(connectionId);
-      };
-
-      if (hasTabs && tabInfo && (tabInfo.dataTabCount > 0 || tabInfo.sqlTabCount > 0)) {
-        const tabDesc = [
-          tabInfo.dataTabCount > 0
-            ? t('common.dataTableCount', { count: tabInfo.dataTabCount })
-            : '',
-          tabInfo.sqlTabCount > 0 ? t('common.sqlQueryCount', { count: tabInfo.sqlTabCount }) : '',
-        ]
-          .filter(Boolean)
-          .join(t('common.enumerationSeparator'));
-        Modal.confirm({
-          title: t('common.closeRelatedTabsTitle'),
-          content: t('common.disconnectTabsContent', { tabs: tabDesc }),
-          okText: t('common.closeAndDisconnect'),
-          cancelText: t('common.disconnectOnly'),
-          transitionName: '',
-          maskTransitionName: '',
-          onOk: () => {
-            tabPanelRef.current?.closeConnectionTabs(connectionId);
-            doDisconnect();
-          },
-          onCancel: () => {
-            doDisconnect();
-          },
-        });
-      } else {
-        doDisconnect();
-      }
-    },
-    [disconnect, selectedConnectionId, setActiveConnection]
-  );
-
-  const handleEditConnection = useCallback((connection: Connection) => {
-    setEditingConnection({
-      id: connection.id,
-      name: connection.name,
-      dbType: connection.db_type,
-      host: connection.host,
-      port: connection.port,
-      username: connection.username,
-      password: '',
-      database: connection.database,
-      group_id: connection.group_id,
-    });
-    setConnectionDialogOpen(true);
-  }, []);
-
-  const handleDeleteConnection = useCallback(
-    (connectionId: string) => {
-      deleteConnection(connectionId);
-    },
-    [deleteConnection]
-  );
-
-  const handleNewQuery = useCallback(
-    async (connectionId: string) => {
-      const conn = connections.find((c) => c.id === connectionId);
-      if (!conn) return;
-
-      // 如果未连接，先尝试连接
-      if (conn.status !== 'connected') {
-        try {
-          await handleConnect(connectionId);
-        } catch (err: any) {
-          // 连接失败时，handleConnect 会处理密码弹框，不需要再处理
-          return;
-        }
-      }
-
-      setSelectedConnectionId(connectionId);
-      setActiveConnection(connectionId);
-      window.dispatchEvent(
-        new CustomEvent('tab-action', {
-          detail: { action: 'new-sql-tab', connectionId, database: selectedDatabase },
-        })
-      );
-    },
-    [connections, handleConnect, setActiveConnection]
-  );
-
-  const handleEditTab = useCallback((targetKey: string, action: string) => {
-    if (action === 'remove' && targetKey !== 'sql') {
-      setSelectedTable(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleMenuAction = async (event: CustomEvent<{ action: string }>) => {
-      const { action } = event.detail;
-      switch (action) {
-        case 'new-connection':
-          setConnectionDialogOpen(true);
-          break;
-        case 'open-connection':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'import-connections':
-        case 'export-connections':
-          setConnectionExportOpen(true);
-          break;
-        case 'options':
-          setSettingsDialogOpen(true);
-          break;
-        case 'toggle-theme':
-          window.dispatchEvent(new CustomEvent('app-action', { detail: { action } }));
-          break;
-        case 'refresh':
-          if (selectedConnectionId && selectedDatabase) {
-            loadDatabaseTables(selectedConnectionId, selectedDatabase, true);
-          }
-          break;
-        case 'new-query':
-          window.dispatchEvent(
-            new CustomEvent('tab-action', { detail: { action: 'new-sql-tab' } })
-          );
-          break;
-        case 'execute-query':
-          window.dispatchEvent(
-            new CustomEvent('tab-action', { detail: { action: 'execute-query' } })
-          );
-          break;
-        case 'connect-selected':
-          if (selectedConnectionId) {
-            handleConnect(selectedConnectionId);
-          }
-          break;
-        case 'disconnect':
-          if (selectedConnectionId) {
-            handleDisconnect(selectedConnectionId);
-          }
-          break;
-        case 'save':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'save' } }));
-          break;
-        case 'save-as':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'import':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'import' } }));
-          break;
-        case 'export':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'export' } }));
-          break;
-        case 'undo':
-        case 'redo':
-        case 'cut':
-        case 'copy':
-        case 'paste':
-        case 'delete':
-        case 'select-all':
-          // 编辑操作（撤销/重做/剪切/复制/粘贴/全选）由浏览器原生处理
-          // Go 菜单未绑定系统快捷键，因此 WebView 会收到原生 keydown 事件
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action } }));
-          break;
-        case 'find':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'find' } }));
-          break;
-        case 'zoom-in':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-in' } }));
-          break;
-        case 'zoom-out':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-out' } }));
-          break;
-        case 'zoom-reset':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-reset' } }));
-          break;
-        case 'fullscreen':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'fullscreen' } }));
-          break;
-        case 'close-all':
-          window.dispatchEvent(
-            new CustomEvent('tab-action', { detail: { action: 'close-all-tabs' } })
-          );
-          break;
-        case 'exit':
-          try {
-            await api.quitApp();
-          } catch (e) {
-            console.error('Failed to quit:', e);
-          }
-          break;
-        case 'new-tab':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-tab' } }));
-          break;
-        case 'close-tab':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'close-tab' } }));
-          break;
-        case 'next-tab':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'next-tab' } }));
-          break;
-        case 'prev-tab':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'prev-tab' } }));
-          break;
-        case 'documentation':
-        case 'search':
-        case 'check-update':
-          window.dispatchEvent(new CustomEvent('app-action', { detail: { action } }));
-          break;
-        case 'data-sync':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'favorites':
-          setFavoritesOpen(true);
-          break;
-        case 'backup':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'restore':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'model-designer':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'cascade':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'tile-horizontally':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'tile-vertically':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'operation-log':
-          setOperationLogOpen(true);
-          break;
-        default:
-          console.log(`Unknown menu action: ${action}`);
-      }
-    };
-
-    window.addEventListener('menu-action', handleMenuAction);
-
-    const handleRefreshConnectionTree = async (event: Event) => {
-      const customEvent = event as CustomEvent<{ connectionId: string; database?: string }>;
-      const { connectionId, database } = customEvent.detail;
-      if (database) {
-        await loadDatabaseTables(connectionId, database, true);
-      } else {
-        // 如果没有指定数据库，刷新该连接下的所有数据库
-        const dbList = connectionDatabases[connectionId] || [];
-        for (const db of dbList) {
-          await loadDatabaseTables(connectionId, db.database, true);
-        }
-      }
-    };
-
-    window.addEventListener('refresh-connection-tree', handleRefreshConnectionTree);
-
-    return () => {
-      window.removeEventListener('menu-action', handleMenuAction);
-      window.removeEventListener('refresh-connection-tree', handleRefreshConnectionTree);
-    };
-  }, [selectedConnectionId, selectedDatabase, loadDatabaseTables, handleConnect, handleDisconnect, connectionDatabases]);
+  }, [connMgr.selectedConnectionId, connMgr.connections, tabMgr.activeTabInfo]);
 
   return (
-    <Layout style={styles.root}>
+    <Layout style={layout.styles.root}>
       <Toolbar />
 
-      <Layout style={styles.mainLayout}>
+      <Layout style={layout.styles.mainLayout}>
         <Sider
           collapsible
-          collapsed={collapsed}
-          onCollapse={(value) => setCollapsed(value)}
+          collapsed={layout.collapsed}
+          onCollapse={(value) => layout.setCollapsed(value)}
           width={320}
           trigger={null}
-          style={{ ...styles.sider }}
+          style={{ ...layout.styles.sider }}
           className="sidebar-enhanced"
         >
-          <div style={styles.siderContent} className="sidebar-content">
-            {!collapsed && (
-              <div style={styles.searchContainer} className="search-container">
+          <div style={layout.styles.siderContent} className="sidebar-content">
+            {!layout.collapsed && (
+              <div style={layout.styles.searchContainer} className="search-container">
                 <GlobalInput
                   placeholder={t('common.tableList.searchPlaceholder')}
-                  value={searchText}
-                  onChange={(e: any) => handleSearchChange(e.target.value)}
-                  style={styles.searchInput}
+                  value={layout.searchText}
+                  onChange={(e: any) => layout.handleSearchChange(e.target.value)}
+                  style={layout.styles.searchInput}
                   size="small"
                   allowClear
                 />
               </div>
             )}
 
-             <div style={styles.connectionTreeContainer} className="connection-tree-container">
+             <div style={layout.styles.connectionTreeContainer} className="connection-tree-container">
                <EnhancedConnectionTree
-                 connections={connections}
-                 groups={groups}
-                 selectedId={selectedConnectionId}
-                 selectedTableId={selectedTable}
+                 connections={connMgr.connections}
+                 groups={connMgr.groups}
+                 selectedId={connMgr.selectedConnectionId}
+                 selectedTableId={connMgr.selectedTable}
                   onSelect={(id) => {
-                    setSelectedConnectionId(id);
-                    setSelectedTable(null);
-                    setSelectedSchema(undefined);
+                    connMgr.setSelectedConnectionId(id);
+                    connMgr.setSelectedTable(null);
+                    connMgr.setSelectedSchema(undefined);
                   }}
                  onTableSelect={(table, database) => {
-                   setSelectedTable(table);
-                   setSelectedDatabase(database);
+                   connMgr.setSelectedTable(table);
+                   connMgr.setSelectedDatabase(database);
                  }}
                   onObjectTypeSelect={(objectType, _database, schema) => {
-                    setSelectedObjectType(objectType);
-                    setSelectedSchema(schema);
+                    tabMgr.setSelectedObjectType(objectType);
+                    connMgr.setSelectedSchema(schema);
                   }}
                  onTableOpen={(tableName, database) => {
-                   setTableToOpen(null);
+                   tabMgr.setTableToOpen(null);
                    setTimeout(() => {
-                     setTableToOpen({ name: tableName, database });
+                     tabMgr.setTableToOpen({ name: tableName, database });
                    }, 0);
                  }}
                   onOpenDesigner={(tableName) => {
                     tabPanelRef.current?.openDesignerTab(tableName);
                   }}
                   onViewOpen={(viewName, database) => {
-                    setTableToOpen(null);
+                    tabMgr.setTableToOpen(null);
                     setTimeout(() => {
-                      setTableToOpen({ name: viewName, database, isView: true });
+                      tabMgr.setTableToOpen({ name: viewName, database, isView: true });
                     }, 0);
                   }}
                   onExpand={(connectionId, expanded) => {
                    if (expanded) {
-                     setExpandedKeys((prev) => [...prev, connectionId]);
+                     connMgr.setExpandedKeys((prev) => [...prev, connectionId]);
                    } else {
-                     setExpandedKeys((prev) => prev.filter((k) => k !== connectionId));
+                     connMgr.setExpandedKeys((prev) => prev.filter((k) => k !== connectionId));
                    }
                  }}
-                 collapsed={collapsed}
-                 searchText={searchText}
-                 expandedKeys={expandedKeys}
-                 onExpandKeys={setExpandedKeys}
-                 connectionDatabases={connectionDatabases}
-                 isLoading={isLoading}
-                 onConnect={handleConnect}
-                 onDisconnect={handleDisconnect}
-                 onEditConnection={handleEditConnection}
-                 onDeleteConnection={handleDeleteConnection}
-                 onNewQuery={handleNewQuery}
-                 onDatabaseExpand={handleDatabaseExpand}
-                 onDatabaseRefresh={handleDatabaseRefresh}
-                 onDatabaseClose={handleDatabaseClose}
-                 onDatabaseProperties={handleDatabaseProperties}
-                 onLoadDatabases={handleLoadDatabases}
-                 onTableExpand={handleTableExpand}
+                 collapsed={layout.collapsed}
+                 searchText={layout.searchText}
+                 expandedKeys={connMgr.expandedKeys}
+                 onExpandKeys={connMgr.setExpandedKeys}
+                 connectionDatabases={connMgr.connectionDatabases}
+                 isLoading={connMgr.isLoading}
+                 onConnect={connMgr.handleConnect}
+                 onDisconnect={connMgr.handleDisconnect}
+                 onEditConnection={connMgr.handleEditConnection}
+                 onDeleteConnection={connMgr.handleDeleteConnection}
+                 onNewQuery={connMgr.handleNewQuery}
+                 onDatabaseExpand={connMgr.handleDatabaseExpand}
+                 onDatabaseRefresh={connMgr.handleDatabaseRefresh}
+                 onDatabaseClose={connMgr.handleDatabaseClose}
+                 onDatabaseProperties={connMgr.handleDatabaseProperties}
+                 onLoadDatabases={connMgr.handleLoadDatabases}
+                 onTableExpand={connMgr.handleTableExpand}
                  onSaveConnection={async (data: any) => {
-                   await saveConnection(data);
+                   await connMgr.saveConnection(data);
                  }}
-                 onSaveGroup={saveGroup}
-                 onDeleteGroup={deleteGroup}
-                  onCreateConnection={() => setConnectionDialogOpen(true)}
-                   onImportConnections={() => setConnectionExportOpen(true)}
-                   onBatchManage={() => setBatchManageOpen(true)}
+                 onSaveGroup={connMgr.saveGroup}
+                 onDeleteGroup={connMgr.deleteGroup}
+                  onCreateConnection={() => connMgr.setConnectionDialogOpen(true)}
+                   onImportConnections={() => connMgr.setConnectionExportOpen(true)}
+                   onBatchManage={() => connMgr.setBatchManageOpen(true)}
                    onRefreshConnections={() => {
                      const currentConns = useAppStore.getState().connections;
                      const statusMap = new Map(currentConns.map((c) => [c.id, c.status]));
@@ -1127,8 +190,8 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
              </div>
 
             <div
-              onClick={() => setCollapsed(!collapsed)}
-              style={styles.collapseButton}
+              onClick={() => layout.setCollapsed(!layout.collapsed)}
+              style={layout.styles.collapseButton}
               className="collapse-button"
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'var(--background-hover)';
@@ -1137,68 +200,68 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
                 e.currentTarget.style.background = 'var(--background-card)';
               }}
             >
-              <span style={styles.collapseButtonText}>
-                {collapsed ? t('common.expand') : t('common.collapse')}
+              <span style={layout.styles.collapseButtonText}>
+                {layout.collapsed ? t('common.expand') : t('common.collapse')}
               </span>
             </div>
           </div>
         </Sider>
 
-        <Content style={styles.content}>
-          <div style={styles.tabPanelContainer}>
+        <Content style={layout.styles.content}>
+          <div style={layout.styles.tabPanelContainer}>
             <TabPanel
               ref={tabPanelRef}
-              selectedConnectionId={selectedConnectionId}
+              selectedConnectionId={connMgr.selectedConnectionId}
               selectedConnectionName={
-                selectedConnectionId
-                  ? connections.find((c) => c.id === selectedConnectionId)?.name
+                connMgr.selectedConnectionId
+                  ? connMgr.connections.find((c) => c.id === connMgr.selectedConnectionId)?.name
                   : undefined
               }
-              selectedTable={selectedTable}
-              selectedDatabase={selectedDatabase}
-              selectedSchema={selectedSchema}
-              selectedObjectType={selectedObjectType}
-              tableToOpen={tableToOpen}
-              onSqlTabCountChange={setSqlTabCount}
-              onActiveTabChange={setActiveTabInfo}
-              onQueryStatusChange={setIsQuerying}
+              selectedTable={connMgr.selectedTable}
+              selectedDatabase={connMgr.selectedDatabase}
+              selectedSchema={connMgr.selectedSchema}
+              selectedObjectType={tabMgr.selectedObjectType}
+              tableToOpen={tabMgr.tableToOpen}
+              onSqlTabCountChange={tabMgr.setSqlTabCount}
+              onActiveTabChange={tabMgr.setActiveTabInfo}
+              onQueryStatusChange={tabMgr.setIsQuerying}
               pageSize={useSettingsStore.getState().settings.pageSize}
-              connectionDatabases={connectionDatabases}
+              connectionDatabases={connMgr.connectionDatabases}
             />
           </div>
         </Content>
       </Layout>
 
       <StatusBar
-        selectedConnectionId={selectedConnectionId}
-        connections={connections}
-        selectedTable={selectedTable}
-        selectedDatabase={selectedDatabase}
-        transactionActive={transactionActive}
+        selectedConnectionId={connMgr.selectedConnectionId}
+        connections={connMgr.connections}
+        selectedTable={connMgr.selectedTable}
+        selectedDatabase={connMgr.selectedDatabase}
+        transactionActive={tabMgr.transactionActive}
         transactionStartTime={useAppStore.getState().transactionStartTime}
-        resultRows={currentResultRows}
-        executionTime={currentExecutionTime}
-        isQuerying={isQuerying}
+        resultRows={tabMgr.currentResultRows}
+        executionTime={tabMgr.currentExecutionTime}
+        isQuerying={tabMgr.isQuerying}
       />
 
       <ConnectionDialog
-        open={connectionDialogOpen}
-        editingData={editingConnection}
+        open={connMgr.connectionDialogOpen}
+        editingData={connMgr.editingConnection}
         onCancel={() => {
-          setConnectionDialogOpen(false);
-          setEditingConnection(undefined);
+          connMgr.setConnectionDialogOpen(false);
+          connMgr.setEditingConnection(undefined);
         }}
         onSave={async (data) => {
-          await handleDialogSave(data);
-          setEditingConnection(undefined);
+          await connMgr.handleDialogSave(data);
+          connMgr.setEditingConnection(undefined);
         }}
       />
 
-      <SettingsDialog open={settingsDialogOpen} onCancel={() => setSettingsDialogOpen(false)} />
+      <SettingsDialog open={layout.settingsDialogOpen} onCancel={() => layout.setSettingsDialogOpen(false)} />
 
       <ConnectionExportDialog
-        open={connectionExportOpen}
-        onClose={() => setConnectionExportOpen(false)}
+        open={connMgr.connectionExportOpen}
+        onClose={() => connMgr.setConnectionExportOpen(false)}
         onImported={() => {
           const store = useAppStore.getState();
           store.setConnections([]);
@@ -1212,12 +275,12 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       />
 
       <BatchManageDialog
-        open={batchManageOpen}
-        connections={connections}
-        groups={groups}
-        onClose={() => setBatchManageOpen(false)}
+        open={connMgr.batchManageOpen}
+        connections={connMgr.connections}
+        groups={connMgr.groups}
+        onClose={() => connMgr.setBatchManageOpen(false)}
         onSaveConnection={async (data: any) => {
-          await saveConnection(data);
+          await connMgr.saveConnection(data);
         }}
         onRefresh={() => {
           api.getConnections().then((conns) => {
@@ -1228,26 +291,26 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       />
 
       <GlobalSearch
-        open={globalSearchOpen}
-        onClose={() => setGlobalSearchOpen(false)}
+        open={layout.globalSearchOpen}
+        onClose={() => layout.setGlobalSearchOpen(false)}
         onSelectTable={(connectionId, database, tableName) => {
-          setSelectedConnectionId(connectionId);
-          setSelectedDatabase(database);
-          setTableToOpen({ name: tableName, database });
+          connMgr.setSelectedConnectionId(connectionId);
+          connMgr.setSelectedDatabase(database);
+          tabMgr.setTableToOpen({ name: tableName, database });
         }}
-        connectionDatabases={connectionDatabases}
+        connectionDatabases={connMgr.connectionDatabases}
       />
 
       <Favorites
-        open={favoritesOpen}
-        onClose={() => setFavoritesOpen(false)}
+        open={layout.favoritesOpen}
+        onClose={() => layout.setFavoritesOpen(false)}
         onSelectTable={(connectionId, database, tableName) => {
-          setSelectedConnectionId(connectionId);
-          setSelectedDatabase(database);
-          setTableToOpen({ name: tableName, database });
+          connMgr.setSelectedConnectionId(connectionId);
+          connMgr.setSelectedDatabase(database);
+          tabMgr.setTableToOpen({ name: tableName, database });
         }}
         onSelectQuery={(sql) => {
-          if (selectedConnectionId) {
+          if (connMgr.selectedConnectionId) {
             window.dispatchEvent(
               new CustomEvent('tab-action', { detail: { action: 'new-sql-tab', sql } })
             );
@@ -1256,12 +319,12 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
       />
 
       <Modal
-        title={`${t('common.connectionPasswordRequired', { name: passwordDialogConn?.name })}`}
-        open={passwordDialogOpen}
-        onOk={handlePasswordSubmit}
+        title={`${t('common.connectionPasswordRequired', { name: connMgr.passwordDialogConn?.name })}`}
+        open={connMgr.passwordDialogOpen}
+        onOk={connMgr.handlePasswordSubmit}
         onCancel={() => {
-          setPasswordDialogOpen(false);
-          passwordForm.resetFields();
+          connMgr.setPasswordDialogOpen(false);
+          connMgr.passwordForm.resetFields();
         }}
         okText={t('common.mainLayout.connect')}
         cancelText={t('common.cancel')}
@@ -1269,7 +332,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         transitionName=""
         maskTransitionName=""
       >
-        <Form form={passwordForm} layout="vertical">
+        <Form form={connMgr.passwordForm} layout="vertical">
           <Form.Item
             name="password"
             rules={[{ required: true, message: t('common.passwordRequired') }]}
@@ -1279,7 +342,7 @@ function MainLayoutComponent({ children }: MainLayoutProps) {
         </Form>
       </Modal>
 
-      <OperationLog open={operationLogOpen} onClose={() => setOperationLogOpen(false)} />
+      <OperationLog open={layout.operationLogOpen} onClose={() => layout.setOperationLogOpen(false)} />
     </Layout>
   );
 }

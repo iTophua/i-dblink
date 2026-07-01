@@ -1,82 +1,49 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import Editor, { OnMount } from '@monaco-editor/react';
+import Editor from '@monaco-editor/react';
 
 import {
-  Button,
-  Space,
   App,
   Tabs,
   TabsProps,
   Tag,
-  Tooltip,
   Dropdown,
   Empty,
   Spin,
   Drawer,
-  Select,
-  Modal,
-  Menu,
-  Divider,
+  Space,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
-import {
-  PlayCircleOutlined,
-  SaveOutlined,
-  ClearOutlined,
-  FormatPainterOutlined,
-  StopOutlined,
-  LineChartOutlined,
-  CopyOutlined,
-  FileTextOutlined,
-  HistoryOutlined,
-  ThunderboltOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  WarningOutlined,
-  SettingOutlined,
-  FullscreenOutlined,
-  BugOutlined,
-  DownloadOutlined,
-  BookOutlined,
-  LoadingOutlined,
-} from '@ant-design/icons';
-import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
-import { formatShortcutForDisplay, getEffectiveShortcut } from '../constants/menuShortcuts';
 import { useAppStore } from '../stores/appStore';
-import { useSettingsStore } from '../stores/settingsStore';
 import { format as formatSql } from 'sql-formatter';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
 import { SnippetManager } from './SnippetManager';
 import { ParamDialog } from './ParamDialog';
-import { extractParams, replaceParams } from '../utils/sqlParams';
-import { splitSqlStatements } from '../utils/sqlUtils';
-import { SQL_KEYWORDS, filterKeywordsByDbType } from '../constants/sqlKeywords';
-import { SQL_FUNCTIONS, filterFunctionsByDbType } from '../constants/sqlFunctions';
-import { api } from '../api';
-import type { QueryResult, DatabaseType } from '../types/api';
-import { detectSqlDialect, type DialectDetection } from '../utils/sqlDialects/detectDialect';
-import { convertByRules } from '../utils/sqlDialects/convertRules';
+import { replaceParams } from '../utils/sqlParams';
+import type { DatabaseType } from '../types/api';
 import { SqlDialectBanner } from './SqlDialectBanner';
 
-interface QueryResultWithTiming extends QueryResult {
+// Extracted hooks
+import { useQueryExecution } from './SQLEditor/hooks/useQueryExecution';
+import { useMonacoEditor } from './SQLEditor/hooks/useMonacoEditor';
+import { useEditorResizer } from './SQLEditor/hooks/useEditorResizer';
+import { useTransaction } from './SQLEditor/hooks/useTransaction';
+import { useSqlDialectDetection } from './SQLEditor/hooks/useSqlDialectDetection';
+
+// Extracted components
+import { SQLEditorToolbar } from './SQLEditor/components/SQLEditorToolbar';
+import { SQLEditorContextMenu } from './SQLEditor/components/SQLEditorContextMenu';
+
+interface QueryResultWithTiming {
   executionTime?: number;
   totalTime?: number;
   executedSql?: string;
-}
-
-declare global {
-  interface Window {
-    __sqlHistoryApi?: {
-      addHistory: (item: {
-        sql: string;
-        success: boolean;
-        duration?: number;
-        rowCount?: number;
-      }) => void;
-    };
-  }
+  columns: string[];
+  rows: any[][];
+  rows_affected?: number;
+  error?: string;
+  execution_time_ms?: number;
 }
 
 interface SQLEditorProps {
@@ -89,248 +56,6 @@ interface SQLEditorProps {
   onQueryStatusChange?: (isQuerying: boolean) => void;
 }
 
-// ========== SQL 智能补全上下文分析器 ==========
-
-/**
- * 提取当前 SQL 语句（从上一个 ; 到光标位置）
- */
-function getCurrentStatement(text: string, cursorOffset: number): string {
-  const beforeCursor = text.slice(0, cursorOffset);
-  const lastSemicolon = beforeCursor.lastIndexOf(';');
-  return beforeCursor.slice(lastSemicolon + 1);
-}
-
-/**
- * 检查位置是否在字符串或注释中（简化版）
- */
-function isInStringOrComment(text: string, offset: number): boolean {
-  let inString: string | null = null;
-  let inComment = false;
-  let i = 0;
-  while (i < offset) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (inComment) {
-      if (ch === '\n') inComment = false;
-      i++;
-      continue;
-    }
-    if (inString) {
-      if (ch === '\\') { i += 2; continue; }
-      if (ch === inString) inString = null;
-      i++;
-      continue;
-    }
-    if (ch === '-' && next === '-') { inComment = true; i += 2; continue; }
-    if (ch === '/' && next === '*') {
-      const end = text.indexOf('*/', i + 2);
-      if (end !== -1 && end < offset) { i = end + 2; continue; }
-      return true;
-    }
-    if (ch === "'" || ch === '"' || ch === '`') inString = ch;
-    i++;
-  }
-  return inString !== null || inComment;
-}
-
-/** 语句类型 */
-type SqlStmtType = 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'CREATE' | 'ALTER' | 'DROP' | 'UNKNOWN';
-
-function detectStatementType(stmt: string): SqlStmtType {
-  const trimmed = stmt.trim().toUpperCase();
-  if (trimmed.startsWith('SELECT')) return 'SELECT';
-  if (trimmed.startsWith('INSERT')) return 'INSERT';
-  if (trimmed.startsWith('UPDATE')) return 'UPDATE';
-  if (trimmed.startsWith('DELETE')) return 'DELETE';
-  if (trimmed.startsWith('CREATE')) return 'CREATE';
-  if (trimmed.startsWith('ALTER')) return 'ALTER';
-  if (trimmed.startsWith('DROP')) return 'DROP';
-  return 'UNKNOWN';
-}
-
-/** 当前光标所在的关键字上下文 */
-interface SqlContext {
-  stmtType: SqlStmtType;
-  isAfterFrom: boolean;
-  isAfterJoin: boolean;
-  isAfterSelect: boolean;
-  isAfterWhere: boolean;
-  isAfterOrderBy: boolean;
-  isAfterGroupBy: boolean;
-  isAfterHaving: boolean;
-  isAfterSet: boolean;
-  isAfterInsertInto: boolean;
-  isAfterValues: boolean;
-  isAfterUpdateTable: boolean;
-  isAfterDeleteFrom: boolean;
-  isAfterCreateTable: boolean;
-  isAfterAlterTable: boolean;
-  isAfterDrop: boolean;
-  lastKeyword: string | null;
-  tableRefs: string[]; // 当前语句中引用的表名（简单提取）
-}
-
-function analyzeSqlContext(textBeforeCursor: string): SqlContext {
-  const upper = textBeforeCursor.toUpperCase();
-  const ctx: SqlContext = {
-    stmtType: detectStatementType(textBeforeCursor),
-    isAfterFrom: false,
-    isAfterJoin: false,
-    isAfterSelect: false,
-    isAfterWhere: false,
-    isAfterOrderBy: false,
-    isAfterGroupBy: false,
-    isAfterHaving: false,
-    isAfterSet: false,
-    isAfterInsertInto: false,
-    isAfterValues: false,
-    isAfterUpdateTable: false,
-    isAfterDeleteFrom: false,
-    isAfterCreateTable: false,
-    isAfterAlterTable: false,
-    isAfterDrop: false,
-    lastKeyword: null,
-    tableRefs: [],
-  };
-
-  // 提取最后的关键字位置（使用反向搜索，避免子查询干扰）
-  const keywords = [
-    'FROM', 'JOIN', 'SELECT', 'WHERE', 'ORDER BY', 'GROUP BY', 'HAVING',
-    'SET', 'INSERT INTO', 'VALUES', 'UPDATE', 'DELETE FROM',
-    'CREATE TABLE', 'ALTER TABLE', 'DROP',
-  ];
-
-  let lastPos = -1;
-  for (const kw of keywords) {
-    const pos = upper.lastIndexOf(kw);
-    if (pos > lastPos) {
-      lastPos = pos;
-      ctx.lastKeyword = kw;
-    }
-  }
-
-  // 简单提取表引用（FROM 和 JOIN 后的表名）
-  const fromMatches = textBeforeCursor.match(/\bFROM\s+(\w+)/gi);
-  if (fromMatches) {
-    fromMatches.forEach(m => {
-      const table = m.replace(/\bFROM\s+/i, '');
-      if (!ctx.tableRefs.includes(table)) ctx.tableRefs.push(table);
-    });
-  }
-  const joinMatches = textBeforeCursor.match(/\bJOIN\s+(\w+)/gi);
-  if (joinMatches) {
-    joinMatches.forEach(m => {
-      const table = m.replace(/\bJOIN\s+/i, '');
-      if (!ctx.tableRefs.includes(table)) ctx.tableRefs.push(table);
-    });
-  }
-
-  // 判断上下文（基于最后关键字）
-  switch (ctx.lastKeyword) {
-    case 'FROM': ctx.isAfterFrom = true; break;
-    case 'JOIN': ctx.isAfterJoin = true; break;
-    case 'SELECT': ctx.isAfterSelect = true; break;
-    case 'WHERE': ctx.isAfterWhere = true; break;
-    case 'ORDER BY': ctx.isAfterOrderBy = true; break;
-    case 'GROUP BY': ctx.isAfterGroupBy = true; break;
-    case 'HAVING': ctx.isAfterHaving = true; break;
-    case 'SET': ctx.isAfterSet = true; break;
-    case 'INSERT INTO': ctx.isAfterInsertInto = true; break;
-    case 'VALUES': ctx.isAfterValues = true; break;
-    case 'UPDATE': ctx.isAfterUpdateTable = true; break;
-    case 'DELETE FROM': ctx.isAfterDeleteFrom = true; break;
-    case 'CREATE TABLE': ctx.isAfterCreateTable = true; break;
-    case 'ALTER TABLE': ctx.isAfterAlterTable = true; break;
-    case 'DROP': ctx.isAfterDrop = true; break;
-  }
-
-  return ctx;
-}
-
-/**
- * 判断是否需要列名建议
- */
-function shouldSuggestColumns(ctx: SqlContext): boolean {
-  return ctx.isAfterSelect || ctx.isAfterWhere || ctx.isAfterOrderBy ||
-         ctx.isAfterGroupBy || ctx.isAfterHaving || ctx.isAfterSet ||
-         ctx.isAfterInsertInto || ctx.isAfterUpdateTable || ctx.isAfterDeleteFrom;
-}
-
-/**
- * 判断是否需要表名建议
- */
-function shouldSuggestTables(ctx: SqlContext): boolean {
-  return ctx.isAfterFrom || ctx.isAfterJoin || ctx.isAfterInsertInto ||
-         ctx.isAfterUpdateTable || ctx.isAfterDeleteFrom || ctx.isAfterAlterTable ||
-         ctx.isAfterDrop;
-}
-
-/**
- * 获取数据库特定的数据类型建议
- */
-function getDbSpecificDataTypes(dbType: string | undefined): string[] {
-  if (!dbType) return ['INT', 'VARCHAR(255)', 'TEXT', 'DECIMAL(10,2)', 'DATETIME', 'BOOLEAN'];
-
-  switch (dbType) {
-    case 'mysql':
-    case 'mariadb':
-      return [
-        'INT', 'BIGINT', 'SMALLINT', 'TINYINT',
-        'VARCHAR(255)', 'TEXT', 'LONGTEXT',
-        'DECIMAL(10,2)', 'FLOAT', 'DOUBLE',
-        'DATETIME', 'TIMESTAMP', 'DATE', 'TIME',
-        'BOOLEAN', 'JSON',
-        'CHAR(1)', 'BINARY(16)', 'BLOB',
-      ];
-    case 'postgresql':
-    case 'kingbase':
-    case 'highgo':
-    case 'vastbase':
-      return [
-        'INTEGER', 'BIGINT', 'SMALLINT', 'SERIAL', 'BIGSERIAL',
-        'VARCHAR(255)', 'TEXT', 'CHAR(1)',
-        'NUMERIC(10,2)', 'REAL', 'DOUBLE PRECISION',
-        'TIMESTAMP', 'TIMESTAMPTZ', 'DATE', 'TIME',
-        'BOOLEAN', 'JSON', 'JSONB', 'UUID',
-        'BYTEA', 'ARRAY', 'INTERVAL',
-      ];
-    case 'sqlite':
-      return [
-        'INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC',
-        'BOOLEAN', 'DATETIME', 'DATE', 'TIME',
-      ];
-    case 'sqlserver':
-      return [
-        'INT', 'BIGINT', 'SMALLINT', 'TINYINT',
-        'VARCHAR(255)', 'NVARCHAR(255)', 'TEXT', 'NTEXT',
-        'DECIMAL(10,2)', 'FLOAT', 'REAL', 'MONEY',
-        'DATETIME', 'DATETIME2', 'DATE', 'TIME',
-        'BIT', 'UNIQUEIDENTIFIER', 'VARBINARY(MAX)',
-        'XML', 'GEOGRAPHY',
-      ];
-    case 'oracle':
-    case 'dameng':
-      return [
-        'NUMBER(10,2)', 'INTEGER', 'BINARY_INTEGER',
-        'VARCHAR2(255)', 'NVARCHAR2(255)', 'CLOB', 'NCLOB',
-        'DATE', 'TIMESTAMP', 'TIMESTAMP WITH TIME ZONE',
-        'BLOB', 'RAW(2000)', 'LONG RAW',
-        'BOOLEAN', 'XMLTYPE',
-      ];
-    default:
-      return ['INT', 'VARCHAR(255)', 'TEXT', 'DECIMAL(10,2)', 'DATETIME', 'BOOLEAN'];
-  }
-}
-
-// 预编译的正则表达式（避免每次触发重新编译）
-const REGEX_PATTERNS = {
-  fromOrJoin: /\b(FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s*$/i,
-  select: /\bSELECT\s+.*$/i,
-  where: /\bWHERE\s+.*$/i,
-  afterTableRef: /\b(FROM|JOIN)\s+(?:\w+\s*,\s*)*\w+\s*$/i,
-  hasTableAlias: /\b(FROM|JOIN)\s+\w+\s+(?:AS\s+)?(\w+)\s*$/i,
-};
-
 export function SQLEditor({
   connectionId,
   database,
@@ -342,6 +67,7 @@ export function SQLEditor({
 }: SQLEditorProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const tc = useThemeColors();
   const connections = useAppStore((state) => state.connections);
   const dbTypeFromStore = useMemo(() => {
     const conn = connections.find((c) => c.id === connectionId);
@@ -351,6 +77,8 @@ export function SQLEditor({
   const dbType = propDbType || dbTypeFromStore;
   const [sql, setSql] = useState(defaultQuery || '');
   const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
+  const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 自定义右键菜单状态
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
@@ -359,10 +87,10 @@ export function SQLEditor({
   const contextMenuMeasuredRef = useRef(false);
   const contextMenuSelectedSqlRef = useRef<string>('');
 
-  // SQL 方言检测状态
-  const [dialectMismatch, setDialectMismatch] = useState<DialectDetection | null>(null);
-  const [dialectDismissed, setDialectDismissed] = useState(false);
-  const dialectDetectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref to link handleExecuteQuery to Monaco shortcuts (avoids closure trap)
+  const handleExecuteQueryRef = useRef<(explicitSql?: string) => void>(() => {});
+  // Ref to link formatSQL to Monaco shortcuts
+  const formatSQLRef = useRef<() => void>(() => {});
 
   // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
   useEffect(() => {
@@ -371,201 +99,90 @@ export function SQLEditor({
     }
   }, [defaultQuery]);
 
-  // SQL 方言检测（debounce 500ms）
+  // --- Extracted hooks ---
+
+  // Editor resizer
+  const { editorRatio, containerRef, handleResizeStart } = useEditorResizer();
+
+  // Monaco editor (must be initialized before useQueryExecution since it provides highlightError/clearErrorMarkers)
+  const {
+    editorRef,
+    monacoRef,
+    handleEditorMount,
+    highlightError,
+    clearErrorMarkers,
+  } = useMonacoEditor({
+    connectionId,
+    database,
+    dbType,
+    availableDatabases,
+    sql,
+    setSql,
+    handleExecuteQueryRef,
+    formatSQLRef,
+    containerRef,
+    setContextMenuVisible,
+    setContextMenuPos,
+    contextMenuSelectedSqlRef,
+    contextMenuMeasuredRef,
+  });
+
+  // Query execution
+  const {
+    loading,
+    result,
+    results,
+    messages,
+    explainPlan,
+    activeTab,
+    resultViewMode,
+    execElapsed,
+    paramDialogOpen,
+    paramDialogParams,
+    pendingSql,
+    handleExecuteQuery,
+    stopQuery,
+    showExplainPlan,
+    setActiveTab,
+    setResultViewMode,
+    setParamDialogOpen,
+    setPendingSql,
+    setResult,
+    setMessages,
+    setExplainPlan,
+  } = useQueryExecution({
+    connectionId,
+    database,
+    sql,
+    dbType,
+    highlightError,
+    clearErrorMarkers,
+    onQueryStatusChange,
+    editorRef,
+  });
+
+  // Transaction
+  const {
+    transactionActive,
+    handleBeginTransaction,
+    handleCommitTransaction,
+    handleRollbackTransaction,
+  } = useTransaction(connectionId);
+
+  // SQL dialect detection
+  const {
+    dialectMismatch,
+    handleQuickConvert,
+    handleDismissDialectBanner,
+  } = useSqlDialectDetection(connectionId, dbType, sql, setSql);
+
+  // 同步 handleExecuteQuery 到 ref，供 Monaco 快捷键使用
   useEffect(() => {
-    if (dialectDetectTimerRef.current) {
-      clearTimeout(dialectDetectTimerRef.current);
-    }
-
-    if (dialectDismissed || !sql || !dbType) {
-      setDialectMismatch(null);
-      return;
-    }
-
-    dialectDetectTimerRef.current = setTimeout(() => {
-      const detection = detectSqlDialect(sql);
-      if (detection && detection.dialect !== dbType) {
-        setDialectMismatch(detection);
-      } else {
-        setDialectMismatch(null);
-      }
-    }, 500);
-
-    return () => {
-      if (dialectDetectTimerRef.current) {
-        clearTimeout(dialectDetectTimerRef.current);
-      }
-    };
-  }, [sql, dbType, dialectDismissed]);
-
-  // 切换连接时重置方言检测
-  useEffect(() => {
-    setDialectDismissed(false);
-    setDialectMismatch(null);
-  }, [connectionId]);
-
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<QueryResultWithTiming | null>(null);
-  const [results, setResults] = useState<QueryResultWithTiming[]>([]);
-  const [activeTab, setActiveTab] = useState<'result' | 'messages' | 'explain'>('result');
-  const [resultViewMode, setResultViewMode] = useState<'auto' | 'all' | 'single'>('auto');
-  const requestStartTimeRef = useRef(0);
-  const [messages, setMessages] = useState<string[]>([]);
-  const [explainPlan, setExplainPlan] = useState<any[]>([]);
-  const [queryHistory, setQueryHistory] = useState<string[]>([]);
-  const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
-  const [transactionActive, setTransactionActive] = useState(false);
-  const [paramDialogOpen, setParamDialogOpen] = useState(false);
-
-  // 执行状态条：实时显示已用时间和已返回行数
-  const [execElapsed, setExecElapsed] = useState(0);
-  const execTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const returnedRowsRef = useRef(0);
-  const [paramDialogParams, setParamDialogParams] = useState<string[]>([]);
-  const [pendingSql, setPendingSql] = useState<string>('');
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const editorRef = useRef<any>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const schemaRef = useRef<{
-    tables: Map<string, string[]>;
-    views: Map<string, string[]>;
-    databases: Set<string>;
-  } | null>(null);
-  const monacoRef = useRef<any>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const errorMarkersRef = useRef<any[]>([]);
-  const dbTypeRef = useRef<DatabaseType | undefined>(dbType);
-  const completionProviderRef = useRef<any>(null);
-
-  // 错误行号解析
-  const parseErrorLine = useCallback((errorMsg: string): number | null => {
-    const mysqlMatch = errorMsg.match(/at line (\d+)/i);
-    if (mysqlMatch) return parseInt(mysqlMatch[1], 10);
-    const pgMatch = errorMsg.match(/LINE (\d+):/i);
-    if (pgMatch) return parseInt(pgMatch[1], 10);
-    const genericMatch = errorMsg.match(/line (\d+)/i);
-    if (genericMatch) return parseInt(genericMatch[1], 10);
-    return null;
-  }, []);
-
-  // 高亮错误行
-  const highlightError = useCallback(
-    (errorMsg: string) => {
-      if (!editorRef.current || !monacoRef.current) return;
-      const errorLine = parseErrorLine(errorMsg);
-      if (errorLine === null) return;
-      const model = editorRef.current.getModel();
-      if (!model) return;
-      const monaco = monacoRef.current;
-      const markers = [
-        {
-          severity: monaco.MarkerSeverity.Error,
-          message: errorMsg,
-          startLineNumber: errorLine,
-          startColumn: 1,
-          endLineNumber: errorLine,
-          endColumn: model.getLineMaxColumn(errorLine),
-        },
-      ];
-      monaco.editor.setModelMarkers(model, 'sql-error', markers);
-      errorMarkersRef.current = markers;
-    },
-    [parseErrorLine]
-  );
-
-  // 清除错误标记
-  const clearErrorMarkers = useCallback(() => {
-    if (!editorRef.current || !monacoRef.current) return;
-    const model = editorRef.current.getModel();
-    if (model) {
-      monacoRef.current.editor.setModelMarkers(model, 'sql-error', []);
-      errorMarkersRef.current = [];
-    }
-  }, []);
-
-  // 可拖拽调整编辑器/结果面板高度
-  const [editorRatio, setEditorRatio] = useState(0.5); // 默认编辑器和结果面板各占 50%
-  const isResizingRef = useRef(false);
-
-  // 缺失的 ref 定义（修复类型错误）
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const cleanupDisposablesRef = useRef<any[]>([]);
-  // Monaco 编辑器内防抖定时器（contentChange/cursorChange/selectionChange/resize）
-  // 用 Set 收集，卸载时统一清理，避免对已卸载组件 setState
-  const editorDebounceTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
-  const savedEditorStateRef = useRef<{ value: string; selections: any; position: any; modelUri: string } | null>(null);
-  const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // 占位函数（修复类型错误）
-  const onSave = useCallback(() => {
-    console.log('Save not implemented');
-  }, []);
-
-  const onFormat = useCallback(() => {
-    console.log('Format not implemented');
-  }, []);
-
-  // formatSQL 在下方定义，这里用 ref 让快捷键能调用最新版本（避免依赖循环）
-  const formatSQLRef = useRef<() => void>(() => {});
-
-  const onStop = useCallback(() => {
-    console.log('Stop not implemented');
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-  }, []);
-
-  const setCursorPosition = useCallback((pos: any) => {
-    // Placeholder
-  }, []);
-
-  const setSelectedText = useCallback((text: string) => {
-    // Placeholder
-  }, []);
+    handleExecuteQueryRef.current = handleExecuteQuery;
+  }, [handleExecuteQuery]);
 
   // 是否有查询结果需要展示（决定结果面板是否显示）
   const hasResult = result !== null || results.length > 0 || loading || explainPlan.length > 0;
-
-  const handleResizeMove = useCallback((e: MouseEvent) => {
-    if (!isResizingRef.current || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const newRatio = (e.clientY - rect.top) / rect.height;
-    setEditorRatio(Math.max(0.15, Math.min(0.85, newRatio)));
-  }, []);
-
-  const handleResizeEnd = useCallback(() => {
-    isResizingRef.current = false;
-    document.removeEventListener('mousemove', handleResizeMove);
-    document.removeEventListener('mouseup', handleResizeEnd);
-  }, [handleResizeMove]);
-
-  const handleResizeStart = useCallback(() => {
-    isResizingRef.current = true;
-    document.addEventListener('mousemove', handleResizeMove);
-    document.addEventListener('mouseup', handleResizeEnd);
-  }, [handleResizeMove, handleResizeEnd]);
-
-  // 缓存预生成的补全建议，避免每次按键都重建对象
-  const completionCacheRef = useRef<{
-    keywordSuggestions: any[];
-    functionSuggestions: any[];
-    tableSuggestions: any[];
-    viewSuggestions: any[];
-    columnSuggestions: any[];
-    tableNameToColumns: Map<string, string[]>;
-    lastSchemaKey: string;
-  } | null>(null);
-
-  // 用于在 handleEditorMount 中引用最新的 handleExecuteQuery，避免闭包陷阱
-  const handleExecuteQueryRef = useRef<(explicitSql?: string) => void>(() => {});
-
-  // 同步 dbType 到 ref，供 Monaco 补全使用
-  useEffect(() => {
-    dbTypeRef.current = dbType;
-  }, [dbType]);
-
-  const tc = useThemeColors();
 
   // 点击其他地方关闭右键菜单
   const handleClickOutside = useCallback((e: MouseEvent) => {
@@ -601,122 +218,6 @@ export function SQLEditor({
     }
   }, [contextMenuVisible, contextMenuPos]);
 
-  // 响应式切换 Monaco Editor 主题
-  useEffect(() => {
-    const monaco = monacoRef.current;
-    if (!monaco) return;
-
-    monaco.editor.defineTheme('custom-dark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'keyword', foreground: '569CD6' },
-        { token: 'type', foreground: '4EC9B0' },
-        { token: 'string', foreground: 'CE9178' },
-        { token: 'comment', foreground: '6A9955' },
-        { token: 'number', foreground: 'B5CEA8' },
-        { token: 'operator', foreground: 'D4D4D4' },
-        { token: 'delimiter', foreground: 'D4D4D4' },
-        { token: 'variable', foreground: '9CDCFE' },
-        { token: 'function', foreground: 'DCDCAA' },
-        { token: 'predefined', foreground: '4EC9B0' },
-      ],
-      colors: {
-        'editor.background': tc.background,
-        'editor.foreground': tc.textPrimary,
-        'editorCursor.foreground': '#FFFFFF',
-        'editor.lineHighlightBackground': tc.backgroundToolbar,
-        'editor.selectionBackground': tc.backgroundActive,
-        'editor.inactiveSelectionBackground': tc.backgroundHover,
-        'editorLineNumber.foreground': tc.textTertiary,
-        'editorLineNumber.activeForeground': tc.primary,
-        'editor.findMatchBackground': tc.backgroundActive,
-        'editor.findMatchHighlightBackground': tc.backgroundHover,
-        'editorHoverWidget.background': tc.backgroundCard,
-        'editorHoverWidget.border': tc.border,
-        'editorSuggestWidget.background': tc.backgroundCard,
-        'editorSuggestWidget.border': tc.border,
-        'editorSuggestWidget.selectedBackground': tc.backgroundActive,
-        'editorSuggestWidget.foreground': tc.textPrimary,
-        'editorSuggestWidget.selectedForeground': tc.textPrimary,
-        'editorWidget.background': tc.backgroundCard,
-        'editorWidget.border': tc.border,
-        'editorWidget.resizeBorder': tc.border,
-        'editorWidget.shadow': '#000000',
-        'editorGroupHeader.tabsBackground': tc.backgroundToolbar,
-        'editorGroupHeader.noTabsBackground': tc.background,
-        'editorGroup.border': tc.border,
-        'editorGroup.dropBackground': tc.backgroundActive,
-        'editorGroupHeader.tabsBorder': tc.border,
-        'editorGroupHeader.noTabsBorder': tc.border,
-        'editorMarkerNavigation.background': tc.backgroundToolbar,
-        'editorMarkerNavigation.border': tc.border,
-        'editorOverviewRuler.background': tc.background,
-        'editorOverviewRuler.border': tc.border,
-        'editorIndentGuide.background': tc.border,
-        'editorIndentGuide.activeBackground': tc.textTertiary,
-        'editorWhitespace.foreground': tc.border,
-      },
-    });
-
-    monaco.editor.defineTheme('custom-light', {
-      base: 'vs',
-      inherit: true,
-      rules: [
-        { token: 'keyword', foreground: '0000FF' },
-        { token: 'type', foreground: '267F99' },
-        { token: 'string', foreground: 'A31515' },
-        { token: 'comment', foreground: '008000' },
-        { token: 'number', foreground: '098658' },
-        { token: 'operator', foreground: '000000' },
-        { token: 'delimiter', foreground: '000000' },
-        { token: 'variable', foreground: '001080' },
-        { token: 'function', foreground: '795E26' },
-        { token: 'predefined', foreground: '267F99' },
-      ],
-      colors: {
-        'editor.background': tc.background,
-        'editor.foreground': tc.textPrimary,
-        'editorCursor.foreground': tc.textPrimary,
-        'editor.lineHighlightBackground': tc.backgroundToolbar,
-        'editor.selectionBackground': tc.backgroundActive,
-        'editor.inactiveSelectionBackground': tc.backgroundHover,
-        'editorLineNumber.foreground': tc.textTertiary,
-        'editorLineNumber.activeForeground': tc.primary,
-        'editor.findMatchBackground': tc.backgroundActive,
-        'editor.findMatchHighlightBackground': tc.backgroundHover,
-        'editorHoverWidget.background': tc.backgroundCard,
-        'editorHoverWidget.border': tc.border,
-        'editorSuggestWidget.background': tc.backgroundCard,
-        'editorSuggestWidget.border': tc.border,
-        'editorSuggestWidget.selectedBackground': tc.backgroundHover,
-        'editorSuggestWidget.foreground': tc.textPrimary,
-        'editorSuggestWidget.selectedForeground': tc.textPrimary,
-        'editorWidget.background': tc.backgroundCard,
-        'editorWidget.border': tc.border,
-        'editorWidget.resizeBorder': tc.border,
-        'editorWidget.shadow': '#A8A8A8',
-        'editorGroupHeader.tabsBackground': tc.backgroundToolbar,
-        'editorGroupHeader.noTabsBackground': tc.backgroundCard,
-        'editorGroup.border': tc.border,
-        'editorGroup.dropBackground': tc.backgroundHover,
-        'editorGroupHeader.tabsBorder': tc.border,
-        'editorGroupHeader.noTabsBorder': tc.border,
-        'editorMarkerNavigation.background': tc.backgroundToolbar,
-        'editorMarkerNavigation.border': tc.border,
-        'editorOverviewRuler.background': tc.backgroundCard,
-        'editorOverviewRuler.border': tc.border,
-        'editorIndentGuide.background': tc.border,
-        'editorIndentGuide.activeBackground': tc.textTertiary,
-        'editorWhitespace.foreground': tc.border,
-      },
-    });
-
-    monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
-  }, [tc]);
-
-  const { executeQuery: executeQueryApi, getTables, getColumns, getAllColumns } = useDatabase();
-
   // 监听 tab-action 事件（来自菜单或工具栏的快捷键）
   useEffect(() => {
     const handleTabAction = (event: Event) => {
@@ -731,964 +232,7 @@ export function SQLEditor({
     };
   }, []);
 
-  // 获取 schema 数据用于补全，并预生成缓存的 suggestions - 优化版本
-  const fetchSchema = useCallback(async () => {
-    if (!connectionId || !database) {
-      schemaRef.current = null;
-      completionCacheRef.current = null;
-      return;
-    }
-
-    try {
-      // 检查缓存是否仍然有效
-      const cacheKey = `${connectionId}.${database}`;
-      if (completionCacheRef.current?.lastSchemaKey === cacheKey) {
-        return; // 缓存有效，跳过重新获取
-      }
-
-      const startTime = performance.now();
-      
-      // 并行获取表和列信息
-      const [tables, allColumnsResult] = await Promise.all([
-        getTables(connectionId, database, false),
-        getAllColumns(connectionId, database)
-      ]);
-
-      const tablesMap = new Map<string, string[]>();
-      const viewsMap = new Map<string, string[]>();
-
-      // 使用 requestIdleCallback 优化大数据集处理
-      const processTables = () => {
-        for (const table of tables) {
-          const tableType = (table.table_type || '').toUpperCase().trim();
-          const isView =
-            tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
-          const targetMap = isView ? viewsMap : tablesMap;
-
-          const lookupKey = table.schema ? `${table.schema}.${table.table_name}` : table.table_name;
-          const columns = allColumnsResult[lookupKey];
-          if (columns) {
-            targetMap.set(
-              table.table_name,
-              columns.map((c) => c.column_name)
-            );
-          } else {
-            targetMap.set(table.table_name, []);
-          }
-        }
-      };
-
-      // 大数据集分批处理
-      if (tables.length > 100) {
-        requestIdleCallback(processTables);
-      } else {
-        processTables();
-      }
-
-      schemaRef.current = {
-        tables: tablesMap,
-        views: viewsMap,
-        databases: availableDatabases
-          ? new Set(availableDatabases)
-          : database
-            ? new Set([database])
-            : new Set(),
-      };
-
-      // 预生成常用 suggestions
-      const generateCommonSuggestions = () => {
-        const filteredKeywords = filterKeywordsByDbType(SQL_KEYWORDS, dbTypeRef.current);
-        const filteredFunctions = filterFunctionsByDbType(SQL_FUNCTIONS, dbTypeRef.current);
-
-        return {
-          keywordSuggestions: filteredKeywords.map((kw) => ({
-            label: kw.label,
-            insertText: kw.insertText,
-            detail: kw.detail || t('common.keyword'),
-          })),
-          functionSuggestions: filteredFunctions.map((fn) => ({
-            label: fn.label,
-            insertText: fn.insertText,
-            detail: fn.detail,
-          })),
-          tableSuggestions: Array.from(tablesMap.keys()).map(tableName => ({
-            label: tableName,
-            detail: t('common.tableDetail', { count: tablesMap.get(tableName)?.length || 0 }),
-          })),
-          viewSuggestions: Array.from(viewsMap.keys()).map(viewName => ({
-            label: viewName,
-            detail: t('common.viewDetail', { count: viewsMap.get(viewName)?.length || 0 }),
-          })),
-          columnSuggestions: [],
-          tableNameToColumns: new Map(tablesMap),
-          lastSchemaKey: cacheKey,
-        };
-      };
-
-      // 使用 requestIdleCallback 预生成 suggestions
-      requestIdleCallback(() => {
-        completionCacheRef.current = generateCommonSuggestions();
-      });
-
-      const endTime = performance.now();
-      console.log(`Schema fetch completed in ${endTime - startTime}ms`);
-    } catch (error) {
-      console.error('Failed to fetch schema for completion:', error);
-      schemaRef.current = null;
-      completionCacheRef.current = null;
-    }
-  }, [connectionId, database, getTables, getAllColumns]);
-
-  // 当连接或数据库变化时，重新获取 schema
-  useEffect(() => {
-    fetchSchema();
-  }, [fetchSchema]);
-
-  // 使用 useCallback 避免闭包陷阱，并预生成基础 suggestions
-  const handleEditorMount = useCallback<OnMount>((editor, monaco) => {
-    editorRef.current = editor;
-    monacoRef.current = monaco;
-
-    // 优化配置：减少内存使用，提升性能
-    editor.updateOptions({
-      fontSize: 14,
-      fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-      minimap: { enabled: false }, // 禁用小地图减少内存
-      scrollBeyondLastLine: false,
-      automaticLayout: true,
-      wordWrap: 'on',
-      lineNumbers: 'on',
-      renderLineHighlight: 'all',
-      selectOnLineNumbers: true,
-      matchBrackets: 'near',
-      autoIndent: 'keep',
-      formatOnPaste: false,
-      formatOnType: false,
-      suggestOnTriggerCharacters: true,
-      quickSuggestions: {
-        other: true,
-        comments: false,
-        strings: false,
-      },
-      parameterHints: {
-        enabled: false,
-      },
-      wordBasedSuggestions: 'off',
-      autoClosingBrackets: 'never',
-      autoClosingQuotes: 'never',
-      folding: true,
-      foldingStrategy: 'auto',
-      showFoldingControls: 'mouseover',
-      renderWhitespace: 'selection',
-      cursorBlinking: 'blink',
-      mouseWheelZoom: false,
-      multiCursorModifier: 'ctrlCmd',
-      accessibilitySupport: 'auto',
-      lineDecorationsWidth: 10,
-      lineNumbersMinChars: 3,
-      glyphMargin: false,
-      contextmenu: false,
-      acceptSuggestionOnEnter: 'on',
-      // 性能优化配置
-      suggestSelection: 'first',
-      stickyScroll: { enabled: false },
-      bracketPairColorization: { enabled: false },
-      inlineSuggest: { enabled: false },
-    });
-
-    // 支持双击选中单词（Monaco Editor 默认行为）
-
-    // 自定义右键菜单
-    editor.onContextMenu((e: any) => {
-      e.event.preventDefault();
-      e.event.stopPropagation();
-      const selection = editor.getSelection();
-      const selected = selection && !selection.isEmpty()
-        ? (editor.getModel()?.getValueInRange(selection)?.trim() || '')
-        : '';
-      contextMenuSelectedSqlRef.current = selected;
-      setContextMenuPos({
-        x: e.event.posx,
-        y: e.event.posy,
-      });
-      contextMenuMeasuredRef.current = false;
-      setContextMenuVisible(true);
-    });
-
-    // 应用主题（defineTheme 已移至 useEffect，监听 tc 变化）
-    monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
-
-    // 注销旧的补全提供者（如果存在）
-    if (completionProviderRef.current) {
-      completionProviderRef.current.dispose();
-      completionProviderRef.current = null;
-    }
-
-    // 初始化补全提供者（智能上下文版本）
-    completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
-      triggerCharacters: ['.', ' ', '(', '[', '{', ',', '\n'],
-      provideCompletionItems: (model: any, position: any) => {
-        // 获取光标前当前行的文本
-        const textBeforeCursor = model.getValueInRange({
-          startLineNumber: position.lineNumber,
-          startColumn: 1,
-          endLineNumber: position.lineNumber,
-          endColumn: position.column,
-        });
-
-        // 如果当前行以分号结尾（允许尾部空格），表示 SQL 语句已结束，不提供建议
-        if (/;\s*$/.test(textBeforeCursor)) {
-          return { suggestions: [] };
-        }
-
-        const word = model.getWordUntilPosition(position);
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn: word.startColumn,
-          endColumn: word.endColumn,
-        };
-
-        // 获取当前语句的完整文本（从上一个 ; 到光标）
-        const fullText = model.getValue();
-        const cursorOffset = model.getOffsetAt(position);
-        const currentStatement = getCurrentStatement(fullText, cursorOffset);
-
-        // 检查是否在字符串或注释中
-        if (isInStringOrComment(fullText, cursorOffset)) {
-          return { suggestions: [] };
-        }
-
-        // 使用新的上下文分析器
-        const ctx = analyzeSqlContext(currentStatement);
-        const currentDbType = dbTypeRef.current;
-
-        // 根据最新的 dbType 过滤关键字和函数
-        const filteredKeywords = filterKeywordsByDbType(SQL_KEYWORDS, currentDbType);
-        const filteredFunctions = filterFunctionsByDbType(SQL_FUNCTIONS, currentDbType);
-
-        const suggestions: any[] = [];
-
-        const cache = completionCacheRef.current;
-        const schema = schemaRef.current;
-
-        // 根据上下文决定建议内容
-        const needColumns = shouldSuggestColumns(ctx);
-        const needTables = shouldSuggestTables(ctx);
-
-        if (schema && cache) {
-          // 1. 需要表名建议（FROM/JOIN/UPDATE/INSERT INTO/ALTER TABLE/DROP）
-          if (needTables) {
-            for (const [tableName, columns] of schema.tables) {
-              suggestions.push({
-                label: tableName,
-                kind: monaco.languages.CompletionItemKind.Class,
-                insertText: tableName,
-                range,
-                detail: t('common.tableDetail', { count: columns.length }),
-                sortText: '0',
-              });
-            }
-            for (const [viewName, columns] of schema.views) {
-              suggestions.push({
-                label: viewName,
-                kind: monaco.languages.CompletionItemKind.Class,
-                insertText: viewName,
-                range,
-                detail: t('common.viewDetail', { count: columns.length }),
-                sortText: '0',
-              });
-            }
-          }
-
-          // 2. 需要列名建议
-          if (needColumns) {
-            const addedColumns = new Set<string>();
-
-            // 2a. INSERT INTO 特定表 -> 只提供该表列名
-            if (ctx.isAfterInsertInto && ctx.stmtType === 'INSERT') {
-              const match = currentStatement.match(/INSERT\s+INTO\s+["\`\[]?(\w+)["\`\]]?/i);
-              if (match && match[1]) {
-                const tableName = match[1];
-                const columns = schema.tables.get(tableName);
-                if (columns) {
-                  for (const column of columns) {
-                    suggestions.push({
-                      label: column,
-                      kind: monaco.languages.CompletionItemKind.Field,
-                      insertText: column,
-                      range,
-                      detail: t('common.tableColumns', { table: tableName }),
-                      sortText: '0',
-                    });
-                  }
-                }
-              }
-            }
-            // 2b. UPDATE table SET -> 只提供 UPDATE 表的列名
-            else if (ctx.isAfterSet && ctx.stmtType === 'UPDATE') {
-              const match = currentStatement.match(/UPDATE\s+["\`\[]?(\w+)["\`\]]?/i);
-              if (match && match[1]) {
-                const tableName = match[1];
-                const columns = schema.tables.get(tableName);
-                if (columns) {
-                  for (const column of columns) {
-                    suggestions.push({
-                      label: column,
-                      kind: monaco.languages.CompletionItemKind.Field,
-                      insertText: column,
-                      range,
-                      detail: t('common.tableColumns', { table: tableName }),
-                      sortText: '0',
-                    });
-                  }
-                }
-              }
-            }
-            // 2c. 其他情况（SELECT/WHERE/ORDER BY/GROUP BY/HAVING）-> 提供已引用表的列名优先
-            else {
-              // 如果有已引用的表，优先提供这些表的列名
-              const targetTables = ctx.tableRefs.length > 0 ? ctx.tableRefs : Array.from(schema.tables.keys());
-
-              for (const tableName of targetTables) {
-                const columns = schema.tables.get(tableName);
-                if (columns) {
-                  for (const column of columns) {
-                    if (!addedColumns.has(column)) {
-                      suggestions.push({
-                        label: column,
-                        kind: monaco.languages.CompletionItemKind.Field,
-                        insertText: column,
-                        range,
-                        detail: t('common.tableColumns', { table: tableName }),
-                        sortText: '0',
-                      });
-                      addedColumns.add(column);
-                    }
-                  }
-                }
-              }
-
-              // 添加表名.列名格式（帮助多表查询时区分）
-              for (const [tableName, columns] of schema.tables) {
-                for (const column of columns) {
-                  suggestions.push({
-                    label: `${tableName}.${column}`,
-                    kind: monaco.languages.CompletionItemKind.Field,
-                    insertText: `${tableName}.${column}`,
-                    range,
-                    detail: t('common.tableColumns', { table: tableName }),
-                    sortText: '1',
-                  });
-                }
-              }
-
-              // 跨数据库引用
-              if (schema.databases && schema.databases.size > 0) {
-                for (const db of schema.databases) {
-                  for (const [tableName, columns] of schema.tables) {
-                    for (const column of columns) {
-                      suggestions.push({
-                        label: `${db}.${tableName}.${column}`,
-                        kind: monaco.languages.CompletionItemKind.Field,
-                        insertText: `${db}.${tableName}.${column}`,
-                        range,
-                        detail: t('common.tableColumns', { table: `${db}.${tableName}` }),
-                        sortText: '1',
-                      });
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // 3. 添加关键字和函数建议（根据上下文选择性添加）
-        // 如果光标后有内容，优先添加关键字和函数
-        const shouldAddKeywords = !needTables || suggestions.length === 0;
-        if (shouldAddKeywords) {
-          // 关键字排序：与当前上下文相关的优先
-          const keywordSortMap: Record<string, number> = {
-            'SELECT': ctx.stmtType === 'UNKNOWN' ? 0 : 10,
-            'INSERT INTO': ctx.stmtType === 'UNKNOWN' ? 0 : 10,
-            'UPDATE': ctx.stmtType === 'UNKNOWN' ? 0 : 10,
-            'DELETE FROM': ctx.stmtType === 'UNKNOWN' ? 0 : 10,
-            'FROM': ctx.isAfterSelect ? 0 : 10,
-            'WHERE': ['SELECT', 'UPDATE', 'DELETE'].includes(ctx.stmtType) ? 1 : 10,
-            'JOIN': ctx.isAfterFrom ? 1 : 10,
-            'LEFT JOIN': ctx.isAfterFrom ? 1 : 10,
-            'INNER JOIN': ctx.isAfterFrom ? 1 : 10,
-            'GROUP BY': ctx.isAfterWhere || ctx.isAfterFrom ? 2 : 10,
-            'ORDER BY': ctx.isAfterWhere || ctx.isAfterFrom ? 2 : 10,
-            'HAVING': ctx.isAfterGroupBy ? 1 : 10,
-            'LIMIT': ctx.isAfterWhere || ctx.isAfterOrderBy ? 2 : 10,
-            'VALUES': ctx.isAfterInsertInto ? 0 : 10,
-            'SET': ctx.stmtType === 'UPDATE' ? 0 : 10,
-          };
-
-          for (const kw of filteredKeywords) {
-            const sortPriority = keywordSortMap[kw.label] ?? 5;
-            suggestions.push({
-              label: kw.label,
-              kind: monaco.languages.CompletionItemKind.Keyword,
-              insertText: kw.insertText,
-              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              detail: kw.detail || t('common.keyword'),
-              sortText: String(sortPriority),
-            });
-          }
-
-          // 函数建议
-          for (const fn of filteredFunctions) {
-            suggestions.push({
-              label: fn.label,
-              kind: monaco.languages.CompletionItemKind.Function,
-              insertText: fn.insertText,
-              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              detail: fn.detail,
-              sortText: '3',
-            });
-          }
-        }
-
-        // 4. CREATE TABLE / ALTER TABLE 上下文 -> 提供数据类型建议
-        if ((ctx.isAfterCreateTable || ctx.isAfterAlterTable) && currentDbType) {
-          const dataTypes = getDbSpecificDataTypes(currentDbType);
-          for (const dt of dataTypes) {
-            suggestions.push({
-              label: dt,
-              kind: monaco.languages.CompletionItemKind.TypeParameter,
-              insertText: dt,
-              range,
-              detail: t('common.dataType'),
-              sortText: '0',
-            });
-          }
-        }
-
-        return { suggestions };
-      },
-    });
-
-    // 添加快捷键（批量注册以减少开销）
-    const shortcuts = [
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, action: () => onSave?.() },
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, action: () => editor.getAction('actions.find')?.run() },
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, action: () => editor.getAction('editor.action.startFindActionReplace')?.run() },
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyD, action: () => editor.getAction('editor.action.duplicateSelection')?.run() },
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyK, action: () => formatSQLRef.current() },
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, action: () => handleExecuteQueryRef.current() },
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter, action: () => {
-        const position = editor.getPosition();
-        if (position) {
-          const lineText = editor.getModel()?.getLineContent(position.lineNumber);
-          if (lineText?.trim()) {
-            handleExecuteQueryRef.current();
-          }
-        }
-      }},
-      { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, action: () => onStop?.() },
-    ];
-
-    shortcuts.forEach(({ key, action }) => {
-      editor.addCommand(key, action);
-    });
-
-    // 监听编辑器内容变化（使用防抖以减少频繁更新）
-    let contentChangeTimeout: ReturnType<typeof setTimeout> | undefined;
-    const disposable = editor.onDidChangeModelContent(() => {
-      if (contentChangeTimeout) clearTimeout(contentChangeTimeout);
-      contentChangeTimeout = setTimeout(() => {
-        const value = editor.getValue();
-        setSql(value);
-      }, 100); // 100ms 防抖
-      editorDebounceTimersRef.current.add(contentChangeTimeout);
-    });
-
-    // 监听光标位置变化（使用节流以减少频繁更新）
-    let cursorChangeTimeout: ReturnType<typeof setTimeout> | undefined;
-    const cursorDisposable = editor.onDidChangeCursorPosition(() => {
-      if (cursorChangeTimeout) clearTimeout(cursorChangeTimeout);
-      cursorChangeTimeout = setTimeout(() => {
-        const position = editor.getPosition();
-        if (position) {
-          const line = editor.getModel()?.getLineContent(position.lineNumber);
-          if (line) {
-            const column = position.column;
-            setCursorPosition?.({ line: position.lineNumber, column, text: line });
-          }
-        }
-      }, 50); // 50ms 节流
-      editorDebounceTimersRef.current.add(cursorChangeTimeout);
-    });
-
-    // 监听选择变化（使用节流）
-    let selectionChangeTimeout: ReturnType<typeof setTimeout> | undefined;
-    const selectionDisposable = editor.onDidChangeCursorSelection(() => {
-      if (selectionChangeTimeout) clearTimeout(selectionChangeTimeout);
-      selectionChangeTimeout = setTimeout(() => {
-        const selection = editor.getSelection();
-        if (selection) {
-          const selectedText = editor.getModel()?.getValueInRange(selection);
-          setSelectedText?.(selectedText || '');
-        }
-      }, 50);
-      editorDebounceTimersRef.current.add(selectionChangeTimeout);
-    });
-
-    // 监听窗口大小变化（使用防抖）
-    let resizeTimeout: ReturnType<typeof setTimeout> | undefined;
-    const handleResize = () => {
-      if (resizeTimeout) clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        if (containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect();
-          editor.layout({ width: rect.width, height: rect.height });
-        }
-      }, 100);
-      editorDebounceTimersRef.current.add(resizeTimeout);
-    };
-
-    resizeObserverRef.current = new ResizeObserver(handleResize);
-    resizeObserverRef.current.observe(containerRef.current!);
-
-    // 初始布局
-    handleResize();
-
-    // 保存清理函数
-    cleanupDisposablesRef.current = [disposable, cursorDisposable, selectionDisposable];
-  }, [onSave, onFormat, onStop, setCursorPosition, setSelectedText]);
-
-  const handleExecuteQuery = useCallback(async (explicitSql?: string) => {
-    // 收起建议列表
-    editorRef.current?.getAction('editor.action.hideSuggestWidget')?.run();
-
-    let sqlToExecute: string;
-    if (explicitSql) {
-      sqlToExecute = explicitSql;
-    } else {
-      const selectedSql = editorRef.current
-        ?.getModel()
-        ?.getValueInRange(editorRef.current.getSelection())
-        ?.trim();
-      sqlToExecute = selectedSql || sql;
-    }
-
-    if (!sqlToExecute.trim()) {
-      message.warning(t('common.pleaseEnterSqlStatement'));
-      return;
-    }
-
-    if (!connectionId) {
-      message.warning(t('common.pleaseSelectADatabaseConnection'));
-      return;
-    }
-
-    if (!database) {
-      message.warning(t('common.pleaseSelectADatabase'));
-      return;
-    }
-
-    // 查询参数化：检测参数并弹出输入对话框
-    const params = extractParams(sqlToExecute);
-    if (params.length > 0 && !pendingSql) {
-      setParamDialogParams(params);
-      setPendingSql(sqlToExecute);
-      setParamDialogOpen(true);
-      return;
-    }
-
-    if (pendingSql) {
-      sqlToExecute = pendingSql;
-      setPendingSql('');
-    }
-
-    // 大数据保护：已禁用
-    // const sqlUpper = sqlToExecute.trim().toUpperCase();
-    // const hasLimit = /\bLIMIT\b/.test(sqlUpper);
-    // const hasTop = /\bTOP\s/.test(sqlUpper);
-    // const hasRownum = /\bROWNUM\b/.test(sqlUpper);
-    // if (
-    //   (sqlUpper.startsWith('SELECT') || sqlUpper.startsWith('/*')) &&
-    //   !hasLimit &&
-    //   !hasTop &&
-    //   !hasRownum
-    // ) {
-    //   const needConfirm = await new Promise<boolean>((resolve) => {
-    //     Modal.confirm({
-    //       title: t('common.largeQueryWarning'),
-    //       content: t('common.queryWithoutLimitWarning'),
-    //       okText: t('common.continueExecution'),
-    //       cancelText: t('common.cancel'),
-    //       transitionName: '',
-    //       maskTransitionName: '',
-    //       onOk: () => resolve(true),
-    //       onCancel: () => resolve(false),
-    //     });
-    //   });
-    //   if (!needConfirm) {
-    //     setLoading(false);
-    //     return;
-    //   }
-    // }
-
-    requestStartTimeRef.current = Date.now();
-    returnedRowsRef.current = 0;
-    setExecElapsed(0);
-    // 启动实时计时器（每 100ms 更新已用时间）
-    if (execTimerRef.current) clearInterval(execTimerRef.current);
-    execTimerRef.current = setInterval(() => {
-      setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
-    }, 100);
-    try {
-      setLoading(true);
-      setMessages([]);
-
-      setResults([]);
-      setExplainPlan([]);
-      clearErrorMarkers();
-      
-      // 取消之前的请求
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      abortControllerRef.current = new AbortController();
-      
-      onQueryStatusChange?.(true);
-
-      // 检测是否多语句（按分号分割，忽略字符串内的分号）
-      const statements = splitSqlStatements(sqlToExecute);
-      const isMultiStatement = statements.length > 1;
-
-      if (isMultiStatement) {
-        const multiResults: QueryResultWithTiming[] = [];
-        const msgs: string[] = [];
-        let totalErrors = 0;
-        let totalSuccess = 0;
-        const maxRows = useSettingsStore.getState().settings.maxResultRows;
-        let hasTruncated = false;
-
-        // 使用批处理优化多语句执行
-        const batchSize = 5;
-        for (let i = 0; i < statements.length; i += batchSize) {
-          const batch = statements.slice(i, i + batchSize);
-          const batchPromises = batch.map(async (stmt, index) => {
-            if (abortControllerRef.current?.signal.aborted) return null;
-            
-            try {
-              const queryResult = await executeQueryApi(connectionId, stmt, database, abortControllerRef.current?.signal);
-              const executionTime = queryResult.execution_time_ms ?? 0;
-
-              const truncated = queryResult.rows.length > maxRows;
-              if (truncated) {
-                hasTruncated = true;
-                queryResult.rows = queryResult.rows.slice(0, maxRows);
-              }
-
-              if (queryResult.error) {
-                msgs.push(t('common.statementFailed', { index: i + index + 1, error: queryResult.error }));
-                totalErrors++;
-                highlightError(queryResult.error);
-                window.__sqlHistoryApi?.addHistory({
-                  sql: stmt,
-                  success: false,
-                  duration: executionTime,
-                });
-              } else {
-                const rowCount = queryResult.rows.length;
-                const affectedRows = queryResult.rows_affected || 0;
-                if (rowCount > 0) {
-                  let msg = t('common.statementSuccess', {
-                    index: i + index + 1,
-                    count: rowCount,
-                    time: executionTime,
-                  });
-                  if (truncated) msg += t('common.truncatedTo', { count: maxRows });
-                  msgs.push(msg);
-                } else if (affectedRows > 0) {
-                  msgs.push(
-                    t('common.statementAffected', {
-                      index: i + index + 1,
-                      count: affectedRows,
-                      time: executionTime,
-                    })
-                  );
-                } else {
-                  msgs.push(t('common.statementExecuted', { index: i + index + 1, time: executionTime }));
-                }
-                totalSuccess++;
-                window.__sqlHistoryApi?.addHistory({
-                  sql: stmt,
-                  success: true,
-                  duration: executionTime,
-                  rowCount: rowCount > 0 ? rowCount : affectedRows,
-                });
-              }
-              return { ...queryResult, executionTime };
-            } catch (error: any) {
-              // 用户主动停止查询时静默跳过（不计为错误）
-              if (error instanceof DOMException && error.name === 'AbortError') {
-                return null;
-              }
-              msgs.push(t('common.statementFailed', { index: i + index + 1, error: error.message || error }));
-              totalErrors++;
-              window.__sqlHistoryApi?.addHistory({
-                sql: stmt,
-                success: false,
-              });
-              return null;
-            }
-          });
-
-          const batchResults = await Promise.all(batchPromises);
-          batchResults.forEach(result => {
-            if (result) multiResults.push(result);
-          });
-
-          // 批次间让UI有机会更新
-          if (i + batchSize < statements.length) {
-            await new Promise(resolve => setTimeout(resolve, 0));
-          }
-        }
-
-        if (hasTruncated) {
-          message.warning(
-            `${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`
-          );
-        }
-
-        setResults(multiResults);
-        setMessages(msgs);
-
-        if (totalErrors === 0) {
-          message.success(
-            `${t('common.allExecutedSuccessfully')}: ${totalSuccess} ${t('common.statements')}`
-          );
-          setActiveTab('result');
-        } else {
-          message.error(
-            `${t('common.partialExecutionFailed')}: ${totalSuccess} ${t('common.success')}, ${totalErrors} ${t('common.failed')}`
-          );
-          setActiveTab('messages');
-        }
-      } else {
-        // 单语句执行（原有逻辑）
-        const queryResult = await executeQueryApi(connectionId, sqlToExecute, database, abortControllerRef.current?.signal);
-        const executionTime = queryResult.execution_time_ms ?? 0;
-        const totalTime = Date.now() - requestStartTimeRef.current;
-
-        if (queryResult.error) {
-          setMessages([`✗ ${t('common.error')}: ${queryResult.error}`]);
-          setActiveTab('messages');
-          message.error(`${t('common.sqlExecutionFailed')}: ${queryResult.error}`);
-          highlightError(queryResult.error);
-          setResult({ ...queryResult, executionTime, totalTime, executedSql: sqlToExecute });
-          window.__sqlHistoryApi?.addHistory({
-            sql: sqlToExecute,
-            success: false,
-            duration: executionTime,
-          });
-        } else {
-          const maxRows = useSettingsStore.getState().settings.maxResultRows;
-          const truncated = queryResult.rows.length > maxRows;
-          const truncatedRows = truncated ? queryResult.rows.slice(0, maxRows) : queryResult.rows;
-          const rowCount = truncatedRows.length;
-          const affectedRows = queryResult.rows_affected || 0;
-
-          setResult({ ...queryResult, rows: truncatedRows, executionTime, totalTime, executedSql: sqlToExecute });
-
-          clearErrorMarkers();
-
-          if (rowCount > 0) {
-            let msg = `✓ ${t('common.querySuccess')}, ${rowCount} ${t('common.records')}, ${t('common.executionTime')} ${executionTime}ms`;
-            if (truncated) {
-              msg += `（${t('common.resultSetTruncated')}, ${t('common.onlyShowingFirst')}${maxRows} ${t('common.rows')}）`;
-              message.warning(
-                `${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`
-              );
-            }
-            setMessages([msg]);
-          } else if (affectedRows > 0) {
-            setMessages([
-              `${t('common.executionSuccess')}, ${affectedRows} ${t('common.rowsAffected')}, ${t('common.executionTime')} ${executionTime}ms`,
-            ]);
-          } else {
-            setMessages([
-              `${t('common.executionSuccess')}, ${t('common.executionTime')} ${executionTime}ms`,
-            ]);
-          }
-
-          setActiveTab('result');
-          window.__sqlHistoryApi?.addHistory({
-            sql: sqlToExecute,
-            success: true,
-            duration: executionTime,
-            rowCount: rowCount > 0 ? rowCount : affectedRows,
-          });
-        }
-      }
-
-      // 保存历史记录（内存缓存，用于快速检索）
-      setQueryHistory((prev) => [sqlToExecute, ...prev.slice(0, 49)]);
-    } catch (error: any) {
-      // 检查是否是取消操作
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        console.log('Query was aborted');
-        setMessages([...messages, '⚠ ' + t('common.queryStopped')]);
-        return;
-      }
-      
-      console.error('SQL execution error:', error);
-      setMessages([`✗ ${t('common.error')}: ${error.message || error}`]);
-      setActiveTab('messages');
-      message.error(`${t('common.sqlExecutionFailed')}: ${error.message || error}`);
-      highlightError(error.message || error);
-    } finally {
-      setLoading(false);
-      abortControllerRef.current = null;
-      onQueryStatusChange?.(false);
-      // 停止执行计时器
-      if (execTimerRef.current) {
-        clearInterval(execTimerRef.current);
-        execTimerRef.current = null;
-      }
-      setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
-    }
-  }, [sql, connectionId, database, executeQueryApi]);
-
-  // 同步 handleExecuteQuery 到 ref，供 Monaco 快捷键使用
-  useEffect(() => {
-    handleExecuteQueryRef.current = handleExecuteQuery;
-  }, [handleExecuteQuery]);
-
-  // 组件卸载时清理资源 - 优化版本
-  useEffect(() => {
-    return () => {
-      // 清理 Monaco Editor 补全提供者
-      if (completionProviderRef.current) {
-        completionProviderRef.current.dispose();
-        completionProviderRef.current = null;
-      }
-
-      // 清理编辑器注册的 disposable（onDidChangeModelContent 等）
-      // 虽然 editor.dispose() 会隐式清理，显式 dispose 更稳妥
-      cleanupDisposablesRef.current.forEach((d) => {
-        try {
-          d?.dispose?.();
-        } catch {
-          // ignore
-        }
-      });
-      cleanupDisposablesRef.current = [];
-
-      // 清理所有 pending 的防抖定时器，避免卸载后对已卸载组件 setState
-      editorDebounceTimersRef.current.forEach((t) => clearTimeout(t));
-      editorDebounceTimersRef.current.clear();
-
-      // 清理执行状态条计时器
-      if (execTimerRef.current) {
-        clearInterval(execTimerRef.current);
-        execTimerRef.current = null;
-      }
-
-      // 保存编辑器状态以便恢复
-      if (editorRef.current) {
-        const model = editorRef.current.getModel();
-        if (model) {
-          const value = model.getValue();
-          const selections = editorRef.current.getSelections();
-          const position = editorRef.current.getPosition();
-          
-          savedEditorStateRef.current = {
-            value,
-            selections,
-            position,
-            modelUri: model.uri.toString(),
-          };
-        }
-      }
-      
-      // 清理编辑器实例
-      if (editorRef.current) {
-        editorRef.current.dispose();
-        editorRef.current = null;
-      }
-      
-      // 清理所有引用和缓存
-      completionCacheRef.current = null;
-      schemaRef.current = null;
-      dbTypeRef.current = undefined;
-      
-      // 取消进行中的请求
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-      
-      // 清理定时器
-      if (completionTimerRef.current) {
-        clearTimeout(completionTimerRef.current);
-        completionTimerRef.current = null;
-      }
-      
-      // 清理事件监听器
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-    };
-  }, []);
-
-  const stopQuery = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      setLoading(false);
-      setMessages((prev) => [...prev, '⚠ ' + t('common.queryStopped')]);
-      message.warning(t('common.queryStopped'));
-      onQueryStatusChange?.(false);
-    } else {
-      message.info(t('common.noQueryExecuting'));
-    }
-  }, [onQueryStatusChange]);
-
-  const showExplainPlan = useCallback(async () => {
-    if (!sql.trim()) {
-      message.warning(t('common.pleaseEnterSqlStatement'));
-      return;
-    }
-
-    if (!connectionId) {
-      message.warning(t('common.pleaseSelectADatabaseConnection'));
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      let trimmedSQL = sql.trim();
-      if (trimmedSQL.endsWith(';')) {
-        trimmedSQL = trimmedSQL.slice(0, -1).trim();
-      }
-
-      const explainSQL = `EXPLAIN ${trimmedSQL}`;
-      const result = await executeQueryApi(connectionId, explainSQL, database);
-
-      if (result.error) {
-        message.error(`${t('common.failedToGenerateExplainPlan')}: ${result.error}`);
-      } else {
-        setExplainPlan(result.rows as unknown[]);
-        setActiveTab('explain');
-        message.success(t('common.explainPlanGenerated'));
-      }
-    } catch (error: any) {
-      console.error('Explain plan error:', error);
-      message.error(`${t('common.failedToGenerateExplainPlan')}: ${error.message || error}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [sql, connectionId, database, executeQueryApi]);
-
+  // Format SQL
   const formatSQL = useCallback(() => {
     if (!editorRef.current) return;
     const dialectMap: Record<string, string> = {
@@ -1714,45 +258,10 @@ export function SQLEditor({
     }
   }, [sql, dbType]);
 
-  // 同步 formatSQL 到 ref，供上方快捷键调用
+  // 同步 formatSQL 到 ref，供 Monaco 快捷键调用
   formatSQLRef.current = formatSQL;
 
-  const handleBeginTransaction = useCallback(async () => {
-    if (!connectionId) {
-      message.warning(t('common.pleaseSelectADatabaseConnection'));
-      return;
-    }
-    try {
-      await api.beginTransaction(connectionId);
-      setTransactionActive(true);
-      message.success(t('common.transactionStarted'));
-    } catch (err: any) {
-      message.error(`${t('common.failedToBeginTransaction')}: ${err.message || err}`);
-    }
-  }, [connectionId]);
-
-  const handleCommitTransaction = useCallback(async () => {
-    if (!connectionId) return;
-    try {
-      await api.commitTransaction(connectionId);
-      setTransactionActive(false);
-      message.success(t('common.transactionCommitted'));
-    } catch (err: any) {
-      message.error(`${t('common.failedToCommitTransaction')}: ${err.message || err}`);
-    }
-  }, [connectionId]);
-
-  const handleRollbackTransaction = useCallback(async () => {
-    if (!connectionId) return;
-    try {
-      await api.rollbackTransaction(connectionId);
-      setTransactionActive(false);
-      message.success(t('common.transactionRolledBack'));
-    } catch (err: any) {
-      message.error(`${t('common.failedToRollbackTransaction')}: ${err.message || err}`);
-    }
-  }, [connectionId]);
-
+  // Editor utility actions
   const clearEditor = useCallback(() => {
     setSql('');
     setResult(null);
@@ -1760,25 +269,6 @@ export function SQLEditor({
     setExplainPlan([]);
     setActiveTab('result');
     message.success(t('common.editorCleared'));
-  }, []);
-
-  // SQL 方言快速转换（规则引擎）
-  const handleQuickConvert = useCallback(() => {
-    if (!dialectMismatch || !dbType) return;
-    const converted = convertByRules(sql, {
-      sourceDialect: dialectMismatch.dialect,
-      targetDialect: dbType,
-    });
-    setSql(converted);
-    setDialectMismatch(null);
-    setDialectDismissed(true);
-    message.success(t('common.sqlEditor.dialectConverted', { source: dialectMismatch.dialect, target: dbType }));
-  }, [sql, dbType, dialectMismatch]);
-
-  // SQL 方言转换忽略
-  const handleDismissDialectBanner = useCallback(() => {
-    setDialectDismissed(true);
-    setDialectMismatch(null);
   }, []);
 
   const saveSQL = useCallback(() => {
@@ -2046,270 +536,33 @@ export function SQLEditor({
       }}
       data-testid="sql-editor"
     >
-      <div
-        style={{
-          padding: '4px 8px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          background: 'var(--background-toolbar)',
-        }}
-        className="sql-editor-toolbar"
-      >
-        <style>{`.sql-editor-toolbar .ant-btn { height: 22px; font-size: 12px; }`}</style>
-        <Space size="small">
-          <Tooltip
-            title={`${t('common.sqlEditor.execute')} (${formatShortcutForDisplay(getEffectiveShortcut('execute-query', useSettingsStore.getState().settings.shortcuts || {}))})`}
-          >
-            <div
-              onClick={() => !loading && connectionId && handleExecuteQuery()}
-              data-testid="sql-execute-btn"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '0 10px',
-                height: 22,
-                borderRadius: 6,
-                background: 'var(--color-primary)',
-                color: tc.isDark ? '#000000' : '#FFFFFF',
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: !connectionId || loading ? 'not-allowed' : 'pointer',
-                opacity: !connectionId ? 0.5 : 1,
-                transition: 'all 0.2s ease',
-                boxShadow: `0 2px 8px ${tc.primary}33`,
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                if (!connectionId || loading) return;
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = `0 4px 12px ${tc.primary}4D`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = `0 2px 8px ${tc.primary}33`;
-              }}
-            >
-              {loading ? <LoadingOutlined /> : <PlayCircleOutlined />}
-              {t('common.executeButton')}
-            </div>
-          </Tooltip>
-          <Button
-            icon={<StopOutlined />}
-            onClick={stopQuery}
-            disabled={!loading}
-            danger
-            size="small"
-          >
-            {t('common.stopButton')}
-          </Button>
-
-          {/* 执行状态条：loading 时实时显示已用时间；非 loading 显示上次查询耗时 */}
-          {loading ? (
-            <span style={{ fontSize: 11, color: tc.primary, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>
-              <LoadingOutlined style={{ marginRight: 4 }} />
-              {t('common.executingLabel')} {execElapsed.toFixed(1)}s
-            </span>
-          ) : execElapsed > 0 ? (
-            <span style={{ fontSize: 11, color: tc.textTertiary, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>
-              {execElapsed.toFixed(2)}s
-            </span>
-          ) : null}
-
-          <div
-            style={{
-              width: 1,
-              height: 16,
-              background: 'var(--border)',
-              margin: '0 4px',
-            }}
-          />
-
-          <Button
-            icon={<FormatPainterOutlined />}
-            onClick={formatSQL}
-            size="small"
-          >
-            {t('common.formatButton')}
-          </Button>
-          <Button
-            icon={<LineChartOutlined />}
-            onClick={showExplainPlan}
-            disabled={!connectionId}
-            size="small"
-          >
-            {t('common.explainPlanButton')}
-          </Button>
-
-          <div
-            style={{
-              width: 1,
-              height: 16,
-              background: 'var(--border)',
-              margin: '0 4px',
-            }}
-          />
-
-          {!transactionActive ? (
-            <Button
-              icon={<ThunderboltOutlined />}
-              onClick={handleBeginTransaction}
-              disabled={!connectionId}
-              size="small"
-            >
-              {t('common.beginTransaction')}
-            </Button>
-          ) : (
-            <>
-              <Button
-                icon={<CheckCircleOutlined />}
-                onClick={handleCommitTransaction}
-                type="primary"
-                size="small"
-              >
-                {t('common.commitTransaction')}
-              </Button>
-              <Button
-                icon={<CloseCircleOutlined />}
-                onClick={handleRollbackTransaction}
-                danger
-                size="small"
-              >
-                {t('common.rollbackTransaction')}
-              </Button>
-            </>
-          )}
-
-          <div
-            style={{
-              width: 1,
-              height: 16,
-              background: 'var(--border)',
-              margin: '0 4px',
-            }}
-          />
-
-          <Tooltip title={t('common.sqlEditor.commentSQL') + ' (Ctrl+/)'}>
-            <Button
-              icon={<FileTextOutlined />}
-              onClick={() => editorRef.current?.getAction('editor.action.commentLine')?.run()}
-              size="small"
-            >
-              {t('common.commentButton')}
-            </Button>
-          </Tooltip>
-
-          <Dropdown
-            menu={{
-              items: [
-                { key: 'upper', label: t('common.uppercase') },
-                { key: 'lower', label: t('common.lowercase') },
-              ],
-              onClick: ({ key }) => {
-                const editor = editorRef.current;
-                if (!editor) return;
-                const model = editor.getModel();
-                const selection = editor.getSelection();
-                if (!model || !selection) return;
-                const selectedText = model.getValueInRange(selection);
-                if (!selectedText) return;
-                const replaced =
-                  key === 'upper' ? selectedText.toUpperCase() : selectedText.toLowerCase();
-                editor.executeEdits('case-transform', [
-                  { range: selection, text: replaced, forceMoveMarkers: true },
-                ]);
-              },
-            }}
-          >
-            <Button icon={<FormatPainterOutlined />} size="small">
-              {t('common.caseButton')}
-            </Button>
-          </Dropdown>
-
-          <Dropdown
-            menu={{
-              items: [
-                { key: 'save', label: t('common.saveSql'), icon: <SaveOutlined /> },
-                { key: 'copy', label: t('common.copySqlMenu'), icon: <CopyOutlined /> },
-                { key: 'clear', label: t('common.clearEditor'), icon: <ClearOutlined /> },
-                { key: 'snippets', label: t('common.codeSnippets'), icon: <BookOutlined /> },
-                { type: 'divider' },
-                { key: 'history', label: t('common.queryHistoryTitle'), icon: <HistoryOutlined /> },
-                {
-                  key: 'export',
-                  label: t('common.exportResults'),
-                  icon: <DownloadOutlined />,
-                  disabled: !result,
-                },
-              ],
-              onClick: ({ key }) => {
-                if (key === 'save') saveSQL();
-                else if (key === 'copy') copySQL();
-                else if (key === 'clear') clearEditor();
-                else if (key === 'export') exportResult();
-                else if (key === 'history') setHistoryPanelVisible(true);
-                else if (key === 'snippets') setSnippetManagerOpen(true);
-              },
-            }}
-          >
-            <Button icon={<FileTextOutlined />} size="small">
-              {t('common.moreButton')}
-            </Button>
-          </Dropdown>
-        </Space>
-
-        <Space>
-          {/* 数据库选择 */}
-          {connectionId ? (
-            availableDatabases && availableDatabases.length > 0 ? (
-              <Select
-                value={database || undefined}
-                onChange={(value) => onDatabaseChange?.(value)}
-                placeholder={t('common.selectDatabasePlaceholder')}
-                showSearch
-                optionFilterProp="label"
-                filterOption={(input, option) =>
-                  (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                }
-                style={{ minWidth: 140 }}
-                size="small"
-                options={availableDatabases.map((db) => ({ label: db, value: db }))}
-              />
-            ) : (
-              <span
-                style={{
-                  color: 'var(--color-error)',
-                  fontSize: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <WarningOutlined />
-                {t('common.notLoaded')}
-              </span>
-            )
-          ) : (
-            <span style={{ color: 'var(--color-error)', fontSize: 12 }}>
-              {t('common.notSelected')}
-            </span>
-          )}
-
-          <Button
-            icon={<FullscreenOutlined />}
-            type="text"
-            onClick={() => {
-              const next = !isFullscreen;
-              setIsFullscreen(next);
-              if (editorRef.current) {
-                setTimeout(() => editorRef.current.layout(), 0);
-              }
-            }}
-          />
-        </Space>
-      </div>
+      {/* Toolbar */}
+      <SQLEditorToolbar
+        loading={loading}
+        connectionId={connectionId}
+        handleExecuteQuery={handleExecuteQuery}
+        stopQuery={stopQuery}
+        showExplainPlan={showExplainPlan}
+        execElapsed={execElapsed}
+        formatSQL={formatSQL}
+        editorRef={editorRef}
+        transactionActive={transactionActive}
+        handleBeginTransaction={handleBeginTransaction}
+        handleCommitTransaction={handleCommitTransaction}
+        handleRollbackTransaction={handleRollbackTransaction}
+        saveSQL={saveSQL}
+        copySQL={copySQL}
+        clearEditor={clearEditor}
+        exportResult={exportResult}
+        setHistoryPanelVisible={setHistoryPanelVisible}
+        setSnippetManagerOpen={setSnippetManagerOpen}
+        database={database}
+        availableDatabases={availableDatabases}
+        onDatabaseChange={onDatabaseChange}
+        isFullscreen={isFullscreen}
+        setIsFullscreen={setIsFullscreen}
+        dbType={dbType}
+      />
 
       {/* SQL 方言转换提示 Banner */}
       {dialectMismatch && dbType && (
@@ -2362,7 +615,7 @@ export function SQLEditor({
               strings: false,
             },
             suggestOnTriggerCharacters: true,
-      acceptSuggestionOnEnter: 'on',
+            acceptSuggestionOnEnter: 'on',
             formatOnPaste: false,
             formatOnType: false,
             matchBrackets: 'near',
@@ -2375,155 +628,24 @@ export function SQLEditor({
           }}
         />
 
-        {/* 自定义右键菜单 - 紧凑布局 */}
+        {/* 自定义右键菜单 */}
         {contextMenuVisible && (
-          <div
-            ref={contextMenuRef}
-            style={{
-              position: 'fixed',
-              left: contextMenuPos.x,
-              top: contextMenuPos.y,
-              zIndex: 1000,
-              background: tc.backgroundCard,
-              border: `1px solid ${tc.border}`,
-              borderRadius: 6,
-              boxShadow: tc.isDark
-                ? '0 2px 8px rgba(0,0,0,0.45)'
-                : '0 2px 8px rgba(0,0,0,0.12)',
-              padding: '2px 0',
-              minWidth: 160,
-              fontSize: 12,
-            }}
-          >
-            <Menu
-              mode="vertical"
-              selectable={false}
-              className="sql-ctx-menu"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                boxShadow: 'none',
-              }}
-              items={[
-                {
-                  key: 'execute',
-                  icon: <PlayCircleOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />,
-                  label: contextMenuSelectedSqlRef.current
-                    ? t('common.executeSelected')
-                    : t('common.executeButton'),
-                  disabled: !connectionId || loading,
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    if (contextMenuSelectedSqlRef.current) {
-                      handleExecuteQuery(contextMenuSelectedSqlRef.current);
-                    } else {
-                      handleExecuteQuery();
-                    }
-                  },
-                },
-                {
-                  key: 'format',
-                  icon: <FormatPainterOutlined style={{ fontSize: 12 }} />,
-                  label: t('common.formatButton'),
-                  onClick: () => { setContextMenuVisible(false); formatSQL(); },
-                },
-                {
-                  key: 'explain',
-                  icon: <LineChartOutlined style={{ fontSize: 12 }} />,
-                  label: t('common.explainPlanButton'),
-                  disabled: !connectionId,
-                  onClick: () => { setContextMenuVisible(false); showExplainPlan(); },
-                },
-                { key: 'd1', type: 'divider' },
-                {
-                  key: 'cut',
-                  icon: <span style={{ fontSize: 11 }}>✂️</span>,
-                  label: t('common.cut'),
-                  onClick: () => { setContextMenuVisible(false); editorRef.current?.getAction('editor.action.clipboardCutAction')?.run(); },
-                },
-                {
-                  key: 'copy',
-                  icon: <CopyOutlined style={{ fontSize: 12 }} />,
-                  label: t('common.copy'),
-                  onClick: () => { setContextMenuVisible(false); editorRef.current?.getAction('editor.action.clipboardCopyAction')?.run(); },
-                },
-                {
-                  key: 'paste',
-                  icon: <span style={{ fontSize: 11 }}>📋</span>,
-                  label: t('common.paste'),
-                  onClick: () => { setContextMenuVisible(false); editorRef.current?.getAction('editor.action.clipboardPasteAction')?.run(); },
-                },
-                {
-                  key: 'select-all',
-                  icon: <span style={{ fontSize: 11 }}>☐</span>,
-                  label: t('common.selectAll'),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    const ed = editorRef.current;
-                    const mc = monacoRef.current;
-                    if (!ed || !mc) return;
-                    const m = ed.getModel();
-                    if (!m) return;
-                    ed.setSelection(new mc.Selection(1, 1, m.getLineCount(), m.getLineMaxColumn(m.getLineCount())));
-                  },
-                },
-                { key: 'd2', type: 'divider' },
-                {
-                  key: 'comment',
-                  icon: <FileTextOutlined style={{ fontSize: 12 }} />,
-                  label: t('common.commentButton'),
-                  onClick: () => { setContextMenuVisible(false); editorRef.current?.getAction('editor.action.commentLine')?.run(); },
-                },
-                {
-                  key: 'uppercase',
-                  icon: <span style={{ fontSize: 11 }}>⬆</span>,
-                  label: t('common.uppercase'),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    const ed = editorRef.current;
-                    if (!ed) return;
-                    const sel = ed.getSelection();
-                    const txt = sel && ed.getModel()?.getValueInRange(sel);
-                    if (!sel || !txt) return;
-                    ed.executeEdits('case', [{ range: sel, text: txt.toUpperCase(), forceMoveMarkers: true }]);
-                  },
-                },
-                {
-                  key: 'lowercase',
-                  icon: <span style={{ fontSize: 11 }}>⬇</span>,
-                  label: t('common.lowercase'),
-                  onClick: () => {
-                    setContextMenuVisible(false);
-                    const ed = editorRef.current;
-                    if (!ed) return;
-                    const sel = ed.getSelection();
-                    const txt = sel && ed.getModel()?.getValueInRange(sel);
-                    if (!sel || !txt) return;
-                    ed.executeEdits('case', [{ range: sel, text: txt.toLowerCase(), forceMoveMarkers: true }]);
-                  },
-                },
-                { key: 'd3', type: 'divider' },
-                {
-                  key: 'save',
-                  icon: <SaveOutlined style={{ fontSize: 12 }} />,
-                  label: t('common.saveSql'),
-                  onClick: () => { setContextMenuVisible(false); saveSQL(); },
-                },
-                {
-                  key: 'copy-sql',
-                  icon: <CopyOutlined style={{ fontSize: 12 }} />,
-                  label: t('common.copySqlMenu'),
-                  onClick: () => { setContextMenuVisible(false); copySQL(); },
-                },
-                {
-                  key: 'clear',
-                  icon: <ClearOutlined style={{ fontSize: 12 }} />,
-                  label: t('common.clearEditor'),
-                  onClick: () => { setContextMenuVisible(false); clearEditor(); },
-                },
-              ]}
-            />
-          </div>
+          <SQLEditorContextMenu
+            contextMenuRef={contextMenuRef}
+            contextMenuPos={contextMenuPos}
+            selectedSql={contextMenuSelectedSqlRef.current}
+            connectionId={connectionId}
+            loading={loading}
+            handleExecuteQuery={handleExecuteQuery}
+            formatSQL={formatSQL}
+            showExplainPlan={showExplainPlan}
+            saveSQL={saveSQL}
+            copySQL={copySQL}
+            clearEditor={clearEditor}
+            editorRef={editorRef}
+            monacoRef={monacoRef}
+            onClose={() => setContextMenuVisible(false)}
+          />
         )}
       </div>
 
@@ -2596,11 +718,11 @@ export function SQLEditor({
             setSql(selectedSql);
             setHistoryPanelVisible(false);
           }}
-          onRerun={(sql) => {
-            setSql(sql);
+          onRerun={(rerunSql) => {
+            setSql(rerunSql);
             setHistoryPanelVisible(false);
             // 等待 state 更新后触发执行
-            setTimeout(() => handleExecuteQueryRef.current(sql), 0);
+            setTimeout(() => handleExecuteQueryRef.current(rerunSql), 0);
           }}
           maxHistory={50}
           storageKey={`sql-history-${connectionId || 'global'}${database ? `-${database}` : ''}`}
@@ -2638,5 +760,3 @@ export function SQLEditor({
     </div>
   );
 }
-
-// 组件已抽取到 ./SQLEditor/ResultGrid.tsx
