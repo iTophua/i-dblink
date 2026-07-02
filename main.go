@@ -92,6 +92,7 @@ func createToolsMenu(app *backend.App) *menu.Menu {
 	m := menu.NewMenu()
 	m.Append(menu.Text("选项/设置...", keys.CmdOrCtrl(","), callback(app, "options")))
 	m.Append(menu.Text("操作日志", nil, callback(app, "operation-log")))
+	m.Append(menu.Text("数据迁移...", nil, callback(app, "data-migration")))
 	m.Append(menu.Text("数据同步...", nil, callback(app, "data-sync")))
 	m.Append(menu.Separator())
 	m.Append(menu.Text("备份数据库...", nil, callback(app, "backup")))

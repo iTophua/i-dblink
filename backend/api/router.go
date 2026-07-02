@@ -126,6 +126,13 @@ func RegisterRoutes(mux *http.ServeMux, manager *db.Manager) {
 
 	// CHECK 约束
 	mux.HandleFunc("POST /check-constraints", recoverMiddleware(h.GetCheckConstraints))
+
+	// 文档生成
+	mux.HandleFunc("POST /generate-doc", recoverMiddleware(h.GenerateDoc))
+
+	// 数据迁移
+	mux.HandleFunc("POST /migration-preview", recoverMiddleware(h.GetMigrationPreview))
+	mux.HandleFunc("POST /execute-migration", recoverMiddleware(h.ExecuteMigration))
 }
 
 // Handler HTTP 处理器

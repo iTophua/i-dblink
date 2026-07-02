@@ -899,4 +899,114 @@ export const api = {
     const result = await GetCheckConstraints(connectionId, tableName, database ?? null);
     return result as unknown as { constraint_name: string; check_clause: string }[];
   },
+
+  // ── 文档生成 ──
+
+  async generateDatabaseDoc(
+    connectionId: string,
+    database: string,
+    options: {
+      include_views: boolean;
+      include_procedures: boolean;
+      include_functions: boolean;
+      include_triggers: boolean;
+      include_indexes: boolean;
+      include_foreign_keys: boolean;
+      include_row_counts: boolean;
+      include_ddl: boolean;
+    }
+  ): Promise<string> {
+    const { GenerateDatabaseDoc } = await import('../../wailsjs/go/backend/App');
+    const result = await GenerateDatabaseDoc(connectionId, database, options);
+    return result as unknown as string;
+  },
+
+  // ── 自动更新 ──
+
+  async checkForUpdate(): Promise<{
+    current_version: string;
+    latest_version: string;
+    has_update: boolean;
+    release_notes: string;
+    download_url: string;
+    published_at: string;
+  }> {
+    const { CheckForUpdate } = await import('../../wailsjs/go/backend/App');
+    const result = await CheckForUpdate();
+    return result as unknown as {
+      current_version: string;
+      latest_version: string;
+      has_update: boolean;
+      release_notes: string;
+      download_url: string;
+      published_at: string;
+    };
+  },
+
+  async getAppVersion(): Promise<string> {
+    const { GetAppVersion } = await import('../../wailsjs/go/backend/App');
+    return await GetAppVersion();
+  },
+
+  // ── 数据迁移 ──
+
+  async getMigrationPreview(
+    sourceConnId: string,
+    targetConnId: string,
+    database: string,
+    targetDatabase: string,
+    tables: string[]
+  ): Promise<{
+    tables: {
+      table_name: string;
+      row_count: number;
+      columns: { column_name: string; data_type: string; is_nullable: string }[];
+      compatible: boolean;
+      warnings: string[];
+    }[];
+    warnings: string[];
+  }> {
+    const { GetMigrationPreview } = await import('../../wailsjs/go/backend/App');
+    const result = await GetMigrationPreview(sourceConnId, targetConnId, database, targetDatabase, tables);
+    return result as unknown as {
+      tables: {
+        table_name: string;
+        row_count: number;
+        columns: { column_name: string; data_type: string; is_nullable: string }[];
+        compatible: boolean;
+        warnings: string[];
+      }[];
+      warnings: string[];
+    };
+  },
+
+  async executeMigration(
+    sourceConnId: string,
+    targetConnId: string,
+    database: string,
+    targetDatabase: string,
+    tables: string[],
+    options: {
+      create_table: boolean;
+      drop_existing: boolean;
+      truncate_target: boolean;
+      batch_size: number;
+    }
+  ): Promise<{
+    tables: { table_name: string; row_count: number; time_ms: number; success: boolean; error: string; warnings?: string[] }[];
+    total_rows: number;
+    total_time_ms: number;
+    success: boolean;
+    error: string;
+  }> {
+    const { ExecuteMigration } = await import('../../wailsjs/go/backend/App');
+    const result = await ExecuteMigration(sourceConnId, targetConnId, database, targetDatabase, tables, options);
+    return result as unknown as {
+      tables: { table_name: string; row_count: number; time_ms: number; success: boolean; error: string; warnings?: string[] }[];
+      total_rows: number;
+      total_time_ms: number;
+      success: boolean;
+      error: string;
+    };
+  },
 };

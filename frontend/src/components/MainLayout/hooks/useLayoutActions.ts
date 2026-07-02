@@ -57,6 +57,11 @@ export function useLayoutActions({
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [operationLogOpen, setOperationLogOpen] = useState(false);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [docGeneratorOpen, setDocGeneratorOpen] = useState(false);
+  const [docGeneratorConnId, setDocGeneratorConnId] = useState('');
+  const [docGeneratorDatabase, setDocGeneratorDatabase] = useState('');
+  const [migrationDialogOpen, setMigrationDialogOpen] = useState(false);
 
   const workspaceRestoredRef = useRef(false);
 
@@ -305,11 +310,16 @@ export function useLayoutActions({
           break;
         case 'documentation':
         case 'search':
-        case 'check-update':
           window.dispatchEvent(new CustomEvent('app-action', { detail: { action } }));
+          break;
+        case 'check-update':
+          setUpdateDialogOpen(true);
           break;
         case 'data-sync':
           message.info(t('common.featureNotImplemented'));
+          break;
+        case 'data-migration':
+          setMigrationDialogOpen(true);
           break;
         case 'favorites':
           setFavoritesOpen(true);
@@ -342,6 +352,18 @@ export function useLayoutActions({
 
     window.addEventListener('menu-action', handleMenuAction);
 
+    // 监听来自 ConnectionTree 右键菜单的 app-action 事件
+    const handleAppAction = (event: Event) => {
+      const customEvent = event as CustomEvent<{ action: string; connId?: string; database?: string }>;
+      const { action, connId, database } = customEvent.detail;
+      if (action === 'generate-doc' && connId && database) {
+        setDocGeneratorConnId(connId);
+        setDocGeneratorDatabase(database);
+        setDocGeneratorOpen(true);
+      }
+    };
+    window.addEventListener('app-action', handleAppAction);
+
     const handleRefreshConnectionTree = async (event: Event) => {
       const customEvent = event as CustomEvent<{ connectionId: string; database?: string }>;
       const { connectionId, database } = customEvent.detail;
@@ -360,6 +382,7 @@ export function useLayoutActions({
 
     return () => {
       window.removeEventListener('menu-action', handleMenuAction);
+      window.removeEventListener('app-action', handleAppAction);
       window.removeEventListener('refresh-connection-tree', handleRefreshConnectionTree);
     };
   }, [selectedConnectionId, selectedDatabase, loadDatabaseTables, handleConnect, handleDisconnect, connectionDatabases]);
@@ -378,6 +401,16 @@ export function useLayoutActions({
     setFavoritesOpen,
     operationLogOpen,
     setOperationLogOpen,
+    updateDialogOpen,
+    setUpdateDialogOpen,
+    docGeneratorOpen,
+    setDocGeneratorOpen,
+    docGeneratorConnId,
+    setDocGeneratorConnId,
+    docGeneratorDatabase,
+    setDocGeneratorDatabase,
+    migrationDialogOpen,
+    setMigrationDialogOpen,
     styles,
     isDarkMode,
     token,

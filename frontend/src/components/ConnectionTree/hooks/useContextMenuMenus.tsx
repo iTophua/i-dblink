@@ -353,6 +353,7 @@ export function useContextMenuMenus(
         { key: 'server-status', label: t('common.serverStatus.title'), icon: <CloudServerOutlined /> },
         { type: 'divider' },
         { key: 'run-sql-file', label: t('common.runSqlFile') },
+        { key: 'generate-doc', label: t('common.docGenerator.title') },
         { type: 'divider' },
         { key: 'db-properties', label: t('common.databasePropertiesMenu') },
       ],
@@ -402,6 +403,12 @@ export function useContextMenuMenus(
         } else if (key === 'run-sql-file') {
           dialogSetters.setRunSqlTarget({ connId, database: dbName });
           dialogSetters.setRunSqlDialogOpen(true);
+        } else if (key === 'generate-doc') {
+          window.dispatchEvent(
+            new CustomEvent('app-action', {
+              detail: { action: 'generate-doc', connId, database: dbName },
+            })
+          );
         } else if (key === 'db-properties') {
           callbacks.onDatabaseProperties?.(connId, dbName);
         }

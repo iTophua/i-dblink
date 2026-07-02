@@ -16,6 +16,9 @@ import { ConnectionExportDialog } from './ConnectionExportDialog';
 import { BatchManageDialog } from './ConnectionTree/BatchManageDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { OperationLog } from './OperationLog';
+import { UpdateDialog } from './UpdateDialog';
+import { DocGeneratorDialog } from './DocGeneratorDialog';
+import { DataMigrationDialog } from './DataMigrationDialog';
 import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { api } from '../api';
@@ -343,6 +346,22 @@ function MainLayoutComponent() {
       </Modal>
 
       <OperationLog open={layout.operationLogOpen} onClose={() => layout.setOperationLogOpen(false)} />
+
+      <UpdateDialog open={layout.updateDialogOpen} onClose={() => layout.setUpdateDialogOpen(false)} />
+
+      {layout.docGeneratorOpen && layout.docGeneratorConnId && layout.docGeneratorDatabase && (
+        <DocGeneratorDialog
+          open={layout.docGeneratorOpen}
+          onClose={() => layout.setDocGeneratorOpen(false)}
+          connectionId={layout.docGeneratorConnId}
+          database={layout.docGeneratorDatabase}
+        />
+      )}
+
+      <DataMigrationDialog
+        open={layout.migrationDialogOpen}
+        onClose={() => layout.setMigrationDialogOpen(false)}
+      />
     </Layout>
   );
 }
