@@ -1,251 +1,123 @@
-# T0 — 技术债务重构计划
+# T0 — 技术债务清理记录
 
-> **目标**: 提升代码可维护性，为后续功能开发扫清障碍  
-> **原则**: 每次重构只改一个文件，改完立即运行 lint + typecheck + test 确保不引入回归
+> **最后更新**: 2026-07-02
+> **状态**: 全部已完成
 
----
-
-## T0-1: commands.rs 模块拆分
-
-**预估**: 4 小时  
-**文件**: `src-tauri/src/commands.rs` (1156 行)  
-**目标**: 按职责拆分为 4 个模块文件
-
-### 当前问题
-
-`commands.rs` 是一个 1156 行的单文件，包含所有 Tauri 命令，按数据库类型 switch 逻辑重复。每个新数据库类型都需要在这个文件中增加大量代码。
-
-### 拆分方案
-
-```
-src-tauri/src/
-  commands/
-    mod.rs              # 公共导出 + register_commands 宏
-    connection.rs       # 连接管理命令 (connect, disconnect, test, etc.)
-    query.rs            # 查询执行命令 (execute_query, execute_ddl)
-    metadata.rs         # 元数据命令 (get_tables, get_columns, get_indexes, etc.)
-    storage.rs          # 本地存储命令 (save_connection, get_connections, etc.)
-```
-
-### 步骤
-
-1. 创建 `src-tauri/src/commands/` 目录
-2. 复制 `commands.rs` 内容，按职责分组到 4 个文件
-3. `mod.rs` 中 re-export 所有 pub 函数
-4. 修改 `main.rs` 中的 `mod commands` 为 `mod commands;`（目录模块）
-5. 运行 `pnpm tauri dev` 确保编译通过
-
-### 验收标准
-
-- [ ] `pnpm tauri dev` 正常启动
-- [ ] 所有 Tauri 命令正常工作
-- [ ] `cargo clippy` 无警告
+本文档记录 iDBLink 历次技术债清理结果。所有已列项均已完成验证。
 
 ---
 
-## T0-2: MainLayout.tsx 拆分
+## 已完成项
 
-**预估**: 3 小时  
-**文件**: `src/components/MainLayout.tsx` (1160 行)  
-**目标**: 提取业务逻辑到 hooks，UI 拆分为子组件
+### T0-1: commands.rs 模块拆分 ✅
 
-### 拆分方案
+**结果**: Tauri → Wails 迁移后已不存在。`src-tauri/`（Rust）和 `commands.rs` 已随迁移整体删除，后端逻辑全部迁移到 Go（`backend/`），通过 Wails v2 绑定暴露。原 Rust 单文件 1156 行的问题自然消解。
 
-```
-src/components/
-  MainLayout.tsx              # 主布局，仅组合子组件 (~200 行)
-  MainLayout/
-    useConnectionManager.ts    # 连接/断开/选择逻辑 hook
-    useTableActions.ts          # 表操作 (打开/设计/删除/清空/复制) hook
-    useMenuActions.ts           # 菜单/快捷键动作处理 hook
-    Sidebar.tsx                 # 侧边栏 (搜索 + 连接树)
-    ContentArea.tsx             # 内容区域 (TabPanel)
-```
+### T0-2: MainLayout.tsx 拆分 ✅
 
-### 步骤
+**结果**: 已拆分完成。
+- `frontend/src/components/MainLayout.tsx`: 369 行（主组件，仅做组合）
+- `frontend/src/components/MainLayout/hooks/`: `useLayoutActions.ts` 等业务逻辑 hook
+- `frontend/src/components/MainLayout/styles.ts`: 样式
 
-1. 提取 `useConnectionManager` hook（连接/断开/数据库选择等状态管理）
-2. 提取 `useTableActions` hook（表操作回调）
-3. 提取 `useMenuActions` hook（菜单事件处理）
-4. 创建 `Sidebar.tsx`（搜索框 + 连接树）
-5. 创建 `ContentArea.tsx`（TabPanel + 状态栏）
-6. `MainLayout.tsx` 仅做组合
+### T0-3: SQLEditor.tsx 关键字外部化 ✅
 
-### 验收标准
+**结果**: 已拆分完成。
+- `frontend/src/components/SQLEditor.tsx`: 790 行（主组件）
+- `frontend/src/components/SQLEditor/`: 12 个子文件（HistoryPanel/ResultGrid/ChartView/ContextMenu + hooks + utils）
+- `frontend/src/constants/sqlKeywords.ts`、`sqlFunctions.ts`、`sqlLiveTemplates.ts`: SQL 关键字外部化
 
-- [ ] `pnpm lint` 无错误
-- [ ] 所有功能无回归
-- [ ] 每个文件不超过 300 行
+### T0-4: DataTable.tsx 拆分 ✅
 
----
+**结果**: 已拆分完成。
+- `frontend/src/components/DataTable.tsx`: 1196 行（主组件）
+- `frontend/src/components/DataTable/`: 10 个子文件（GlideDataTable/FindReplaceBar/CellPreviewDialog/ContextMenu/ConditionalFormattingPanel/utils/adapters 等）
 
-## T0-3: SQLEditor.tsx 关键字外部化
+### T0-5: escapeIdentifier 多数据库支持 ✅
 
-**预估**: 2 小时  
-**文件**: `src/components/SQLEditor.tsx` (1948 行)  
-**目标**: SQL 关键字和函数定义提取到独立文件
+**结果**: 已完成。标识符转义通过 `frontend/src/utils/sqlDialects/` 统一实现：
+- MySQL/MariaDB: 反引号 ` `` `
+- PostgreSQL/Kingbase/Highgo/Vastbase/Oracle/Dameng: 双引号 `"`
+- SQL Server: 方括号 `[]`
+- 各方言的 `buildCreateTable`/`buildAlterTable`/`buildColumnDef` 内部统一调用 `this.escapeIdentifier`
 
-### 拆分方案
+### T0-6: SQL 注入风险修复 ✅
 
-```
-src/constants/
-  sqlKeywords.ts     # SQL_KEYWORDS 数组 (~150 行)
-  sqlFunctions.ts     # SQL_FUNCTIONS 数组 (~200 行)
-  sqlSnippets.ts      # SQL 代码片段定义
-```
+**结果**: 已完成（含 2026-07-02 收尾）。
 
-### 步骤
+前端所有 SQL 构建位置统一走 `frontend/src/utils/sqlDialects/` 方言抽象：
+- 标识符：`dialect.escapeIdentifier(name)` 或包装函数 `escapeSqlIdentifier(name, dbType)`
+- 值：`dialect.escapeValue(value)`（处理 NULL/数字/布尔/反斜杠/单引号/空串→NULL）
+- 表引用：`dialect.buildTableRef(tableName, database)`
+- WHERE 子句：`dialect.escapeIdentifier` + `dialect.escapeValue` 组合，或 `buildLikeCondition`
 
-1. 将 `SQLEditor.tsx` 中 `SQL_KEYWORDS` 提取到 `sqlKeywords.ts`
-2. 将 `SQL_FUNCTIONS` 提取到 `sqlFunctions.ts`
-3. 将 `splitSqlStatements` 提取到 `src/utils/sqlUtils.ts`
-4. 修改 `SQLEditor.tsx` 中的 import
-
-### 验收标准
-
-- [ ] SQL 补全功能正常
-- [ ] `pnpm lint` 无错误
+**审计清单（全部已修复）：**
+- `DataTable/utils.ts` `buildQuery` — 用 `dialect.buildTableRef`/`escapeIdentifier`/`escapeValue`
+- `SQLEditor/ResultGrid.tsx` INSERT/UPDATE/DELETE — 用 `dialect.buildInsert`/`buildUpdate`/`buildDelete`
+- `TableDesigner/index.tsx` DDL — 用 `dialect.buildCreateTable`/`buildAlterTable`
+- `ImportExport/index.tsx` SQL 导出 — 值转义已于 2026-07-02 从手写 `'` 加倍改为 `dialect.escapeValue`，与 DumpDialog 对齐
+- `CopyTableDialog.tsx` 跨库复制 — 值转义已于 2026-07-02 从手写 `'` 加倍改为 `dialect.escapeValue`
+- `hooks/useApi.ts` `getTableInfo`/`getCreateTableSQL` — 用 `dialect.buildTableInfoQuery`/`buildTableDDLQuery`，无字符串拼接
+- `DumpDialog.tsx`、`ContextMenu/menuItems.tsx`、`TableExportWizard.tsx` — 均用 `dialect.escapeIdentifier`/`escapeValue`
 
 ---
 
-## T0-4: DataTable.tsx 拆分
+## T0-7: Tauri → Wails 迁移遗留清理 ✅ (2026-07-02)
 
-**预估**: 4 小时  
-**文件**: `src/components/DataTable.tsx` (2636 行)  
-**目标**: 按功能拆分为子模块
+Tauri → Wails v2 迁移后遗留的死代码、失效配置、过时文档清理。
 
-### 拆分方案
+**删除的死代码：**
+- `e2e/tauri-mcp-integration.test.ts` — Tauri MCP 专用测试（12 个通用 Playwright 测试保留）
+- `e2e/mcp-tests/` — 4 个 `tauri-mcp` CLI shell 脚本
+- `frontend/src/__mocks__/tauri-mock.ts` — 零引用孤儿文件（488 行），mock 已迁至 `setupTests.ts` 基于 Wails 绑定
+- `go-backend/` — 仅剩 testdata 的僵尸目录（testdata 已在 `backend/testdata/` 存在）
 
-```
-src/components/DataTable/
-  index.tsx               # 主组件，组合子组件 (~300 行)
-  useDataTable.ts          # 数据加载、编辑、分页等状态 hook (~400 行)
-  DataTableToolbar.tsx     # 工具栏 (~200 行)
-  DataTableGrid.tsx        # AG Grid 网格 (~300 行)
-  DataTableFilter.tsx      # 高级筛选面板 (~200 行)
-  DataTableExport.ts       # 导出逻辑 (CSV/Excel/JSON/XML/TXT/Markdown) (~150 行)
-  DataTableContextMenu.tsx  # 右键菜单 (~150 行)
-  DataTableModals.tsx       # 编辑/新增弹窗 (~200 行)
-```
+**修复的失效配置：**
+- `playwright.config.ts`: `webServer.command` 从 `pnpm tauri dev`（已失效）改为 `wails dev`，E2E 恢复可运行
+- `docker-compose.test.yml`: testdata 挂载路径从 `./go-backend/testdata/` 改为 `./backend/testdata/`
+- `frontend/vitest.config.ts`: `exclude` 移除死路径 `src-tauri/**`、`go-backend/**`
+- `frontend/eslint.config.mjs`: `ignores` 移除死路径 `src-tauri`
 
-### 步骤
+**删除的过时文档：**
+- `doc/P0_SPEC.md`、`P1_SPEC.md`、`P2_SPEC.md`、`P3_SPEC.md` — 已完成的阶段性交付规格
+- `doc/TEST_PLAN.md`、`TEST_REPORT.md`、`AUTOMATION_TEST.md` — 描述已删除的 Tauri-mcp 测试方案
 
-1. 提取导出工具函数到 `DataTableExport.ts`
-2. 提取右键菜单到 `DataTableContextMenu.tsx`
-3. 提取筛选面板到 `DataTableFilter.tsx`
-4. 提取工具栏到 `DataTableToolbar.tsx`
-5. 提取核心状态管理到 `useDataTable.ts` hook
-6. 主组件仅做组合
-
-### 验收标准
-
-- [ ] 所有现有功能无回归
-- [ ] 每个文件不超过 400 行
-- [ ] `pnpm lint` 无错误
+**保留的迁移记录（不动）：**
+- `docs/superpowers/plans/2026-05-20-tauri-to-wails-migration.md` — 迁移规划历史
+- `docs/superpowers/specs/2026-05-20-tauri-to-wails-migration-design.md` — 迁移设计文档
+- `QWEN.md` 迁移说明章节 — 刻意保留的架构演进记录
 
 ---
 
-## T0-5: TableDesigner escapeIdentifier 修复 ✅ 已完成
+## 已知遗留（非技术债，记录备查）
 
-**预估**: 1 小时  
-**实际**: 已包含在 P0-5 中完成  
-**文件**: `src/components/TableDesigner/index.tsx`
-**目标**: 支持多数据库标识符转义
+### CI workflow
+`.github/workflows/` 仅 `release.yml`（Wails 构建 + DMG/NSIS 打包），无 `test.yml`。CI 不跑测试，本地验证为准。
 
-### 实现说明
+### LICENSE
+README 声明 MIT 但仓库无 LICENSE 文件。
 
-已完成以下改进:
+### i18n
+基础设施已搭建（`frontend/src/i18n/`，zh-CN + en-US），但大部分 UI 文本仍为硬编码中文。属功能增量而非技术债。
 
-1. `escapeIdentifier` 函数支持多数据库类型:
-   - MySQL/MariaDB: 反引号 `` ` ``
-   - PostgreSQL, Kingbase, Highgo, VastBase, Oracle, Dameng: 双引号 `"`
-   - SQL Server: 方括号 `[]`
-
-2. `generateCreateTableSQL` 接受 `dbType` 参数:
-   - MySQL: 生成 `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4` 后缀
-   - 其他数据库: 生成标准 `)` 后缀
-
-3. `generateColumnDef` 根据数据库类型决定是否添加 `COMMENT`
-
-4. `DB_TYPE_FIELDS` 映射 8 种数据库类型的字段类型列表
-
-5. 类型选择器根据 `dbType` 动态加载对应数据库的字段类型
-
-### 验收标准
-
-- [x] MySQL 表设计器生成 `\`column\`` 格式
-- [x] PostgreSQL 表设计器生成 `"column"` 格式
-- [x] SQL Server 表设计器生成 `[column]` 格式
-- [x] 达梦表设计器生成 `"column"` 格式
-- [x] `ENGINE=InnoDB` 和 `COMMENT` 仅 MySQL 生成
-
----
-
-## T0-6: SQL 注入风险修复
-
-**预估**: 2 小时  
-**文件**: `src/hooks/useApi.ts`
-
-### 当前问题
-
-`useApi.ts` 中 `getTableInfo` 使用字符串拼接构建 SQL:
-
-```typescript
-// 可能存在风险的代码
-const sql = `SELECT * FROM ${tableName} WHERE ...`;
-```
-
-### 解决方案
-
-对于所有前端构建 SQL 的位置:
-1. 标识符使用 `escapeIdentifier` 函数
-2. 值使用参数化查询或严格转义
-3. 确保 `escapeSqlValue` 在所有 SQL 构建位置使用
-
-### 审计清单
-
-搜索所有前端构建 SQL 的位置:
-- `DataTable.tsx` — `buildQuery` 函数
-- `SQLEditor/ResultGrid.tsx` — INSERT/UPDATE 语句生成
-- `TableDesigner/index.tsx` — DDL 生成
-- `ImportExport/index.tsx` — 导入 SQL 生成
-
-### 验收标准
-
-- [ ] 所有前端构建的 SQL 中标识符都被正确转义
-- [ ] 所有 SQL 值都被正确转义
-- [ ] 无直接字符串拼接
-
----
-
-## 重构顺序建议
-
-建议按照以下顺序进行重构，每步完成后立即验证:
-
-1. **T0-5** (1h) — escapeIdentifier 修复，影响最小，风险最低
-2. **T0-6** (2h) — SQL 注入修复，安全优先
-3. **T0-3** (2h) — SQLEditor 关键字外部化，最简单的拆分
-4. **T0-2** (3h) — MainLayout 拆分
-5. **T0-4** (4h) — DataTable 拆分，最复杂
-6. **T0-1** (4h) — commands.rs 拆分，Rust 侧
-
-**总预估**: 16 小时
+### ER 图
+组件骨架存在但完成度约 20%（缺外键关系线和自动布局）。属未完成功能而非技术债。
 
 ---
 
 ## 验证命令
 
-每次重构后必须运行:
-
 ```bash
 # 前端
-pnpm lint                    # ESLint 检查
-pnpm exec tsc --noEmit       # TypeScript 类型检查
-pnpm test                    # 单元测试
+pnpm lint                    # ESLint
+pnpm exec -- tsc --noEmit    # TypeScript 类型检查
+pnpm test                    # Vitest 单元测试（392 个）
 
-# Rust
-cd src-tauri && cargo clippy # Rust lint
+# Go 后端（从根目录）
+go build ./...               # 编译
+go test ./...                # 测试
 
-# 集成测试
-pnpm tauri dev               # 启动完整应用验证
+# E2E（需先启动 wails dev）
+wails dev &                  # 启动 Vite:5100 + Wails 窗口
+npx playwright test          # 跑 e2e/ 下的 Playwright 测试
 ```

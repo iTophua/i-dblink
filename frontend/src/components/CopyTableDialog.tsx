@@ -3,6 +3,7 @@ import { Modal, Form, Input, Radio, message, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { getErrorMessage } from '../utils/getErrorMessage';
+import { getDialect } from '../utils/sqlDialects';
 
 interface CopyTableDialogProps {
   open: boolean;
@@ -87,12 +88,9 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
 
           if (result.rows && result.rows.length > 0) {
             const colNames = result.columns || [];
+            const dialect = getDialect(dbType);
             for (const row of result.rows) {
-              const values = row.map((v: any) => {
-                if (v === null || v === undefined) return 'NULL';
-                if (typeof v === 'string') return `'${v.replace(/'/g, "''")}'`;
-                return String(v);
-              });
+              const values = row.map((v: any) => dialect.escapeValue(v));
 
               const insertSql = `INSERT INTO ${escapeId(targetTable)} (${colNames.map((c: string) => escapeId(c)).join(', ')}) VALUES (${values.join(', ')})`;
               await api.executeQuery(connectionId, insertSql, targetDatabase);

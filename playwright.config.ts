@@ -25,7 +25,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'pnpm tauri dev',
+    command: 'wails dev',
     port: 5100,
     reuseExisting: false,
     stdout: 'pipe',

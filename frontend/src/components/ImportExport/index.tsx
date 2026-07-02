@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 import { useAppStore } from '../../stores/appStore';
 import { escapeSqlIdentifier } from '../../utils/sqlUtils';
+import { getDialect } from '../../utils/sqlDialects';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 
 const { TextArea } = Input;
@@ -133,13 +134,11 @@ export function ImportExportModal({
         content = JSON.stringify(data, null, 2);
         filename = `${tableName}_${Date.now()}.json`;
       } else if (exportOptions.format === 'sql') {
-        // SQL 导出
+        // SQL 导出 — 值转义统一走方言 escapeValue（与 DumpDialog 对齐，含 NULL/数字/反斜杠处理）
+        const dialect = getDialect(dbType);
         const lines: string[] = [];
         for (const row of rows) {
-          const values = row.map((v) => {
-            if (v === null || v === undefined) return 'NULL';
-            return `'${String(v).replace(/'/g, "''")}'`;
-          });
+          const values = row.map((v) => dialect.escapeValue(v));
           lines.push(
             `INSERT INTO ${escapeId(tableName)} (${columns.map((c) => escapeId(c)).join(', ')}) VALUES (${values.join(', ')});`
           );

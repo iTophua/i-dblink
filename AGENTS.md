@@ -19,7 +19,7 @@ cd frontend && pnpm test:integration  # 集成测试
 cd frontend && pnpm test:e2e          # E2E 测试（Playwright）
 
 # --- Go 后端测试（项目根目录执行） ---
-go test ./...                         # 注意：不是 go-backend/ 目录
+go test ./...                         # 从项目根目录执行（非 backend/ 子目录）
 
 # --- 代码质量（根目录执行，内部 cd frontend） ---
 pnpm lint                             # ESLint（flat config）
@@ -38,10 +38,10 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 | 层 | 路径 | 关键文件 |
 |----|------|----------|
 | 入口 | `main.go` | Wails 应用设置，7 个菜单 38 个菜单项，macOS 特殊处理 |
-| 后端 | `backend/` | `app.go`（1879 LOC，50+ 绑定方法），`db/`（10 种驱动），`api/`，`localdb/`，`security.go` |
-| 前端 | `frontend/src/` | `api/index.ts`（47 个方法），`components/`（~39 个），`hooks/`（6 个），`stores/`（3 个 Zustand） |
+| 后端 | `backend/` | `app.go`（332 LOC）+ 16 个 `app_*.go`（按功能拆分的 80+ 绑定方法），`db/`（10 种驱动），`api/`，`localdb/`，`security.go` |
+| 前端 | `frontend/src/` | `api/index.ts`（80 个方法），`components/`（~34 个 + 子目录），`hooks/`（6 个），`stores/`（3 个 Zustand） |
 | 绑定 | `frontend/wailsjs/` | `wails dev` 自动生成，**已 gitignore** |
-| E2E | `e2e/` | Playwright 测试（14 个测试文件） |
+| E2E | `e2e/` | Playwright 测试（12 个测试文件） |
 
 **通信方式：**
 - 前端 → 后端：Wails 绑定调用 `frontend/wailsjs/go/backend/App.*`
@@ -56,9 +56,8 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 - **已知 Go 测试失败**（非你的改动引起）：`TestConvertValue/int`（类型断言）、`TestDropTable/drop_non-existent_table`
 - **浮动窗口功能无效**：Wails v2 不支持前端多窗口 API
 - **i18n 部分完成**：基础设施已搭建（`frontend/src/i18n/`，zh-CN 和 en-US locale），但大部分 UI 文本仍为硬编码中文
-- **两个 Go 目录**：`backend/`（真实源码）和 `go-backend/`（仅含 `testdata/`，迁移遗留）。根目录 `main.go` 导入 `idblink/backend`，`go test ./...` 从根目录执行
-- **CI 过时**：`.github/workflows/test.yml` 仍引用 `go-backend/` 和 `src-tauri/`（Tauri 迁移遗留）
 - **无 LICENSE 文件**：README 声明 MIT 但仓库中无 LICENSE 文件
+- **CI 不跑测试**：`.github/workflows/` 仅 `release.yml`（打包发布），无 `test.yml`，以本地验证为准
 
 ## Test quirks
 
@@ -69,7 +68,7 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   import { mockExecuteQuery } from '../setupTests'
   ```
 - Vitest 配置：`frontend/vitest.config.ts`，jsdom 环境，globals 启用
-- ESLint：flat config 位于 `frontend/eslint.config.mjs`，忽略 `dist` 和 `src-tauri`
+- ESLint：flat config 位于 `frontend/eslint.config.mjs`，忽略 `dist` 和 `wailsjs`
 - E2E 测试：Playwright 配置位于根目录 `playwright.config.ts`，测试在 `e2e/`
 
 ## Verification order
@@ -97,7 +96,7 @@ pnpm lint → pnpm exec -- tsc --noEmit → pnpm test → go test ./...
 | `backend/db/` | 10 种数据库驱动实现 |
 | `backend/localdb/` | SQLite 本地存储（连接、分组、片段） |
 | `backend/security.go` | AES-256-GCM 密码加密 |
-| `frontend/src/api/index.ts` | 47 个 Wails 绑定封装 |
+| `frontend/src/api/index.ts` | 80 个 Wails 绑定封装 |
 | `frontend/src/components/DataTable.tsx` | 数据表格（60KB，最大组件之一） |
 | `frontend/src/components/SQLEditor.tsx` | SQL 编辑器（93KB，最大文件） |
 | `frontend/src/components/ConnectionDialog.tsx` | 连接配置对话框（32KB） |
