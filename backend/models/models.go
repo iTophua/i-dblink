@@ -45,8 +45,8 @@ type ForeignKeyInfo struct {
 
 // QueryResult SQL 查询结果
 type QueryResult struct {
-	Columns         []string        `json:"columns,omitempty"`
-	Rows            [][]interface{} `json:"rows,omitempty"`
+	Columns         []string        `json:"columns"`
+	Rows            [][]interface{} `json:"rows"`
 	RowsAffected    *uint64         `json:"rows_affected,omitempty"`
 	Error           string          `json:"error,omitempty"`
 	ExecutionTimeMs int64           `json:"execution_time_ms,omitempty"`

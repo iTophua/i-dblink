@@ -250,7 +250,10 @@ export function SQLEditor({
       sqlite: 'sqlite',
       sqlserver: 'transactsql',
       oracle: 'plsql',
-      dameng: 'oracle',
+      dameng: 'plsql', // 达梦兼容 Oracle
+      kingbase: 'postgresql', // 金仓兼容 PostgreSQL
+      highgo: 'postgresql', // 神通兼容 PostgreSQL
+      vastbase: 'postgresql', // 海量兼容 PostgreSQL
     };
     try {
       const formatted = formatSql(sql, {

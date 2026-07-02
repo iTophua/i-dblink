@@ -171,10 +171,15 @@ export function useQueryExecution({
               const queryResult = await executeQueryApi(connectionId, stmt, database, abortControllerRef.current?.signal);
               const executionTime = queryResult.execution_time_ms ?? 0;
 
-              const truncated = queryResult.rows.length > maxRows;
+              // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
+              const rows = queryResult.rows ?? [];
+
+              const truncated = rows.length > maxRows;
               if (truncated) {
                 hasTruncated = true;
-                queryResult.rows = queryResult.rows.slice(0, maxRows);
+                queryResult.rows = rows.slice(0, maxRows);
+              } else {
+                queryResult.rows = rows;
               }
 
               if (queryResult.error) {
@@ -296,8 +301,9 @@ export function useQueryExecution({
           });
         } else {
           const maxRows = useSettingsStore.getState().settings.maxResultRows;
-          const truncated = queryResult.rows.length > maxRows;
-          const truncatedRows = truncated ? queryResult.rows.slice(0, maxRows) : queryResult.rows;
+          const allRows = queryResult.rows ?? [];
+          const truncated = allRows.length > maxRows;
+          const truncatedRows = truncated ? allRows.slice(0, maxRows) : allRows;
           const rowCount = truncatedRows.length;
           const affectedRows = queryResult.rows_affected || 0;
 
@@ -402,14 +408,15 @@ export function useQueryExecution({
       if (result.error) {
         message.error(`${t('common.failedToGenerateExplainPlan')}: ${result.error}`);
       } else {
+        const planRows = result.rows ?? [];
         // SQL Server SHOWPLAN_XML returns plan as XML in result rows;
         // if no rows, the plan may be in messages — show a notice.
-        if (result.rows.length === 0) {
+        if (planRows.length === 0) {
           message.info(t('common.explainPlanGenerated') + ': ' + (t('common.noExplainPlanData') || 'No tabular data returned (XML plan may be in messages).'));
         }
-        setExplainPlan(result.rows as unknown[]);
+        setExplainPlan(planRows as unknown[]);
         setActiveTab('explain');
-        if (result.rows.length > 0) {
+        if (planRows.length > 0) {
           message.success(t('common.explainPlanGenerated'));
         }
       }
