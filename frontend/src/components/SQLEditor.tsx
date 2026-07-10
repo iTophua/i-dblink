@@ -24,6 +24,7 @@ import { ParamDialog } from './ParamDialog';
 import { replaceParams } from '../utils/sqlParams';
 import type { DatabaseType } from '../types/api';
 import { SqlDialectBanner } from './SqlDialectBanner';
+import { AIPanel } from './AIPanel';
 
 // Extracted hooks
 import { useQueryExecution } from './SQLEditor/hooks/useQueryExecution';
@@ -83,6 +84,7 @@ export function SQLEditor({
   const [sql, setSql] = useState(defaultQuery || '');
   const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
+  const [aiPanelVisible, setAiPanelVisible] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 自定义右键菜单状态
@@ -590,6 +592,7 @@ export function SQLEditor({
         isFullscreen={isFullscreen}
         setIsFullscreen={setIsFullscreen}
         dbType={dbType}
+        onOpenAIPanel={() => setAiPanelVisible(true)}
       />
 
       {/* SQL 方言转换提示 Banner */}
@@ -754,6 +757,23 @@ export function SQLEditor({
           }}
           maxHistory={50}
           storageKey={`sql-history-${connectionId || 'global'}${database ? `-${database}` : ''}`}
+        />
+      </Drawer>
+
+      {/* AI 助手抽屉 */}
+      <Drawer
+        title={t('common.ai')}
+        placement="right"
+        width={420}
+        onClose={() => setAiPanelVisible(false)}
+        open={aiPanelVisible}
+        styles={{ body: { padding: 0 } }}
+      >
+        <AIPanel
+          sql={sql}
+          dbType={dbType}
+          onInsertSQL={(s) => setSql((prev) => prev + s)}
+          onReplaceSQL={(s) => setSql(s)}
         />
       </Drawer>
 

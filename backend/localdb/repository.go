@@ -729,3 +729,70 @@ func scanFavorite(scanner interface {
 
 	return &fav, nil
 }
+
+// ==================== AI 配置 ====================
+
+// AIConfigRepository AI 配置仓库（键值对存储，敏感值由调用方加密后写入）
+type AIConfigRepository struct {
+	db *sql.DB
+}
+
+// NewAIConfigRepository 创建 AI 配置仓库
+func NewAIConfigRepository(db *sql.DB) *AIConfigRepository {
+	return &AIConfigRepository{db: db}
+}
+
+// Get 获取指定 key 的值（不存在返回空字符串 + nil）
+func (r *AIConfigRepository) Get(key string) (string, error) {
+	var value string
+	err := r.db.QueryRow(`SELECT value FROM ai_config WHERE key = ?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to query ai_config[%s]: %w", key, err)
+	}
+	return value, nil
+}
+
+// Set 设置键值（upsert）
+func (r *AIConfigRepository) Set(key, value string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := r.db.Exec(
+		`INSERT INTO ai_config (key, value, updated_at) VALUES (?, ?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+		key, value, now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to set ai_config[%s]: %w", key, err)
+	}
+	return nil
+}
+
+// Delete 删除指定 key
+func (r *AIConfigRepository) Delete(key string) error {
+	_, err := r.db.Exec(`DELETE FROM ai_config WHERE key = ?`, key)
+	if err != nil {
+		return fmt.Errorf("failed to delete ai_config[%s]: %w", key, err)
+	}
+	return nil
+}
+
+// GetAll 获取所有配置（key → value）
+func (r *AIConfigRepository) GetAll() (map[string]string, error) {
+	rows, err := r.db.Query(`SELECT key, value FROM ai_config`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ai_config: %w", err)
+	}
+	defer rows.Close()
+
+	m := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		m[k] = v
+	}
+	return m, rows.Err()
+}

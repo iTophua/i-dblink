@@ -26,6 +26,7 @@ import {
   BookOutlined,
   DownloadOutlined,
   LoadingOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useThemeColors } from '../../../hooks/useThemeColors';
 import { formatShortcutForDisplay, getEffectiveShortcut } from '../../../constants/menuShortcuts';
@@ -70,6 +71,9 @@ export interface SQLEditorToolbarProps {
   isFullscreen: boolean;
   setIsFullscreen: (v: boolean) => void;
   dbType?: DatabaseType;
+
+  // AI
+  onOpenAIPanel?: () => void;
 }
 
 export function SQLEditorToolbar({
@@ -98,6 +102,7 @@ export function SQLEditorToolbar({
   isFullscreen,
   setIsFullscreen,
   dbType,
+  onOpenAIPanel,
 }: SQLEditorToolbarProps) {
   const { t } = useTranslation();
   const tc = useThemeColors();
@@ -191,6 +196,18 @@ export function SQLEditorToolbar({
         >
           {t('common.formatButton')}
         </Button>
+
+        {onOpenAIPanel && (
+          <Tooltip title={t('common.ai')}>
+            <Button
+              icon={<RobotOutlined />}
+              onClick={onOpenAIPanel}
+              size="small"
+            >
+              {t('common.ai')}
+            </Button>
+          </Tooltip>
+        )}
         <Button
           icon={<LineChartOutlined />}
           onClick={showExplainPlan}

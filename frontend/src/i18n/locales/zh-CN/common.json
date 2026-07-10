@@ -1973,6 +1973,43 @@
       "cteDesc": "WITH 名称 AS (SELECT ...) SELECT * FROM 名称",
       "beginTransaction": "BEGIN TRANSACTION 事务",
       "beginTransactionDesc": "BEGIN TRANSACTION ... COMMIT 事务块"
+    },
+    "ai": "AI 助手",
+    "aiSettings": {
+      "title": "AI 助手配置",
+      "description": "配置远程 AI 模型用于 SQL 方言转换、解释优化和自然语言生成 SQL。API Key 加密存储在本地，不会上传。",
+      "enableAI": "启用 AI 助手",
+      "provider": "服务商",
+      "baseUrl": "API 地址",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "输入 API Key",
+      "apiKeyMasked": "已配置（掩码显示，留空不修改）",
+      "model": "模型名称",
+      "modelPlaceholder": "如 deepseek-chat",
+      "maxTokens": "最大 Token 数",
+      "temperature": "温度",
+      "temperatureTip": "0-2，越高越有创造力，越低越确定",
+      "testConnection": "测试连接",
+      "testing": "测试中...",
+      "saveSuccess": "AI 配置已保存",
+      "saveFailed": "保存失败",
+      "testSuccess": "连接成功",
+      "testFailed": "连接失败",
+      "notConfigured": "尚未配置"
+    },
+    "aiTask": {
+      "convertDialect": "AI 转换方言",
+      "explain": "AI 解释/优化",
+      "generateSQL": "AI 生成 SQL",
+      "convertTarget": "目标方言",
+      "convertBtn": "转换",
+      "naturalInputPlaceholder": "描述你想执行的查询...",
+      "generateBtn": "生成 SQL",
+      "streaming": "生成中...",
+      "insertToEditor": "插入到编辑器",
+      "targetEmpty": "请先选择目标方言",
+      "sqlEmpty": "没有可操作的 SQL",
+      "inputEmpty": "请输入自然语言描述"
     }
   },
   "docGenerator": {

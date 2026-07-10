@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"idblink/backend/ai"
 	"idblink/backend/api"
 	"idblink/backend/db"
 )
@@ -98,6 +99,7 @@ type App struct {
 	dbManager *db.Manager
 	tunnel    *api.TunnelManager
 	handler   *api.Handler
+	aiManager *ai.ProviderManager
 	activeConns map[string]bool
 	connMu    sync.RWMutex // 保护 activeConns 的并发访问
 }
@@ -157,6 +159,12 @@ func (a *App) Startup(ctx context.Context) {
 
 	// 初始化 API handler
 	a.handler = api.NewHandler(a.dbManager, a.tunnel)
+
+	// 初始化 AI Provider 管理器（从存储加载配置，若已配置则创建 Provider）
+	a.aiManager = ai.NewProviderManager()
+	if err := a.aiManager.ReloadFromConfig(a.storage); err != nil {
+		runtime.LogWarningf(ctx, "Failed to init AI manager: %v", err)
+	}
 }
 
 // Context 返回 Wails 上下文（供菜单和事件使用）

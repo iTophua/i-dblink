@@ -1961,6 +1961,43 @@
       "cteDesc": "WITH name AS (SELECT ...) SELECT * FROM name",
       "beginTransaction": "BEGIN TRANSACTION",
       "beginTransactionDesc": "BEGIN TRANSACTION ... COMMIT"
+    },
+    "ai": "AI Assistant",
+    "aiSettings": {
+      "title": "AI Assistant Settings",
+      "description": "Configure a remote AI model for SQL dialect conversion, explanation/optimization, and natural language to SQL. The API Key is encrypted and stored locally.",
+      "enableAI": "Enable AI Assistant",
+      "provider": "Provider",
+      "baseUrl": "API Base URL",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Enter API Key",
+      "apiKeyMasked": "Configured (masked, leave empty to keep)",
+      "model": "Model Name",
+      "modelPlaceholder": "e.g. deepseek-chat",
+      "maxTokens": "Max Tokens",
+      "temperature": "Temperature",
+      "temperatureTip": "0-2, higher is more creative, lower is more deterministic",
+      "testConnection": "Test Connection",
+      "testing": "Testing...",
+      "saveSuccess": "AI config saved",
+      "saveFailed": "Save failed",
+      "testSuccess": "Connection successful",
+      "testFailed": "Connection failed",
+      "notConfigured": "Not configured"
+    },
+    "aiTask": {
+      "convertDialect": "AI Convert Dialect",
+      "explain": "AI Explain/Optimize",
+      "generateSQL": "AI Generate SQL",
+      "convertTarget": "Target Dialect",
+      "convertBtn": "Convert",
+      "naturalInputPlaceholder": "Describe the query you want...",
+      "generateBtn": "Generate SQL",
+      "streaming": "Generating...",
+      "insertToEditor": "Insert to Editor",
+      "targetEmpty": "Please select a target dialect first",
+      "sqlEmpty": "No SQL to operate on",
+      "inputEmpty": "Please enter a natural language description"
     }
   },
   "docGenerator": {

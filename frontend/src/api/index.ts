@@ -97,6 +97,63 @@ export interface TablesResult {
   views: TableInfo[];
 }
 
+// ── AI 类型 ──
+
+export interface AICloudConfig {
+  enabled: boolean;
+  provider: string;
+  baseUrl: string;
+  apiKeyMask: string;
+  model: string;
+  maxTokens: number;
+  temperature: number;
+}
+
+export interface AICloudConfigInput {
+  enabled: boolean;
+  provider: string;
+  baseUrl: string;
+  apiKey: string; // 空字符串表示不修改已有 key
+  model: string;
+  maxTokens: number;
+  temperature: number;
+}
+
+export interface AIConnTestResult {
+  success: boolean;
+  message: string;
+}
+
+export interface AIPresetProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  model: string;
+}
+
+export interface AITaskResult {
+  taskId: string;
+  result: string;
+  provider: string;
+}
+
+export interface AIStatus {
+  enabled: boolean;
+  ready: boolean;
+}
+
+export interface AITaskRequest {
+  taskId: string;
+  requestId?: string;
+  sourceDialect?: string;
+  targetDialect?: string;
+  sql?: string;
+  naturalInput?: string;
+  databaseType?: string;
+  tableInfo?: string;
+  context?: Record<string, string>;
+}
+
 export interface TableStructure {
   columns: ColumnInfo[];
   indexes: IndexInfo[];
@@ -1008,5 +1065,47 @@ export const api = {
       success: boolean;
       error: string;
     };
+  },
+
+  // ── AI ──
+
+  async getAIPresetProviders(): Promise<AIPresetProvider[]> {
+    const { GetAIPresetProviders } = await import('../../wailsjs/go/backend/App');
+    const result = await GetAIPresetProviders();
+    return (result as unknown as { providers: AIPresetProvider[] }).providers;
+  },
+
+  async getAICloudConfig(): Promise<AICloudConfig> {
+    const { GetAICloudConfig } = await import('../../wailsjs/go/backend/App');
+    const result = await GetAICloudConfig();
+    return result as unknown as AICloudConfig;
+  },
+
+  async saveAICloudConfig(config: AICloudConfigInput): Promise<void> {
+    const { SaveAICloudConfig } = await import('../../wailsjs/go/backend/App');
+    await SaveAICloudConfig(config);
+  },
+
+  async testAIConnection(config: AICloudConfigInput): Promise<AIConnTestResult> {
+    const { TestAIConnection } = await import('../../wailsjs/go/backend/App');
+    const result = await TestAIConnection(config);
+    return result as unknown as AIConnTestResult;
+  },
+
+  async executeAITask(req: AITaskRequest): Promise<AITaskResult> {
+    const { ExecuteAITask } = await import('../../wailsjs/go/backend/App');
+    const result = await ExecuteAITask(req);
+    return result as unknown as AITaskResult;
+  },
+
+  async executeAITaskStream(req: AITaskRequest): Promise<void> {
+    const { ExecuteAITaskStream } = await import('../../wailsjs/go/backend/App');
+    await ExecuteAITaskStream(req);
+  },
+
+  async getAIStatus(): Promise<AIStatus> {
+    const { GetAIStatus } = await import('../../wailsjs/go/backend/App');
+    const result = await GetAIStatus();
+    return result as unknown as AIStatus;
   },
 };

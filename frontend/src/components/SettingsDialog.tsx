@@ -14,6 +14,8 @@ import {
   message,
   type InputRef,
 } from 'antd';
+import { ApiOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { useAIStore } from '../stores/aiStore';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
 import { THEME_PRESETS_LIST } from '../styles/theme';
 import {
@@ -30,7 +32,7 @@ interface SettingsDialogProps {
   onCancel: () => void;
 }
 
-type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor';
+type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor' | 'ai';
 
 const MENU_ITEMS = [
   { key: 'general', labelKey: 'common.general' },
@@ -38,6 +40,7 @@ const MENU_ITEMS = [
   { key: 'language', labelKey: 'common.language' },
   { key: 'shortcuts', labelKey: 'common.shortcuts' },
   { key: 'editor', labelKey: 'common.editor' },
+  { key: 'ai', labelKey: 'common.ai' },
 ];
 
 export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
@@ -232,6 +235,8 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
             {activeTab === 'shortcuts' && <ShortcutsSettings />}
 
             {activeTab === 'editor' && <EditorSettings />}
+
+            {activeTab === 'ai' && <AISettings />}
           </Form>
         </div>
       </div>
@@ -572,6 +577,216 @@ function EditorSettings() {
             </div>
           </div>
         ))}
+    </div>
+  );
+}
+
+// AI 预置服务商列表（与后端 ai.PresetProviders 对应）
+const AI_PRESET_PROVIDERS = [
+  { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  { id: 'qwen', name: '通义千问 (Qwen)', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
+  { id: 'zhipu', name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
+  { id: 'moonshot', name: '月之暗面 (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+  { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  { id: 'custom', name: '自定义 (OpenAI 兼容)', baseUrl: '', model: '' },
+];
+
+function AISettings() {
+  const { t } = useTranslation();
+  const loadConfig = useAIStore((s) => s.loadConfig);
+  const saveConfig = useAIStore((s) => s.saveConfig);
+  const testConnection = useAIStore((s) => s.testConnection);
+  // 独立选择器，避免对象返回导致的重渲染
+  const enabled0 = useAIStore((s) => s.enabled);
+  const provider0 = useAIStore((s) => s.provider);
+  const baseUrl0 = useAIStore((s) => s.baseUrl);
+  const apiKeyMask = useAIStore((s) => s.apiKeyMask);
+  const model0 = useAIStore((s) => s.model);
+  const maxTokens0 = useAIStore((s) => s.maxTokens);
+  const temperature0 = useAIStore((s) => s.temperature);
+
+  const config = {
+    enabled: enabled0,
+    provider: provider0,
+    baseUrl: baseUrl0,
+    apiKeyMask,
+    model: model0,
+    maxTokens: maxTokens0,
+    temperature: temperature0,
+  };
+  const [provider, setProvider] = useState(config.provider || 'deepseek');
+  const [baseUrl, setBaseUrl] = useState(config.baseUrl);
+  const [apiKey, setApiKey] = useState(''); // 空 = 不修改
+  const [model, setModel] = useState(config.model);
+  const [maxTokens, setMaxTokens] = useState(config.maxTokens || 0);
+  const [temperature, setTemperature] = useState(config.temperature || 0.7);
+  const [enabled, setEnabled] = useState(config.enabled);
+  const [testing, setTesting] = useState(false);
+  const [messageApi, contextHolder] = message.useMessage();
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
+
+  // 从后端加载后同步本地表单
+  useEffect(() => {
+    setProvider(config.provider || 'deepseek');
+    setBaseUrl(config.baseUrl);
+    setModel(config.model);
+    setMaxTokens(config.maxTokens || 0);
+    setTemperature(config.temperature || 0.7);
+    setEnabled(config.enabled);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.provider, config.baseUrl, config.model, config.maxTokens, config.temperature, config.enabled]);
+
+  const handleProviderChange = (value: string) => {
+    setProvider(value);
+    const preset = AI_PRESET_PROVIDERS.find((p) => p.id === value);
+    if (preset) {
+      setBaseUrl(preset.baseUrl);
+      setModel(preset.model);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      const result = await testConnection({
+        enabled,
+        provider,
+        baseUrl,
+        apiKey,
+        model,
+        maxTokens,
+        temperature,
+      });
+      if (result.success) {
+        messageApi.success(t('common.aiSettings.testSuccess') + ': ' + result.message);
+      } else {
+        messageApi.error(t('common.aiSettings.testFailed') + ': ' + result.message);
+      }
+    } catch (err) {
+      messageApi.error(t('common.aiSettings.testFailed') + ': ' + String(err));
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      await saveConfig({
+        enabled,
+        provider,
+        baseUrl,
+        apiKey, // 空 = 不修改
+        model,
+        maxTokens,
+        temperature,
+      });
+      setApiKey(''); // 保存后清空明文输入
+      messageApi.success(t('common.aiSettings.saveSuccess'));
+    } catch (err) {
+      messageApi.error(t('common.aiSettings.saveFailed') + ': ' + String(err));
+    }
+  };
+
+  return (
+    <div>
+      {contextHolder}
+      <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}>
+        {t('common.aiSettings.description')}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <span style={{ fontWeight: 600 }}>{t('common.aiSettings.enableAI')}</span>
+        <Switch checked={enabled} onChange={setEnabled} />
+      </div>
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        <div>
+          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>{t('common.aiSettings.provider')}</div>
+          <Select
+            value={provider}
+            onChange={handleProviderChange}
+            style={{ width: '100%' }}
+            options={AI_PRESET_PROVIDERS.map((p) => ({ value: p.id, label: p.name }))}
+          />
+        </div>
+
+        <div>
+          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>{t('common.aiSettings.baseUrl')}</div>
+          <Input
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://api.example.com/v1"
+          />
+        </div>
+
+        <div>
+          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>{t('common.aiSettings.apiKey')}</div>
+          <Input.Password
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={config.apiKeyMask || t('common.aiSettings.apiKeyPlaceholder')}
+          />
+          {config.apiKeyMask && !apiKey && (
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+              {t('common.aiSettings.apiKeyMasked')}: {config.apiKeyMask}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>{t('common.aiSettings.model')}</div>
+          <Input
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={t('common.aiSettings.modelPlaceholder')}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+              {t('common.aiSettings.maxTokens')}
+            </div>
+            <InputNumber
+              value={maxTokens}
+              onChange={(v) => setMaxTokens(v || 0)}
+              min={0}
+              max={32768}
+              step={256}
+              style={{ width: '100%' }}
+              placeholder="0 = 不限制"
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+              {t('common.aiSettings.temperature')}
+            </div>
+            <InputNumber
+              value={temperature}
+              onChange={(v) => setTemperature(v || 0)}
+              min={0}
+              max={2}
+              step={0.1}
+              style={{ width: '100%' }}
+            />
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          {t('common.aiSettings.temperatureTip')}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <Button icon={<ApiOutlined />} loading={testing} onClick={handleTest}>
+            {testing ? t('common.aiSettings.testing') : t('common.aiSettings.testConnection')}
+          </Button>
+          <Button type="primary" icon={<ThunderboltOutlined />} onClick={handleSave}>
+            {t('common.save')}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

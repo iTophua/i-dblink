@@ -100,6 +100,12 @@ func RunMigrations(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_favorites_type ON favorites(type)`,
 		`CREATE INDEX IF NOT EXISTS idx_favorites_connection_id ON favorites(connection_id)`,
+		// AI 配置（键值对，敏感值如 api_key 为 AES-256-GCM 密文）
+		`CREATE TABLE IF NOT EXISTS ai_config (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 	}
 
 	for i, migration := range migrations {

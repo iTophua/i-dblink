@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"idblink/backend/localdb"
 )
@@ -16,6 +17,7 @@ type Storage struct {
 	snippetRepo    *localdb.SnippetRepository
 	historyRepo    *localdb.HistoryRepository
 	favoriteRepo   *localdb.FavoriteRepository
+	aiConfigRepo   *localdb.AIConfigRepository
 }
 
 // NewStorage 创建存储服务
@@ -42,6 +44,7 @@ func NewStorage(dataDir string) (*Storage, error) {
 		snippetRepo:    localdb.NewSnippetRepository(pool.DB()),
 		historyRepo:    localdb.NewHistoryRepository(pool.DB()),
 		favoriteRepo:   localdb.NewFavoriteRepository(pool.DB()),
+		aiConfigRepo:   localdb.NewAIConfigRepository(pool.DB()),
 	}, nil
 }
 
@@ -240,4 +243,81 @@ func (s *Storage) SaveFavorite(fav *localdb.Favorite) error {
 // DeleteFavorite 删除收藏
 func (s *Storage) DeleteFavorite(id string) error {
 	return s.favoriteRepo.Delete(id)
+}
+
+// ==================== AI 配置 ====================
+
+// sensitiveAIKeys 需要加密存储的 AI 配置键
+var sensitiveAIKeys = map[string]bool{
+	"ai.api_key": true,
+}
+
+// GetAIConfig 获取 AI 配置值（敏感键自动解密；不存在返回空字符串）
+func (s *Storage) GetAIConfig(key string) (string, error) {
+	val, err := s.aiConfigRepo.Get(key)
+	if err != nil {
+		return "", err
+	}
+	if val == "" {
+		return "", nil
+	}
+	if sensitiveAIKeys[key] {
+		decrypted, err := DecryptPassword(val)
+		if err != nil {
+			return "", fmt.Errorf("failed to decrypt ai_config[%s]: %w", key, err)
+		}
+		return decrypted, nil
+	}
+	return val, nil
+}
+
+// SetAIConfig 设置 AI 配置值（敏感键自动加密）
+func (s *Storage) SetAIConfig(key, value string) error {
+	if value == "" {
+		return s.aiConfigRepo.Delete(key)
+	}
+	if sensitiveAIKeys[key] {
+		encrypted, err := EncryptPassword(value)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt ai_config[%s]: %w", key, err)
+		}
+		value = encrypted
+	}
+	return s.aiConfigRepo.Set(key, value)
+}
+
+// GetAllAIConfig 获取所有 AI 配置（敏感键返回密文，调用方需自行判断）
+func (s *Storage) GetAllAIConfig() (map[string]string, error) {
+	return s.aiConfigRepo.GetAll()
+}
+
+// GetAIConfigMasked 获取所有 AI 配置，敏感键返回掩码（供前端展示）
+func (s *Storage) GetAIConfigMasked() (map[string]string, error) {
+	all, err := s.aiConfigRepo.GetAll()
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(all))
+	for k, v := range all {
+		if sensitiveAIKeys[k] {
+			result[k] = maskAPIKey(v)
+		} else {
+			result[k] = v
+		}
+	}
+	return result, nil
+}
+
+// maskAPIKey 将 API Key 掩码处理。
+// 输入是密文，先解密再掩码；解密失败返回固定占位符（避免泄露密文长度/内容）。
+func maskAPIKey(encrypted string) string {
+	plain, err := DecryptPassword(encrypted)
+	if err != nil {
+		// 解密失败不泄露任何信息，统一返回占位符
+		return "****（无法读取）"
+	}
+	if len(plain) <= 8 {
+		return strings.Repeat("*", len(plain))
+	}
+	return plain[:4] + strings.Repeat("*", len(plain)-8) + plain[len(plain)-4:]
 }
