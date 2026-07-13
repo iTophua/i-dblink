@@ -78,6 +78,7 @@ jobs:
             build/bin/iDBLink-macos.dmg
             build/bin/iDBLink-macos.zip
           if-no-files-found: error
+          retention-days: 1
 
   build-windows:
     name: Build Windows
@@ -121,6 +122,7 @@ jobs:
             build/bin/*installer*.exe
             build/bin/iDBLink.exe
           if-no-files-found: error
+          retention-days: 1
 
   release:
     name: Publish Release

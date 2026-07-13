@@ -190,13 +190,4 @@
     <!-- 左下角 -->
     <path d="M 20,124 L 4,124 L 4,108"/>
   </g>
-
-  <!-- 应用名称 iDBLink - 简洁现代字体 -->
-  <g transform="translate(64,116)" filter="url(#glow)">
-    <text x="0" y="0" text-anchor="middle" 
-          font-family="'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif" 
-          font-size="10" font-weight="600" letter-spacing="2" fill="#00ffff" opacity="0.9">
-      IDBLINK
-    </text>
-  </g>
 </svg>
