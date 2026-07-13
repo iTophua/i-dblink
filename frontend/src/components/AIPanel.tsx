@@ -8,6 +8,7 @@ import {
   LoadingOutlined,
   CopyOutlined,
   CheckCircleOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAIStore } from '../stores/aiStore';
@@ -151,19 +152,32 @@ export function AIPanel({ sql, dbType, onInsertSQL, onReplaceSQL, getTableInfo }
 
   const canInsert = activeTask === 'convert' || activeTask === 'generate';
 
-  // 未启用时显示提示
+  // 未启用时显示提示 + 去设置按钮
   if (!enabled || !ready) {
     return (
       <div
         style={{
-          padding: 16,
+          padding: 24,
           color: 'var(--text-secondary)',
           fontSize: 12,
           textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 12,
         }}
       >
-        <RobotOutlined style={{ fontSize: 24, marginBottom: 8, display: 'block' }} />
-        {t('common.aiSettings.notConfigured')}
+        <RobotOutlined style={{ fontSize: 32, color: 'var(--text-tertiary)' }} />
+        <div>{t('common.aiSettings.notConfigured')}</div>
+        <Button
+          type="primary"
+          ghost
+          size="small"
+          icon={<SettingOutlined />}
+          onClick={() => window.dispatchEvent(new CustomEvent('menu-action', { detail: { action: 'options' } }))}
+        >
+          {t('common.aiSettings.goToSettings')}
+        </Button>
       </div>
     );
   }
@@ -179,7 +193,7 @@ export function AIPanel({ sql, dbType, onInsertSQL, onReplaceSQL, getTableInfo }
               value={targetDialect}
               onChange={setTargetDialect}
               options={DIALECT_OPTIONS}
-              style={{ width: 140 }}
+              style={{ flex: 1, minWidth: 0 }}
               size="small"
             />
             <Button
@@ -278,7 +292,7 @@ export function AIPanel({ sql, dbType, onInsertSQL, onReplaceSQL, getTableInfo }
             background: 'var(--background-card)',
           }}
         >
-          {output || <span style={{ color: 'var(--text-tertiary)' }}>AI 输出将显示在这里...</span>}
+          {output || <span style={{ color: 'var(--text-tertiary)' }}>{t('common.aiTask.outputPlaceholder')}</span>}
         </pre>
       </div>
     </div>

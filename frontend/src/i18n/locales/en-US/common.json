@@ -1980,13 +1980,15 @@
       "noModels": "No models, click the refresh button to load",
       "loadModelsFailed": "Failed to load models",
       "autoSaveHint": "AI config is saved automatically on change",
+      "saving": "Saving...",
       "testConnection": "Test Connection",
       "testing": "Testing...",
       "saveSuccess": "AI config saved",
       "saveFailed": "Save failed",
       "testSuccess": "Connection successful",
       "testFailed": "Connection failed",
-      "notConfigured": "Not configured"
+      "notConfigured": "Not configured",
+      "goToSettings": "Configure"
     },
     "aiTask": {
       "convertDialect": "AI Convert Dialect",
@@ -2000,7 +2002,8 @@
       "insertToEditor": "Insert to Editor",
       "targetEmpty": "Please select a target dialect first",
       "sqlEmpty": "No SQL to operate on",
-      "inputEmpty": "Please enter a natural language description"
+      "inputEmpty": "Please enter a natural language description",
+      "outputPlaceholder": "AI output will appear here..."
     },
     "mcp": "MCP",
     "mcpSettings": {

@@ -693,6 +693,21 @@ function AISettings() {
     loadConfig();
   }, [loadConfig]);
 
+  // #3：首次加载配置后，若已配置 baseUrl 且 models 为空，自动拉取一次模型列表
+  const autoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    if (models0.length > 0) return;
+    // 等配置加载完成且有 baseUrl（说明已配过 API 地址）
+    if (!baseUrl) return;
+    autoLoadedRef.current = true;
+    loadModels({ baseUrl }).catch(() => {
+      // 静默失败，用户可手动点刷新
+      autoLoadedRef.current = false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseUrl, models0.length]);
+
   // 从后端加载后同步本地表单（后端数据变化时同步到本地受控 state）
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -865,10 +880,16 @@ function AISettings() {
           </div>
         </div>
 
-        <div style={{ marginTop: 4 }}>
-          <Button icon={<ApiOutlined />} loading={testing} onClick={handleTest}>
+        <div style={{ marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Button icon={<ApiOutlined />} loading={testing} onClick={handleTest} style={{ flex: 1 }}>
             {testing ? t('common.aiSettings.testing') : t('common.aiSettings.testConnection')}
           </Button>
+          {/* P1-#2：保存中全局反馈——按钮区右侧小 loading 图标 */}
+          {savingField && savingField !== 'enabled' && savingField !== 'model' && (
+            <Tooltip title={t('common.aiSettings.saving')}>
+              <LoadingOutlined style={{ fontSize: 14, color: 'var(--text-tertiary)' }} />
+            </Tooltip>
+          )}
         </div>
       </div>
     </div>
@@ -932,14 +953,13 @@ function MCPSettings() {
         <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
           {t('common.mcpSettings.executablePath')}
         </div>
-        <Input.Group compact>
+        <Space.Compact style={{ width: '100%' }}>
           <Input
             value={config.executablePath}
             readOnly
-            style={{ width: 'calc(100% - 80px)', fontFamily: 'monospace', fontSize: 12 }}
+            style={{ flex: 1, minWidth: 0, fontFamily: 'monospace', fontSize: 12 }}
           />
           <Button
-            style={{ width: 80 }}
             onClick={() => {
               navigator.clipboard.writeText(config.executablePath);
               messageApi.success(t('common.mcpSettings.copied'));
@@ -947,7 +967,7 @@ function MCPSettings() {
           >
             {t('common.copy')}
           </Button>
-        </Input.Group>
+        </Space.Compact>
         {config.isDev && (
           <div style={{ fontSize: 11, color: 'var(--color-warning)', marginTop: 2 }}>
             {t('common.mcpSettings.devModeWarning')}
