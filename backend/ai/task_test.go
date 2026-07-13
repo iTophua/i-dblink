@@ -124,30 +124,6 @@ func TestPresetProviders(t *testing.T) {
 	}
 }
 
-func TestParseIntDefault(t *testing.T) {
-	if parseIntDefault("", 42) != 42 {
-		t.Error("empty string should return default")
-	}
-	if parseIntDefault("100", 42) != 100 {
-		t.Error("valid number should be parsed")
-	}
-	if parseIntDefault("abc", 42) != 42 {
-		t.Error("invalid string should return default")
-	}
-}
-
-func TestParseFloatDefault(t *testing.T) {
-	if parseFloatDefault("", 0.5) != 0.5 {
-		t.Error("empty string should return default")
-	}
-	if parseFloatDefault("0.70", 0.5) != 0.7 {
-		t.Error("valid float should be parsed")
-	}
-	if parseFloatDefault("abc", 0.5) != 0.5 {
-		t.Error("invalid string should return default")
-	}
-}
-
 // --- Manager ---
 
 func TestProviderManager_NotReady(t *testing.T) {

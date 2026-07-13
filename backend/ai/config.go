@@ -1,16 +1,14 @@
 package ai
 
-import "fmt"
-
 // AI 配置键（存储在 ai_config 表中）
 const (
-	CfgEnabled    = "ai.enabled"    // "true"/"false"
-	CfgProvider   = "ai.provider"   // Provider 名称标识（如 "deepseek"）
-	CfgBaseURL    = "ai.base_url"   // API Base URL
-	CfgAPIKey     = "ai.api_key"    // API Key（加密存储）
-	CfgModel      = "ai.model"      // 模型名称
-	CfgMaxTokens  = "ai.max_tokens" // 最大 token 数
-	CfgTemp       = "ai.temperature"
+	CfgEnabled   = "ai.enabled"  // "true"/"false"
+	CfgProvider  = "ai.provider" // Provider 名称标识（如 "deepseek"）
+	CfgBaseURL   = "ai.base_url" // API Base URL
+	CfgAPIKey    = "ai.api_key"  // API Key（加密存储）
+	CfgModel     = "ai.model"    // 模型名称
+	CfgMaxTokens = "ai.max_tokens" // 已废弃：不再由用户配置（保留键以兼容旧数据，不再读写）
+	CfgTemp      = "ai.temperature" // 已废弃：同上
 )
 
 // PresetProvider 预置服务商配置（前端选择后自动填充 BaseURL + Model）
@@ -39,14 +37,13 @@ type ConfigStore interface {
 }
 
 // CloudConfig 从存储加载的完整云端配置（API Key 已解密）
+// 注意：maxTokens/temperature 不再由用户配置，统一使用模型默认值，因此不在此结构中。
 type CloudConfig struct {
-	Enabled     bool
-	Provider    string
-	BaseURL     string
-	APIKey      string
-	Model       string
-	MaxTokens   int
-	Temperature float64
+	Enabled  bool
+	Provider string
+	BaseURL  string
+	APIKey   string
+	Model    string
 }
 
 // LoadCloudConfig 从存储加载配置
@@ -63,26 +60,23 @@ func LoadCloudConfig(store ConfigStore) (*CloudConfig, error) {
 	}
 
 	cfg := &CloudConfig{
-		Enabled:     masked[CfgEnabled] == "true",
-		Provider:    masked[CfgProvider],
-		BaseURL:     masked[CfgBaseURL],
-		APIKey:      apiKey,
-		Model:       masked[CfgModel],
-		MaxTokens:   parseIntDefault(masked[CfgMaxTokens], 0),
-		Temperature: parseFloatDefault(masked[CfgTemp], 0),
+		Enabled:  masked[CfgEnabled] == "true",
+		Provider: masked[CfgProvider],
+		BaseURL:  masked[CfgBaseURL],
+		APIKey:   apiKey,
+		Model:    masked[CfgModel],
 	}
 	return cfg, nil
 }
 
 // SaveCloudConfigInput 保存配置时的输入（API Key 为明文，由存储层加密）
+// 注意：maxTokens/temperature 不再由用户配置，统一使用模型默认值。
 type SaveCloudConfigInput struct {
-	Enabled     bool    `json:"enabled"`
-	Provider    string  `json:"provider"`
-	BaseURL     string  `json:"baseUrl"`
-	APIKey      string  `json:"apiKey"`      // 明文，空字符串表示不修改
-	Model       string  `json:"model"`
-	MaxTokens   int     `json:"maxTokens"`
-	Temperature float64 `json:"temperature"`
+	Enabled  bool   `json:"enabled"`
+	Provider string `json:"provider"`
+	BaseURL  string `json:"baseUrl"`
+	APIKey   string `json:"apiKey"` // 明文，空字符串表示不修改
+	Model    string `json:"model"`
 }
 
 // SaveCloudConfig 将配置写入存储
@@ -106,12 +100,6 @@ func SaveCloudConfig(store ConfigStore, input *SaveCloudConfigInput) error {
 	if err := store.SetAIConfig(CfgModel, input.Model); err != nil {
 		return err
 	}
-	if err := store.SetAIConfig(CfgMaxTokens, fmt.Sprintf("%d", input.MaxTokens)); err != nil {
-		return err
-	}
-	if err := store.SetAIConfig(CfgTemp, fmt.Sprintf("%.2f", input.Temperature)); err != nil {
-		return err
-	}
 	// API Key：空字符串表示不修改（前端传掩码时跳过）
 	if input.APIKey != "" {
 		if err := store.SetAIConfig(CfgAPIKey, input.APIKey); err != nil {
@@ -123,13 +111,11 @@ func SaveCloudConfig(store ConfigStore, input *SaveCloudConfigInput) error {
 
 // MaskedConfig 返回给前端的掩码配置（API Key 掩码化）
 type MaskedConfig struct {
-	Enabled     bool    `json:"enabled"`
-	Provider    string  `json:"provider"`
-	BaseURL     string  `json:"baseUrl"`
-	APIKeyMask  string  `json:"apiKeyMask"`
-	Model       string  `json:"model"`
-	MaxTokens   int     `json:"maxTokens"`
-	Temperature float64 `json:"temperature"`
+	Enabled    bool   `json:"enabled"`
+	Provider   string `json:"provider"`
+	BaseURL    string `json:"baseUrl"`
+	APIKeyMask string `json:"apiKeyMask"`
+	Model      string `json:"model"`
 }
 
 // GetMaskedConfig 从存储读取掩码配置（供前端展示）
@@ -139,34 +125,10 @@ func GetMaskedConfig(store ConfigStore) (*MaskedConfig, error) {
 		return nil, err
 	}
 	return &MaskedConfig{
-		Enabled:     masked[CfgEnabled] == "true",
-		Provider:    masked[CfgProvider],
-		BaseURL:     masked[CfgBaseURL],
-		APIKeyMask:  masked[CfgAPIKey],
-		Model:       masked[CfgModel],
-		MaxTokens:   parseIntDefault(masked[CfgMaxTokens], 0),
-		Temperature: parseFloatDefault(masked[CfgTemp], 0),
+		Enabled:    masked[CfgEnabled] == "true",
+		Provider:   masked[CfgProvider],
+		BaseURL:    masked[CfgBaseURL],
+		APIKeyMask: masked[CfgAPIKey],
+		Model:      masked[CfgModel],
 	}, nil
-}
-
-func parseIntDefault(s string, def int) int {
-	if s == "" {
-		return def
-	}
-	var n int
-	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
-		return def
-	}
-	return n
-}
-
-func parseFloatDefault(s string, def float64) float64 {
-	if s == "" {
-		return def
-	}
-	var f float64
-	if _, err := fmt.Sscanf(s, "%f", &f); err != nil {
-		return def
-	}
-	return f
 }

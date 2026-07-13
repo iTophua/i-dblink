@@ -39,11 +39,10 @@ func (m *ProviderManager) ReloadFromConfig(store ConfigStore) error {
 	// 仅在配置完整时创建 Provider
 	if cfg.BaseURL != "" && cfg.APIKey != "" && cfg.Model != "" {
 		m.provider = NewOpenAIProvider(OpenAIConfig{
-			BaseURL:     cfg.BaseURL,
-			APIKey:      cfg.APIKey,
-			Model:       cfg.Model,
-			MaxTokens:   cfg.MaxTokens,
-			Temperature: cfg.Temperature,
+			BaseURL: cfg.BaseURL,
+			APIKey:  cfg.APIKey,
+			Model:   cfg.Model,
+			// MaxTokens/Temperature 不再从用户配置读取，统一使用模型默认值
 		})
 	}
 

@@ -105,8 +105,6 @@ export interface AICloudConfig {
   baseUrl: string;
   apiKeyMask: string;
   model: string;
-  maxTokens: number;
-  temperature: number;
 }
 
 export interface AICloudConfigInput {
@@ -115,8 +113,6 @@ export interface AICloudConfigInput {
   baseUrl: string;
   apiKey: string; // 空字符串表示不修改已有 key
   model: string;
-  maxTokens: number;
-  temperature: number;
 }
 
 export interface AIConnTestResult {
@@ -129,6 +125,16 @@ export interface AIPresetProvider {
   name: string;
   baseUrl: string;
   model: string;
+}
+
+export interface AIModel {
+  id: string;
+  owned_by?: string;
+}
+
+export interface AIModelsRequest {
+  baseUrl?: string;
+  apiKey?: string; // 空则后端用已存的 key
 }
 
 export interface AITaskResult {
@@ -1082,6 +1088,12 @@ export const api = {
     const { GetAIPresetProviders } = await import('../../wailsjs/go/backend/App');
     const result = await GetAIPresetProviders();
     return (result as unknown as { providers: AIPresetProvider[] }).providers;
+  },
+
+  async getAIModels(req: AIModelsRequest): Promise<AIModel[]> {
+    const { GetAIModels } = await import('../../wailsjs/go/backend/App');
+    const result = await GetAIModels(req);
+    return (result as unknown as { models: AIModel[] }).models;
   },
 
   async getAICloudConfig(): Promise<AICloudConfig> {

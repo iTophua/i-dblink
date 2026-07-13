@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, type AICloudConfig, type AICloudConfigInput, type AIConnTestResult } from '../api';
+import { api, type AICloudConfig, type AICloudConfigInput, type AIConnTestResult, type AIModel, type AIModelsRequest } from '../api';
 
 interface AIState {
   // 从后端同步的配置快照（API Key 仅为掩码）
@@ -9,8 +9,10 @@ interface AIState {
   baseUrl: string;
   apiKeyMask: string;
   model: string;
-  maxTokens: number;
-  temperature: number;
+
+  // 动态拉取的模型列表
+  models: AIModel[];
+  loadingModels: boolean;
 
   // 加载状态
   loading: boolean;
@@ -20,6 +22,8 @@ interface AIState {
   checkStatus: () => Promise<void>;
   saveConfig: (config: AICloudConfigInput) => Promise<void>;
   testConnection: (config: AICloudConfigInput) => Promise<AIConnTestResult>;
+  loadModels: (req: AIModelsRequest) => Promise<AIModel[]>;
+  clearModels: () => void;
 }
 
 export const useAIStore = create<AIState>((set) => ({
@@ -29,8 +33,8 @@ export const useAIStore = create<AIState>((set) => ({
   baseUrl: '',
   apiKeyMask: '',
   model: '',
-  maxTokens: 0,
-  temperature: 0,
+  models: [],
+  loadingModels: false,
   loading: false,
 
   loadConfig: async () => {
@@ -43,8 +47,6 @@ export const useAIStore = create<AIState>((set) => ({
         baseUrl: config.baseUrl,
         apiKeyMask: config.apiKeyMask,
         model: config.model,
-        maxTokens: config.maxTokens,
-        temperature: config.temperature,
         loading: false,
       });
     } catch (err) {
@@ -73,12 +75,24 @@ export const useAIStore = create<AIState>((set) => ({
       baseUrl: cfg.baseUrl,
       apiKeyMask: cfg.apiKeyMask,
       model: cfg.model,
-      maxTokens: cfg.maxTokens,
-      temperature: cfg.temperature,
     });
   },
 
   testConnection: async (config: AICloudConfigInput) => {
     return await api.testAIConnection(config);
   },
+
+  loadModels: async (req: AIModelsRequest) => {
+    set({ loadingModels: true });
+    try {
+      const models = await api.getAIModels(req);
+      set({ models, loadingModels: false });
+      return models;
+    } catch (err) {
+      set({ loadingModels: false });
+      throw err;
+    }
+  },
+
+  clearModels: () => set({ models: [] }),
 }));

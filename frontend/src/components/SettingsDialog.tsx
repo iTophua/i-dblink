@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Modal,
   Form,
@@ -14,7 +14,13 @@ import {
   message,
   type InputRef,
 } from 'antd';
-import { ApiOutlined, ThunderboltOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons';
+import {
+  ApiOutlined,
+  CopyOutlined,
+  CheckOutlined,
+  ReloadOutlined,
+  LoadingOutlined,
+} from '@ant-design/icons';
 import { useAIStore } from '../stores/aiStore';
 import { api } from '../api';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
@@ -90,6 +96,9 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
     form.setFieldsValue({ themeMode: mode });
   };
 
+  // AI（自动保存）和 MCP（只读展示）两个 tab 不依赖底部全局保存按钮
+  const isAutoSaveTab = activeTab === 'ai' || activeTab === 'mcp';
+
   const menuItems = useMemo(
     () =>
       MENU_ITEMS.map((item) => ({
@@ -119,15 +128,23 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       className="settings-dialog-modal"
       data-testid="settings-dialog"
       footer={
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Button onClick={handleReset} data-testid="settings-reset-btn">{t('common.reset')}</Button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {isAutoSaveTab ? (
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+              {t('common.aiSettings.autoSaveHint')}
+            </span>
+          ) : (
+            <Button onClick={handleReset} data-testid="settings-reset-btn">{t('common.reset')}</Button>
+          )}
           <div>
             <Button onClick={onCancel} style={{ marginRight: 8 }}>
-              {t('common.cancel')}
+              {t('common.close')}
             </Button>
-            <Button type="primary" onClick={handleSave}>
-              {t('common.save')}
-            </Button>
+            {!isAutoSaveTab && (
+              <Button type="primary" onClick={handleSave}>
+                {t('common.save')}
+              </Button>
+            )}
           </div>
         </div>
       }
@@ -600,14 +617,16 @@ function AISettings() {
   const loadConfig = useAIStore((s) => s.loadConfig);
   const saveConfig = useAIStore((s) => s.saveConfig);
   const testConnection = useAIStore((s) => s.testConnection);
+  const loadModels = useAIStore((s) => s.loadModels);
+  const clearModels = useAIStore((s) => s.clearModels);
   // 独立选择器，避免对象返回导致的重渲染
   const enabled0 = useAIStore((s) => s.enabled);
   const provider0 = useAIStore((s) => s.provider);
   const baseUrl0 = useAIStore((s) => s.baseUrl);
   const apiKeyMask = useAIStore((s) => s.apiKeyMask);
   const model0 = useAIStore((s) => s.model);
-  const maxTokens0 = useAIStore((s) => s.maxTokens);
-  const temperature0 = useAIStore((s) => s.temperature);
+  const models0 = useAIStore((s) => s.models);
+  const loadingModels0 = useAIStore((s) => s.loadingModels);
 
   const config = {
     enabled: enabled0,
@@ -615,41 +634,123 @@ function AISettings() {
     baseUrl: baseUrl0,
     apiKeyMask,
     model: model0,
-    maxTokens: maxTokens0,
-    temperature: temperature0,
   };
   const [provider, setProvider] = useState(config.provider || 'deepseek');
   const [baseUrl, setBaseUrl] = useState(config.baseUrl);
   const [apiKey, setApiKey] = useState(''); // 空 = 不修改
   const [model, setModel] = useState(config.model);
-  const [maxTokens, setMaxTokens] = useState(config.maxTokens || 0);
-  const [temperature, setTemperature] = useState(config.temperature || 0.7);
   const [enabled, setEnabled] = useState(config.enabled);
   const [testing, setTesting] = useState(false);
+  const [savingField, setSavingField] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
+
+  // P0-3 修复：autoSave 请求排队，串行化避免竞态。
+  // 1. saveChainRef：链式 Promise 保证请求串行执行（先发先到后端）。
+  // 2. latestRef：存最新的表单值。enqueueSave 接收 patch 时同步合并到 ref，
+  //    这样回调执行时（可能在 React re-render 前）也能读到最新值。
+  //    apiKey 不走 patch（仅失焦保存），通过 useEffect 同步到 ref。
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const latestRef = useRef({ enabled, provider, baseUrl, model, apiKey });
+  useEffect(() => {
+    latestRef.current.enabled = enabled;
+    latestRef.current.provider = provider;
+    latestRef.current.baseUrl = baseUrl;
+    latestRef.current.model = model;
+    latestRef.current.apiKey = apiKey;
+  }, [enabled, provider, baseUrl, model, apiKey]);
+
+  const enqueueSave = (
+    patch: Partial<{ enabled: boolean; provider: string; baseUrl: string; model: string }>
+  ): Promise<void> => {
+    // 同步更新 ref，确保回调读到最新值（不等 useEffect flush）
+    if (patch.enabled !== undefined) latestRef.current.enabled = patch.enabled;
+    if (patch.provider !== undefined) latestRef.current.provider = patch.provider;
+    if (patch.baseUrl !== undefined) latestRef.current.baseUrl = patch.baseUrl;
+    if (patch.model !== undefined) latestRef.current.model = patch.model;
+
+    const fieldName = Object.keys(patch)[0] || 'all';
+    setSavingField(fieldName);
+    saveChainRef.current = saveChainRef.current.then(async () => {
+      const cur = latestRef.current;
+      try {
+        await saveConfig({
+          enabled: cur.enabled,
+          provider: cur.provider,
+          baseUrl: cur.baseUrl,
+          apiKey: cur.apiKey,
+          model: cur.model,
+        });
+      } catch (err) {
+        messageApi.error(t('common.aiSettings.saveFailed') + ': ' + String(err));
+      } finally {
+        setSavingField((cur2) => (cur2 === fieldName ? null : cur2));
+      }
+    });
+    return saveChainRef.current;
+  };
 
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
 
-  // 从后端加载后同步本地表单
+  // 从后端加载后同步本地表单（后端数据变化时同步到本地受控 state）
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProvider(config.provider || 'deepseek');
     setBaseUrl(config.baseUrl);
     setModel(config.model);
-    setMaxTokens(config.maxTokens || 0);
-    setTemperature(config.temperature || 0.7);
     setEnabled(config.enabled);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.provider, config.baseUrl, config.model, config.maxTokens, config.temperature, config.enabled]);
+  }, [config.provider, config.baseUrl, config.model, config.enabled]);
 
   const handleProviderChange = (value: string) => {
     setProvider(value);
+    // P0-2 修复：切换服务商后清空旧的模型列表（不同服务商模型不通用）
+    clearModels();
     const preset = AI_PRESET_PROVIDERS.find((p) => p.id === value);
-    if (preset) {
-      setBaseUrl(preset.baseUrl);
-      setModel(preset.model);
+    const newBaseUrl = preset?.baseUrl ?? baseUrl;
+    const newModel = preset?.model ?? '';
+    setBaseUrl(newBaseUrl);
+    setModel(newModel);
+    // 切换服务商后自动保存（含新的 baseUrl/model）
+    enqueueSave({ provider: value, baseUrl: newBaseUrl, model: newModel });
+  };
+
+  const handleEnabledChange = (checked: boolean) => {
+    setEnabled(checked);
+    enqueueSave({ enabled: checked });
+  };
+
+  // baseUrl 失焦时保存（避免输入过程中频繁保存）
+  const handleBaseUrlBlur = () => {
+    enqueueSave({ baseUrl });
+  };
+
+  // API Key 失焦时保存（仅当用户输入了内容）
+  const handleApiKeyBlur = () => {
+    if (!apiKey) return;
+    enqueueSave({});
+    setApiKey(''); // 保存后清空明文输入
+  };
+
+  // 动态加载模型列表
+  const handleLoadModels = async () => {
+    try {
+      await loadModels({
+        baseUrl,
+        apiKey, // 空则后端用已存的 key
+      });
+    } catch (err) {
+      messageApi.error(t('common.aiSettings.loadModelsFailed') + ': ' + String(err));
     }
+  };
+
+  // P0-1 修复：onChange 可能传入 undefined（手动清空输入），显式转空字符串。
+  // model 清空会让 Provider 无法初始化，但允许临时清空以重新选择。
+  const handleModelChange = (value: string | undefined) => {
+    const next = value ?? '';
+    setModel(next);
+    enqueueSave({ model: next });
   };
 
   const handleTest = async () => {
@@ -661,8 +762,6 @@ function AISettings() {
         baseUrl,
         apiKey,
         model,
-        maxTokens,
-        temperature,
       });
       if (result.success) {
         messageApi.success(t('common.aiSettings.testSuccess') + ': ' + result.message);
@@ -676,24 +775,6 @@ function AISettings() {
     }
   };
 
-  const handleSave = async () => {
-    try {
-      await saveConfig({
-        enabled,
-        provider,
-        baseUrl,
-        apiKey, // 空 = 不修改
-        model,
-        maxTokens,
-        temperature,
-      });
-      setApiKey(''); // 保存后清空明文输入
-      messageApi.success(t('common.aiSettings.saveSuccess'));
-    } catch (err) {
-      messageApi.error(t('common.aiSettings.saveFailed') + ': ' + String(err));
-    }
-  };
-
   return (
     <div>
       {contextHolder}
@@ -703,7 +784,10 @@ function AISettings() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <span style={{ fontWeight: 600 }}>{t('common.aiSettings.enableAI')}</span>
-        <Switch checked={enabled} onChange={setEnabled} />
+        <Space size="small">
+          {savingField === 'enabled' && <LoadingOutlined style={{ fontSize: 12 }} />}
+          <Switch checked={enabled} onChange={handleEnabledChange} />
+        </Space>
       </div>
 
       <div style={{ display: 'grid', gap: 12 }}>
@@ -722,6 +806,7 @@ function AISettings() {
           <Input
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
+            onBlur={handleBaseUrlBlur}
             placeholder="https://api.example.com/v1"
           />
         </div>
@@ -731,6 +816,7 @@ function AISettings() {
           <Input.Password
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
+            onBlur={handleApiKeyBlur}
             placeholder={config.apiKeyMask || t('common.aiSettings.apiKeyPlaceholder')}
           />
           {config.apiKeyMask && !apiKey && (
@@ -741,53 +827,47 @@ function AISettings() {
         </div>
 
         <div>
-          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>{t('common.aiSettings.model')}</div>
-          <Input
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder={t('common.aiSettings.modelPlaceholder')}
-          />
+          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+            {t('common.aiSettings.model')}
+          </div>
+          <Space.Compact style={{ width: '100%' }}>
+            <Select
+              value={model || undefined}
+              onChange={handleModelChange}
+              style={{ width: 'calc(100% - 40px)' }}
+              placeholder={t('common.aiSettings.modelPlaceholder')}
+              showSearch
+              options={models0.map((m) => ({
+                value: m.id,
+                label: m.owned_by ? `${m.id} (${m.owned_by})` : m.id,
+              }))}
+              notFoundContent={
+                loadingModels0
+                  ? t('common.aiSettings.loadingModels')
+                  : t('common.aiSettings.noModels')
+              }
+              suffixIcon={
+                savingField === 'model' ? (
+                  <LoadingOutlined />
+                ) : undefined
+              }
+            />
+            <Tooltip title={t('common.aiSettings.loadModels')}>
+              <Button
+                icon={loadingModels0 ? <LoadingOutlined /> : <ReloadOutlined />}
+                onClick={handleLoadModels}
+                loading={loadingModels0}
+              />
+            </Tooltip>
+          </Space.Compact>
+          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+            {t('common.aiSettings.modelTip')}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-              {t('common.aiSettings.maxTokens')}
-            </div>
-            <InputNumber
-              value={maxTokens}
-              onChange={(v) => setMaxTokens(v || 0)}
-              min={0}
-              max={32768}
-              step={256}
-              style={{ width: '100%' }}
-              placeholder="0 = 不限制"
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-              {t('common.aiSettings.temperature')}
-            </div>
-            <InputNumber
-              value={temperature}
-              onChange={(v) => setTemperature(v || 0)}
-              min={0}
-              max={2}
-              step={0.1}
-              style={{ width: '100%' }}
-            />
-          </div>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-          {t('common.aiSettings.temperatureTip')}
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <div style={{ marginTop: 4 }}>
           <Button icon={<ApiOutlined />} loading={testing} onClick={handleTest}>
             {testing ? t('common.aiSettings.testing') : t('common.aiSettings.testConnection')}
-          </Button>
-          <Button type="primary" icon={<ThunderboltOutlined />} onClick={handleSave}>
-            {t('common.save')}
           </Button>
         </div>
       </div>

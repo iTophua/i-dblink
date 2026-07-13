@@ -14,24 +14,20 @@ import (
 
 // AICloudConfigInput 前端传入的云端 AI 配置
 type AICloudConfigInput struct {
-	Enabled     bool    `json:"enabled"`
-	Provider    string  `json:"provider"`
-	BaseURL     string  `json:"baseUrl"`
-	APIKey      string  `json:"apiKey"` // 明文（空字符串表示不修改已有 key）
-	Model       string  `json:"model"`
-	MaxTokens   int     `json:"maxTokens"`
-	Temperature float64 `json:"temperature"`
+	Enabled  bool   `json:"enabled"`
+	Provider string `json:"provider"`
+	BaseURL  string `json:"baseUrl"`
+	APIKey   string `json:"apiKey"` // 明文（空字符串表示不修改已有 key）
+	Model    string `json:"model"`
 }
 
 // AICloudConfigResponse 返回给前端的云端 AI 配置（API Key 掩码）
 type AICloudConfigResponse struct {
-	Enabled     bool    `json:"enabled"`
-	Provider    string  `json:"provider"`
-	BaseURL     string  `json:"baseUrl"`
-	APIKeyMask  string  `json:"apiKeyMask"`
-	Model       string  `json:"model"`
-	MaxTokens   int     `json:"maxTokens"`
-	Temperature float64 `json:"temperature"`
+	Enabled    bool   `json:"enabled"`
+	Provider   string `json:"provider"`
+	BaseURL    string `json:"baseUrl"`
+	APIKeyMask string `json:"apiKeyMask"`
+	Model      string `json:"model"`
 }
 
 // AIConnTestResponse 连接测试结果
@@ -78,6 +74,56 @@ func (a *App) GetAIPresetProviders() (AIPresetProvidersResponse, error) {
 	return AIPresetProvidersResponse{Providers: ai.PresetProviders}, nil
 }
 
+// AIModelsRequest 拉取模型列表的请求参数。
+// baseUrl/apiKey 为空时后端回退到已保存的配置——用于设置页
+// "先填地址+Key 再拉模型"的临时验证场景。
+type AIModelsRequest struct {
+	BaseURL string `json:"baseUrl,omitempty"`
+	APIKey  string `json:"apiKey,omitempty"` // 明文，空表示用已存的 key
+}
+
+// AIModelsResponse 可用模型列表响应
+type AIModelsResponse struct {
+	Models []ai.ModelInfo `json:"models"`
+}
+
+// GetAIModels 拉取可用模型列表（通过前端临时传入的配置，或已保存的配置）。
+// 用于设置页模型字段的动态下拉选择。
+func (a *App) GetAIModels(req AIModelsRequest) (AIModelsResponse, error) {
+	baseURL := req.BaseURL
+	apiKey := req.APIKey
+
+	// 前端未传时回退到已保存配置
+	if baseURL == "" {
+		cfg, err := ai.LoadCloudConfig(a.storage)
+		if err != nil {
+			return AIModelsResponse{}, fmt.Errorf("failed to load config: %w", err)
+		}
+		baseURL = cfg.BaseURL
+	}
+	if apiKey == "" {
+		stored, err := a.storage.GetAIConfig(ai.CfgAPIKey)
+		if err != nil {
+			return AIModelsResponse{}, fmt.Errorf("failed to read stored API key: %w", err)
+		}
+		apiKey = stored
+	}
+
+	if baseURL == "" || apiKey == "" {
+		return AIModelsResponse{}, fmt.Errorf("请先配置 API 地址和 API Key")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	models, err := ai.ListModels(ctx, baseURL, apiKey)
+	if err != nil {
+		return AIModelsResponse{}, err
+	}
+
+	return AIModelsResponse{Models: models}, nil
+}
+
 // GetAICloudConfig 获取云端 AI 配置（API Key 以掩码返回）
 func (a *App) GetAICloudConfig() (AICloudConfigResponse, error) {
 	masked, err := ai.GetMaskedConfig(a.storage)
@@ -85,26 +131,22 @@ func (a *App) GetAICloudConfig() (AICloudConfigResponse, error) {
 		return AICloudConfigResponse{}, fmt.Errorf("failed to get AI config: %w", err)
 	}
 	return AICloudConfigResponse{
-		Enabled:     masked.Enabled,
-		Provider:    masked.Provider,
-		BaseURL:     masked.BaseURL,
-		APIKeyMask:  masked.APIKeyMask,
-		Model:       masked.Model,
-		MaxTokens:   masked.MaxTokens,
-		Temperature: masked.Temperature,
+		Enabled:    masked.Enabled,
+		Provider:   masked.Provider,
+		BaseURL:    masked.BaseURL,
+		APIKeyMask: masked.APIKeyMask,
+		Model:      masked.Model,
 	}, nil
 }
 
 // SaveAICloudConfig 保存云端 AI 配置（API Key 加密存储）
 func (a *App) SaveAICloudConfig(config AICloudConfigInput) error {
 	input := &ai.SaveCloudConfigInput{
-		Enabled:     config.Enabled,
-		Provider:    config.Provider,
-		BaseURL:     config.BaseURL,
-		APIKey:      config.APIKey,
-		Model:       config.Model,
-		MaxTokens:   config.MaxTokens,
-		Temperature: config.Temperature,
+		Enabled:  config.Enabled,
+		Provider: config.Provider,
+		BaseURL:  config.BaseURL,
+		APIKey:   config.APIKey,
+		Model:    config.Model,
 	}
 
 	if err := ai.SaveCloudConfig(a.storage, input); err != nil {
@@ -143,11 +185,9 @@ func (a *App) TestAIConnection(config AICloudConfigInput) (AIConnTestResponse, e
 
 	// 用临时 Provider 发一条简短消息测试
 	provider := ai.NewOpenAIProvider(ai.OpenAIConfig{
-		BaseURL:     config.BaseURL,
-		APIKey:      apiKey,
-		Model:       config.Model,
-		MaxTokens:   10,
-		Temperature: 0,
+		BaseURL: config.BaseURL,
+		APIKey:  apiKey,
+		Model:   config.Model,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
