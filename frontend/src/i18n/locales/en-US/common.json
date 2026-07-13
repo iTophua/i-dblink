@@ -1998,6 +1998,24 @@
       "targetEmpty": "Please select a target dialect first",
       "sqlEmpty": "No SQL to operate on",
       "inputEmpty": "Please enter a natural language description"
+    },
+    "mcp": "MCP",
+    "mcpSettings": {
+      "description": "MCP (Model Context Protocol) lets AI clients (Claude Desktop, Cursor) operate your databases through iDBLink. Add the configuration below to your AI client's config file.",
+      "executablePath": "Executable Path",
+      "devModeWarning": "Currently in dev mode — path points to a temporary build. Production build will have a different path.",
+      "configJSON": "Claude Desktop Config",
+      "copyConfig": "Copy Config",
+      "copied": "Copied to clipboard",
+      "configFilePath": "Config File Path",
+      "configFileTip": "Add the config JSON to this file. Create it if it doesn't exist. Restart Claude Desktop after editing.",
+      "availableTools": "Available Tools",
+      "steps": "Setup Steps",
+      "step1": "Copy the config JSON above",
+      "step2": "Open the config file (path above) and paste the config",
+      "step3": "Restart your AI client (e.g. Claude Desktop)",
+      "step4": "Your AI client can now manage your databases via iDBLink",
+      "loadFailed": "Failed to load MCP config"
     }
   },
   "docGenerator": {

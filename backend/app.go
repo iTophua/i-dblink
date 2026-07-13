@@ -167,6 +167,30 @@ func (a *App) Startup(ctx context.Context) {
 	}
 }
 
+// InitStandalone 在无 Wails 环境下初始化（供 MCP sidecar 等 CLI 场景使用）。
+// 与 Startup 逻辑一致，但不依赖 Wails ctx——用 context.Background() 代替。
+func (a *App) InitStandalone() error {
+	a.ctx = context.Background()
+
+	dataDir := a.getDataDir()
+	storage, err := NewStorage(dataDir)
+	if err != nil {
+		return fmt.Errorf("failed to init storage: %w", err)
+	}
+	a.storage = storage
+
+	a.dbManager = db.NewManager()
+	a.tunnel = api.NewTunnelManager()
+	a.handler = api.NewHandler(a.dbManager, a.tunnel)
+
+	a.aiManager = ai.NewProviderManager()
+	if err := a.aiManager.ReloadFromConfig(a.storage); err != nil {
+		// AI 初始化失败不影响 MCP 核心，仅记录
+		fmt.Fprintf(os.Stderr, "[mcp] AI manager init warning: %v\n", err)
+	}
+	return nil
+}
+
 // Context 返回 Wails 上下文（供菜单和事件使用）
 func (a *App) Context() context.Context {
 	return a.ctx

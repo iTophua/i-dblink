@@ -2010,6 +2010,24 @@
       "targetEmpty": "请先选择目标方言",
       "sqlEmpty": "没有可操作的 SQL",
       "inputEmpty": "请输入自然语言描述"
+    },
+    "mcp": "MCP",
+    "mcpSettings": {
+      "description": "MCP（Model Context Protocol）让 AI 客户端（如 Claude Desktop、Cursor）通过 iDBLink 操作你的数据库。将下面的配置添加到 AI 客户端的配置文件中即可。",
+      "executablePath": "可执行文件路径",
+      "devModeWarning": "当前为开发模式，路径指向临时编译文件。生产构建后路径会变化。",
+      "configJSON": "Claude Desktop 配置",
+      "copyConfig": "复制配置",
+      "copied": "已复制到剪贴板",
+      "configFilePath": "配置文件路径",
+      "configFileTip": "将配置 JSON 添加到此文件中。如果文件不存在，创建它。修改后需重启 Claude Desktop。",
+      "availableTools": "可用工具",
+      "steps": "使用步骤",
+      "step1": "复制上方的配置 JSON",
+      "step2": "打开配置文件（上方路径），将配置粘贴进去",
+      "step3": "重启 AI 客户端（如 Claude Desktop）",
+      "step4": "在 AI 客户端中即可使用 iDBLink 管理你的数据库",
+      "loadFailed": "加载 MCP 配置失败"
     }
   },
   "docGenerator": {

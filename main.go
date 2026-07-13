@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"os"
 	gos "runtime"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"idblink/backend"
+	"idblink/backend/mcpserver"
 )
 
 //go:embed all:frontend/dist
@@ -155,9 +157,36 @@ func createMenu(app *backend.App) *menu.Menu {
 }
 
 func main() {
+	// MCP sidecar 模式：iDBLink --mcp [--stdio]
+	if len(os.Args) >= 2 && os.Args[1] == "--mcp" {
+		runMCP()
+		return
+	}
+	runGUI()
+}
+
+// runMCP 以 MCP Server 模式启动（不启动 GUI）。
+// 外部 AI 客户端（Claude Desktop / Cursor）以子进程方式拉起此进程，
+// 通过 stdin/stdout 进行 MCP 协议通信。
+func runMCP() {
+	app := backend.NewApp()
+	if err := app.InitStandalone(); err != nil {
+		fmt.Fprintf(os.Stderr, "[mcp] init failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	srv := mcpserver.New(app)
+	if err := srv.ServeStdio(); err != nil {
+		fmt.Fprintf(os.Stderr, "[mcp] server error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runGUI 以 Wails GUI 模式启动（默认）。
+func runGUI() {
 	app := backend.NewApp()
 
-		err := wails.Run(&options.App{
+	err := wails.Run(&options.App{
 		Title:     "iDBLink",
 		Width:     1400,
 		Height:    900,

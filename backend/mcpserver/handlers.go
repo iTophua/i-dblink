@@ -1,0 +1,322 @@
+package mcpserver
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"github.com/mark3labs/mcp-go/mcp"
+
+	"idblink/backend"
+)
+
+// ==================== 辅助函数 ====================
+
+// argStr 从参数 map 中提取字符串，不存在返回空字符串。
+func argStr(args map[string]any, key string) string {
+	if v, ok := args[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// argStrPtr 提取字符串指针，空值返回 nil。
+func argStrPtr(args map[string]any, key string) *string {
+	s := argStr(args, key)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// argIntPtr 提取 *int（MCP 传来的 number 是 float64）。
+func argIntPtr(args map[string]any, key string) *int {
+	if v, ok := args[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			i := int(n)
+			return &i
+		case int:
+			return &n
+		case string:
+			if parsed, err := strconv.Atoi(n); err == nil {
+				return &parsed
+			}
+		}
+	}
+	return nil
+}
+
+// argInt 提取 int，不存在返回 default 值。
+func argInt(args map[string]any, key string, def int) int {
+	if p := argIntPtr(args, key); p != nil {
+		return *p
+	}
+	return def
+}
+
+// jsonResult 构造 JSON 结果（处理 error）。
+func jsonResult(data any, err error, errMsg string) (*mcp.CallToolResult, error) {
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr(errMsg, err), nil
+	}
+	return mcp.NewToolResultJSON(data)
+}
+
+// ==================== 连接管理 handlers ====================
+
+func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	conns, err := s.app.GetConnections()
+	return jsonResult(conns, err, "failed to list connections")
+}
+
+func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+
+	name := argStr(args, "name")
+	dbType := argStr(args, "db_type")
+	host := argStr(args, "host")
+	if name == "" || dbType == "" || host == "" {
+		return mcp.NewToolResultError("name, db_type, and host are required"), nil
+	}
+
+	input := backend.ConnectionInput{
+		Name:     name,
+		DbType:   dbType,
+		Host:     host,
+		Port:     argInt(args, "port", 0),
+		Username: argStr(args, "username"),
+		Database: argStrPtr(args, "database"),
+	}
+	if pwd := argStr(args, "password"); pwd != "" {
+		input.Password = &pwd
+	}
+
+	conn, err := s.app.SaveConnection(input)
+	return jsonResult(conn, err, "failed to create connection")
+}
+
+func (s *Server) handleUpdateConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	input := backend.ConnectionInput{
+		ID: connID,
+	}
+	// 只填入用户提供的字段（空值保持原样需要特殊处理——这里简化为：传了的就更新）
+	if v := argStr(args, "name"); v != "" {
+		input.Name = v
+	}
+	if v := argStr(args, "db_type"); v != "" {
+		input.DbType = v
+	}
+	if v := argStr(args, "host"); v != "" {
+		input.Host = v
+	}
+	if p := argIntPtr(args, "port"); p != nil {
+		input.Port = *p
+	}
+	if v := argStr(args, "username"); v != "" {
+		input.Username = v
+	}
+	if v := argStr(args, "password"); v != "" {
+		input.Password = &v
+	}
+	if v := argStr(args, "database"); v != "" {
+		input.Database = &v
+	}
+
+	// 先从存储取现有连接，合并更新
+	existing, err := s.app.GetConnections()
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to get existing connections", err), nil
+	}
+	var found bool
+	for _, c := range existing {
+		if c.ID == connID {
+			found = true
+			// 用现有值补齐用户未传的字段（空值 = 不修改，回退到原值）
+			if input.Name == "" {
+				input.Name = c.Name
+			}
+			if input.DbType == "" {
+				input.DbType = c.DbType
+			}
+			if input.Host == "" {
+				input.Host = c.Host
+			}
+			if input.Port == 0 {
+				input.Port = c.Port
+			}
+			if input.Username == "" {
+				input.Username = c.Username
+			}
+			// database：用户未传则回退到原值
+			if input.Database == nil {
+				input.Database = c.Database
+			}
+			break
+		}
+	}
+	if !found {
+		return mcp.NewToolResultError(fmt.Sprintf("connection %s not found", connID)), nil
+	}
+
+	conn, err := s.app.SaveConnection(input)
+	return jsonResult(conn, err, "failed to update connection")
+}
+
+func (s *Server) handleDeleteConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	if err := s.app.DeleteConnection(connID); err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to delete connection", err), nil
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Connection %s deleted successfully", connID)), nil
+}
+
+func (s *Server) handleTestConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+
+	input := backend.ConnectionInput{
+		DbType:   argStr(args, "db_type"),
+		Host:     argStr(args, "host"),
+		Port:     argInt(args, "port", 0),
+		Username: argStr(args, "username"),
+		Database: argStrPtr(args, "database"),
+	}
+	if pwd := argStr(args, "password"); pwd != "" {
+		input.Password = &pwd
+	}
+
+	if input.DbType == "" || input.Host == "" {
+		return mcp.NewToolResultError("db_type and host are required"), nil
+	}
+
+	if err := s.app.TestConnection(input); err != nil {
+		return mcp.NewToolResultErrorFromErr("connection test failed", err), nil
+	}
+	return mcp.NewToolResultText("Connection test successful"), nil
+}
+
+// ==================== 查询 handlers ====================
+
+func (s *Server) handleListDatabases(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	dbs, err := s.app.GetDatabases(connID)
+	return jsonResult(dbs, err, "failed to list databases")
+}
+
+func (s *Server) handleListTables(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	result, err := s.app.GetTablesCategorized(connID, database, argStrPtr(args, "search"))
+	return jsonResult(result, err, "failed to list tables")
+}
+
+func (s *Server) handleDescribeTable(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	table := argStr(args, "table_name")
+	if connID == "" || table == "" {
+		return mcp.NewToolResultError("connection_id and table_name are required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	structure, err := s.app.GetTableStructure(connID, table, database)
+	return jsonResult(structure, err, "failed to describe table")
+}
+
+func (s *Server) handleGetTableDDL(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	table := argStr(args, "table_name")
+	if connID == "" || table == "" {
+		return mcp.NewToolResultError("connection_id and table_name are required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	ddls, err := s.app.GetTableDDL(connID, table, database)
+	return jsonResult(ddls, err, "failed to get table DDL")
+}
+
+func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	sqlText := argStr(args, "sql")
+	if connID == "" || sqlText == "" {
+		return mcp.NewToolResultError("connection_id and sql are required"), nil
+	}
+
+	// 安全检查：强制只读
+	if !IsReadOnlyQuery(sqlText) {
+		return mcp.NewToolResultError(
+			"execute_query only allows read-only statements (SELECT, WITH, EXPLAIN, SHOW, DESCRIBE). " +
+				"For INSERT/UPDATE/DELETE, use execute_update."), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	result, err := s.app.ExecuteQuery(connID, sqlText, database)
+	return jsonResult(result, err, "query failed")
+}
+
+// ==================== 写操作 handlers ====================
+
+func (s *Server) handleExecuteUpdate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	sqlText := argStr(args, "sql")
+	if connID == "" || sqlText == "" {
+		return mcp.NewToolResultError("connection_id and sql are required"), nil
+	}
+
+	// 安全检查：仅允许 DML
+	if !IsDMLStatement(sqlText) {
+		return mcp.NewToolResultError(
+			"execute_update only allows INSERT, UPDATE, or DELETE statements. " +
+				"DDL (CREATE, DROP, ALTER, TRUNCATE) is not allowed."), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	result, err := s.app.ExecuteQuery(connID, sqlText, database)
+	return jsonResult(result, err, "update failed")
+}

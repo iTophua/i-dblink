@@ -18,7 +18,7 @@ export interface AppSettings {
   themeMode: ThemeMode;
   themePreset: ThemePreset;
   language: 'zh-CN' | 'en-US';
-  settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor' | 'ai';
+  settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor' | 'ai' | 'mcp';
   shortcuts: Record<string, string>; // id -> keys
   liveTemplatesEnabled: boolean;
 }

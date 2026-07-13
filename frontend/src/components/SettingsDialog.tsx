@@ -14,8 +14,9 @@ import {
   message,
   type InputRef,
 } from 'antd';
-import { ApiOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { ApiOutlined, ThunderboltOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons';
 import { useAIStore } from '../stores/aiStore';
+import { api } from '../api';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
 import { THEME_PRESETS_LIST } from '../styles/theme';
 import {
@@ -32,7 +33,7 @@ interface SettingsDialogProps {
   onCancel: () => void;
 }
 
-type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor' | 'ai';
+type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor' | 'ai' | 'mcp';
 
 const MENU_ITEMS = [
   { key: 'general', labelKey: 'common.general' },
@@ -41,6 +42,7 @@ const MENU_ITEMS = [
   { key: 'shortcuts', labelKey: 'common.shortcuts' },
   { key: 'editor', labelKey: 'common.editor' },
   { key: 'ai', labelKey: 'common.ai' },
+  { key: 'mcp', labelKey: 'common.mcp' },
 ];
 
 export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
@@ -237,6 +239,8 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
             {activeTab === 'editor' && <EditorSettings />}
 
             {activeTab === 'ai' && <AISettings />}
+
+            {activeTab === 'mcp' && <MCPSettings />}
           </Form>
         </div>
       </div>
@@ -786,6 +790,166 @@ function AISettings() {
             {t('common.save')}
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// MCP 设置组件 — 展示 MCP Server 配置信息
+function MCPSettings() {
+  const { t } = useTranslation();
+  const [config, setConfig] = useState<import('../api').MCPConfigInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [messageApi, contextHolder] = message.useMessage();
+
+  useEffect(() => {
+    api
+      .getMCPConfig()
+      .then((info) => {
+        setConfig(info);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to get MCP config:', err);
+        setLoading(false);
+      });
+  }, []);
+
+  const handleCopyConfig = () => {
+    if (!config) return;
+    navigator.clipboard.writeText(config.configJSON);
+    setCopied(true);
+    messageApi.success(t('common.mcpSettings.copied'));
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>
+        {t('common.loading')}
+      </div>
+    );
+  }
+
+  if (!config) {
+    return (
+      <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-error)' }}>
+        {t('common.mcpSettings.loadFailed')}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {contextHolder}
+      <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}>
+        {t('common.mcpSettings.description')}
+      </div>
+
+      {/* 可执行文件路径 */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+          {t('common.mcpSettings.executablePath')}
+        </div>
+        <Input.Group compact>
+          <Input
+            value={config.executablePath}
+            readOnly
+            style={{ width: 'calc(100% - 80px)', fontFamily: 'monospace', fontSize: 12 }}
+          />
+          <Button
+            style={{ width: 80 }}
+            onClick={() => {
+              navigator.clipboard.writeText(config.executablePath);
+              messageApi.success(t('common.mcpSettings.copied'));
+            }}
+          >
+            {t('common.copy')}
+          </Button>
+        </Input.Group>
+        {config.isDev && (
+          <div style={{ fontSize: 11, color: 'var(--color-warning)', marginTop: 2 }}>
+            {t('common.mcpSettings.devModeWarning')}
+          </div>
+        )}
+      </div>
+
+      {/* Claude Desktop 配置 JSON */}
+      <div style={{ marginBottom: 16 }}>
+        <div
+          style={{
+            marginBottom: 4,
+            fontSize: 13,
+            fontWeight: 500,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>{t('common.mcpSettings.configJSON')}</span>
+          <Button size="small" type="link" onClick={handleCopyConfig} icon={copied ? <CheckOutlined /> : <CopyOutlined />}>
+            {t('common.mcpSettings.copyConfig')}
+          </Button>
+        </div>
+        <pre
+          style={{
+            background: 'var(--background-active)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            padding: 12,
+            fontSize: 12,
+            fontFamily: 'monospace',
+            overflow: 'auto',
+            margin: 0,
+            maxHeight: 200,
+            color: 'var(--text-primary)',
+          }}
+        >
+          {config.configJSON}
+        </pre>
+      </div>
+
+      {/* 配置文件路径 */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+          {t('common.mcpSettings.configFilePath')}
+        </div>
+        <Input
+          value={config.configPath}
+          readOnly
+          style={{ fontFamily: 'monospace', fontSize: 12 }}
+        />
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+          {t('common.mcpSettings.configFileTip')}
+        </div>
+      </div>
+
+      {/* 可用工具列表 */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+          {t('common.mcpSettings.availableTools')}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {config.tools.split(', ').map((tool) => (
+            <Tag key={tool} style={{ fontFamily: 'monospace', fontSize: 11 }}>
+              {tool}
+            </Tag>
+          ))}
+        </div>
+      </div>
+
+      {/* 使用步骤 */}
+      <div>
+        <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500 }}>
+          {t('common.mcpSettings.steps')}
+        </div>
+        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+          <li>{t('common.mcpSettings.step1')}</li>
+          <li>{t('common.mcpSettings.step2')}</li>
+          <li>{t('common.mcpSettings.step3')}</li>
+          <li>{t('common.mcpSettings.step4')}</li>
+        </ol>
       </div>
     </div>
   );

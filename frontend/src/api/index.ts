@@ -142,6 +142,15 @@ export interface AIStatus {
   ready: boolean;
 }
 
+export interface MCPConfigInfo {
+  executablePath: string;
+  platform: string;
+  isDev: boolean;
+  configJSON: string;
+  configPath: string;
+  tools: string;
+}
+
 export interface AITaskRequest {
   taskId: string;
   requestId?: string;
@@ -1107,5 +1116,13 @@ export const api = {
     const { GetAIStatus } = await import('../../wailsjs/go/backend/App');
     const result = await GetAIStatus();
     return result as unknown as AIStatus;
+  },
+
+  // ── MCP ──
+
+  async getMCPConfig(): Promise<MCPConfigInfo> {
+    const { GetMCPConfig } = await import('../../wailsjs/go/backend/App');
+    const result = await GetMCPConfig();
+    return result as unknown as MCPConfigInfo;
   },
 };
