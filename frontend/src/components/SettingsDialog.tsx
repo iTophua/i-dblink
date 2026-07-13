@@ -693,18 +693,15 @@ function AISettings() {
     loadConfig();
   }, [loadConfig]);
 
-  // #3：首次加载配置后，若已配置 baseUrl 且 models 为空，自动拉取一次模型列表
+  // #3：首次进入 AI tab 时，若已配置 baseUrl 且 models 为空，自动拉取一次。
+  // 失败不重试（ref 已置 true），用户可手动点刷新按钮。
   const autoLoadedRef = useRef(false);
   useEffect(() => {
     if (autoLoadedRef.current) return;
     if (models0.length > 0) return;
-    // 等配置加载完成且有 baseUrl（说明已配过 API 地址）
     if (!baseUrl) return;
     autoLoadedRef.current = true;
-    loadModels({ baseUrl }).catch(() => {
-      // 静默失败，用户可手动点刷新
-      autoLoadedRef.current = false;
-    });
+    loadModels({ baseUrl }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseUrl, models0.length]);
 
@@ -799,10 +796,7 @@ function AISettings() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <span style={{ fontWeight: 600 }}>{t('common.aiSettings.enableAI')}</span>
-        <Space size="small">
-          {savingField === 'enabled' && <LoadingOutlined style={{ fontSize: 12 }} />}
-          <Switch checked={enabled} onChange={handleEnabledChange} />
-        </Space>
+        <Switch checked={enabled} onChange={handleEnabledChange} />
       </div>
 
       <div style={{ display: 'grid', gap: 12 }}>
@@ -861,11 +855,6 @@ function AISettings() {
                   ? t('common.aiSettings.loadingModels')
                   : t('common.aiSettings.noModels')
               }
-              suffixIcon={
-                savingField === 'model' ? (
-                  <LoadingOutlined />
-                ) : undefined
-              }
             />
             <Tooltip title={t('common.aiSettings.loadModels')}>
               <Button
@@ -884,8 +873,8 @@ function AISettings() {
           <Button icon={<ApiOutlined />} loading={testing} onClick={handleTest} style={{ flex: 1 }}>
             {testing ? t('common.aiSettings.testing') : t('common.aiSettings.testConnection')}
           </Button>
-          {/* P1-#2：保存中全局反馈——按钮区右侧小 loading 图标 */}
-          {savingField && savingField !== 'enabled' && savingField !== 'model' && (
+          {/* 统一的保存中指示器——任何字段保存时都显示 */}
+          {savingField && (
             <Tooltip title={t('common.aiSettings.saving')}>
               <LoadingOutlined style={{ fontSize: 14, color: 'var(--text-tertiary)' }} />
             </Tooltip>
