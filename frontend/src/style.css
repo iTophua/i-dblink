@@ -36,9 +36,12 @@
   --text-tertiary: #6B7280;
   --text-disabled: #C7C7CC;
 
-  --border-color: #e2e8f0;
-  --border-color-light: #f1f5f9;
-  --border-color-dark: #cbd5e1;
+  /* 边框变量统一引用动态 --border（由 App.tsx 从主题注入），
+     确保 --border-color 系列也跟随主题/暗色模式变化。
+     旧代码大量引用 --border-color，这里做透明转发，零破坏性。 */
+  --border-color: var(--border, #e2e8f0);
+  --border-color-light: var(--border-light, #f1f5f9);
+  --border-color-dark: var(--border-dark, #cbd5e1);
 
   --background: #FFFFFF;
   --background-card: #FFFFFF;

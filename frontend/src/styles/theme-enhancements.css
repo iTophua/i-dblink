@@ -618,7 +618,7 @@
     var(--background-toolbar) 100%
   ) !important;
   border-right: 1px solid var(--border-color-light) !important;
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
 }
 
 .sidebar-enhanced::after {
@@ -801,11 +801,13 @@
 .toolbar-enhanced {
   background: var(--background) !important;
   border-bottom: 1px solid var(--border-color) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 [data-theme='dark'] .toolbar-enhanced {
   background: var(--background) !important;
   border-bottom: 1px solid var(--border-color) !important;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
 }
 
 .toolbar-btn {
