@@ -714,7 +714,7 @@ tbody tr:hover {
 
 /* ==================== Tabs 紧凑模式 ==================== */
 .ant-tabs-small > .ant-tabs-nav .ant-tabs-tab {
-  padding: 4px 0;
+  padding: 8px 0;
   font-size: 12px;
 }
 
@@ -723,9 +723,9 @@ tbody tr:hover {
 }
 
 .ant-tabs.ant-tabs-editable-card .ant-tabs-tab {
-  padding: 4px 12px;
+  padding: 6px 12px;
   height: auto;
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 .ant-tabs.ant-tabs-editable-card .ant-tabs-tab .anticon {
