@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { DatabaseType } from '../../../types/api';
-import { detectSqlDialect, type DialectDetection } from '../../../utils/sqlDialects/detectDialect';
+import { detectSqlDialect, mergeCompatibleDialect, type DialectDetection } from '../../../utils/sqlDialects/detectDialect';
 import { convertByRules } from '../../../utils/sqlDialects/convertRules';
 
 export function useSqlDialectDetection(
@@ -30,7 +30,9 @@ export function useSqlDialectDetection(
 
     dialectDetectTimerRef.current = setTimeout(() => {
       const detection = detectSqlDialect(sql);
-      if (detection && detection.dialect !== dbType) {
+      // 双向兼容归一比较：检测出的方言和连接 dbType 都归一到主方言再比较，
+      // 避免 oracle 语法在 dameng 连接（兼容）误报、达梦语法折叠成 oracle 后与 dameng 恒不等等问题。
+      if (detection && detection.dialect !== mergeCompatibleDialect(dbType)) {
         setDialectMismatch(detection);
       } else {
         setDialectMismatch(null);

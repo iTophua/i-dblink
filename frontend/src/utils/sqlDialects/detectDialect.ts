@@ -377,7 +377,10 @@ export function detectSqlDialect(sql: string): DialectDetection | null {
   // 兼容方言合并：mariadb 归入 mysql，dameng 归入 oracle，kingbase/highgo/vastbase 归入 postgresql
   const mergedDialect = mergeCompatibleDialect(bestDialect);
   const maxPossibleScore = FEATURES.reduce((sum, f) => sum + WEIGHTS[f.weight], 0);
-  const confidence = Math.min(bestScore / (maxPossibleScore * 0.15), 1);
+  // 置信度 = 命中分数 / 有效基准分。
+  // 基准系数 0.08：让单个 high 权重特征（3 分）即可达到 confidence ≈ 0.6 触发阈值，
+  // 避免用户只输入少量跨方言语法（如单独 LIMIT）时完全不提示。
+  const confidence = Math.min(bestScore / (maxPossibleScore * 0.08), 1);
 
   if (confidence < CONFIDENCE_THRESHOLD) {
     return null;
@@ -391,9 +394,10 @@ export function detectSqlDialect(sql: string): DialectDetection | null {
 }
 
 /**
- * 将兼容方言合并为主方言
+ * 将兼容方言合并为主方言。
+ * 导出供 hook 做双向归一比较（避免 oracle 语法在 dameng 连接误报等）。
  */
-function mergeCompatibleDialect(dialect: DatabaseType): DatabaseType {
+export function mergeCompatibleDialect(dialect: DatabaseType): DatabaseType {
   switch (dialect) {
     case 'mariadb':
       return 'mysql';

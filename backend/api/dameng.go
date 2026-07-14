@@ -47,6 +47,7 @@ func damengGetTables(ctx context.Context, dbConn db.Executor, database *string) 
 	if database != nil && *database != "" {
 		schema = *database
 	}
+	schema = strings.ToUpper(schema)
 
 	query := `
 		SELECT TABLE_NAME, 'BASE TABLE' AS TABLE_TYPE,
@@ -145,29 +146,45 @@ func damengGetAllColumns(ctx context.Context, dbConn db.Executor, database *stri
 	if database != nil && *database != "" {
 		schema = *database
 	}
+	schema = strings.ToUpper(schema)
 
+	// 含主键子查询，确保批量获取时也能识别主键列
 	query := `
-		SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE,
-			CASE WHEN NULLABLE = 'N' THEN 'NO' ELSE 'YES' END AS IS_NULLABLE,
-			NULL AS COLUMN_KEY,
-			DATA_DEFAULT AS COLUMN_DEFAULT,
+		SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE,
+			CASE WHEN c.NULLABLE = 'N' THEN 'NO' ELSE 'YES' END AS IS_NULLABLE,
+			CASE WHEN EXISTS (
+				SELECT 1 FROM ALL_CONS_COLUMNS cc
+				JOIN ALL_CONSTRAINTS co ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME AND cc.OWNER = co.OWNER
+				WHERE co.CONSTRAINT_TYPE = 'P'
+					AND co.OWNER = c.OWNER
+					AND co.TABLE_NAME = c.TABLE_NAME
+					AND cc.COLUMN_NAME = c.COLUMN_NAME
+			) THEN 'PRI' ELSE '' END AS COLUMN_KEY,
+			c.DATA_DEFAULT AS COLUMN_DEFAULT,
 			NULL AS EXTRA,
 			NULL AS COMMENT
-		FROM SYS.DBA_TAB_COLUMNS
-		WHERE OWNER = ?
-		ORDER BY TABLE_NAME, COLUMN_ID
+		FROM ALL_TAB_COLUMNS c
+		WHERE c.OWNER = ?
+		ORDER BY c.TABLE_NAME, c.COLUMN_ID
 	`
 	rows, err := dbConn.QueryContext(ctx, query, schema)
 	if err != nil {
+		// fallback：USER_* 视图
 		query = `
-			SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE,
-				CASE WHEN NULLABLE = 'N' THEN 'NO' ELSE 'YES' END,
-				NULL, DATA_DEFAULT, NULL, NULL
-			FROM SYS.ALL_TAB_COLUMNS
-			WHERE OWNER = ?
-			ORDER BY TABLE_NAME, COLUMN_ID
+			SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE,
+				CASE WHEN c.NULLABLE = 'N' THEN 'NO' ELSE 'YES' END,
+				CASE WHEN EXISTS (
+					SELECT 1 FROM USER_CONS_COLUMNS cc
+					JOIN USER_CONSTRAINTS co ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME
+					WHERE co.CONSTRAINT_TYPE = 'P'
+						AND co.TABLE_NAME = c.TABLE_NAME
+						AND cc.COLUMN_NAME = c.COLUMN_NAME
+				) THEN 'PRI' ELSE '' END,
+				c.DATA_DEFAULT, NULL, NULL
+			FROM USER_TAB_COLUMNS c
+			ORDER BY c.TABLE_NAME, c.COLUMN_ID
 		`
-		rows, err = dbConn.QueryContext(ctx, query, schema)
+		rows, err = dbConn.QueryContext(ctx, query)
 		if err != nil {
 			return models.AllColumnsResult{}, err
 		}
@@ -194,13 +211,17 @@ func damengGetColumns(ctx context.Context, dbConn db.Executor, tableName string,
 	if database != nil && *database != "" {
 		schema = *database
 	}
+	// 达梦默认大写存储对象名（与 Oracle 一致），统一转大写匹配
+	schema = strings.ToUpper(schema)
+	tableNameUpper := strings.ToUpper(tableName)
 
+	// 主查询：优先用 ALL_* 视图（比 DBA_* 权限要求低），含主键子查询
 	query := `
 		SELECT c.COLUMN_NAME, c.DATA_TYPE,
 			CASE WHEN c.NULLABLE = 'N' THEN 'NO' ELSE 'YES' END AS IS_NULLABLE,
 			CASE WHEN EXISTS (
-				SELECT 1 FROM SYS.DBA_CONS_COLUMNS cc
-				JOIN SYS.DBA_CONSTRAINTS co ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME
+				SELECT 1 FROM ALL_CONS_COLUMNS cc
+				JOIN ALL_CONSTRAINTS co ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME AND cc.OWNER = co.OWNER
 				WHERE co.CONSTRAINT_TYPE = 'P'
 					AND co.OWNER = c.OWNER
 					AND co.TABLE_NAME = c.TABLE_NAME
@@ -209,21 +230,29 @@ func damengGetColumns(ctx context.Context, dbConn db.Executor, tableName string,
 			c.DATA_DEFAULT AS COLUMN_DEFAULT,
 			NULL AS EXTRA,
 			NULL AS COMMENT
-		FROM SYS.DBA_TAB_COLUMNS c
+		FROM ALL_TAB_COLUMNS c
 		WHERE c.OWNER = ? AND c.TABLE_NAME = ?
 		ORDER BY c.COLUMN_ID
 	`
-	rows, err := dbConn.QueryContext(ctx, query, schema, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, schema, tableNameUpper)
 	if err != nil {
+		// fallback：USER_* 视图（当前用户 schema，不需要 OWNER 过滤）
 		query = `
-			SELECT COLUMN_NAME, DATA_TYPE,
-				CASE WHEN NULLABLE = 'N' THEN 'NO' ELSE 'YES' END,
-				NULL, DATA_DEFAULT, NULL, NULL
-			FROM SYS.ALL_TAB_COLUMNS
-			WHERE OWNER = ? AND TABLE_NAME = ?
-			ORDER BY COLUMN_ID
+			SELECT c.COLUMN_NAME, c.DATA_TYPE,
+				CASE WHEN c.NULLABLE = 'N' THEN 'NO' ELSE 'YES' END,
+				CASE WHEN EXISTS (
+					SELECT 1 FROM USER_CONS_COLUMNS cc
+					JOIN USER_CONSTRAINTS co ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME
+					WHERE co.CONSTRAINT_TYPE = 'P'
+						AND co.TABLE_NAME = c.TABLE_NAME
+						AND cc.COLUMN_NAME = c.COLUMN_NAME
+				) THEN 'PRI' ELSE '' END,
+				c.DATA_DEFAULT, NULL, NULL
+			FROM USER_TAB_COLUMNS c
+			WHERE c.TABLE_NAME = ?
+			ORDER BY c.COLUMN_ID
 		`
-		rows, err = dbConn.QueryContext(ctx, query, schema, tableName)
+		rows, err = dbConn.QueryContext(ctx, query, tableNameUpper)
 		if err != nil {
 			return nil, err
 		}
@@ -250,29 +279,34 @@ func damengGetIndexes(ctx context.Context, dbConn db.Executor, tableName string,
 	if database != nil && *database != "" {
 		schema = *database
 	}
+	schema = strings.ToUpper(schema)
+	tableNameUpper := strings.ToUpper(tableName)
 
+	// IS_PRIMARY：达梦主键约束生成的索引名以 PK_ 开头（与 Oracle 一致）
 	query := `
 		SELECT i.INDEX_NAME, c.COLUMN_NAME,
 			CASE WHEN i.UNIQUENESS = 'UNIQUE' THEN 1 ELSE 0 END AS IS_UNIQUE,
-			0 AS IS_PRIMARY,
+			CASE WHEN i.INDEX_NAME LIKE 'PK_%' THEN 1 ELSE 0 END AS IS_PRIMARY,
 			c.COLUMN_POSITION AS SEQ_IN_INDEX
-		FROM SYS.DBA_INDEXES i
-		JOIN SYS.DBA_IND_COLUMNS c ON i.INDEX_NAME = c.INDEX_NAME AND i.OWNER = c.INDEX_OWNER
+		FROM ALL_INDEXES i
+		JOIN ALL_IND_COLUMNS c ON i.INDEX_NAME = c.INDEX_NAME AND i.OWNER = c.INDEX_OWNER
 		WHERE i.TABLE_OWNER = ? AND i.TABLE_NAME = ?
 		ORDER BY i.INDEX_NAME, c.COLUMN_POSITION
 	`
-	rows, err := dbConn.QueryContext(ctx, query, schema, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, schema, tableNameUpper)
 	if err != nil {
+		// fallback：USER_* 视图
 		query = `
 			SELECT i.INDEX_NAME, c.COLUMN_NAME,
 				CASE WHEN i.UNIQUENESS = 'UNIQUE' THEN 1 ELSE 0 END,
-				0, c.COLUMN_POSITION
-			FROM SYS.ALL_INDEXES i
-			JOIN SYS.ALL_IND_COLUMNS c ON i.INDEX_NAME = c.INDEX_NAME AND i.OWNER = c.INDEX_OWNER
-			WHERE i.TABLE_OWNER = ? AND i.TABLE_NAME = ?
+				CASE WHEN i.INDEX_NAME LIKE 'PK_%' THEN 1 ELSE 0 END,
+				c.COLUMN_POSITION
+			FROM USER_INDEXES i
+			JOIN USER_IND_COLUMNS c ON i.INDEX_NAME = c.INDEX_NAME
+			WHERE i.TABLE_NAME = ?
 			ORDER BY i.INDEX_NAME, c.COLUMN_POSITION
 		`
-		rows, err = dbConn.QueryContext(ctx, query, schema, tableName)
+		rows, err = dbConn.QueryContext(ctx, query, tableNameUpper)
 		if err != nil {
 			return nil, err
 		}
@@ -299,6 +333,8 @@ func damengGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName str
 	if database != nil && *database != "" {
 		schema = *database
 	}
+	schema = strings.ToUpper(schema)
+	tableNameUpper := strings.ToUpper(tableName)
 
 	// 达梦外键查询：使用 USER_CONSTRAINTS / ALL_CONSTRAINTS 视图
 	// 注意：不同版本的达梦数据库系统视图列名可能有差异，出错时返回空数组
@@ -342,9 +378,9 @@ func damengGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName str
 	for i, query := range queries {
 		if i == 0 {
 			// USER_ 视图不需要 OWNER 参数
-			rows, err = dbConn.QueryContext(ctx, query, tableName)
+			rows, err = dbConn.QueryContext(ctx, query, tableNameUpper)
 		} else {
-			rows, err = dbConn.QueryContext(ctx, query, schema, tableName)
+			rows, err = dbConn.QueryContext(ctx, query, schema, tableNameUpper)
 		}
 		if err == nil {
 			break

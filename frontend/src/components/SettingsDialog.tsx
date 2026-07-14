@@ -768,11 +768,12 @@ function AISettings() {
   const handleTest = async () => {
     setTesting(true);
     try {
+      // 从 latestRef 读 apiKey，避免 onBlur 清空 state 后拿到空值
       const result = await testConnection({
         enabled,
         provider,
         baseUrl,
-        apiKey,
+        apiKey: apiKey || latestRef.current.apiKey,
         model,
       });
       if (result.success) {
@@ -870,7 +871,13 @@ function AISettings() {
         </div>
 
         <div style={{ marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Button icon={<ApiOutlined />} loading={testing} onClick={handleTest} style={{ flex: 1 }}>
+          <Button
+            icon={<ApiOutlined />}
+            loading={testing}
+            onClick={handleTest}
+            onMouseDown={(e) => e.preventDefault()}
+            style={{ flex: 1 }}
+          >
             {testing ? t('common.aiSettings.testing') : t('common.aiSettings.testConnection')}
           </Button>
           {/* 统一的保存中指示器——任何字段保存时都显示 */}
