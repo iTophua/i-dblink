@@ -202,16 +202,10 @@ export function useContextMenuMenus(
         if (key === 'connect') {
           await callbacks.onConnect(conn.id);
         } else if (key === 'disconnect') {
-          Modal.confirm({
-            title: t('common.confirmDisconnect'),
-            content: t('common.confirmDisconnectContent', { name: conn.name }),
-            okText: t('common.disconnectLabel'),
-            okType: 'danger',
-            cancelText: t('common.cancel'),
-            transitionName: '',
-            maskTransitionName: '',
-            onOk: () => callbacks.onDisconnect(conn.id),
-          });
+          // 直接调用 handleDisconnect：它内部会根据是否有打开的标签页
+          // 决定是否弹出"关闭相关标签页"确认框（有标签页才弹，无则直接断开）。
+          // 此处不再重复弹纯确认框，避免出现两个确认弹窗。
+          callbacks.onDisconnect(conn.id);
         } else if (key === 'refresh') {
           callbacks.onExpandKeys(expandedKeys.filter((k) => !k.startsWith(`db::${conn.id}::`)));
           callbacks.onExpand(conn.id, true);
