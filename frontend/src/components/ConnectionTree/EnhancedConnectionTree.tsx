@@ -6,6 +6,7 @@ import {
   PlusOutlined,
   FolderOutlined,
   AppstoreOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import type { Connection } from '../../stores/appStore';
 import { EnhancedEmptyState } from '../LoadingStates';
@@ -127,6 +128,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       onTableOpen, onOpenDesigner, onOpenViewDefinition, onViewOpen, onDeleteGroup,
       handleCopyConnection: connectionActions.handleCopyConnection,
       handleMoveConnection: connectionActions.handleMoveConnection,
+      onRefreshConnections,
     }
   );
 
@@ -254,18 +256,30 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       <Spin spinning={isLoading} size="small" wrapperClassName="connection-tree-spin-wrapper">
         {connections.length === 0 && !isLoading ? emptyState : (
           <>
-            {connections.length > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 4px 2px' }}>
-                <Tooltip title={t('common.batchManage.title')}>
+            {connections.length > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, padding: '0 4px 2px' }}>
+                <Tooltip title={t('common.mainLayout.refreshConnections')}>
                   <span
-                    onClick={(e) => { e.stopPropagation(); onBatchManage?.(); }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4, transition: 'all 0.2s' }}
+                    onClick={(e) => { e.stopPropagation(); onRefreshConnections?.(); }}
+                    style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4, transition: 'all 0.2s' }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--background-hover)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <AppstoreOutlined style={{ fontSize: 11 }} />
+                    <ReloadOutlined style={{ fontSize: 11 }} />
                   </span>
                 </Tooltip>
+                {connections.length > 1 && (
+                  <Tooltip title={t('common.batchManage.title')}>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); onBatchManage?.(); }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4, transition: 'all 0.2s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--background-hover)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <AppstoreOutlined style={{ fontSize: 11 }} />
+                    </span>
+                  </Tooltip>
+                )}
               </div>
             )}
             <Tree

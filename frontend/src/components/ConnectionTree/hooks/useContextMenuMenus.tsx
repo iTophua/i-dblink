@@ -8,6 +8,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
+  SyncOutlined,
   PlayCircleOutlined,
   DisconnectOutlined,
   CopyOutlined,
@@ -75,6 +76,8 @@ interface ActionCallbacks {
   onDeleteGroup: (id: string) => void;
   handleCopyConnection: (conn: Connection) => Promise<void>;
   handleMoveConnection: (connectionId: string, targetGroupId: string) => Promise<void>;
+  // 刷新整个连接列表（重拉后端，MCP/外部变更可见）
+  onRefreshConnections?: () => void;
 }
 
 export function useContextMenuMenus(
@@ -100,6 +103,11 @@ export function useContextMenuMenus(
                 icon: <DisconnectOutlined />,
               },
               { key: 'refresh', label: t('common.refresh'), icon: <ReloadOutlined /> },
+              {
+                key: 'refresh-connections',
+                label: t('common.mainLayout.refreshConnections'),
+                icon: <SyncOutlined />,
+              },
               { type: 'divider' },
               { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
               { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
@@ -156,6 +164,12 @@ export function useContextMenuMenus(
             ]
           : [
               { key: 'connect', label: t('common.mainLayout.connect'), icon: <LinkOutlined /> },
+              {
+                key: 'refresh-connections',
+                label: t('common.mainLayout.refreshConnections'),
+                icon: <SyncOutlined />,
+              },
+              { type: 'divider' },
               { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
               { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
               { type: 'divider' },
@@ -209,6 +223,8 @@ export function useContextMenuMenus(
         } else if (key === 'refresh') {
           callbacks.onExpandKeys(expandedKeys.filter((k) => !k.startsWith(`db::${conn.id}::`)));
           callbacks.onExpand(conn.id, true);
+        } else if (key === 'refresh-connections') {
+          callbacks.onRefreshConnections?.();
         } else if (key === 'edit') {
           callbacks.onEditConnection(conn);
         } else if (key === 'delete') {

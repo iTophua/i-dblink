@@ -16,6 +16,27 @@ interface UseConnectionManagerParams {
   tabPanelRef: React.RefObject<TabPanelRef | null>;
 }
 
+/**
+ * 按连接配置过滤数据库列表。
+ * - 连接配置指定了 database：只保留该库；若服务器实际不存在该库，仍保留配置值显示（避免树空白）
+ * - 未配置 database：返回完整列表
+ *
+ * 注：仅在展开连接节点时过滤，后端 GetDatabases 仍返回完整列表，
+ * DataMigrationDialog 等需要完整列表的场景不受影响。
+ */
+function filterDatabasesByConfig(
+  databases: string[],
+  connections: Connection[],
+  connectionId: string
+): string[] {
+  const conn = connections.find((c) => c.id === connectionId);
+  const configuredDb = conn?.database;
+  if (!configuredDb) return databases;
+  const filtered = databases.filter((db) => db === configuredDb);
+  // 配置了但服务器上没查到（可能权限不足/库被改名/拼写差异），仍显示配置值，避免树空白
+  return filtered.length > 0 ? filtered : [configuredDb];
+}
+
 export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams) {
   const { t } = useTranslation();
 
@@ -253,7 +274,9 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
       try {
         await connect(connectionId);
         const databases = (await getDatabases(connectionId)) || [];
-        const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
+        // 同 handleLoadDatabases：配置了 database 就只显示该库
+        const filtered = filterDatabasesByConfig(databases, connections, connectionId);
+        const dbList = filtered.map((db) => ({ database: db, tables: [], loaded: false }));
         setConnectionDatabases((prev) => ({
           ...prev,
           [connectionId]: dbList,
@@ -475,8 +498,12 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
   const handleLoadDatabases = useCallback(
     async (connectionId: string) => {
       try {
-        const databases = await getDatabases(connectionId);
-        const dbList = databases.map((db) => ({ database: db, tables: [], loaded: false }));
+        const databases = (await getDatabases(connectionId)) || [];
+        // 若连接配置指定了 database，则只显示该库（避免展开后看到服务器上所有库）；
+        // 未配置则显示全部。后端 GetDatabases 仍返回完整列表，此处仅在前端过滤，
+        // DataMigrationDialog 等需要完整列表的场景不受影响。
+        const filtered = filterDatabasesByConfig(databases, connections, connectionId);
+        const dbList = filtered.map((db) => ({ database: db, tables: [], loaded: false }));
         setConnectionDatabases((prev) => ({
           ...prev,
           [connectionId]: dbList,
@@ -485,7 +512,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
         console.error('Failed to load database list:', error);
       }
     },
-    [getDatabases]
+    [getDatabases, connections]
   );
 
   const handleTableExpand = useCallback(
