@@ -2003,6 +2003,17 @@
       "notConfigured": "尚未配置",
       "goToSettings": "去配置"
     },
+    "aiChat": {
+      "context": "上下文",
+      "selectAll": "全选",
+      "selectNone": "全不选",
+      "selectConnection": "选择连接",
+      "emptyHint": "开始与 AI 助手对话",
+      "inputPlaceholder": "输入消息，Enter 发送，Shift+Enter 换行",
+      "applyToEditor": "应用到编辑器",
+      "applied": "SQL 已应用到编辑器",
+      "clearHistory": "清空对话历史"
+    },
     "aiTask": {
       "convertDialect": "AI 转换方言",
       "explain": "AI 解释/优化",

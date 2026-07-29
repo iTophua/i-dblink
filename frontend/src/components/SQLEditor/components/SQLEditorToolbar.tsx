@@ -31,6 +31,7 @@ import {
 import { useThemeColors } from '../../../hooks/useThemeColors';
 import { formatShortcutForDisplay, getEffectiveShortcut } from '../../../constants/menuShortcuts';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { useAIChatStore } from '../../../stores/aiChatStore';
 import type { DatabaseType } from '../../../types/api';
 import type { RecentDatabaseEntry } from '../../../stores/workspaceStore';
 
@@ -71,9 +72,6 @@ export interface SQLEditorToolbarProps {
   isFullscreen: boolean;
   setIsFullscreen: (v: boolean) => void;
   dbType?: DatabaseType;
-
-  // AI
-  onOpenAIPanel?: () => void;
 }
 
 export function SQLEditorToolbar({
@@ -102,7 +100,6 @@ export function SQLEditorToolbar({
   isFullscreen,
   setIsFullscreen,
   dbType,
-  onOpenAIPanel,
 }: SQLEditorToolbarProps) {
   const { t } = useTranslation();
   const tc = useThemeColors();
@@ -197,17 +194,15 @@ export function SQLEditorToolbar({
           {t('common.formatButton')}
         </Button>
 
-        {onOpenAIPanel && (
-          <Tooltip title={t('common.ai')}>
-            <Button
-              icon={<RobotOutlined />}
-              onClick={onOpenAIPanel}
-              size="small"
-            >
-              {t('common.ai')}
-            </Button>
-          </Tooltip>
-        )}
+        <Tooltip title={t('common.ai')}>
+          <Button
+            icon={<RobotOutlined />}
+            onClick={() => useAIChatStore.getState().setPanelVisible(true)}
+            size="small"
+          >
+            {t('common.ai')}
+          </Button>
+        </Tooltip>
         <Button
           icon={<LineChartOutlined />}
           onClick={showExplainPlan}

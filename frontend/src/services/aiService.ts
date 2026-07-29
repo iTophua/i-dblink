@@ -1,5 +1,5 @@
 import { EventsOn } from '../api';
-import { api, type AITaskRequest } from '../api';
+import { api, type AITaskRequest, type AIChatMessage } from '../api';
 
 /**
  * 流式执行 AI 任务。
@@ -64,4 +64,16 @@ export async function streamAITask(
 export async function executeAITask(req: AITaskRequest): Promise<string> {
   const result = await api.executeAITask(req);
   return result.result;
+}
+
+/**
+ * 流式 AI 聊天（多轮对话，前端透传 messages 数组）。
+ * 与 streamAITask 共享同一套事件机制（ai-stream-<requestID>）。
+ */
+export async function streamChat(
+  messages: AIChatMessage[],
+  onChunk: (text: string) => void,
+  onError?: (err: string) => void
+): Promise<string> {
+  return streamAITask({ taskId: 'chat', messages }, onChunk, onError);
 }

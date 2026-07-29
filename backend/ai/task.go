@@ -13,6 +13,7 @@ const (
 	TaskSQLConvert  TaskID = "sql-convert"  // SQL 方言转换
 	TaskSQLExplain  TaskID = "sql-explain"  // SQL 解释 + 优化建议
 	TaskSQLGenerate TaskID = "sql-generate" // 自然语言 → SQL
+	TaskChat        TaskID = "chat"         // 通用 AI 聊天（前端透传 messages）
 )
 
 // TaskRequest AI 任务请求
@@ -51,6 +52,17 @@ var taskRegistry = map[TaskID]*Task{
 	TaskSQLConvert:  taskSQLConvert,
 	TaskSQLExplain:  taskSQLExplain,
 	TaskSQLGenerate: taskSQLGenerate,
+	TaskChat:        taskChat,
+}
+
+// taskChat 通用聊天任务占位定义。
+// 实际消息由前端透传（app_ai.go 的 buildAIMessages 特判 chat task），
+// BuildPrompt 不会被调用，这里仅满足 Task 结构体要求。
+var taskChat = &Task{
+	ID:          TaskChat,
+	Name:        "通用聊天",
+	Description: "多轮对话，前端透传 messages",
+	BuildPrompt: func(req *TaskRequest) []ChatMessage { return nil },
 }
 
 // GetTask 获取任务定义

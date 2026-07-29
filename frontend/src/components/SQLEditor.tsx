@@ -24,8 +24,6 @@ import { ParamDialog } from './ParamDialog';
 import { replaceParams } from '../utils/sqlParams';
 import type { DatabaseType } from '../types/api';
 import { SqlDialectBanner } from './SqlDialectBanner';
-import { AIPanel } from './AIPanel';
-
 // Extracted hooks
 import { useQueryExecution } from './SQLEditor/hooks/useQueryExecution';
 import { useMonacoEditor } from './SQLEditor/hooks/useMonacoEditor';
@@ -84,7 +82,6 @@ export function SQLEditor({
   const [sql, setSql] = useState(defaultQuery || '');
   const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
-  const [aiPanelVisible, setAiPanelVisible] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 自定义右键菜单状态
@@ -242,6 +239,20 @@ export function SQLEditor({
     return () => {
       window.removeEventListener('tab-action', handleTabAction);
     };
+  }, []);
+
+  // 监听全局 AI SQL 注入事件（来自 AIChatPanel 的"应用到编辑器"）
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const { mode, sql } = (event as CustomEvent).detail;
+      if (mode === 'replace') {
+        setSql(sql);
+      } else {
+        setSql((prev) => (prev ? prev + '\n' + sql : sql));
+      }
+    };
+    window.addEventListener('ai-sql-inject', handler);
+    return () => window.removeEventListener('ai-sql-inject', handler);
   }, []);
 
   // Format SQL
@@ -594,7 +605,6 @@ export function SQLEditor({
         isFullscreen={isFullscreen}
         setIsFullscreen={setIsFullscreen}
         dbType={dbType}
-        onOpenAIPanel={() => setAiPanelVisible(true)}
       />
 
       {/* SQL 方言转换提示 Banner */}
@@ -761,23 +771,6 @@ export function SQLEditor({
           }}
           maxHistory={50}
           storageKey={`sql-history-${connectionId || 'global'}${database ? `-${database}` : ''}`}
-        />
-      </Drawer>
-
-      {/* AI 助手抽屉 */}
-      <Drawer
-        title={t('common.ai')}
-        placement="right"
-        width={420}
-        onClose={() => setAiPanelVisible(false)}
-        open={aiPanelVisible}
-        styles={{ body: { padding: 0 } }}
-      >
-        <AIPanel
-          sql={sql}
-          dbType={dbType}
-          onInsertSQL={(s) => setSql((prev) => prev + s)}
-          onReplaceSQL={(s) => setSql(s)}
         />
       </Drawer>
 

@@ -1991,6 +1991,17 @@
       "notConfigured": "Not configured",
       "goToSettings": "Configure"
     },
+    "aiChat": {
+      "context": "Context",
+      "selectAll": "Select All",
+      "selectNone": "Select None",
+      "selectConnection": "Select connection",
+      "emptyHint": "Start a conversation with AI assistant",
+      "inputPlaceholder": "Type a message, Enter to send, Shift+Enter for newline",
+      "applyToEditor": "Apply to editor",
+      "applied": "SQL applied to editor",
+      "clearHistory": "Clear conversation history"
+    },
     "aiTask": {
       "convertDialect": "AI Convert Dialect",
       "explain": "AI Explain/Optimize",

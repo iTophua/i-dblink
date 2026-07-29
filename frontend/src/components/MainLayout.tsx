@@ -11,6 +11,7 @@ import { Toolbar } from './Toolbar';
 import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
 import { TabPanel, type TabPanelRef } from './TabPanel';
 import { StatusBar } from './StatusBar';
+import { AIChatPanel } from './AIChatPanel';
 import { ConnectionDialog } from './ConnectionDialog';
 import { ConnectionExportDialog } from './ConnectionExportDialog';
 import { BatchManageDialog } from './ConnectionTree/BatchManageDialog';
@@ -82,6 +83,20 @@ function MainLayoutComponent() {
       }
     }
   }, [connMgr.selectedConnectionId, connMgr.connections, tabMgr.activeTabInfo]);
+
+  // AI 面板"应用到编辑器"：注入 SQL 到当前 SQL tab，无 SQL tab 则自动新建
+  const handleInjectSQL = (sql: string, mode: 'append' | 'replace') => {
+    const info = tabPanelRef.current?.getActiveTabInfo();
+    if (info?.type === 'sql') {
+      window.dispatchEvent(new CustomEvent('ai-sql-inject', { detail: { mode, sql } }));
+    } else {
+      tabPanelRef.current?.openSqlTab({
+        connectionId: info?.connectionId || connMgr.selectedConnectionId || undefined,
+        database: info?.database || connMgr.selectedDatabase,
+        defaultQuery: sql,
+      });
+    }
+  };
 
   return (
     <Layout style={layout.styles.root}>
@@ -245,6 +260,15 @@ function MainLayoutComponent() {
         resultRows={tabMgr.currentResultRows}
         executionTime={tabMgr.currentExecutionTime}
         isQuerying={tabMgr.isQuerying}
+      />
+
+      {/* 全局 AI 聊天面板（独立于 tab，全局可用） */}
+      <AIChatPanel
+        connections={connMgr.connections}
+        selectedConnectionId={connMgr.selectedConnectionId}
+        connectionDatabases={connMgr.connectionDatabases}
+        onApplySQL={handleInjectSQL}
+        onOpenSettings={() => window.dispatchEvent(new CustomEvent('menu-action', { detail: { action: 'options' } }))}
       />
 
       <ConnectionDialog

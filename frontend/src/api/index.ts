@@ -167,6 +167,14 @@ export interface AITaskRequest {
   databaseType?: string;
   tableInfo?: string;
   context?: Record<string, string>;
+  /** 通用聊天任务（taskId="chat"）透传到后端，支持多轮对话 */
+  messages?: AIChatMessage[];
+}
+
+/** AI 聊天消息（前端透传到后端 Provider） */
+export interface AIChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
 }
 
 export interface TableStructure {

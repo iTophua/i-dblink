@@ -47,6 +47,14 @@ type AITaskRequest struct {
 	DatabaseType  string            `json:"databaseType,omitempty"`
 	TableInfo     string            `json:"tableInfo,omitempty"`
 	Context       map[string]string `json:"context,omitempty"`
+	// Messages 通用聊天任务（taskId="chat"）直接透传到 Provider，绕过 BuildPrompt
+	Messages []AIChatMessage `json:"messages,omitempty"`
+}
+
+// AIChatMessage 聊天消息（前端透传到 Provider，支持多轮对话）
+type AIChatMessage struct {
+	Role    string `json:"role"`    // "system" | "user" | "assistant"
+	Content string `json:"content"`
 }
 
 // AITaskResponse AI 任务响应
@@ -221,16 +229,7 @@ func (a *App) ExecuteAITask(req AITaskRequest) (AITaskResponse, error) {
 		return AITaskResponse{}, err
 	}
 
-	messages := task.BuildPrompt(&ai.TaskRequest{
-		TaskID:        ai.TaskID(req.TaskID),
-		SourceDialect: req.SourceDialect,
-		TargetDialect: req.TargetDialect,
-		SQL:           req.SQL,
-		NaturalInput:  req.NaturalInput,
-		DatabaseType:  req.DatabaseType,
-		TableInfo:     req.TableInfo,
-		Context:       req.Context,
-	})
+	messages := buildAIMessages(req, task)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -268,16 +267,7 @@ func (a *App) ExecuteAITaskStream(req AITaskRequest) error {
 		req.RequestID = requestID
 	}
 
-	messages := task.BuildPrompt(&ai.TaskRequest{
-		TaskID:        ai.TaskID(req.TaskID),
-		SourceDialect: req.SourceDialect,
-		TargetDialect: req.TargetDialect,
-		SQL:           req.SQL,
-		NaturalInput:  req.NaturalInput,
-		DatabaseType:  req.DatabaseType,
-		TableInfo:     req.TableInfo,
-		Context:       req.Context,
-	})
+	messages := buildAIMessages(req, task)
 
 	// 流式 context：超时 5 分钟（LLM 长响应）。
 	// 注意：不能用 defer cancel()——本方法立即返回（Wails 绑定是同步 RPC），
@@ -307,6 +297,29 @@ func (a *App) GetAIStatus() (AIStatusResponse, error) {
 }
 
 // ==================== 辅助函数 ====================
+
+// buildAIMessages 根据请求类型构建发往 Provider 的消息列表。
+// - chat 任务：直接透传前端传入的 Messages（支持多轮对话），绕过 task.BuildPrompt
+// - 其他任务：走 task.BuildPrompt 构建单轮 system+user 消息
+func buildAIMessages(req AITaskRequest, task *ai.Task) []ai.ChatMessage {
+	if ai.TaskID(req.TaskID) == ai.TaskChat {
+		msgs := make([]ai.ChatMessage, 0, len(req.Messages))
+		for _, m := range req.Messages {
+			msgs = append(msgs, ai.ChatMessage{Role: m.Role, Content: m.Content})
+		}
+		return msgs
+	}
+	return task.BuildPrompt(&ai.TaskRequest{
+		TaskID:        ai.TaskID(req.TaskID),
+		SourceDialect: req.SourceDialect,
+		TargetDialect: req.TargetDialect,
+		SQL:           req.SQL,
+		NaturalInput:  req.NaturalInput,
+		DatabaseType:  req.DatabaseType,
+		TableInfo:     req.TableInfo,
+		Context:       req.Context,
+	})
+}
 
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
