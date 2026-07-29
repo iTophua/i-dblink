@@ -78,6 +78,7 @@ import {
 } from '../../wailsjs/go/backend/App';
 import { backend } from '../../wailsjs/go/models';
 const ConnectionInput = backend.ConnectionInput;
+const AITaskRequestClass = backend.AITaskRequest;
 
 import type {
   ConnectionOutput,
@@ -1129,13 +1130,13 @@ export const api = {
 
   async executeAITask(req: AITaskRequest): Promise<AITaskResult> {
     const { ExecuteAITask } = await import('../../wailsjs/go/backend/App');
-    const result = await ExecuteAITask(req);
+    const result = await ExecuteAITask(new AITaskRequestClass(req));
     return result as unknown as AITaskResult;
   },
 
   async executeAITaskStream(req: AITaskRequest): Promise<void> {
     const { ExecuteAITaskStream } = await import('../../wailsjs/go/backend/App');
-    await ExecuteAITaskStream(req);
+    await ExecuteAITaskStream(new AITaskRequestClass(req));
   },
 
   async getAIStatus(): Promise<AIStatus> {
