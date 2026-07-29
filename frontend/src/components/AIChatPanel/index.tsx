@@ -109,36 +109,33 @@ export function AIChatPanel({
       return;
     }
 
-    // 构建发给后端的消息列表（含 system prompt + 历史消息 + 当前输入）
-    const tableInfo = await buildTableInfo(connectionId || '', selectedDatabases);
-    const systemPrompt = buildSystemPrompt(currentDbType, tableInfo);
-
-    const historyMessages = [
-      ...chatMessages.map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
-    ];
-
-    const requestMessages = [
-      { role: 'system' as const, content: systemPrompt },
-      ...historyMessages,
-      { role: 'user' as const, content: trimmed },
-    ];
-
-    // 更新 UI：添加用户消息 + 空的 assistant 消息
+    // 1. 先更新 UI（即时反馈）+ 设置 streaming=true 防止并发发送
+    //    在此之后 buildTableInfo 期间用户无法再次点发送
     addUserMessage(trimmed);
     startAssistantMessage();
     setInput('');
 
     try {
-      await streamChat(
-        requestMessages,
-        (chunk) => appendAssistantChunk(chunk),
-        (err) => {
-          appendAssistantChunk(`\n\n[Error] ${err}`);
-        }
-      );
+      // 2. 异步构建表结构上下文（可能耗时数秒，在 UI 已更新后执行）
+      const tableInfo = await buildTableInfo(connectionId || '', selectedDatabases);
+      const systemPrompt = buildSystemPrompt(currentDbType, tableInfo);
+
+      // 3. 构建发给后端的消息列表
+      //    历史消息从 chatMessages 闭包取值（此时不含刚 add 的用户消息，因为 React 未重渲染），
+      //    当前用户消息单独 append
+      const historyMessages = chatMessages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      const requestMessages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...historyMessages,
+        { role: 'user' as const, content: trimmed },
+      ];
+
+      // 4. 流式发送（错误统一由 catch 处理，不传 onError 避免重复追加）
+      await streamChat(requestMessages, (chunk) => appendAssistantChunk(chunk));
       finalizeAssistantMessage();
     } catch (err) {
       appendAssistantChunk(`\n\n[Error] ${err instanceof Error ? err.message : String(err)}`);
