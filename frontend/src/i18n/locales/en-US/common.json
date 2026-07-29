@@ -464,6 +464,7 @@
       "lowerSQL": "Lowercase",
       "sqlFormatted": "SQL formatted",
     "dialectConverted": "SQL converted from {{source}} to {{target}} dialect",
+    "aiConvertFailed": "AI conversion failed",
       "sqlCommented": "Commented",
       "sqlUncommented": "Uncommented",
       "sqlUppercased": "Uppercased",

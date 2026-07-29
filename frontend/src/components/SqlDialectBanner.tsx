@@ -5,7 +5,7 @@
  */
 
 import { Alert, Button, Space, Tag, Tooltip, Typography } from 'antd';
-import { BulbOutlined, ExperimentOutlined, CloseOutlined } from '@ant-design/icons';
+import { BulbOutlined, ExperimentOutlined, LoadingOutlined, CloseOutlined } from '@ant-design/icons';
 import type { DatabaseType } from '../types/api';
 
 const { Text } = Typography;
@@ -35,6 +35,8 @@ export interface SqlDialectBannerProps {
   onQuickConvert: () => void;
   /** AI 增强转换（Pro） */
   onAIConvert?: () => void;
+  /** AI 转换进行中（显示 loading，禁用按钮） */
+  converting?: boolean;
   /** 忽略本次提示 */
   onDismiss: () => void;
 }
@@ -45,6 +47,7 @@ export function SqlDialectBanner({
   matchedFeatures,
   onQuickConvert,
   onAIConvert,
+  converting,
   onDismiss,
 }: SqlDialectBannerProps) {
   const sourceName = DB_DISPLAY_NAMES[sourceDialect] ?? sourceDialect;
@@ -106,20 +109,22 @@ export function SqlDialectBanner({
                 type="primary"
                 icon={<BulbOutlined />}
                 onClick={onQuickConvert}
+                disabled={converting}
                 style={{ fontSize: 12, height: 24 }}
               >
                 快速转换
               </Button>
             </Tooltip>
             {onAIConvert && (
-              <Tooltip title="使用 AI 模型进行深度转换（Pro）">
+              <Tooltip title="使用 AI 模型进行深度转换">
                 <Button
                   size="small"
-                  icon={<ExperimentOutlined />}
+                  icon={converting ? <LoadingOutlined /> : <ExperimentOutlined />}
                   onClick={onAIConvert}
+                  disabled={converting}
                   style={{ fontSize: 12, height: 24 }}
                 >
-                  AI 转换
+                  {converting ? 'AI 转换中…' : 'AI 转换'}
                 </Button>
               </Tooltip>
             )}

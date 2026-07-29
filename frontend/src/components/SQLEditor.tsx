@@ -183,6 +183,8 @@ export function SQLEditor({
   const {
     dialectMismatch,
     handleQuickConvert,
+    handleAIConvert,
+    aiConverting,
     handleDismissDialectBanner,
   } = useSqlDialectDetection(connectionId, dbType, sql, setSql);
 
@@ -602,6 +604,8 @@ export function SQLEditor({
           targetDialect={dbType}
           matchedFeatures={dialectMismatch.matchedFeatures}
           onQuickConvert={handleQuickConvert}
+          onAIConvert={handleAIConvert}
+          converting={aiConverting}
           onDismiss={handleDismissDialectBanner}
         />
       )}

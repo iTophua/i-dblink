@@ -480,6 +480,7 @@
       "lowerSQL": "转小写",
       "sqlFormatted": "SQL 已格式化",
     "dialectConverted": "SQL 已从 {{source}} 转换为 {{target}} 语法",
+    "aiConvertFailed": "AI 转换失败",
       "sqlCommented": "已注释",
       "sqlUncommented": "已取消注释",
       "sqlUppercased": "已转大写",
