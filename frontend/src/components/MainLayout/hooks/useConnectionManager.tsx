@@ -617,7 +617,8 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     [disconnect, selectedConnectionId, setActiveConnection]
   );
 
-  const handleEditConnection = useCallback((connection: Connection) => {
+  const handleEditConnection = useCallback(async (connection: Connection) => {
+    // 先用基础数据打开弹窗（password 暂为空），再异步拉取已存密码回显
     setEditingConnection({
       id: connection.id,
       name: connection.name,
@@ -630,6 +631,16 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
       group_id: connection.group_id,
     });
     setConnectionDialogOpen(true);
+
+    // 异步拉取已存密码，回显到 editingConnection
+    try {
+      const pwd = await api.getConnectionPassword(connection.id);
+      if (pwd) {
+        setEditingConnection((prev) => (prev ? { ...prev, password: pwd } : prev));
+      }
+    } catch (err) {
+      console.error('Failed to load connection password:', err);
+    }
   }, []);
 
   const handleDeleteConnection = useCallback(

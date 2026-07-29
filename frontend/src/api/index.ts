@@ -22,6 +22,7 @@ import {
   GetColumns,
   GetConnectionHistory,
   GetConnections,
+  GetConnectionPassword,
   GetDatabaseDDL,
   GetDatabases,
   GetEvents,
@@ -231,6 +232,11 @@ export const api = {
       ssl_skip_verify: sslConfig?.ssl_skip_verify || false,
     });
     await TestConnection(input);
+  },
+
+  /** 获取连接的已存密码明文（仅编辑时回显用） */
+  async getConnectionPassword(connectionId: string): Promise<string> {
+    return await GetConnectionPassword(connectionId);
   },
 
   async connectConnection(connectionId: string): Promise<void> {

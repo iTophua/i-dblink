@@ -179,6 +179,20 @@ func (a *App) DisconnectDatabase(connectionID string) error {
 	return nil
 }
 
+// GetConnectionPassword 获取连接的已存密码明文（供编辑时回显）。
+// 仅在用户主动编辑某个连接时调用，列表接口 GetConnections 仍不返回密码。
+// 密码以加密形式存储，此处解密后返回明文。
+func (a *App) GetConnectionPassword(connectionID string) (string, error) {
+	_, password, err := a.storage.GetConnectionWithPassword(connectionID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get connection password: %w", err)
+	}
+	if password == nil {
+		return "", nil
+	}
+	return *password, nil
+}
+
 // GetConnections 获取所有连接
 func (a *App) GetConnections() ([]ConnectionOutput, error) {
 	conns, err := a.storage.GetConnections()
