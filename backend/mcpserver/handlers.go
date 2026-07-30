@@ -81,21 +81,79 @@ func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolReq
 	if name == "" || dbType == "" || host == "" {
 		return mcp.NewToolResultError("name, db_type, and host are required"), nil
 	}
+	port := argInt(args, "port", 0)
+	username := argStr(args, "username")
+	database := argStrPtr(args, "database")
+	password := argStr(args, "password")
 
+	// 优先复用：同一服务器+账号（db_type+host+port+username）的连接已存在则复用，
+	// database 仅作优先级参考，不参与身份判定（execute_query 可指定任意库）。
+	existing, err := s.app.GetConnections()
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to check existing connections", err), nil
+	}
+	if hit := findReusableConnection(existing, dbType, host, port, username, database); hit != nil {
+		// 命中：传了新密码则更新（仅改密码，用专用方法避免覆盖现有 SSL/SSH/Name 等字段）
+		if password != "" {
+			if err := s.app.UpdateConnectionPassword(hit.ID, password); err != nil {
+				return mcp.NewToolResultErrorFromErr("failed to update connection password", err), nil
+			}
+		}
+		return mcp.NewToolResultJSON(hit)
+	}
+
+	// 无匹配：正常新建
 	input := backend.ConnectionInput{
 		Name:     name,
 		DbType:   dbType,
 		Host:     host,
-		Port:     argInt(args, "port", 0),
-		Username: argStr(args, "username"),
-		Database: argStrPtr(args, "database"),
+		Port:     port,
+		Username: username,
+		Database: database,
 	}
-	if pwd := argStr(args, "password"); pwd != "" {
-		input.Password = &pwd
+	if password != "" {
+		input.Password = &password
 	}
 
 	conn, err := s.app.SaveConnection(input)
 	return jsonResult(conn, err, "failed to create connection")
+}
+
+// findReusableConnection 查找可复用的已存在连接（同一服务器+账号）。
+// 身份匹配 = db_type + host + port + username（database 不参与身份判定，仅作优先级参考）。
+// 多个匹配时按优先级挑一个：精确库（请求 X 且现有 X）> 通用连接（database=nil）> 其他指定库（兜底）。
+// 返回 nil 表示无任何匹配，调用方应新建。
+func findReusableConnection(
+	conns []backend.ConnectionOutput,
+	dbType, host string,
+	port int,
+	username string,
+	database *string,
+) *backend.ConnectionOutput {
+	var general, anyMatch *backend.ConnectionOutput
+	for i := range conns {
+		c := &conns[i]
+		if c.DbType != dbType || c.Host != host || c.Port != port || c.Username != username {
+			continue
+		}
+		// 精确库命中：立即返回（最高优先级）
+		if database != nil && c.Database != nil && *c.Database == *database {
+			return c
+		}
+		// 通用连接（database=nil）：记为次优
+		if c.Database == nil && general == nil {
+			general = c
+		}
+		// 兜底：任意同服务器+账号匹配即可访问请求的库
+		if anyMatch == nil {
+			anyMatch = c
+		}
+	}
+	// 优先通用连接（最灵活），其次任意兜底
+	if general != nil {
+		return general
+	}
+	return anyMatch
 }
 
 func (s *Server) handleUpdateConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
