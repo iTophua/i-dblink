@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Space, Typography, Divider, Tag, Tooltip } from 'antd';
-import { CheckCircleOutlined, QuestionCircleOutlined, RobotOutlined } from '@ant-design/icons';
+import { Layout, Space, Typography, Divider, Tag } from 'antd';
+import { CheckCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { Connection } from '../../stores/appStore';
-import { useAIStore } from '../../stores/aiStore';
-import { useAIChatStore } from '../../stores/aiChatStore';
 import { api } from '../../api';
 
 type StatusBarProps = {
@@ -33,9 +31,6 @@ export function StatusBar({
   const { t } = useTranslation();
   const { Footer } = Layout;
   const { Text } = Typography;
-
-  const aiReady = useAIStore((s) => s.ready);
-  const setChatPanelVisible = useAIChatStore((s) => s.setPanelVisible);
 
   const [txDuration, setTxDuration] = useState<number>(0);
 
@@ -161,16 +156,6 @@ export function StatusBar({
         {isConnected && serverInfo?.character_set && <Text>{serverInfo.character_set}</Text>}
         {!isConnected && <Text>UTF-8</Text>}
         <Text>v1.0.0</Text>
-        <Tooltip title={t('common.ai')}>
-          <RobotOutlined
-            style={{
-              fontSize: 12,
-              cursor: 'pointer',
-              color: aiReady ? 'var(--color-primary)' : 'var(--text-tertiary)',
-            }}
-            onClick={() => setChatPanelVisible(true)}
-          />
-        </Tooltip>
         <QuestionCircleOutlined style={{ fontSize: 11, cursor: 'help' }} />
       </Space>
     </Footer>

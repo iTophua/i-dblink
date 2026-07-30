@@ -1,5 +1,5 @@
 import React, { type JSX, useCallback, useState } from 'react';
-import { Layout, Button, Dropdown } from 'antd';
+import { Layout, Button, Dropdown, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -19,10 +19,13 @@ import {
   CodeOutlined,
   SyncOutlined,
   KeyOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { KeyboardShortcutsModal } from '../../utils/uxEnhancements';
 import { getShortcutMenuLabel, isMacOS } from '../../constants/menuShortcuts';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useAIStore } from '../../stores/aiStore';
+import { useAIChatStore } from '../../stores/aiChatStore';
 
 type ToolbarStyle = React.CSSProperties;
 
@@ -35,6 +38,8 @@ export function Toolbar(): JSX.Element {
   const { t } = useTranslation();
   const shortcuts = useSettingsStore((s) => s.settings.shortcuts || {});
   const isMac = isMacOS();
+  const aiReady = useAIStore((s) => s.ready);
+  const setChatPanelVisible = useAIChatStore((s) => s.setPanelVisible);
 
   const getLabel = (key: string, text: string) => `${text}${getShortcutMenuLabel(key, shortcuts, isMac)}`;
 
@@ -212,6 +217,23 @@ export function Toolbar(): JSX.Element {
 
   const renderAppButtons = () => (
     <>
+      <Tooltip title={aiReady ? t('common.ai') : t('common.aiPanel.notConfigured')}>
+        <Button
+          type="text"
+          size="small"
+          icon={<RobotOutlined />}
+          onClick={() => setChatPanelVisible(true)}
+          data-testid="toolbar-ai"
+          style={{
+            borderRadius: 6,
+            color: aiReady ? 'var(--color-primary)' : 'var(--text-tertiary)',
+            fontWeight: aiReady ? 500 : 400,
+          }}
+        >
+          {t('common.ai')}
+        </Button>
+      </Tooltip>
+      <div style={dividerStyle} />
       <Button
         type="text"
         size="small"
