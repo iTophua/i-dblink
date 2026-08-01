@@ -868,20 +868,20 @@ export const DataTable = memo(function DataTable({
       {!showFilterPanel && (
         <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-color)', flexShrink: 0, display: 'flex', gap: 12, alignItems: 'center', background: 'var(--background-card)' }}>
           <span style={{ fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{t('common.dataGrid.filter')}</span>
-          <SqlInput value={whereClause} onChange={(val) => setWhereClause(val)} placeholder={t('common.dataGrid.filterPlaceholder')} size="small" style={{ flex: 1, height: 24, fontSize: 12 }}
+          <SqlInput value={whereClause} onChange={(val) => setWhereClause(val)} placeholder={t('common.dataGrid.filterPlaceholder')} size="middle" style={{ flex: 1, height: 28, fontSize: 13 }}
             columns={columns.map((c) => ({ column_name: c.column_name, data_type: c.data_type }))}
             dbType={dbType}
             onPressEnter={() => { setCurrentPage(1); loadData(); }} />
-          <Divider type="vertical" style={{ height: 16, margin: 0, background: 'var(--border-color)' }} />
+          <Divider type="vertical" style={{ height: 18, margin: 0, background: 'var(--border-color)' }} />
           <span style={{ fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{t('common.dataGrid.orderBy')}</span>
-          <SqlInput value={orderByClause} onChange={(val) => setOrderByClause(val)} placeholder={t('common.dataGrid.orderBy') + ' ASC/DESC ...'} size="small" style={{ flex: 1, height: 24, fontSize: 12 }}
+          <SqlInput value={orderByClause} onChange={(val) => setOrderByClause(val)} placeholder={t('common.dataGrid.orderBy') + ' ASC/DESC ...'} size="middle" style={{ flex: 1, height: 28, fontSize: 13 }}
             columns={columns.map((c) => ({ column_name: c.column_name, data_type: c.data_type }))}
             dbType={dbType}
             onPressEnter={() => { setCurrentPage(1); loadData(); }} />
-          <Button size="small" type="primary" onClick={() => { setCurrentPage(1); loadData(); }} style={{ fontSize: 12, height: 24 }}>{t('common.applyFilter')}</Button>
-          <Button size="small" onClick={() => { setWhereClause(''); setOrderByClause(''); setCurrentPage(1); loadData(); }} style={{ fontSize: 12, height: 24 }}>{t('common.clearFilter')}</Button>
-          <Divider type="vertical" style={{ height: 16, margin: '0 4px', background: 'var(--border-color)' }} />
-          <Input size="small" placeholder={t('common.goToRow')} value={goToRowValue} onChange={(e) => setGoToRowValue(e.target.value)} onPressEnter={handleGoToRow} style={{ width: 64, fontSize: 12, textAlign: 'center', padding: '0 4px', height: 24 }} />
+          <Button size="small" type="primary" onClick={() => { setCurrentPage(1); loadData(); }} style={{ fontSize: 12, height: 28 }}>{t('common.applyFilter')}</Button>
+          <Button size="small" onClick={() => { setWhereClause(''); setOrderByClause(''); setCurrentPage(1); loadData(); }} style={{ fontSize: 12, height: 28 }}>{t('common.clearFilter')}</Button>
+          <Divider type="vertical" style={{ height: 18, margin: '0 4px', background: 'var(--border-color)' }} />
+          <Input size="small" placeholder={t('common.goToRow')} value={goToRowValue} onChange={(e) => setGoToRowValue(e.target.value)} onPressEnter={handleGoToRow} style={{ width: 72, fontSize: 12, textAlign: 'center', padding: '0 4px', height: 28 }} />
         </div>
       )}
       {/* ═══ Filter Panel（展开）═══ */}
