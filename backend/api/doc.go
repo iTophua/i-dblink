@@ -25,11 +25,135 @@ type DocOptions struct {
 	IncludeDDL          bool `json:"include_ddl"`
 }
 
+// docText 文档生成文案（支持中英文）
+type docText struct {
+	DBType       string
+	GeneratedAt  string
+	TOC          string
+	Tables       string
+	Views        string
+	Procedures   string
+	Functions    string
+	Triggers     string
+	TableCount   string
+	ViewCount    string
+	ColType      string
+	Engine       string
+	RowCount     string
+	DataSize     string
+	Collation    string
+	ColInfoErr   string
+	ColName      string
+	ColDataType  string
+	Nullable     string
+	DefaultVal   string
+	ColKey       string
+	Comment      string
+	Indexes      string
+	IdxName      string
+	IdxColumns   string
+	Unique       string
+	Primary      string
+	ForeignKeys  string
+	FKConstraint string
+	FKColumn     string
+	FKRefTable   string
+	FKRefColumn  string
+	DDL          string
+	TrigEvent    string
+	TrigTiming   string
+}
+
+var docTextZh = docText{
+	DBType:       "数据库类型",
+	GeneratedAt:  "生成时间",
+	TOC:          "目录",
+	Tables:       "表",
+	Views:        "视图",
+	Procedures:   "存储过程",
+	Functions:    "函数",
+	Triggers:     "触发器",
+	TableCount:   "表数量",
+	ViewCount:    "视图数量",
+	ColType:      "类型",
+	Engine:       "引擎",
+	RowCount:     "行数",
+	DataSize:     "数据大小",
+	Collation:    "排序规则",
+	ColInfoErr:   "获取列信息失败",
+	ColName:      "列名",
+	ColDataType:  "类型",
+	Nullable:     "可空",
+	DefaultVal:   "默认值",
+	ColKey:       "键",
+	Comment:      "注释",
+	Indexes:      "索引",
+	IdxName:      "索引名",
+	IdxColumns:   "列",
+	Unique:       "唯一",
+	Primary:      "主键",
+	ForeignKeys:  "外键",
+	FKConstraint: "约束名",
+	FKColumn:     "列",
+	FKRefTable:   "引用表",
+	FKRefColumn:  "引用列",
+	DDL:          "DDL",
+	TrigEvent:    "事件",
+	TrigTiming:   "时机",
+}
+
+var docTextEn = docText{
+	DBType:       "Database Type",
+	GeneratedAt:  "Generated At",
+	TOC:          "Table of Contents",
+	Tables:       "Tables",
+	Views:        "Views",
+	Procedures:   "Procedures",
+	Functions:    "Functions",
+	Triggers:     "Triggers",
+	TableCount:   "Tables",
+	ViewCount:    "Views",
+	ColType:      "Type",
+	Engine:       "Engine",
+	RowCount:     "Rows",
+	DataSize:     "Data Size",
+	Collation:    "Collation",
+	ColInfoErr:   "Failed to load columns",
+	ColName:      "Column",
+	ColDataType:  "Type",
+	Nullable:     "Nullable",
+	DefaultVal:   "Default",
+	ColKey:       "Key",
+	Comment:      "Comment",
+	Indexes:      "Indexes",
+	IdxName:      "Name",
+	IdxColumns:   "Columns",
+	Unique:       "Unique",
+	Primary:      "Primary",
+	ForeignKeys:  "Foreign Keys",
+	FKConstraint: "Constraint",
+	FKColumn:     "Column",
+	FKRefTable:   "Ref Table",
+	FKRefColumn:  "Ref Column",
+	DDL:          "DDL",
+	TrigEvent:    "Event",
+	TrigTiming:   "Timing",
+}
+
+// getDocText 根据语言选择文案，默认中文
+func getDocText(lang string) docText {
+	if strings.HasPrefix(lang, "en") {
+		return docTextEn
+	}
+	return docTextZh
+}
+
 // GenerateDocRequest 文档生成请求
 type GenerateDocRequest struct {
 	ConnectionID string     `json:"connection_id"`
 	Database     string     `json:"database"`
 	Options      DocOptions `json:"options"`
+	Lang         string     `json:"lang"` // "zh-CN" | "en-US"，默认 "zh-CN"
 }
 
 // GenerateDoc 生成数据库文档
@@ -55,10 +179,11 @@ func (h *Handler) GenerateDoc(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	var md strings.Builder
+	tr := getDocText(req.Lang)
 
 	// ── 标题 ──
 	md.WriteString(fmt.Sprintf("# %s\n\n", req.Database))
-	md.WriteString(fmt.Sprintf("**数据库类型:** %s | **生成时间:** %s\n\n", dbType, time.Now().Format("2006-01-02 15:04:05")))
+	md.WriteString(fmt.Sprintf("**%s:** %s | **%s:** %s\n\n", tr.DBType, dbType, tr.GeneratedAt, time.Now().Format("2006-01-02 15:04:05")))
 
 	// ── 获取表和视图 ──
 	tablesResult, err := getTablesCategorized(ctx, exec, dbType, &req.Database, nil)
@@ -67,53 +192,53 @@ func (h *Handler) GenerateDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ── 目录 ──
-	md.WriteString("## 目录\n\n")
+	// ── 目录（统一英文锚点 id，避免编码问题）──
+	md.WriteString(fmt.Sprintf("## %s\n\n", tr.TOC))
 	if len(tablesResult.Tables) > 0 {
-		md.WriteString("- [表 (Tables)](#表)\n")
+		md.WriteString(fmt.Sprintf("- [%s](#tables)\n", tr.Tables))
 	}
 	if req.Options.IncludeViews && len(tablesResult.Views) > 0 {
-		md.WriteString("- [视图 (Views)](#视图)\n")
+		md.WriteString(fmt.Sprintf("- [%s](#views)\n", tr.Views))
 	}
 	if req.Options.IncludeProcedures {
-		md.WriteString("- [存储过程 (Procedures)](#存储过程)\n")
+		md.WriteString(fmt.Sprintf("- [%s](#procedures)\n", tr.Procedures))
 	}
 	if req.Options.IncludeFunctions {
-		md.WriteString("- [函数 (Functions)](#函数)\n")
+		md.WriteString(fmt.Sprintf("- [%s](#functions)\n", tr.Functions))
 	}
 	if req.Options.IncludeTriggers {
-		md.WriteString("- [触发器 (Triggers)](#触发器)\n")
+		md.WriteString(fmt.Sprintf("- [%s](#triggers)\n", tr.Triggers))
 	}
 	md.WriteString("\n")
 
 	// ── 表统计 ──
-	md.WriteString(fmt.Sprintf("**表数量:** %d | **视图数量:** %d\n\n---\n\n", len(tablesResult.Tables), len(tablesResult.Views)))
+	md.WriteString(fmt.Sprintf("**%s:** %d | **%s:** %d\n\n---\n\n", tr.TableCount, len(tablesResult.Tables), tr.ViewCount, len(tablesResult.Views)))
 
 	// ── 表详情 ──
 	if len(tablesResult.Tables) > 0 {
-		md.WriteString("<a id=\"表\"></a>\n\n## 表 (Tables)\n\n")
-		writeTableDocs(ctx, exec, dbType, &req.Database, tablesResult.Tables, &req.Options, &md)
+		md.WriteString(fmt.Sprintf("<a id=\"tables\"></a>\n\n## %s\n\n", tr.Tables))
+		writeTableDocs(ctx, exec, dbType, &req.Database, tablesResult.Tables, &req.Options, &md, &tr)
 	}
 
 	// ── 视图详情 ──
 	if req.Options.IncludeViews && len(tablesResult.Views) > 0 {
-		md.WriteString("<a id=\"视图\"></a>\n\n## 视图 (Views)\n\n")
-		writeTableDocs(ctx, exec, dbType, &req.Database, tablesResult.Views, &req.Options, &md)
+		md.WriteString(fmt.Sprintf("<a id=\"views\"></a>\n\n## %s\n\n", tr.Views))
+		writeTableDocs(ctx, exec, dbType, &req.Database, tablesResult.Views, &req.Options, &md, &tr)
 	}
 
 	// ── 存储过程 ──
 	if req.Options.IncludeProcedures {
-		writeRoutinesDocs(ctx, exec, dbType, &req.Database, "PROCEDURE", &md)
+		writeRoutinesDocs(ctx, exec, dbType, &req.Database, "PROCEDURE", &md, &tr)
 	}
 
 	// ── 函数 ──
 	if req.Options.IncludeFunctions {
-		writeRoutinesDocs(ctx, exec, dbType, &req.Database, "FUNCTION", &md)
+		writeRoutinesDocs(ctx, exec, dbType, &req.Database, "FUNCTION", &md, &tr)
 	}
 
 	// ── 触发器 ──
 	if req.Options.IncludeTriggers {
-		writeTriggersDocs(ctx, exec, dbType, &req.Database, &md)
+		writeTriggersDocs(ctx, exec, dbType, &req.Database, &md, &tr)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -273,7 +398,7 @@ func getTableDDLForDoc(ctx context.Context, exec db.Executor, dbType string, tab
 }
 
 // writeTableDocs 写入表/视图的文档
-func writeTableDocs(ctx context.Context, exec db.Executor, dbType string, database *string, tables []models.TableInfo, opts *DocOptions, md *strings.Builder) {
+func writeTableDocs(ctx context.Context, exec db.Executor, dbType string, database *string, tables []models.TableInfo, opts *DocOptions, md *strings.Builder, tr *docText) {
 	for _, table := range tables {
 		tableName := table.TableName
 		md.WriteString(fmt.Sprintf("### %s", tableName))
@@ -285,19 +410,19 @@ func writeTableDocs(ctx context.Context, exec db.Executor, dbType string, databa
 		// 表信息
 		infoParts := []string{}
 		if table.TableType != "" {
-			infoParts = append(infoParts, fmt.Sprintf("类型: %s", table.TableType))
+			infoParts = append(infoParts, fmt.Sprintf("%s: %s", tr.ColType, table.TableType))
 		}
 		if table.Engine != nil && *table.Engine != "" {
-			infoParts = append(infoParts, fmt.Sprintf("引擎: %s", *table.Engine))
+			infoParts = append(infoParts, fmt.Sprintf("%s: %s", tr.Engine, *table.Engine))
 		}
 		if table.RowCount != nil && opts.IncludeRowCounts {
-			infoParts = append(infoParts, fmt.Sprintf("行数: %d", *table.RowCount))
+			infoParts = append(infoParts, fmt.Sprintf("%s: %d", tr.RowCount, *table.RowCount))
 		}
 		if table.DataSize != nil && *table.DataSize != "" {
-			infoParts = append(infoParts, fmt.Sprintf("数据大小: %s", *table.DataSize))
+			infoParts = append(infoParts, fmt.Sprintf("%s: %s", tr.DataSize, *table.DataSize))
 		}
 		if table.Collation != nil && *table.Collation != "" {
-			infoParts = append(infoParts, fmt.Sprintf("排序规则: %s", *table.Collation))
+			infoParts = append(infoParts, fmt.Sprintf("%s: %s", tr.Collation, *table.Collation))
 		}
 		if len(infoParts) > 0 {
 			md.WriteString(fmt.Sprintf("> %s\n\n", strings.Join(infoParts, " | ")))
@@ -306,11 +431,12 @@ func writeTableDocs(ctx context.Context, exec db.Executor, dbType string, databa
 		// 列信息
 		columns, err := getColumnsForDoc(ctx, exec, dbType, tableName, database)
 		if err != nil {
-			md.WriteString(fmt.Sprintf("> ⚠️ 获取列信息失败: %v\n\n", err))
+			md.WriteString(fmt.Sprintf("> ⚠️ %s: %v\n\n", tr.ColInfoErr, err))
 			continue
 		}
 
-		md.WriteString("| 列名 | 类型 | 可空 | 默认值 | 键 | 注释 |\n")
+		md.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %s |\n",
+			tr.ColName, tr.ColDataType, tr.Nullable, tr.DefaultVal, tr.ColKey, tr.Comment))
 		md.WriteString("|------|------|------|--------|-----|------|\n")
 		for _, col := range columns {
 			nullable := "NO"
@@ -350,8 +476,8 @@ func writeTableDocs(ctx context.Context, exec db.Executor, dbType string, databa
 				for _, idx := range indexes {
 					idxMap[idx.IndexName] = append(idxMap[idx.IndexName], idx)
 				}
-				md.WriteString("**索引:**\n\n")
-				md.WriteString("| 索引名 | 列 | 唯一 | 主键 |\n")
+				md.WriteString(fmt.Sprintf("**%s:**\n\n", tr.Indexes))
+				md.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n", tr.IdxName, tr.IdxColumns, tr.Unique, tr.Primary))
 				md.WriteString("|--------|-----|------|------|\n")
 				// 排序以保证输出稳定
 				idxNames := make([]string, 0, len(idxMap))
@@ -384,7 +510,7 @@ func writeTableDocs(ctx context.Context, exec db.Executor, dbType string, databa
 		if opts.IncludeDDL {
 			ddl := getTableDDLForDoc(ctx, exec, dbType, tableName, database)
 			if ddl != "" {
-				md.WriteString("**DDL:**\n\n```sql\n")
+				md.WriteString(fmt.Sprintf("**%s:**\n\n```sql\n", tr.DDL))
 				md.WriteString(ddl)
 				md.WriteString("\n```\n\n")
 			}
@@ -394,8 +520,8 @@ func writeTableDocs(ctx context.Context, exec db.Executor, dbType string, databa
 		if opts.IncludeForeignKeys {
 			fks, err := getForeignKeysForDoc(ctx, exec, dbType, tableName, database)
 			if err == nil && len(fks) > 0 {
-				md.WriteString("**外键:**\n\n")
-				md.WriteString("| 约束名 | 列 | 引用表 | 引用列 |\n")
+				md.WriteString(fmt.Sprintf("**%s:**\n\n", tr.ForeignKeys))
+				md.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n", tr.FKConstraint, tr.FKColumn, tr.FKRefTable, tr.FKRefColumn))
 				md.WriteString("|--------|-----|--------|--------|\n")
 				for _, fk := range fks {
 					md.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
@@ -410,17 +536,19 @@ func writeTableDocs(ctx context.Context, exec db.Executor, dbType string, databa
 }
 
 // writeRoutinesDocs 写入存储过程/函数文档
-func writeRoutinesDocs(ctx context.Context, exec db.Executor, dbType string, database *string, routineType string, md *strings.Builder) {
+func writeRoutinesDocs(ctx context.Context, exec db.Executor, dbType string, database *string, routineType string, md *strings.Builder, tr *docText) {
 	routines, err := getRoutinesForDoc(ctx, exec, dbType, database)
 	if err != nil {
 		return
 	}
 
 	var items []models.RoutineInfo
-	sectionTitle := "存储过程 (Procedures)"
+	sectionTitle := tr.Procedures
+	anchorID := "procedures"
 	if routineType == "FUNCTION" {
 		items = routines.Functions
-		sectionTitle = "函数 (Functions)"
+		sectionTitle = tr.Functions
+		anchorID = "functions"
 	} else {
 		items = routines.Procedures
 	}
@@ -429,11 +557,7 @@ func writeRoutinesDocs(ctx context.Context, exec db.Executor, dbType string, dat
 		return
 	}
 
-	id := "存储过程"
-	if routineType == "FUNCTION" {
-		id = "函数"
-	}
-	md.WriteString(fmt.Sprintf("<a id=\"%s\"></a>\n\n## %s\n\n", id, sectionTitle))
+	md.WriteString(fmt.Sprintf("<a id=\"%s\"></a>\n\n## %s\n\n", anchorID, sectionTitle))
 
 	for _, routine := range items {
 		md.WriteString(fmt.Sprintf("### %s", routine.RoutineName))
@@ -457,22 +581,22 @@ func writeRoutinesDocs(ctx context.Context, exec db.Executor, dbType string, dat
 }
 
 // writeTriggersDocs 写入触发器文档
-func writeTriggersDocs(ctx context.Context, exec db.Executor, dbType string, database *string, md *strings.Builder) {
+func writeTriggersDocs(ctx context.Context, exec db.Executor, dbType string, database *string, md *strings.Builder, tr *docText) {
 	// 触发器需要通过 pool 访问，这里用 GetPool 的方式
 	// 由于 doc handler 已经通过 exec 执行，我们用不同方式获取触发器
 	switch dbType {
 	case "mysql", "mariadb":
-		writeTriggersFromQuery(ctx, exec, dbType, database, md)
+		writeTriggersFromQuery(ctx, exec, dbType, database, md, tr)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		writeTriggersFromQuery(ctx, exec, dbType, database, md)
+		writeTriggersFromQuery(ctx, exec, dbType, database, md, tr)
 	case "sqlserver":
-		writeTriggersFromQuery(ctx, exec, dbType, database, md)
+		writeTriggersFromQuery(ctx, exec, dbType, database, md, tr)
 	default:
 		return
 	}
 }
 
-func writeTriggersFromQuery(ctx context.Context, exec db.Executor, dbType string, database *string, md *strings.Builder) {
+func writeTriggersFromQuery(ctx context.Context, exec db.Executor, dbType string, database *string, md *strings.Builder, tr *docText) {
 	var rows [][]interface{}
 
 	switch dbType {
@@ -509,8 +633,8 @@ func writeTriggersFromQuery(ctx context.Context, exec db.Executor, dbType string
 		return
 	}
 
-	md.WriteString("<a id=\"触发器\"></a>\n\n## 触发器 (Triggers)\n\n")
-	md.WriteString("| 名称 | 事件 | 表 | 时机 |\n")
+	md.WriteString(fmt.Sprintf("<a id=\"triggers\"></a>\n\n## %s\n\n", tr.Triggers))
+	md.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n", tr.IdxName, tr.TrigEvent, tr.Tables, tr.TrigTiming))
 	md.WriteString("|------|------|-----|------|\n")
 	for _, row := range rows {
 		if len(row) >= 3 {

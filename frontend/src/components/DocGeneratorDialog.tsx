@@ -34,7 +34,7 @@ const defaultOptions: DocOptions = {
 };
 
 export function DocGeneratorDialog({ open, onClose, connectionId, database }: DocGeneratorDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [options, setOptions] = useState<DocOptions>(defaultOptions);
   const [loading, setLoading] = useState(false);
@@ -50,7 +50,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
   const handleGenerate = useCallback(async () => {
     setLoading(true);
     try {
-      const content = await api.generateDatabaseDoc(connectionId, database, options);
+      const content = await api.generateDatabaseDoc(connectionId, database, options, i18n.language);
       setDocContent(content);
       setCurrentStep(1);
     } catch {
@@ -58,7 +58,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
     } finally {
       setLoading(false);
     }
-  }, [connectionId, database, options, t]);
+  }, [connectionId, database, options, t, i18n.language]);
 
   const handleExport = useCallback(() => {
     const blob = new Blob([docContent], { type: 'text/markdown;charset=utf-8' });

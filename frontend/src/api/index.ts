@@ -1001,10 +1001,11 @@ export const api = {
       include_foreign_keys: boolean;
       include_row_counts: boolean;
       include_ddl: boolean;
-    }
+    },
+    lang: string
   ): Promise<string> {
     const { GenerateDatabaseDoc } = await import('../../wailsjs/go/backend/App');
-    const result = await GenerateDatabaseDoc(connectionId, database, options);
+    const result = await GenerateDatabaseDoc(connectionId, database, options, lang);
     return result as unknown as string;
   },
 
