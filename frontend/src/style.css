@@ -767,9 +767,11 @@ tbody tr:hover {
   min-height: 0 !important;
   display: flex !important;
   flex-direction: column !important;
+  background: transparent !important;
 }
 
 .ant-tabs-tabpane {
+  background: transparent !important;
   height: 100% !important;
   width: 100% !important;
   flex: 1 !important;
