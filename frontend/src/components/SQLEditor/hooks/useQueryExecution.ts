@@ -3,7 +3,6 @@ import { App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../../hooks/useApi';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { extractParams } from '../../../utils/sqlParams';
 import { splitSqlStatements } from '../../../utils/sqlUtils';
 import { getDialect } from '../../../utils/sqlDialects';
 import type { QueryResult, DatabaseType } from '../../../types/api';
@@ -76,8 +75,10 @@ export function useQueryExecution({
   const returnedRowsRef = useRef(0);
 
   // Param dialog state shared with parent
+  // 参数化查询已禁用：paramDialogParams 固定为空，paramDialogOpen/pendingSql
+  // 保留以维持与 ParamDialog 组件的结构兼容（弹窗不再主动打开）。
   const [paramDialogOpen, setParamDialogOpen] = useState(false);
-  const [paramDialogParams, setParamDialogParams] = useState<string[]>([]);
+  const paramDialogParams: string[] = [];
   const [pendingSql, setPendingSql] = useState<string>('');
 
   const handleExecuteQuery = useCallback(async (explicitSql?: string) => {
@@ -110,15 +111,7 @@ export function useQueryExecution({
       return;
     }
 
-    // 查询参数化：检测参数并弹出输入对话框
-    const params = extractParams(sqlToExecute);
-    if (params.length > 0 && !pendingSql) {
-      setParamDialogParams(params);
-      setPendingSql(sqlToExecute);
-      setParamDialogOpen(true);
-      return;
-    }
-
+    // 参数化查询已禁用（extractParams 始终返回 []），相关弹窗逻辑已移除。
     if (pendingSql) {
       sqlToExecute = pendingSql;
       setPendingSql('');

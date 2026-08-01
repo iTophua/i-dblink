@@ -5,10 +5,12 @@ function escapeSqlValue(value: string): string {
     .replace(new RegExp(String.fromCharCode(0), 'g'), '');
 }
 
-export function extractParams(sql: string): string[] {
-  const matches = sql.match(/:(\w+)/g);
-  if (!matches) return [];
-  return [...new Set(matches.map((m) => m.substring(1)))];
+// 参数化查询已禁用：原正则 /:(\w+)/g 会误把字符串字面量里的 :00（如时间
+// '2024-01-10 00:00:00'）识别成命名参数，导致达梦/Oracle 等 INSERT 含时间
+// 字面量的 SQL 时弹窗要求输入"参数 00"。始终返回空数组跳过参数弹窗，SQL 原
+// 样执行。replaceParams 保留，未来若恢复参数化功能需配合更精确的占位符语法。
+export function extractParams(): string[] {
+  return [];
 }
 
 export function replaceParams(sql: string, values: Record<string, string>): string {
