@@ -194,7 +194,7 @@ const TableRow = React.memo(
           <span
             title={t.comment}
             style={{
-              fontSize: 11,
+              fontSize: 12,
               color: t.comment ? 'var(--text-tertiary)' : 'var(--text-disabled)',
               userSelect: 'none',
               WebkitUserSelect: 'none',
@@ -214,7 +214,7 @@ const TableRow = React.memo(
           <div style={{ textAlign: 'right' }}>
             <span
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: 'var(--text-tertiary)',
                 userSelect: 'none',
                 WebkitUserSelect: 'none',
@@ -229,7 +229,7 @@ const TableRow = React.memo(
         <div style={{ textAlign: 'right' }}>
           <span
             style={{
-              fontSize: 11,
+              fontSize: 12,
               color: 'var(--text-tertiary)',
               userSelect: 'none',
               WebkitUserSelect: 'none',
@@ -243,7 +243,7 @@ const TableRow = React.memo(
         <div style={{ textAlign: 'center' }}>
           <span
             style={{
-              fontSize: 10,
+              fontSize: 11,
               color: 'var(--text-secondary)',
               userSelect: 'none',
               WebkitUserSelect: 'none',
@@ -261,7 +261,7 @@ const TableRow = React.memo(
             <span
               title={t.create_time || ''}
               style={{
-                fontSize: 10,
+                fontSize: 11,
                 color: 'var(--text-tertiary)',
                 userSelect: 'none',
                 WebkitUserSelect: 'none',
@@ -280,7 +280,7 @@ const TableRow = React.memo(
             <span
               title={t.update_time || ''}
               style={{
-                fontSize: 10,
+                fontSize: 11,
                 color: 'var(--text-tertiary)',
                 userSelect: 'none',
                 WebkitUserSelect: 'none',
@@ -377,7 +377,7 @@ function ListHeader({
         background: 'var(--header-bg)',
         borderBottom: '1px solid var(--border)',
         fontWeight: 500,
-        fontSize: 11,
+        fontSize: 13,
         color: 'var(--text-tertiary)',
         position: 'sticky',
         top: 0,
