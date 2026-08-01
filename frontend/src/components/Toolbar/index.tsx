@@ -54,7 +54,7 @@ export function Toolbar(): JSX.Element {
   const toolbarStyle: ToolbarStyle = {
     height: 44,
     lineHeight: '44px',
-    background: 'var(--background)',
+    background: 'var(--background-card)',
     borderBottom: '1px solid var(--border-color)',
     padding: '0 14px',
     display: 'flex',
@@ -178,7 +178,7 @@ export function Toolbar(): JSX.Element {
 
   const buttonStyle: React.CSSProperties = {
     fontSize: 12,
-    color: 'var(--text-tertiary)',
+    color: 'var(--text-secondary)',
   };
 
   const renderToolbarButtons = () => (
@@ -208,7 +208,7 @@ export function Toolbar(): JSX.Element {
         icon={<ReloadOutlined />}
         onClick={() => handleMenuAction('refresh')}
         data-testid="toolbar-refresh"
-        style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
+        style={{ borderRadius: 6, color: 'var(--text-secondary)' }}
       >
         {t('common.refreshLabel')}
       </Button>
@@ -238,7 +238,7 @@ export function Toolbar(): JSX.Element {
           icon={<KeyOutlined />}
           onClick={() => setShortcutsModalOpen(true)}
           data-testid="toolbar-shortcuts"
-          style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
+          style={{ borderRadius: 6, color: 'var(--text-secondary)' }}
         />
       </Tooltip>
       <Tooltip title={isDarkMode ? t('common.lightMode') : t('common.darkMode')}>
@@ -248,7 +248,7 @@ export function Toolbar(): JSX.Element {
           icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
           onClick={handleToggleTheme}
           data-testid="toolbar-theme-toggle"
-          style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
+          style={{ borderRadius: 6, color: 'var(--text-secondary)' }}
         />
       </Tooltip>
       <Tooltip title={t('common.options')}>
@@ -258,7 +258,7 @@ export function Toolbar(): JSX.Element {
           icon={<SettingOutlined />}
           onClick={() => handleMenuAction('options')}
           data-testid="toolbar-settings"
-          style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
+          style={{ borderRadius: 6, color: 'var(--text-secondary)' }}
         />
       </Tooltip>
     </>

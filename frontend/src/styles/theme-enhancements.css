@@ -876,7 +876,7 @@
 /* ==================== 工具栏增强效果 ==================== */
 /* Signature：顶部 inset 高光（模拟光源从上方照射）+ 底部微阴影（浮起感） */
 .toolbar-enhanced {
-  background: var(--background) !important;
+  background: var(--background-card) !important;
   border-bottom: 1px solid var(--border-color) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.6),
@@ -884,7 +884,7 @@
 }
 
 [data-theme='dark'] .toolbar-enhanced {
-  background: var(--background) !important;
+  background: var(--background-card) !important;
   border-bottom: 1px solid var(--border-color) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
