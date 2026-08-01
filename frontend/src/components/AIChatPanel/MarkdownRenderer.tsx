@@ -4,7 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 import { Button, Tooltip } from 'antd';
-import { CopyOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { CopyOutlined, CheckCircleOutlined, CodeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 
 interface MarkdownRendererProps {
@@ -166,19 +166,20 @@ function CodeBlock({
           />
         </Tooltip>
         {isSQL && onApplySQL && (
-          <Button
-            size="small"
-            type="text"
-            onClick={() => onApplySQL(code)}
-            style={{
-              color: 'rgba(255,255,255,0.9)',
-              background: 'rgba(0,0,0,0.3)',
-              height: 24,
-              fontSize: 11,
-            }}
-          >
-            {t('common.aiChat.applyToEditor')}
-          </Button>
+          <Tooltip title={t('common.aiChat.applyToEditor')}>
+            <Button
+              size="small"
+              type="text"
+              icon={<CodeOutlined />}
+              onClick={() => onApplySQL(code)}
+              style={{
+                color: 'rgba(255,255,255,0.7)',
+                background: 'rgba(0,0,0,0.3)',
+                minWidth: 24,
+                height: 24,
+              }}
+            />
+          </Tooltip>
         )}
       </div>
     </div>

@@ -217,7 +217,7 @@ export function Toolbar(): JSX.Element {
 
   const renderAppButtons = () => (
     <>
-      <Tooltip title={aiReady ? t('common.ai') : t('common.aiPanel.notConfigured')}>
+      <Tooltip title={aiReady ? t('common.ai') : t('common.aiSettings.notConfigured')}>
         <Button
           type="text"
           size="small"
