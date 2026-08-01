@@ -227,43 +227,40 @@ export function Toolbar(): JSX.Element {
           style={{
             borderRadius: 6,
             color: aiReady ? 'var(--color-primary)' : 'var(--text-tertiary)',
-            fontWeight: aiReady ? 500 : 400,
           }}
-        >
-          {t('common.ai')}
-        </Button>
+        />
       </Tooltip>
       <div style={dividerStyle} />
-      <Button
-        type="text"
-        size="small"
-        icon={<KeyOutlined />}
-        onClick={() => setShortcutsModalOpen(true)}
-        data-testid="toolbar-shortcuts"
-        style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
-      >
-        {t('common.shortcutsTitle')}
-      </Button>
-      <Button
-        type="text"
-        size="small"
-        icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
-        onClick={handleToggleTheme}
-        data-testid="toolbar-theme-toggle"
-        style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
-      >
-        {isDarkMode ? t('common.lightMode') : t('common.darkMode')}
-      </Button>
-      <Button
-        type="text"
-        size="small"
-        icon={<SettingOutlined />}
-        onClick={() => handleMenuAction('options')}
-        data-testid="toolbar-settings"
-        style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
-      >
-        {t('common.options')}
-      </Button>
+      <Tooltip title={t('common.shortcutsTitle')}>
+        <Button
+          type="text"
+          size="small"
+          icon={<KeyOutlined />}
+          onClick={() => setShortcutsModalOpen(true)}
+          data-testid="toolbar-shortcuts"
+          style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
+        />
+      </Tooltip>
+      <Tooltip title={isDarkMode ? t('common.lightMode') : t('common.darkMode')}>
+        <Button
+          type="text"
+          size="small"
+          icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
+          onClick={handleToggleTheme}
+          data-testid="toolbar-theme-toggle"
+          style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
+        />
+      </Tooltip>
+      <Tooltip title={t('common.options')}>
+        <Button
+          type="text"
+          size="small"
+          icon={<SettingOutlined />}
+          onClick={() => handleMenuAction('options')}
+          data-testid="toolbar-settings"
+          style={{ borderRadius: 6, color: 'var(--text-tertiary)' }}
+        />
+      </Tooltip>
     </>
   );
 
