@@ -118,7 +118,7 @@ const TableGridCard = React.memo(
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          padding: '7px 6px',
+          padding: '4px 8px',
           borderRadius: 3,
           userSelect: 'none',
           background: selected ? 'var(--row-selected-bg)' : 'transparent',
