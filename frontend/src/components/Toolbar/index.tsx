@@ -189,7 +189,7 @@ export function Toolbar(): JSX.Element {
         icon={<PlusOutlined />}
         onClick={() => handleMenuAction('new-connection')}
         data-testid="toolbar-new-connection"
-        style={{ borderRadius: 6, boxShadow: `0 2px 8px ${tc.primary}33` }}
+        className="toolbar-btn-primary"
       >
         {t('common.newConnectionBtn')}
       </Button>
@@ -198,7 +198,8 @@ export function Toolbar(): JSX.Element {
         icon={<CodeOutlined />}
         onClick={() => handleMenuAction('new-query')}
         data-testid="toolbar-new-query"
-        style={{ borderRadius: 6 }}
+        className="toolbar-btn"
+        style={{ borderRadius: 6, color: 'var(--color-primary)', borderColor: 'var(--color-primary-alpha-30)' }}
       >
         {t('common.newQueryBtn')}
       </Button>
