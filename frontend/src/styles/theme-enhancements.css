@@ -866,21 +866,15 @@
 }
 
 /* ==================== 工具栏增强效果 ==================== */
-/* Signature：顶部 inset 高光（模拟光源从上方照射）+ 底部微阴影（浮起感） */
 .toolbar-enhanced {
   background: var(--background-card) !important;
   border-bottom: 1px solid var(--border-color) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 [data-theme='dark'] .toolbar-enhanced {
   background: var(--background-card) !important;
   border-bottom: 1px solid var(--border-color) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 1px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .toolbar-btn {
@@ -913,7 +907,7 @@
 /* 主按钮（新建连接）：纯色扁平，干净利落 */
 .toolbar-btn-primary.ant-btn-primary {
   border-radius: 6px !important;
-  font-size: 12px !important;
+  font-size: 13px !important;
   box-shadow: none !important;
 }
 

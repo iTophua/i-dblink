@@ -177,7 +177,7 @@ export function Toolbar(): JSX.Element {
   ];
 
   const buttonStyle: React.CSSProperties = {
-    fontSize: 12,
+    fontSize: 13,
     color: 'var(--text-secondary)',
   };
 
