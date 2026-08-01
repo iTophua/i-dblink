@@ -170,14 +170,14 @@ const TableRow = React.memo(
       table_name: (t) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           {t.table_type === 'VIEW' ? (
-            <EyeOutlined style={{ fontSize: 13, color: 'var(--color-info)', flexShrink: 0 }} />
+            <EyeOutlined style={{ fontSize: 16, color: 'var(--color-info)', flexShrink: 0 }} />
           ) : (
-            <TableOutlined style={{ color: 'var(--color-primary)', flexShrink: 0, fontSize: 13 }} />
+            <TableOutlined style={{ color: 'var(--color-primary)', flexShrink: 0, fontSize: 16 }} />
           )}
           <span
             title={t.table_name}
             style={{
-              fontSize: 13,
+              fontSize: 14,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
