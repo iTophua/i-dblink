@@ -144,8 +144,6 @@
   border-radius: var(--radius-surface, 8px);
   box-shadow: var(--shadow-overlay, 0 16px 48px rgba(0, 0, 0, 0.16));
   padding: 4px 0;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 [data-theme='dark'] .app-context-menu {
@@ -469,10 +467,7 @@
 .ant-dropdown-menu {
   border-radius: 10px !important;
   padding: 6px !important;
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.15),
-    0 4px 12px rgba(0, 0, 0, 0.1) !important;
-  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
   background: var(--background-card);
 }
 
@@ -492,10 +487,8 @@
   background: var(--background-card) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   box-shadow:
-    0 16px 48px rgba(0, 0, 0, 0.5),
-    0 8px 16px rgba(0, 0, 0, 0.3),
+    0 12px 32px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
-  backdrop-filter: blur(20px);
 }
 
 [data-theme='dark'] .ant-dropdown-menu-item {
@@ -517,7 +510,6 @@
   font-size: 12px !important;
   padding: 8px 12px !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
-  backdrop-filter: blur(8px);
 }
 
 /* ==================== 标签页增强效果 ==================== */
@@ -904,6 +896,7 @@
   overflow: hidden;
   transition: all 0.2s ease !important;
   border-radius: 8px !important;
+  color: var(--text-secondary) !important;
 }
 
 .toolbar-btn:hover {
@@ -916,7 +909,7 @@
 }
 
 [data-theme='dark'] .toolbar-btn {
-  color: var(--text-tertiary) !important;
+  color: var(--text-secondary) !important;
   background: transparent !important;
 }
 
@@ -977,7 +970,6 @@
     var(--background-toolbar) 100%
   ) !important;
   border-top: 1px solid var(--border-color-light) !important;
-  backdrop-filter: blur(12px);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.4),
     0 -2px 8px rgba(0, 0, 0, 0.04);
@@ -1063,7 +1055,6 @@
     0 16px 48px rgba(0, 0, 0, 0.5),
     0 8px 24px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(20px);
   padding: 12px 20px !important;
 }
 
@@ -1116,7 +1107,6 @@
     0 16px 64px rgba(0, 0, 0, 0.5),
     0 8px 24px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(20px);
 }
 
 [data-theme='dark'] .ant-notification-notice-message {
