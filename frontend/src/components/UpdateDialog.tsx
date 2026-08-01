@@ -33,7 +33,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
       const result = await api.checkForUpdate();
       setUpdateInfo(result as unknown as UpdateInfo);
     } catch {
-      setError(t('common.update.checkFailed'));
+      setError(t('common.updateDialog.checkFailed'));
     } finally {
       setLoading(false);
     }
@@ -55,7 +55,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
 
   return (
     <Modal
-      title={t('common.update.title')}
+      title={t('common.updateDialog.title')}
       open={open}
       onCancel={onClose}
       width={520}
@@ -67,7 +67,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
           <Button onClick={onClose}>{t('common.close')}</Button>
           {updateInfo?.has_update && (
             <Button type="primary" icon={<LinkOutlined />} onClick={handleDownload}>
-              {t('common.update.download')}
+              {t('common.updateDialog.download')}
             </Button>
           )}
         </Space>
@@ -76,25 +76,25 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
           <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
-          <p style={{ marginTop: 12 }}>{t('common.update.checking')}</p>
+          <p style={{ marginTop: 12 }}>{t('common.updateDialog.checking')}</p>
         </div>
       ) : error ? (
         <div style={{ textAlign: 'center', padding: '20px 0' }}>
           <Text type="danger">{error}</Text>
           <div style={{ marginTop: 16 }}>
-            <Button onClick={checkForUpdate}>{t('common.update.retry')}</Button>
+            <Button onClick={checkForUpdate}>{t('common.updateDialog.retry')}</Button>
           </div>
         </div>
       ) : updateInfo ? (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
             <div>
-              <Text strong>{t('common.update.currentVersion')}:</Text>{' '}
+              <Text strong>{t('common.updateDialog.currentVersion')}:</Text>{' '}
               <Tag>{updateInfo.current_version}</Tag>
             </div>
             <div style={{ fontSize: 18, color: 'var(--ant-color-text-tertiary)' }}>→</div>
             <div>
-              <Text strong>{t('common.update.latestVersion')}:</Text>{' '}
+              <Text strong>{t('common.updateDialog.latestVersion')}:</Text>{' '}
               <Tag color={updateInfo.has_update ? 'green' : 'default'}>
                 {updateInfo.latest_version}
               </Tag>
@@ -115,7 +115,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
                 }}
               >
                 <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
-                <Text>{t('common.update.newVersionAvailable')}</Text>
+                <Text>{t('common.updateDialog.newVersionAvailable')}</Text>
               </div>
 
               {updateInfo.published_at && (
@@ -123,7 +123,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
                   type="secondary"
                   style={{ display: 'block', marginBottom: 8, fontSize: 12 }}
                 >
-                  {t('common.update.publishedAt')}:{' '}
+                  {t('common.updateDialog.publishedAt')}:{' '}
                   {new Date(updateInfo.published_at).toLocaleDateString()}
                 </Text>
               )}
@@ -132,7 +132,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
                 <>
                   <Divider style={{ margin: '12px 0' }} />
                   <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                    {t('common.update.releaseNotes')}:
+                    {t('common.updateDialog.releaseNotes')}:
                   </Text>
                   <Paragraph
                     style={{
@@ -163,7 +163,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
                 style={{ fontSize: 32, color: 'var(--ant-color-success)', marginBottom: 8 }}
               />
               <div>
-                <Text>{t('common.update.alreadyLatest')}</Text>
+                <Text>{t('common.updateDialog.alreadyLatest')}</Text>
               </div>
             </div>
           )}
