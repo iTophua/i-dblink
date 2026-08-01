@@ -33,7 +33,7 @@ export const getMainLayoutStyles = () => ({
   },
   content: {
     flex: 1,
-    background: 'var(--background)',
+    background: 'var(--background-card)',
     margin: 0,
     marginLeft: 0,
     padding: 0,
