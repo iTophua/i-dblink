@@ -940,27 +940,13 @@
 /* ==================== 状态栏增强效果 ==================== */
 /* 渐变背景 + 顶部 inset 高光（与顶部工具栏呼应，形成上下光源统一） */
 .status-bar-enhanced {
-  background: linear-gradient(
-    180deg,
-    var(--background) 0%,
-    var(--background-toolbar) 100%
-  ) !important;
+  background: var(--background-card) !important;
   border-top: 1px solid var(--border-color-light) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 -2px 8px rgba(0, 0, 0, 0.04);
 }
 
 [data-theme='dark'] .status-bar-enhanced {
-  background: linear-gradient(
-    180deg,
-    var(--background-card) 0%,
-    var(--background-toolbar) 100%
-  ) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    0 -2px 12px rgba(0, 0, 0, 0.2);
+  background: var(--background-card) !important;
+  border-top: 1px solid var(--border-color) !important;
 }
 
 /* ==================== 徽标和标签增强效果 ==================== */

@@ -1133,7 +1133,7 @@ export const DataTable = memo(function DataTable({
       {/* ═══ SQL Preview Panel ═══ */}
       {hasChanges && showSqlPanel && (
         <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-card)', flexShrink: 0, maxHeight: 160, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--border-color)', background: 'var(--background-toolbar)' }}>
+          <div style={{ padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--border-color)', background: 'var(--background-card)' }}>
             <CodeOutlined style={{ fontSize: 11, color: 'var(--color-primary)' }} />
             <span style={{ fontSize: 11, fontWeight: 500 }}>{t('common.dataGrid.pendingSql')} ({pendingSqls.length})</span>
             <div style={{ flex: 1 }} />
@@ -1162,7 +1162,7 @@ export const DataTable = memo(function DataTable({
       )}
 
       {/* ═══ Status Bar ═══ */}
-      <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-toolbar)', padding: '1px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, minHeight: 22 }}>
+      <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-card)', padding: '1px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, minHeight: 22 }}>
         <Space size={2}>
           <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.refreshLabel')}</Button>
           {hasChanges && (
@@ -1172,7 +1172,7 @@ export const DataTable = memo(function DataTable({
           )}
         </Space>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
-          <code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontFamily: 'monospace', padding: '2px 6px', background: 'var(--background-toolbar)', borderRadius: 3, border: '1px solid var(--border-color)', maxWidth: 'none' }}>{currentSql}</code>
+          <code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontFamily: 'monospace', padding: '2px 6px', background: 'var(--background-card)', borderRadius: 3, border: '1px solid var(--border-color)', maxWidth: 'none' }}>{currentSql}</code>
           <Tooltip title={t('common.copySql')}>
             <Button icon={<CopyOutlined />} type="text" onClick={copySql} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} />
           </Tooltip>

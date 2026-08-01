@@ -686,7 +686,7 @@ export const SqlInput: React.FC<SqlInputProps> = ({
         autoComplete="off"
         autoCorrect="off"
         spellCheck={false}
-        style={{ height: 20, fontSize: 11, padding: '0 4px' }}
+        style={{ height: style?.height || 20, fontSize: style?.fontSize || 11, padding: '0 4px' }}
         onKeyDown={handleKeyDown}
       />
     </AutoComplete>

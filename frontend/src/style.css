@@ -7,9 +7,9 @@
 /* ==================== CSS 变量定义 ==================== */
 :root {
   /* Fallback values - will be overridden by dynamic theme variables from App.tsx */
-  --color-primary: #1E3A8A;
-  --color-primary-hover: #2563EB;
-  --color-primary-active: #1E40AF;
+  --color-primary: #2563EB;
+  --color-primary-hover: #3B82F6;
+  --color-primary-active: #1D4ED8;
   --color-success: #10B981;
   --color-warning: #F97316;
   --color-error: #EF4444;
@@ -43,9 +43,9 @@
   --border-color-light: var(--border-light, #f1f5f9);
   --border-color-dark: var(--border-dark, #cbd5e1);
 
-  --background: #FFFFFF;
-  --background-card: #FFFFFF;
-  --background-toolbar: #FFFFFF;
+  --background: #F4F5F7;
+  --background-card: #FAFBFC;
+  --background-toolbar: #F0F1F4;
   --background-hover: #F1F5F9;
   --background-active: #EFF6FF;
 

@@ -285,7 +285,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
               onExpand={(keys, info) => treeHandlers.handleExpand(keys, info)}
               onSelect={treeHandlers.handleSelect} treeData={treeData}
               draggable={isDraggable} onDrop={handleDrop}
-              style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 13, userSelect: 'none', height: '100%' }}
+              style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 14, userSelect: 'none', height: '100%' }}
               className="connection-tree" blockNode virtual
             />
           </>

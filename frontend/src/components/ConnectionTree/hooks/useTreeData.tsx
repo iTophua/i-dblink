@@ -245,7 +245,7 @@ export function useTreeData({
                           onClick={() => handlers.onOpenRoutine?.(connId, db.database, proc, 'procedure')}
                         >
                           <CodeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
-                          <span style={{ fontSize: 13 }}>{proc}</span>
+                          <span style={{ fontSize: 14 }}>{proc}</span>
                         </span>
                       </Dropdown>
                     ),
@@ -311,8 +311,8 @@ export function useTreeData({
                           style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
                           onClick={() => handlers.onOpenRoutine?.(connId, db.database, func, 'function')}
                         >
-                          <FunctionOutlined style={{ color: 'var(--color-info)', fontSize: 13 }} />
-                          <span style={{ fontSize: 13 }}>{func}</span>
+                          <FunctionOutlined style={{ color: 'var(--color-info)', fontSize: 14 }} />
+                          <span style={{ fontSize: 14 }}>{func}</span>
                         </span>
                       </Dropdown>
                     ),
@@ -379,7 +379,7 @@ export function useTreeData({
                           onClick={() => handlers.onOpenTrigger?.(connId, db.database, trigger.name)}
                         >
                           <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
-                          <span style={{ fontSize: 13 }}>{trigger.name}</span>
+                          <span style={{ fontSize: 14 }}>{trigger.name}</span>
                         </span>
                       </Dropdown>
                     ),
@@ -442,7 +442,7 @@ export function useTreeData({
                     title: (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <SortAscendingOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-                        <span style={{ fontSize: 13 }}>{seq.sequence_name}</span>
+                        <span style={{ fontSize: 14 }}>{seq.sequence_name}</span>
                       </span>
                     ),
                   }))
@@ -546,7 +546,7 @@ export function useTreeData({
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <TableOutlined style={{ color: 'var(--color-primary)', fontSize: 13 }} />
+                  <TableOutlined style={{ color: 'var(--color-primary)', fontSize: 14 }} />
                   <span>{t('common.tables', { count: items.tables.length })}</span>
                 </span>
               </div>
@@ -579,7 +579,7 @@ export function useTreeData({
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                  <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 13 }} />
+                  <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 14 }} />
                   <span>{t('common.views', { count: items.views.length })}</span>
                 </span>
               </div>
@@ -614,7 +614,7 @@ export function useTreeData({
                 <Dropdown menu={menus.getSchemaMenu(connId, db.database, schemaName)} trigger={['contextMenu']}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
                     <FolderOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>{schemaName}</span>
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>{schemaName}</span>
                   </span>
                 </Dropdown>
               </div>
@@ -668,7 +668,7 @@ export function useTreeData({
               </span>
             ) : (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <TableOutlined style={{ color: 'var(--color-primary)', fontSize: 13 }} />
+                <TableOutlined style={{ color: 'var(--color-primary)', fontSize: 14 }} />
                 <span>{t('common.tables', { count: tableItems.length })}</span>
               </span>
             )}
@@ -738,7 +738,7 @@ export function useTreeData({
               </span>
             ) : (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 13 }} />
+                <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 14 }} />
                 <span>{t('common.views', { count: viewItems.length })}</span>
               </span>
             )}
