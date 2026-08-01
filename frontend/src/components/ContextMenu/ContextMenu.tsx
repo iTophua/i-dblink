@@ -13,25 +13,22 @@ function MenuItem({ item }: { item: MenuItemConfig }) {
   const { icon, label, disabled, danger, onClick } = item;
   return (
     <div
+      className={`ctx-menu-item${disabled ? '' : ' hoverable'}`}
       style={{
         padding: '6px 12px',
         fontSize: 12,
-        cursor: disabled ? 'not-allowed' : 'pointer',
         display: 'flex',
         alignItems: 'center',
         gap: 8,
         color: danger ? 'var(--color-error)' : disabled ? 'var(--text-disabled)' : 'var(--text-primary)',
         opacity: disabled ? 0.5 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
       }}
       onClick={(e) => {
         if (disabled) return;
         e.stopPropagation();
         onClick();
       }}
-      onMouseEnter={(e) => {
-        if (!disabled) e.currentTarget.style.background = 'var(--background-hover)';
-      }}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       {icon}
       {label}
@@ -107,16 +104,12 @@ export function ContextMenu({ items, visible, x, y, onClose }: ContextMenuProps)
   return (
     <div
       ref={menuRef}
+      className="app-context-menu"
       style={{
         position: 'fixed',
         top: finalY,
         left: finalX,
         zIndex: 2000,
-        background: 'var(--background-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 4,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-        padding: '4px 0',
         minWidth: 180,
         maxHeight: 'calc(100vh - 16px)',
         overflowY: 'auto',

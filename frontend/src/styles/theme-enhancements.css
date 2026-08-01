@@ -136,6 +136,28 @@
   background: var(--row-selected-bg);
 }
 
+/* ==================== 统一右键菜单质感 ==================== */
+/* 3 套手写右键菜单（通用 ContextMenu / TabPanel / SQLEditor）统一为一致的浮层质感 */
+.app-context-menu {
+  background: var(--background-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-surface, 8px);
+  box-shadow: var(--shadow-overlay, 0 16px 48px rgba(0, 0, 0, 0.16));
+  padding: 4px 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+[data-theme='dark'] .app-context-menu {
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* 右键菜单内 antd Menu 透明背景融合 */
+.app-context-menu .ant-menu {
+  background: transparent !important;
+  border: none !important;
+}
+
 /* ==================== 按钮增强效果 ==================== */
 .ant-btn-primary {
   position: relative;

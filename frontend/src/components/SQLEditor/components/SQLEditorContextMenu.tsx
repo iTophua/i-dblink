@@ -10,7 +10,6 @@ import {
   SaveOutlined,
   ClearOutlined,
 } from '@ant-design/icons';
-import { useThemeColors } from '../../../hooks/useThemeColors';
 
 export interface SQLEditorContextMenuProps {
   contextMenuRef: React.RefObject<HTMLDivElement | null>;
@@ -46,23 +45,16 @@ export function SQLEditorContextMenu({
   onClose,
 }: SQLEditorContextMenuProps) {
   const { t } = useTranslation();
-  const tc = useThemeColors();
 
   return (
     <div
       ref={contextMenuRef}
+      className="app-context-menu"
       style={{
         position: 'fixed',
         left: contextMenuPos.x,
         top: contextMenuPos.y,
         zIndex: 1000,
-        background: tc.backgroundCard,
-        border: `1px solid ${tc.border}`,
-        borderRadius: 6,
-        boxShadow: tc.isDark
-          ? '0 2px 8px rgba(0,0,0,0.45)'
-          : '0 2px 8px rgba(0,0,0,0.12)',
-        padding: '2px 0',
         minWidth: 160,
         fontSize: 12,
       }}

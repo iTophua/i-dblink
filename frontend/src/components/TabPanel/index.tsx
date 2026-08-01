@@ -1689,16 +1689,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       {contextMenu.visible && (
         <div
           ref={contextMenuRef}
+          className="app-context-menu"
           style={{
             position: 'fixed',
             left: contextMenu.x,
             top: contextMenu.y,
             zIndex: 1000,
-            background: 'var(--background-card)',
-            border: `1px solid var(--border-dark)`,
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            padding: '4px 0',
             minWidth: 150,
           }}
         >
