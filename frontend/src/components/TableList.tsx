@@ -118,7 +118,7 @@ const TableGridCard = React.memo(
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          padding: '5px 6px',
+          padding: '7px 6px',
           borderRadius: 3,
           userSelect: 'none',
           background: selected ? 'var(--row-selected-bg)' : 'transparent',
@@ -126,15 +126,15 @@ const TableGridCard = React.memo(
       >
         {table.table_type === 'VIEW' ? (
           <EyeOutlined
-             style={{ fontSize: 15, color: 'var(--color-info)', flexShrink: 0 }}
+             style={{ fontSize: 16, color: 'var(--color-info)', flexShrink: 0 }}
           />
         ) : (
-          <TableOutlined style={{ fontSize: 15, color: 'var(--color-primary)', flexShrink: 0 }} />
+          <TableOutlined style={{ fontSize: 16, color: 'var(--color-primary)', flexShrink: 0 }} />
         )}
         <span
           title={table.table_name}
           style={{
-            fontSize: 13,
+            fontSize: 14,
             margin: 0,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
