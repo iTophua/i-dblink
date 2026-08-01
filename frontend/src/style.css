@@ -732,6 +732,8 @@ tbody tr:hover {
   padding: 8px 14px;
   height: auto;
   line-height: 1.4;
+  flex: none;
+  width: auto;
 }
 
 .ant-tabs.ant-tabs-editable-card .ant-tabs-tab .anticon {
