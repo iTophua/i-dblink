@@ -748,6 +748,7 @@ tbody tr:hover {
   flex-direction: column !important;
   min-height: 0 !important;
   overflow: hidden !important;
+  background: transparent !important;
 }
 
 .ant-tabs-content-holder {

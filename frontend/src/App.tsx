@@ -218,7 +218,7 @@ function App() {
         darkItemHoverBg: themeConfig.neutralColors.backgroundHover,
       },
       Tabs: {
-        cardBg: themeConfig.neutralColors.backgroundCard,
+        cardBg: 'transparent',
         itemSelectedColor: themeConfig.colors.primary,
         fontSize: 13,
       },
