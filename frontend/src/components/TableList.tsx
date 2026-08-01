@@ -126,15 +126,15 @@ const TableGridCard = React.memo(
       >
         {table.table_type === 'VIEW' ? (
           <EyeOutlined
-             style={{ fontSize: 14, color: 'var(--color-info)', flexShrink: 0 }}
+             style={{ fontSize: 15, color: 'var(--color-info)', flexShrink: 0 }}
           />
         ) : (
-          <TableOutlined style={{ fontSize: 14, color: 'var(--color-primary)', flexShrink: 0 }} />
+          <TableOutlined style={{ fontSize: 15, color: 'var(--color-primary)', flexShrink: 0 }} />
         )}
         <span
           title={table.table_name}
           style={{
-            fontSize: 12,
+            fontSize: 13,
             margin: 0,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -170,14 +170,14 @@ const TableRow = React.memo(
       table_name: (t) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           {t.table_type === 'VIEW' ? (
-            <EyeOutlined style={{ fontSize: 12, color: 'var(--color-info)', flexShrink: 0 }} />
+            <EyeOutlined style={{ fontSize: 13, color: 'var(--color-info)', flexShrink: 0 }} />
           ) : (
-            <TableOutlined style={{ color: 'var(--color-primary)', flexShrink: 0, fontSize: 12 }} />
+            <TableOutlined style={{ color: 'var(--color-primary)', flexShrink: 0, fontSize: 13 }} />
           )}
           <span
             title={t.table_name}
             style={{
-              fontSize: 12,
+              fontSize: 13,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
