@@ -161,7 +161,7 @@
 .data-toolbar {
   padding: 4px 8px;
   border-bottom: 1px solid var(--border-color);
-  background: var(--background-toolbar);
+  background: var(--background-card);
 }
 .data-toolbar-btn {
   height: 24px !important;
@@ -702,11 +702,7 @@
 /* 渐变背景 + 右边缘层次阴影（移除原 2px 主色竖条，改为更克制的边缘表达） */
 .sidebar-enhanced {
   position: relative !important;
-  background: linear-gradient(
-    180deg,
-    var(--background-card) 0%,
-    var(--background-toolbar) 100%
-  ) !important;
+  background: var(--background-card) !important;
   border-right: 1px solid var(--border-color-light) !important;
   box-shadow:
     inset -1px 0 0 var(--border-color),
@@ -714,11 +710,7 @@
 }
 
 [data-theme='dark'] .sidebar-enhanced {
-  background: linear-gradient(
-    180deg,
-    var(--background-card) 0%,
-    var(--background-toolbar) 100%
-  ) !important;
+  background: var(--background-card) !important;
   border-right: 1px solid var(--border-color) !important;
   box-shadow:
     inset -1px 0 0 var(--border-color),

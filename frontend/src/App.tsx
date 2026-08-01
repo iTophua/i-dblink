@@ -221,6 +221,7 @@ function App() {
         cardBg: themeConfig.neutralColors.backgroundCard,
         itemSelectedColor: themeConfig.colors.primary,
         fontSize: 13,
+        horizontalItemPadding: '10px 16px',
       },
       Table: {
         headerBg: themeConfig.neutralColors.backgroundToolbar,

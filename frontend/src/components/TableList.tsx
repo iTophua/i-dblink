@@ -118,7 +118,7 @@ const TableGridCard = React.memo(
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          padding: '3px 6px',
+          padding: '5px 6px',
           borderRadius: 3,
           userSelect: 'none',
           background: selected ? 'var(--row-selected-bg)' : 'transparent',
@@ -301,7 +301,7 @@ const TableRow = React.memo(
         style={{
           display: 'grid',
           gridTemplateColumns: columns.map((c) => c.width).join(' '),
-          padding: '4px 12px',
+          padding: '6px 12px',
           alignItems: 'center',
           userSelect: 'none',
           borderBottom: '1px solid var(--border)',
