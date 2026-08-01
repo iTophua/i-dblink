@@ -158,6 +158,38 @@
   border: none !important;
 }
 
+/* ==================== DataTable 工具栏统一 ==================== */
+/* 数据表格工具栏按钮统一高度/字号/圆角，替代 ~12 处重复的内联样式 */
+.data-toolbar {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--background-toolbar);
+}
+.data-toolbar-btn {
+  height: 24px !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+  border-radius: var(--radius-control, 6px) !important;
+}
+.data-toolbar-btn.ant-btn-icon-only {
+  padding: 0 6px !important;
+}
+/* 工具栏信息标签：最小可读字号 */
+.data-toolbar-tag {
+  margin: 0 !important;
+  height: 20px !important;
+  line-height: '18px';
+  font-size: 11px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+/* 工具栏快速筛选输入框 */
+.data-toolbar-input {
+  height: 24px !important;
+  font-size: 12px !important;
+  border-radius: var(--radius-control, 6px) !important;
+}
+
 /* ==================== 按钮增强效果 ==================== */
 .ant-btn-primary {
   position: relative;

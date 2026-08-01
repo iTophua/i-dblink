@@ -815,29 +815,29 @@ export const DataTable = memo(function DataTable({
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--background-card)' }}>
       {/* ═══ Toolbar ═══ */}
-      <div style={{ padding: '1px 4px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--background-toolbar)', flexShrink: 0, minHeight: 22 }}>
-        <Space size={2} split={<Divider type="vertical" style={{ height: 14, margin: '0 4px', background: 'var(--border-color)' }} />}>
-          <Button icon={<PlusOutlined />} onClick={handleAddRow} type="primary" size="small" style={{ height: 20, padding: '0 6px', fontSize: 11 }}>{t('common.addRowLabel')}</Button>
-          <Button icon={<DeleteOutlined />} onClick={handleDeleteRows} disabled={selectedRows.length === 0} danger size="small" style={{ height: 20, padding: '0 6px', fontSize: 11 }}>{t('common.delete')}</Button>
+      <div className="data-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, minHeight: 28 }}>
+        <Space size={4} split={<Divider type="vertical" style={{ height: 14, margin: '0 4px', background: 'var(--border-color)' }} />}>
+          <Button icon={<PlusOutlined />} onClick={handleAddRow} type="primary" size="small" className="data-toolbar-btn">{t('common.addRowLabel')}</Button>
+          <Button icon={<DeleteOutlined />} onClick={handleDeleteRows} disabled={selectedRows.length === 0} danger size="small" className="data-toolbar-btn">{t('common.delete')}</Button>
           {hasChanges && (
             <>
-              <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} loading={loading} style={{ height: 20, padding: '0 6px', fontSize: 11 }}>
+              <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} loading={loading} className="data-toolbar-btn">
                 {t('common.submit')} ({pendingSqls.length})
               </Button>
               <Tooltip title={t('common.dataGrid.undoStep')}>
-                <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} disabled={!hasEditHistory} style={{ height: 20, padding: '0 6px', fontSize: 11 }}>
+                <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} disabled={!hasEditHistory} className="data-toolbar-btn">
                   {t('common.undo')}
                 </Button>
               </Tooltip>
               <Tooltip title={t('common.dataGrid.undoAllTip')}>
-                <Button size="small" danger icon={<CloseOutlined />} onClick={handleUndoAll} style={{ height: 20, padding: '0 6px', fontSize: 11 }}>
+                <Button size="small" danger icon={<CloseOutlined />} onClick={handleUndoAll} className="data-toolbar-btn">
                   {t('common.undoAll')}
                 </Button>
               </Tooltip>
             </>
           )}
-          <Tooltip title={t('common.refreshLabel')}><Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} /></Tooltip>
-          <Tooltip title={t('common.dataGrid.filter')}><Button icon={<FilterOutlined />} onClick={() => setShowFilterPanel(!showFilterPanel)} type={showFilterPanel || whereClause ? 'primary' : 'default'} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} /></Tooltip>
+          <Tooltip title={t('common.refreshLabel')}><Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} size="small" className="data-toolbar-btn" /></Tooltip>
+          <Tooltip title={t('common.dataGrid.filter')}><Button icon={<FilterOutlined />} onClick={() => setShowFilterPanel(!showFilterPanel)} type={showFilterPanel || whereClause ? 'primary' : 'default'} size="small" className="data-toolbar-btn" /></Tooltip>
           <Popover content={
             <Space direction="vertical" size={2} style={{ maxHeight: 200, overflow: 'auto' }}>
               {columns.map((col) => (
@@ -847,20 +847,20 @@ export const DataTable = memo(function DataTable({
               ))}
             </Space>
           } trigger="click" open={showColVisibility} onOpenChange={setShowColVisibility}>
-            <Tooltip title={t('common.columnVisibility')}><Button icon={<EyeInvisibleOutlined />} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} /></Tooltip>
+            <Tooltip title={t('common.columnVisibility')}><Button icon={<EyeInvisibleOutlined />} size="small" className="data-toolbar-btn" /></Tooltip>
           </Popover>
           <Dropdown menu={{ items: [
             { key: 'csv', label: t('common.exportCsv'), onClick: handleExportCsv },
             { key: 'xlsx', label: t('common.exportExcel'), onClick: handleExportExcel },
           ]}}>
-            <Button icon={<DownloadOutlined />} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.export')}</Button>
+            <Button icon={<DownloadOutlined />} size="small" className="data-toolbar-btn">{t('common.export')}</Button>
           </Dropdown>
         </Space>
-        <Space size={2}>
-          <Input prefix={<SearchOutlined style={{ fontSize: 10, color: 'var(--text-tertiary)' }} />} value={quickFilter} onChange={(e) => setQuickFilter(e.target.value)} placeholder={t('common.search')} size="small" style={{ width: 160, height: 18, fontSize: 10 }} />
-          <Tag style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16, background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{tableName}</Tag>
-          <Tag color="green" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>{totalCount.toLocaleString()} {t('common.rows')}</Tag>
-          {selectedRows.length > 0 && <Tag color="orange" style={{ margin: 0, lineHeight: '14px', fontSize: 10, height: 16 }}>{selectedRows.length} {t('common.rows')}</Tag>}
+        <Space size={4}>
+          <Input prefix={<SearchOutlined style={{ fontSize: 12, color: 'var(--text-tertiary)' }} />} value={quickFilter} onChange={(e) => setQuickFilter(e.target.value)} placeholder={t('common.search')} size="small" className="data-toolbar-input" style={{ width: 160 }} />
+          <Tag className="data-toolbar-tag" style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{tableName}</Tag>
+          <Tag color="green" className="data-toolbar-tag">{totalCount.toLocaleString()} {t('common.rows')}</Tag>
+          {selectedRows.length > 0 && <Tag color="orange" className="data-toolbar-tag">{selectedRows.length} {t('common.rows')}</Tag>}
         </Space>
       </div>
 
