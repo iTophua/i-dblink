@@ -210,13 +210,7 @@ function MainLayoutComponent() {
             <div
               onClick={() => layout.setCollapsed(!layout.collapsed)}
               style={layout.styles.collapseButton}
-              className="collapse-button"
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--background-hover)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--background-card)';
-              }}
+              className="collapse-button hoverable"
             >
               <span style={layout.styles.collapseButtonText}>
                 {layout.collapsed ? t('common.expand') : t('common.collapse')}

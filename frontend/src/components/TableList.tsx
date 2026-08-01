@@ -113,26 +113,15 @@ const TableGridCard = React.memo(
       <div
         data-table-name={table.table_name}
         onClick={onClick}
+        className={`hoverable${selected ? ' is-selected' : ''}`}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 6,
           padding: '3px 6px',
-          cursor: 'pointer',
           borderRadius: 3,
           userSelect: 'none',
           background: selected ? 'var(--row-selected-bg)' : 'transparent',
-          transition: 'background 0.2s',
-        }}
-        onMouseEnter={(e) => {
-          if (!selected) {
-            e.currentTarget.style.background = 'var(--background-hover)';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!selected) {
-            e.currentTarget.style.background = 'transparent';
-          }
         }}
       >
         {table.table_type === 'VIEW' ? (
@@ -308,26 +297,15 @@ const TableRow = React.memo(
       <div
         data-table-name={table.table_name}
         onClick={onClick}
+        className={`hoverable${selected ? ' is-selected' : ''}`}
         style={{
           display: 'grid',
           gridTemplateColumns: columns.map((c) => c.width).join(' '),
           padding: '4px 12px',
           alignItems: 'center',
-          cursor: 'pointer',
           userSelect: 'none',
           borderBottom: '1px solid var(--border)',
           background: selected ? 'var(--row-selected-bg)' : 'transparent',
-          transition: 'background 0.2s',
-        }}
-        onMouseEnter={(e) => {
-          if (!selected) {
-            e.currentTarget.style.background = 'var(--background-hover)';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!selected) {
-            e.currentTarget.style.background = 'transparent';
-          }
         }}
       >
         {columns.map((col) => {

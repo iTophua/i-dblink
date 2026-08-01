@@ -718,6 +718,7 @@ export function SQLEditor({
       {hasResult && (
         <div
           onMouseDown={handleResizeStart}
+          className="resize-handle"
           style={{
             flex: '0 0 4px',
             background: 'var(--border)',
@@ -725,14 +726,7 @@ export function SQLEditor({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'background 0.2s',
             userSelect: 'none',
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLDivElement).style.background = 'var(--color-primary)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLDivElement).style.background = 'var(--border)';
           }}
         >
           <div

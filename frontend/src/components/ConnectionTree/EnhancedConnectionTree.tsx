@@ -260,10 +260,9 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, padding: '0 4px 2px' }}>
                 <Tooltip title={t('common.mainLayout.refreshConnections')}>
                   <span
+                    className="hoverable hoverable-primary"
                     onClick={(e) => { e.stopPropagation(); onRefreshConnections?.(); }}
-                    style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4, transition: 'all 0.2s' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--background-hover)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}
+                    style={{ display: 'inline-flex', alignItems: 'center', fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4 }}
                   >
                     <ReloadOutlined style={{ fontSize: 11 }} />
                   </span>
@@ -271,10 +270,9 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
                 {connections.length > 1 && (
                   <Tooltip title={t('common.batchManage.title')}>
                     <span
+                      className="hoverable hoverable-primary"
                       onClick={(e) => { e.stopPropagation(); onBatchManage?.(); }}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4, transition: 'all 0.2s' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--background-hover)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4 }}
                     >
                       <AppstoreOutlined style={{ fontSize: 11 }} />
                     </span>

@@ -186,18 +186,11 @@ export function HistoryPanel({
               return (
                 <List.Item
                   onClick={() => onSelect(item.sql)}
+                  className="hoverable"
                   style={{
                     padding: '10px 16px',
-                    cursor: 'pointer',
-                    transition: 'background 0.2s',
                     borderBottom: `1px solid var(--border)`,
                     borderLeft: `3px solid ${item.success ? 'var(--color-success)' : 'var(--color-error)'}`,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--row-hover-bg)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
                   }}
                 >
                   <List.Item.Meta
