@@ -1600,7 +1600,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           minHeight: 0,
         }}
         tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
-        tabBarGutter={2}
+        tabBarGutter={4}
         items={primaryTabItems}
         onEdit={handleTabEdit}
         renderTabBar={renderDraggableTabBar}
@@ -1629,7 +1629,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             minHeight: 0,
           }}
           tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
-          tabBarGutter={2}
+          tabBarGutter={4}
           items={secondaryTabItems}
           onEdit={handleSecondaryPaneEdit}
           renderTabBar={renderDraggableTabBar}

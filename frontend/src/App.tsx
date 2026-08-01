@@ -220,7 +220,7 @@ function App() {
       Tabs: {
         cardBg: themeConfig.neutralColors.backgroundCard,
         itemSelectedColor: themeConfig.colors.primary,
-        fontSize: 13,
+        fontSize: 14,
         horizontalItemPadding: '12px 16px',
       },
       Table: {
