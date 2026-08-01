@@ -836,7 +836,7 @@ function TableListComponent({
           flexShrink: 0,
           borderBottom: '1px solid var(--border)',
           padding: '8px 12px',
-          background: 'var(--background-toolbar)',
+          background: 'var(--background-card)',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
