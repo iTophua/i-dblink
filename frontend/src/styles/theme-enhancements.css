@@ -910,37 +910,27 @@
   color: var(--text-primary) !important;
 }
 
-/* 主按钮（新建连接）：渐变光泽 + inset 高光，复用已定义的 --color-primary-gradient */
+/* 主按钮（新建连接）：纯色扁平，干净利落 */
 .toolbar-btn-primary.ant-btn-primary {
-  transition: all 0.2s ease !important;
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   font-size: 12px !important;
-  background: var(--color-primary-gradient, var(--color-primary)) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 2px 8px var(--color-primary-alpha-30) !important;
+  box-shadow: none !important;
 }
 
 .toolbar-btn-primary.ant-btn-primary:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    0 4px 14px var(--color-primary-alpha-30) !important;
+  transform: none;
+  box-shadow: none !important;
 }
 
 .toolbar-btn-primary.ant-btn-primary:active {
-  transform: translateY(0) !important;
   filter: brightness(0.96) !important;
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.12),
-    0 1px 4px var(--color-primary-alpha-30) !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 [data-theme='dark'] .toolbar-btn-primary.ant-btn-primary:hover {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 4px 14px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: none !important;
 }
 
 /* ==================== SQL 编辑器工具栏增强 ==================== */
