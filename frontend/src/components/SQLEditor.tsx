@@ -36,6 +36,7 @@ import { SQLEditorToolbar } from './SQLEditor/components/SQLEditorToolbar';
 import { SQLEditorContextMenu } from './SQLEditor/components/SQLEditorContextMenu';
 import { getErrorMessage } from '../utils/getErrorMessage';
 import type { RecentDatabaseEntry } from '../stores/workspaceStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface QueryResultWithTiming {
   executionTime?: number;
@@ -95,6 +96,10 @@ export function SQLEditor({
   const handleExecuteQueryRef = useRef<(explicitSql?: string) => void>(() => {});
   // Ref to link formatSQL to Monaco shortcuts
   const formatSQLRef = useRef<() => void>(() => {});
+  // 格式化前的原文快照（用于"还原"）+ 标记是否已格式化
+  const rawSqlBeforeFormatRef = useRef<string | null>(null);
+  const isFormattingRef = useRef(false); // 标记当前 setSql 由 formatSQL 触发（避免误清 isFormatted）
+  const [isFormatted, setIsFormatted] = useState(false);
 
   // 当 defaultQuery prop 变化时更新 SQL 内容（用于从外部打开带预设 SQL 的 Tab）
   // 使用 ref 避免初始渲染时的同步 setState
@@ -110,6 +115,9 @@ export function SQLEditor({
 
   // Editor resizer
   const { editorRatio, containerRef, handleResizeStart } = useEditorResizer();
+
+  // SQL 编辑器自动换行设置（默认关闭）
+  const editorWordWrap = useSettingsStore((s) => s.settings.editorWordWrap);
 
   // Monaco editor (must be initialized before useQueryExecution since it provides highlightError/clearErrorMarkers)
   const {
@@ -132,6 +140,7 @@ export function SQLEditor({
     setContextMenuPos,
     contextMenuSelectedSqlRef,
     contextMenuMeasuredRef,
+    editorWordWrap,
   });
 
   // Query execution
@@ -255,9 +264,18 @@ export function SQLEditor({
     return () => window.removeEventListener('ai-sql-inject', handler);
   }, []);
 
-  // Format SQL
+  // Format SQL / 还原（互切）
   const formatSQL = useCallback(() => {
     if (!editorRef.current) return;
+    // 已格式化 → 还原原文
+    if (isFormatted && rawSqlBeforeFormatRef.current !== null) {
+      isFormattingRef.current = true;
+      setSql(rawSqlBeforeFormatRef.current);
+      rawSqlBeforeFormatRef.current = null;
+      setIsFormatted(false);
+      message.success(t('common.sqlEditor.sqlRestored'));
+      return;
+    }
     const dialectMap: Record<string, string> = {
       mysql: 'mysql',
       mariadb: 'mariadb',
@@ -277,12 +295,15 @@ export function SQLEditor({
         indentStyle: 'standard',
         linesBetweenQueries: 2,
       });
+      rawSqlBeforeFormatRef.current = sql; // 快照原文供还原
+      isFormattingRef.current = true;
       setSql(formatted);
+      setIsFormatted(true);
       message.success(t('common.sqlEditor.sqlFormatted'));
     } catch (e: unknown) {
       message.error(`${t('common.formattingFailed')}: ${getErrorMessage(e)}`);
     }
-  }, [sql, dbType]);
+  }, [sql, dbType, isFormatted]);
 
   // 同步 formatSQL 到 ref，供 Monaco 快捷键调用
   useEffect(() => {
@@ -587,6 +608,7 @@ export function SQLEditor({
         showExplainPlan={showExplainPlan}
         execElapsed={execElapsed}
         formatSQL={formatSQL}
+        isFormatted={isFormatted}
         editorRef={editorRef}
         transactionActive={transactionActive}
         handleBeginTransaction={handleBeginTransaction}
@@ -635,7 +657,16 @@ export function SQLEditor({
           language="sql"
           theme={tc.isDark ? 'vs-dark' : 'vs-light'}
           value={sql}
-          onChange={(value) => setSql(value || '')}
+          onChange={(value) => {
+            // formatSQL 触发的变更不清除 isFormatted；手动编辑则清除（快照失效）
+            if (isFormattingRef.current) {
+              isFormattingRef.current = false;
+            } else if (isFormatted) {
+              setIsFormatted(false);
+              rawSqlBeforeFormatRef.current = null;
+            }
+            setSql(value || '');
+          }}
           onMount={handleEditorMount}
           options={{
             minimap: { enabled: false },
@@ -645,7 +676,7 @@ export function SQLEditor({
             scrollBeyondLastLine: false,
             automaticLayout: true,
             tabSize: 2,
-            wordWrap: 'on',
+            wordWrap: editorWordWrap ? 'on' : 'off',
             folding: true,
             foldingStrategy: 'auto',
             showFoldingControls: 'mouseover',

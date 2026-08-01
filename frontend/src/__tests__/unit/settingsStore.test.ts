@@ -10,6 +10,7 @@ const defaultSettings: AppSettings = {
   language: 'zh-CN',
   shortcuts: {},
   liveTemplatesEnabled: true,
+  editorWordWrap: false,
 };
 
 describe('settingsStore', () => {

@@ -13,6 +13,7 @@ import {
   SaveOutlined,
   ClearOutlined,
   FormatPainterOutlined,
+  UndoOutlined,
   StopOutlined,
   LineChartOutlined,
   CopyOutlined,
@@ -46,6 +47,7 @@ export interface SQLEditorToolbarProps {
 
   // Format
   formatSQL: () => void;
+  isFormatted: boolean; // 是否已格式化（用于切换"格式化/还原"）
   editorRef: React.MutableRefObject<any>;
 
   // Transaction
@@ -82,6 +84,7 @@ export function SQLEditorToolbar({
   showExplainPlan,
   execElapsed,
   formatSQL,
+  isFormatted,
   editorRef,
   transactionActive,
   handleBeginTransaction,
@@ -187,11 +190,11 @@ export function SQLEditorToolbar({
         />
 
         <Button
-          icon={<FormatPainterOutlined />}
+          icon={isFormatted ? <UndoOutlined /> : <FormatPainterOutlined />}
           onClick={formatSQL}
           size="small"
         >
-          {t('common.formatButton')}
+          {isFormatted ? t('common.unformatButton') : t('common.formatButton')}
         </Button>
 
         <Tooltip title={t('common.ai')}>

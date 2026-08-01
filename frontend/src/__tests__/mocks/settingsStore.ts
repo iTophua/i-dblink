@@ -19,6 +19,7 @@ export interface AppSettings {
   settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor';
   shortcuts: Record<string, string>;
   liveTemplatesEnabled: boolean;
+  editorWordWrap: boolean;
 }
 
 interface SettingsState {
@@ -35,6 +36,7 @@ const defaultSettings: AppSettings = {
   language: 'zh-CN',
   shortcuts: {},
   liveTemplatesEnabled: true,
+  editorWordWrap: false,
 };
 
 const VERSION = 1;

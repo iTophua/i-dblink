@@ -514,6 +514,7 @@ function EditorSettings() {
   const { t } = useTranslation();
 
   const liveTemplatesEnabled = settings.liveTemplatesEnabled !== false;
+  const editorWordWrap = settings.editorWordWrap === true;
 
   // Group templates by category
   const grouped = SQL_LIVE_TEMPLATES.reduce<Record<string, typeof SQL_LIVE_TEMPLATES>>((acc, tpl) => {
@@ -524,6 +525,23 @@ function EditorSettings() {
 
   return (
     <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+              {t('common.editorSettings.wordWrap')}
+            </div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+              {t('common.editorSettings.wordWrapDesc')}
+            </div>
+          </div>
+          <Switch
+            checked={editorWordWrap}
+            onChange={(checked) => updateSettings({ editorWordWrap: checked })}
+          />
+        </div>
+      </div>
+
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>

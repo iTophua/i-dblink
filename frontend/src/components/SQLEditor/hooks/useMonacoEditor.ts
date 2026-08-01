@@ -28,13 +28,15 @@ export interface UseMonacoEditorParams {
   handleExecuteQueryRef: React.MutableRefObject<(explicitSql?: string) => void>;
   // Ref to the latest formatSQL function
   formatSQLRef: React.MutableRefObject<() => void>;
-  // Container ref for resize observer
-  containerRef: React.RefObject<HTMLDivElement | null>;
+  // Container ref（曾用于 resize observer，现已改用 Monaco 内置 automaticLayout，保留接口字段向后兼容）
+  containerRef?: React.RefObject<HTMLDivElement | null>;
   // Context menu state setters (managed here since used only in editor mount)
   setContextMenuVisible: (v: boolean) => void;
   setContextMenuPos: (pos: { x: number; y: number }) => void;
   contextMenuSelectedSqlRef: React.MutableRefObject<string>;
   contextMenuMeasuredRef: React.MutableRefObject<boolean>;
+  // SQL 编辑器自动换行（默认关闭）
+  editorWordWrap: boolean;
 }
 
 export function useMonacoEditor({
@@ -46,11 +48,11 @@ export function useMonacoEditor({
   setSql,
   handleExecuteQueryRef,
   formatSQLRef,
-  containerRef,
   setContextMenuVisible,
   setContextMenuPos,
   contextMenuSelectedSqlRef,
   contextMenuMeasuredRef,
+  editorWordWrap,
 }: UseMonacoEditorParams) {
   const { t } = useTranslation();
   const tc = useThemeColors();
@@ -74,7 +76,6 @@ export function useMonacoEditor({
     lastSchemaKey: string;
   } | null>(null);
   const dbTypeRef = useRef<DatabaseType | undefined>(dbType);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const cleanupDisposablesRef = useRef<any[]>([]);
   const idleCallbackIdsRef = useRef<Set<number>>(new Set());
   const editorDebounceTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
@@ -86,6 +87,11 @@ export function useMonacoEditor({
   useEffect(() => {
     dbTypeRef.current = dbType;
   }, [dbType]);
+
+  // 响应式切换自动换行（运行时修改设置后即时生效）
+  useEffect(() => {
+    editorRef.current?.updateOptions({ wordWrap: editorWordWrap ? 'on' : 'off' });
+  }, [editorWordWrap]);
 
   // 响应式切换 Monaco Editor 主题
   useEffect(() => {
@@ -372,7 +378,7 @@ export function useMonacoEditor({
       minimap: { enabled: false }, // 禁用小地图减少内存
       scrollBeyondLastLine: false,
       automaticLayout: true,
-      wordWrap: 'on',
+      wordWrap: editorWordWrap ? 'on' : 'off',
       lineNumbers: 'on',
       renderLineHighlight: 'all',
       selectOnLineNumbers: true,
@@ -781,24 +787,9 @@ export function useMonacoEditor({
       editorDebounceTimersRef.current.add(selectionChangeTimeout);
     });
 
-    // 监听窗口大小变化（使用防抖）
-    let resizeTimeout: ReturnType<typeof setTimeout> | undefined;
-    const handleResize = () => {
-      if (resizeTimeout) clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        if (containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect();
-          editor.layout({ width: rect.width, height: rect.height });
-        }
-      }, 100);
-      editorDebounceTimersRef.current.add(resizeTimeout);
-    };
-
-    resizeObserverRef.current = new ResizeObserver(handleResize);
-    resizeObserverRef.current.observe(containerRef.current!);
-
-    // 初始布局
-    handleResize();
+    // 布局：依赖 Monaco 内置 automaticLayout（测量编辑器自身 DOM，准确无延迟）。
+    // 曾用自定义 ResizeObserver + 防抖 editor.layout()，但因观察的是外层容器
+    // （含工具栏 ~30px），导致编辑器视口偏大、底部被 overflow:hidden 裁剪。
 
     // 保存清理函数
     cleanupDisposablesRef.current = [disposable, cursorDisposable, selectionDisposable];
@@ -863,12 +854,6 @@ export function useMonacoEditor({
       if (completionTimerRef.current) {
         clearTimeout(completionTimerRef.current);
         completionTimerRef.current = null;
-      }
-      
-      // 清理事件监听器
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
       }
     };
   }, []);

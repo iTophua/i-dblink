@@ -21,6 +21,7 @@ export interface AppSettings {
   settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor' | 'ai' | 'mcp';
   shortcuts: Record<string, string>; // id -> keys
   liveTemplatesEnabled: boolean;
+  editorWordWrap: boolean; // SQL 编辑器自动换行，默认关闭
 }
 
 interface SettingsState {
@@ -37,6 +38,7 @@ const defaultSettings: AppSettings = {
   language: 'zh-CN',
   shortcuts: {},
   liveTemplatesEnabled: true,
+  editorWordWrap: false,
 };
 
 const VERSION = 1;

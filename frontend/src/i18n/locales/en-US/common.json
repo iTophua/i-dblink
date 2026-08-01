@@ -463,6 +463,7 @@
       "upperSQL": "Uppercase",
       "lowerSQL": "Lowercase",
       "sqlFormatted": "SQL formatted",
+      "sqlRestored": "SQL restored",
     "dialectConverted": "SQL converted from {{source}} to {{target}} dialect",
     "aiConvertFailed": "AI conversion failed",
       "sqlCommented": "Commented",
@@ -1128,6 +1129,7 @@
     "executeSelected": "Execute Selected",
     "stopButton": "Stop",
     "formatButton": "Format",
+    "unformatButton": "Unformat",
     "explainPlanButton": "Explain Plan",
     "beginTransaction": "Begin Transaction",
     "commitTransaction": "Commit",
@@ -1935,6 +1937,10 @@
     "recentDatabases": "Recent",
     "allDatabases": "All Databases",
     "recentDatabasesEmpty": "No recent databases",
+    "editorSettings": {
+      "wordWrap": "Auto Word Wrap",
+      "wordWrapDesc": "Wrap long lines in SQL editor (off by default)"
+    },
     "liveTemplates": {
       "title": "Live Templates",
       "description": "Type a short trigger and press Tab to expand into a SQL template with editable placeholders.",
