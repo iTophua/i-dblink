@@ -6,7 +6,7 @@
  */
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
-  Modal, Spin, Empty, Button, Space, message, Tag, Select,
+  Modal, Button, Space, message, Tag, Select,
   Tooltip, Input, Divider, DatePicker, Checkbox, Popover, Dropdown, AutoComplete,
 } from 'antd';
 import {
@@ -14,7 +14,7 @@ import {
   FilterOutlined, CopyOutlined,
   EyeInvisibleOutlined, SearchOutlined,
   ReloadOutlined, SaveOutlined, UndoOutlined,
-  CloseOutlined, CodeOutlined,
+  CloseOutlined, CodeOutlined, TableOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../hooks/useApi';
@@ -31,6 +31,7 @@ import { useContextMenu } from './ContextMenu';
 import { DataTableContextMenu } from './DataTable/DataTableContextMenu';
 import { CellPreviewDialog } from './DataTable/CellPreviewDialog';
 import { SqlInput } from './SqlInput';
+import { EnhancedEmptyState, TableDataSkeleton } from './LoadingStates';
 
 interface DataTableProps {
   connectionId: string;
@@ -1062,8 +1063,8 @@ export const DataTable = memo(function DataTable({
       {/* ═══ Grid ═══ */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {loading && !hasLoaded && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: tc.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)', zIndex: 10 }}>
-            <Spin size="large" />
+          <div style={{ position: 'absolute', inset: 0, zIndex: 10 }}>
+            <TableDataSkeleton />
           </div>
         )}
         {hasLoaded && glideCols.length > 0 ? (
@@ -1087,9 +1088,10 @@ export const DataTable = memo(function DataTable({
             enableFindReplace
           />
         ) : hasLoaded ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Empty description={t('common.noTableStructure')} />
-          </div>
+          <EnhancedEmptyState
+            icon={<TableOutlined style={{ fontSize: 36, color: 'var(--text-tertiary)' }} />}
+            title={t('common.noTableStructure')}
+          />
         ) : null}
       </div>
 

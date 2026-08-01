@@ -8,7 +8,6 @@ import {
   Tag,
   Dropdown,
   Empty,
-  Spin,
   Drawer,
   Space,
 } from 'antd';
@@ -37,6 +36,7 @@ import { SQLEditorContextMenu } from './SQLEditor/components/SQLEditorContextMen
 import { getErrorMessage } from '../utils/getErrorMessage';
 import type { RecentDatabaseEntry } from '../stores/workspaceStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { EnhancedEmptyState, QueryResultSkeleton } from './LoadingStates';
 
 interface QueryResultWithTiming {
   executionTime?: number;
@@ -394,26 +394,15 @@ export function SQLEditor({
       <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {!result ? (
           !connectionId ? (
-            <div
-              style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Empty
-                description={t('common.pleaseSelectDatabaseConnection')}
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            </div>
+            <EnhancedEmptyState
+              title={t('common.pleaseSelectDatabaseConnection')}
+            />
           ) : loading ? (
-            <div
-              style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}
-            >
-              <Spin size="large" tip={t('common.executingLabel')} />
-            </div>
+            <QueryResultSkeleton />
           ) : (
-            <div
-              style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Empty description={t('common.noQueryResults')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            </div>
+            <EnhancedEmptyState
+              title={t('common.noQueryResults')}
+            />
           )
         ) : (
           <ResultGrid

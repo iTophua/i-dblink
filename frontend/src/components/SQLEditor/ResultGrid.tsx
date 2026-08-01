@@ -18,6 +18,7 @@ import { exportToExcel } from '../../utils/exportUtils';
 import { getDialect } from '../../utils/sqlDialects';
 import DataEditor from '@glideapps/glide-data-grid';
 import { GlideDataTable, type GlideRow } from '../DataTable/GlideDataTable';
+import { EnhancedEmptyState } from '../LoadingStates';
 import { namesToGlideColumns, createResultCellModified } from '../DataTable/adapters/resultAdapter';
 import { useContextMenu } from '../ContextMenu';
 import { ResultGridContextMenu } from './ResultGridContextMenu';
@@ -408,7 +409,13 @@ export function ResultGrid({
   }, [queryResult, message, t]);
 
   // 错误
-  if (queryResult.error) return <Empty description={<span style={{ color: 'var(--color-error)' }}>{queryResult.error}</span>} />;
+  if (queryResult.error)
+    return (
+      <EnhancedEmptyState
+        icon={<ExclamationCircleOutlined style={{ fontSize: 36, color: 'var(--color-error)' }} />}
+        title={queryResult.error}
+      />
+    );
 
   const hasChanges = modifiedRows.size > 0 || deletedIndices.size > 0 || newRows.length > 0;
 
