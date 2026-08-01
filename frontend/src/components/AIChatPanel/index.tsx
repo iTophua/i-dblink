@@ -177,6 +177,7 @@ export function AIChatPanel({
       width={480}
       onClose={() => setPanelVisible(false)}
       open={panelVisible}
+      className="ai-chat-drawer"
       styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
       extra={
         chatMessages.length > 0 && (

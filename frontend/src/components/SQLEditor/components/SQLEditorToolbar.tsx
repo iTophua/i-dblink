@@ -134,24 +134,24 @@ export function SQLEditorToolbar({
               padding: '0 10px',
               height: 22,
               borderRadius: 6,
-              background: 'var(--color-primary)',
+              background: 'var(--color-primary-gradient, var(--color-primary))',
               color: tc.isDark ? '#000000' : '#FFFFFF',
               fontSize: 12,
               fontWeight: 500,
               cursor: !connectionId || loading ? 'not-allowed' : 'pointer',
               opacity: !connectionId ? 0.5 : 1,
               transition: 'all 0.2s ease',
-              boxShadow: `0 2px 8px ${tc.primary}33`,
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 8px ${tc.primary}33`,
               whiteSpace: 'nowrap',
             }}
             onMouseEnter={(e) => {
               if (!connectionId || loading) return;
               e.currentTarget.style.transform = 'translateY(-1px)';
-              e.currentTarget.style.boxShadow = `0 4px 12px ${tc.primary}4D`;
+              e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.22), 0 4px 12px ${tc.primary}4D`;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = `0 2px 8px ${tc.primary}33`;
+              e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 8px ${tc.primary}33`;
             }}
           >
             {loading ? <LoadingOutlined /> : <PlayCircleOutlined />}

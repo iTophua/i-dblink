@@ -61,6 +61,15 @@
     0 6px 20px rgba(0, 0, 0, 0.12);
 }
 
+/* ==================== 暗色模式阴影变量覆盖 ==================== */
+/* style.css 的 --shadow-* 是静态亮色值，暗色模式需更深的阴影才有层次感 */
+[data-theme='dark'] {
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
 [data-theme='dark'] .shadow-enhanced {
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.35),
@@ -610,6 +619,7 @@
 }
 
 /* ==================== 侧边栏增强效果 ==================== */
+/* 渐变背景 + 右边缘层次阴影（移除原 2px 主色竖条，改为更克制的边缘表达） */
 .sidebar-enhanced {
   position: relative !important;
   background: linear-gradient(
@@ -618,19 +628,9 @@
     var(--background-toolbar) 100%
   ) !important;
   border-right: 1px solid var(--border-color-light) !important;
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
-}
-
-.sidebar-enhanced::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--color-primary);
-  pointer-events: none;
-  z-index: 2;
+  box-shadow:
+    inset -1px 0 0 var(--border-color),
+    1px 0 8px -4px rgba(0, 0, 0, 0.06);
 }
 
 [data-theme='dark'] .sidebar-enhanced {
@@ -640,12 +640,9 @@
     var(--background-toolbar) 100%
   ) !important;
   border-right: 1px solid var(--border-color) !important;
-  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
-}
-
-[data-theme='dark'] .sidebar-enhanced::after {
-  background: var(--color-primary);
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    inset -1px 0 0 var(--border-color),
+    1px 0 12px -6px rgba(0, 0, 0, 0.4);
 }
 
 /* 侧边栏内容容器统一背景 */
@@ -714,8 +711,8 @@
 }
 
 .connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
-  background: transparent !important;
-  box-shadow: none;
+  background: var(--color-primary-alpha-15) !important;
+  color: var(--color-primary) !important;
   border-left-color: var(--color-primary);
 }
 
@@ -738,9 +735,8 @@
 }
 
 [data-theme='dark'] .connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
-  background: transparent !important;
+  background: var(--color-primary-alpha-15) !important;
   color: var(--color-primary) !important;
-  box-shadow: none;
   border-left-color: var(--color-primary);
 }
 
@@ -798,16 +794,21 @@
 }
 
 /* ==================== 工具栏增强效果 ==================== */
+/* Signature：顶部 inset 高光（模拟光源从上方照射）+ 底部微阴影（浮起感） */
 .toolbar-enhanced {
   background: var(--background) !important;
   border-bottom: 1px solid var(--border-color) !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 [data-theme='dark'] .toolbar-enhanced {
   background: var(--background) !important;
   border-bottom: 1px solid var(--border-color) !important;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 6px rgba(0, 0, 0, 0.3);
 }
 
 .toolbar-btn {
@@ -836,28 +837,51 @@
   color: var(--text-primary) !important;
 }
 
-.toolbar-btn-primary {
+/* 主按钮（新建连接）：渐变光泽 + inset 高光，复用已定义的 --color-primary-gradient */
+.toolbar-btn-primary.ant-btn-primary {
   transition: all 0.2s ease !important;
   border-radius: 8px !important;
   font-size: 12px !important;
+  background: var(--color-primary-gradient, var(--color-primary)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 8px var(--color-primary-alpha-30) !important;
 }
 
-.toolbar-btn-primary:hover {
-  filter: brightness(1.1);
+.toolbar-btn-primary.ant-btn-primary:hover {
+  filter: brightness(1.08);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 4px 14px var(--color-primary-alpha-30) !important;
 }
 
-.toolbar-btn-primary:active {
+.toolbar-btn-primary.ant-btn-primary:active {
   transform: translateY(0) !important;
-  box-shadow: none !important;
+  filter: brightness(0.96) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.12),
+    0 1px 4px var(--color-primary-alpha-30) !important;
 }
 
-[data-theme='dark'] .toolbar-btn-primary:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+[data-theme='dark'] .toolbar-btn-primary.ant-btn-primary:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 4px 14px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ==================== SQL 编辑器工具栏增强 ==================== */
+/* 底部内嵌分隔线，让工具栏与编辑区有清晰层次 */
+.sql-editor-toolbar {
+  box-shadow: inset 0 -1px 0 var(--border-color) !important;
+}
+
+[data-theme='dark'] .sql-editor-toolbar {
+  box-shadow: inset 0 -1px 0 var(--border-color) !important;
 }
 
 /* ==================== 状态栏增强效果 ==================== */
+/* 渐变背景 + 顶部 inset 高光（与顶部工具栏呼应，形成上下光源统一） */
 .status-bar-enhanced {
   background: linear-gradient(
     180deg,
@@ -866,7 +890,9 @@
   ) !important;
   border-top: 1px solid var(--border-color-light) !important;
   backdrop-filter: blur(12px);
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 -2px 8px rgba(0, 0, 0, 0.04);
 }
 
 [data-theme='dark'] .status-bar-enhanced {
@@ -877,8 +903,8 @@
   ) !important;
   border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
   box-shadow:
-    0 -2px 12px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 -2px 12px rgba(0, 0, 0, 0.2);
 }
 
 /* ==================== 徽标和标签增强效果 ==================== */
@@ -1660,4 +1686,40 @@
 
 [data-theme-preset='ink'][data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.12);
+}
+
+/* ==================== 浮层质感：弹窗、抽屉（克制玻璃态） ==================== */
+
+/* 设置弹窗：圆角 + 浮层阴影 + 标题分隔 */
+.settings-dialog-modal .ant-modal-content {
+  border-radius: var(--radius-overlay, 12px) !important;
+  box-shadow: var(--shadow-overlay) !important;
+  overflow: hidden;
+}
+
+.settings-dialog-modal .ant-modal-header {
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 0 !important;
+}
+
+/* AI 聊天面板（Drawer）：玻璃态背景 + 左侧浮起阴影 */
+.ai-chat-drawer .ant-drawer-content {
+  background: var(--glass-background, rgba(255, 255, 255, 0.88)) !important;
+  backdrop-filter: blur(20px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.4) !important;
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.08) !important;
+}
+
+.ai-chat-drawer .ant-drawer-header {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.ai-chat-drawer .ant-drawer-body {
+  background: transparent !important;
+}
+
+[data-theme='dark'] .ai-chat-drawer .ant-drawer-content {
+  background: var(--glass-background, rgba(18, 21, 30, 0.92)) !important;
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5) !important;
 }

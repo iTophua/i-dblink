@@ -122,8 +122,6 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       width={780}
       style={{ maxHeight: 550 }}
       forceRender
-      transitionName=""
-      maskTransitionName=""
       styles={{ body: { height: 470, overflow: 'hidden', padding: 0 } }}
       className="settings-dialog-modal"
       data-testid="settings-dialog"
