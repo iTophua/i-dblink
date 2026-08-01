@@ -118,10 +118,13 @@ const TableGridCard = React.memo(
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          padding: '4px 8px',
-          borderRadius: 3,
+          padding: '6px 10px',
+          borderRadius: 6,
           userSelect: 'none',
-          background: selected ? 'var(--row-selected-bg)' : 'transparent',
+          border: selected
+            ? '1px solid var(--color-primary)'
+            : '1px solid var(--border-color)',
+          background: selected ? 'var(--row-selected-bg)' : 'var(--background-card)',
         }}
       >
         {table.table_type === 'VIEW' ? (
@@ -1119,12 +1122,12 @@ function TableListComponent({
               {tableRowItems}
             </div>
           ) : (
-            <div style={{ padding: 4 }}>
+            <div style={{ padding: 8 }}>
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                  gap: 2,
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                  gap: 8,
                 }}
               >
                 {tableGridItems}
