@@ -6,7 +6,7 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from 'react';
-import { Tabs, Empty, Breadcrumb, Menu, App, Modal, Tooltip } from 'antd';
+import { Tabs, Breadcrumb, Menu, App, Modal, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { TabsProps } from 'antd';
 import {
@@ -34,6 +34,7 @@ import { parseSqlStatements } from '../../utils/parseSql';
 import { TableExportWizard } from '../TableExportWizard';
 import { DumpDialog } from '../DumpDialog';
 import { CopyTableDialog } from '../CopyTableDialog';
+import { EnhancedEmptyState } from '../LoadingStates';
 import type { TableInfo, DatabaseType, ColumnInfo } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAppStore } from '../../stores/appStore';
@@ -1553,20 +1554,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               />
             )
           ) : (
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text-tertiary)',
-              }}
-            >
-              <Empty
-                description={t('common.pleaseSelectConnection')}
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            </div>
+            <EnhancedEmptyState
+              icon={<AppstoreOutlined style={{ fontSize: 40, color: 'var(--color-primary)' }} />}
+              title={t('common.pleaseSelectConnection')}
+            />
           )}
         </div>
       ),
