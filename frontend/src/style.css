@@ -7,13 +7,13 @@
 /* ==================== CSS 变量定义 ==================== */
 :root {
   /* Fallback values - will be overridden by dynamic theme variables from App.tsx */
-  --color-primary: #2563EB;
-  --color-primary-hover: #3B82F6;
-  --color-primary-active: #1D4ED8;
-  --color-success: #10B981;
-  --color-warning: #F97316;
+  --color-primary: #475569;
+  --color-primary-hover: #566B7F;
+  --color-primary-active: #364152;
+  --color-success: #059669;
+  --color-warning: #F59E0B;
   --color-error: #EF4444;
-  --color-info: #1E3A8A;
+  --color-info: #3B82F6;
 
   --color-primary-alpha-15: color-mix(in srgb, var(--color-primary) 15%, transparent);
   --color-primary-alpha-30: color-mix(in srgb, var(--color-primary) 30%, transparent);
@@ -720,7 +720,7 @@ tbody tr:hover {
 
 /* ==================== Tabs 紧凑模式 ==================== */
 .ant-tabs-small > .ant-tabs-nav .ant-tabs-tab {
-  padding: 10px 0;
+  padding: 10px 16px;
   font-size: 14px;
 }
 
@@ -729,11 +729,12 @@ tbody tr:hover {
 }
 
 .ant-tabs.ant-tabs-editable-card .ant-tabs-tab {
-  padding: 8px 14px;
+  padding: 10px 16px;
   height: auto;
   line-height: 1.4;
   flex: none;
   width: auto;
+  min-width: max-content;
 }
 
 .ant-tabs.ant-tabs-editable-card .ant-tabs-tab .anticon {
@@ -831,4 +832,14 @@ tbody tr:hover {
     background-color 0.3s ease,
     color 0.3s ease,
     border-color 0.3s ease;
+}
+
+/* ==================== 窗口拖拽区域（隐藏标题栏后） ==================== */
+/* 工具栏整体可拖动窗口，内部交互元素恢复点击 */
+.toolbar-drag-region {
+  -webkit-app-region: drag;
+  position: relative;
+}
+.toolbar-no-drag {
+  -webkit-app-region: no-drag;
 }

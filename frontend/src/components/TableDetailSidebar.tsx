@@ -200,15 +200,16 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
             <div
               style={{
                 flex: 1,
-                overflow: 'auto',
+                overflow: 'hidden',
                 minHeight: 0,
+                minWidth: 0,
                 display: 'flex',
-                alignItems: 'stretch',
+                flexDirection: 'column',
                 background: 'transparent',
               }}
             >
               {displayDdl ? (
-                <DDLViewer ddl={displayDdl} />
+                <DDLViewer ddl={displayDdl} style={{ flex: 1, minHeight: 0 }} />
               ) : (
                 <div
                   style={{

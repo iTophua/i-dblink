@@ -4,6 +4,7 @@ import { theme, message } from 'antd';
 import { useMenuShortcuts } from '../../../hooks/useMenuShortcuts';
 import type { TableInfo } from '../../../types/api';
 import type { Connection } from '../../../stores/appStore';
+import { useAppStore } from '../../../stores/appStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { api } from '../../../api';
 import { getMainLayoutStyles } from '../styles';
@@ -296,6 +297,20 @@ export function useLayoutActions({
             console.error('Failed to quit:', e);
           }
           break;
+        case 'refresh': {
+          // F5 / 菜单「刷新」：重拉连接列表（保留已连接状态），同步 appStore
+          const currentConns = useAppStore.getState().connections;
+          const statusMap = new Map(currentConns.map((c) => [c.id, c.status]));
+          api.getConnections().then((conns) => {
+            useAppStore.getState().setConnections(
+              conns.map((c) => ({
+                ...c,
+                status: statusMap.get(c.id) || ('disconnected' as const),
+              }))
+            );
+          });
+          break;
+        }
         case 'new-tab':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'new-tab' } }));
           break;

@@ -10,6 +10,8 @@ import i18n from './i18n';
 import './style.css';
 import './App.css';
 import { EventsOn } from './api';
+import { SetNativeWindowAppearance } from '../wailsjs/go/backend/App';
+import { WindowSetBackgroundColour } from '../wailsjs/runtime/runtime';
 
 // NOTE: Modal 过渡动画已通过全局 CSS 禁用（style.css 中覆盖 rc-motion 相关样式）
 
@@ -146,6 +148,24 @@ function App() {
       root.setAttribute('data-theme', effectiveMode);
       root.setAttribute('data-theme-preset', themePreset);
 
+      // 同步原生窗口外观（macOS 标题栏/红绿灯按钮/窗口边框/菜单栏）
+      // 后端通过 CGO+ObjC 调 NSWindow.setAppearance:（仅 darwin 生效，其他平台空实现）
+      // themeMode='system' 时传 'system' 让后端移除覆盖、跟随系统
+      const nativeMode = themeMode === 'system' ? 'system' : effectiveMode;
+      void SetNativeWindowAppearance(nativeMode);
+
+      // 同步窗口背景色：webview 透明（WebviewIsTransparent:true）时，
+      // 窗口 BackgroundColour 作为底色透过透明像素显示。
+      // 跟随主题 background 同步，消除启动白屏和主题切换闪烁。
+      const bg = themeConfig.neutralColors.background;
+      const hex = bg.replace('#', '');
+      if (hex.length === 6) {
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        WindowSetBackgroundColour(r, g, b, 255);
+      }
+
       window.setTimeout(() => {
         root.classList.remove('theme-transitioning');
       }, 300);
@@ -154,7 +174,7 @@ function App() {
     requestAnimationFrame(() => {
       applyVars();
     });
-  }, [effectiveMode, themePreset, isHydrated]);
+  }, [effectiveMode, themeMode, themePreset, isHydrated]);
 
   if (showSplash) {
     return (
@@ -175,12 +195,16 @@ function App() {
       colorPrimaryActive: themeConfig.colors.primaryActive,
       colorSuccess: themeConfig.colors.success,
       colorSuccessHover: themeConfig.colors.successHover,
+      colorSuccessActive: themeConfig.colors.successActive,
       colorWarning: themeConfig.colors.warning,
       colorWarningHover: themeConfig.colors.warningHover,
+      colorWarningActive: themeConfig.colors.warningActive,
       colorError: themeConfig.colors.error,
       colorErrorHover: themeConfig.colors.errorHover,
+      colorErrorActive: themeConfig.colors.errorActive,
       colorInfo: themeConfig.colors.info,
       colorInfoHover: themeConfig.colors.infoHover,
+      colorInfoActive: themeConfig.colors.infoActive,
       colorBgContainer: themeConfig.neutralColors.backgroundCard,
       colorBgElevated: themeConfig.neutralColors.backgroundCard,
       colorBgLayout: themeConfig.neutralColors.background,

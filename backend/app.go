@@ -228,6 +228,20 @@ func (a *App) ShowDevTools() {
 	}
 }
 
+// SetNativeWindowAppearance 设置原生窗口外观（macOS 标题栏/红绿灯按钮/边框）。
+//
+// mode 取值：
+//   - "light"：浅色外观
+//   - "dark"：深色外观
+//   - "system"：跟随系统偏好
+//
+// macOS 通过 CGO+ObjC 调 NSWindow.setAppearance:；其他平台为空实现。
+// 前端在主题切换时同步调用，使原生窗口跟随前端主题。
+func (a *App) SetNativeWindowAppearance(mode string) error {
+	SetWindowAppearance(mode)
+	return nil
+}
+
 // isDevMode 检查是否为开发模式
 func isDevMode() bool {
 	if os.Getenv("WAILS_DEV") == "1" {

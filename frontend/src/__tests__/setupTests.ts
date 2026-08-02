@@ -114,6 +114,7 @@ vi.mock('../../wailsjs/go/backend/App', () => ({
   BatchImport: mockBatchImport,
   QuitApp: mockQuitApp,
   Greet: mockGreet,
+  SetNativeWindowAppearance: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../../wailsjs/runtime/runtime', () => ({
@@ -123,6 +124,7 @@ vi.mock('../../wailsjs/runtime/runtime', () => ({
   WindowMinimise: vi.fn(),
   Hide: vi.fn(),
   Quit: vi.fn(),
+  WindowSetBackgroundColour: vi.fn(),
 }));
 
 vi.mock('../../wailsjs/go/models', () => ({

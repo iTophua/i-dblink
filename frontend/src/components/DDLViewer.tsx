@@ -9,9 +9,11 @@ import { useThemeColors } from '../hooks/useThemeColors';
 interface DDLViewerProps {
   ddl: string;
   maxHeight?: string | number;
+  /** 外部样式（用于 flex 布局下让组件占满父容器，如 { flex: 1, minHeight: 0 }） */
+  style?: React.CSSProperties;
 }
 
-export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight }) => {
+export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight, style }) => {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const tc = useThemeColors();
@@ -111,6 +113,13 @@ export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight }) => {
         background: 'transparent',
         border: `1px solid ${borderColor}`,
         borderRadius: 6,
+        // 防止长 SQL 行撑破父容器（flex 子项默认 min-width:auto 会被内容撑开）
+        // 注意：不加 overflow:hidden，否则会截断垂直滚动；宽度约束由 minWidth:0 + maxWidth 提供
+        minWidth: 0,
+        maxWidth: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        ...style,
       }}
     >
       <div
@@ -146,8 +155,15 @@ export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight }) => {
           margin: 0,
           padding: 12,
           background: 'transparent',
-          maxHeight: maxHeight,
+          // maxHeight 优先用外部传入；否则在 flex 父容器里用 100% 占满
+          maxHeight: maxHeight || '100%',
           overflow: 'auto',
+          // 关键：限定 pre 自身宽度，防止长行撑破 flex 父链
+          maxWidth: '100%',
+          minWidth: 0,
+          // 在 flex 父容器里让 pre 正确收缩（不被内容高度撑破）
+          flex: 1,
+          minHeight: 0,
         }}
         wrapLines
       >

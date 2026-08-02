@@ -17,9 +17,11 @@ import {
   DisconnectOutlined,
   DatabaseOutlined,
   CodeOutlined,
+  ConsoleSqlOutlined,
   SyncOutlined,
   KeyOutlined,
   RobotOutlined,
+  LayoutOutlined,
 } from '@ant-design/icons';
 import { KeyboardShortcutsModal } from '../../utils/uxEnhancements';
 import { getShortcutMenuLabel, isMacOS } from '../../constants/menuShortcuts';
@@ -31,7 +33,14 @@ type ToolbarStyle = React.CSSProperties;
 
 const { Header } = Layout;
 
-export function Toolbar(): JSX.Element {
+interface ToolbarProps {
+  /** 侧边栏是否已折叠（用于切换图标） */
+  sidebarCollapsed?: boolean;
+  /** 点击折叠/展开按钮的回调 */
+  onToggleSidebar?: () => void;
+}
+
+export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}): JSX.Element {
   const tc = useThemeColors();
   const isDarkMode = tc.isDark;
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
@@ -52,11 +61,13 @@ export function Toolbar(): JSX.Element {
   }, []);
 
   const toolbarStyle: ToolbarStyle = {
-    height: 44,
-    lineHeight: '44px',
+    height: 38,
+    lineHeight: '38px',
     background: 'var(--background-card)',
     borderBottom: '1px solid var(--border-color)',
-    padding: '0 14px',
+    // macOS 隐藏标题栏后，左侧留出红绿灯空间（红绿灯 ~52px + 较大安全边距，避免按钮紧贴）
+    // 非 macOS 不需要留红绿灯空间，正常 padding
+    padding: isMac ? '0 12px 0 92px' : '0 12px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -183,35 +194,56 @@ export function Toolbar(): JSX.Element {
 
   const renderToolbarButtons = () => (
     <>
+      {/* 侧边栏显隐按钮：固定用 LayoutOutlined，颜色区分状态（展开=primary 强调，隐藏=弱化） */}
+      {onToggleSidebar && (
+        <Tooltip title={sidebarCollapsed ? t('common.expand') : t('common.collapse')}>
+          <Button
+            type="text"
+            size="small"
+            icon={<LayoutOutlined />}
+            onClick={onToggleSidebar}
+            data-testid="toolbar-toggle-sidebar"
+            style={{
+              borderRadius: 6,
+              color: sidebarCollapsed ? 'var(--text-tertiary)' : 'var(--color-primary)',
+            }}
+          />
+        </Tooltip>
+      )}
       <Button
         type="primary"
         size="small"
-        icon={<PlusOutlined />}
+        icon={<DatabaseOutlined />}
         onClick={() => handleMenuAction('new-connection')}
         data-testid="toolbar-new-connection"
         className="toolbar-btn-primary"
+        style={{
+          borderRadius: 6,
+          fontWeight: 500,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
       >
         {t('common.newConnectionBtn')}
       </Button>
       <Button
         size="small"
-        icon={<CodeOutlined />}
+        icon={<ConsoleSqlOutlined />}
         onClick={() => handleMenuAction('new-query')}
         data-testid="toolbar-new-query"
         className="toolbar-btn"
-        style={{ borderRadius: 6, color: 'var(--color-primary)', borderColor: 'var(--color-primary-alpha-30)' }}
+        style={{
+          borderRadius: 6,
+          fontWeight: 500,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          color: 'var(--color-primary)',
+          borderColor: 'var(--color-primary-alpha-30)',
+        }}
       >
         {t('common.newQueryBtn')}
-      </Button>
-      <Button
-        type="text"
-        size="small"
-        icon={<ReloadOutlined />}
-        onClick={() => handleMenuAction('refresh')}
-        data-testid="toolbar-refresh"
-        style={{ borderRadius: 6, color: 'var(--text-secondary)' }}
-      >
-        {t('common.refreshLabel')}
       </Button>
     </>
   );
@@ -267,8 +299,8 @@ export function Toolbar(): JSX.Element {
 
   return (
     <>
-      <Header style={toolbarStyle} className="toolbar-enhanced">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <Header style={toolbarStyle} className="toolbar-enhanced toolbar-drag-region">
+        <div className="toolbar-no-drag" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {!isMac && (
             <>
               <Dropdown
@@ -332,7 +364,9 @@ export function Toolbar(): JSX.Element {
           )}
           {renderToolbarButtons()}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{renderAppButtons()}</div>
+        <div className="toolbar-no-drag" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {renderAppButtons()}
+        </div>
       </Header>
 
       <KeyboardShortcutsModal

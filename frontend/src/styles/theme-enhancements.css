@@ -189,68 +189,36 @@
 }
 
 /* ==================== 按钮增强效果 ==================== */
+/* 主按钮：纯扁平，无立体阴影/高光/上浮 */
 .ant-btn-primary {
   position: relative;
-  overflow: hidden;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.12),
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease !important;
+  box-shadow: none !important;
 }
 
-.ant-btn-primary::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.2);
-}
-
+.ant-btn-primary::before,
 .ant-btn-primary::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.4s ease, height 0.4s ease;
+  display: none !important;
 }
 
 .ant-btn-primary:hover {
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.15),
-    0 2px 4px rgba(0, 0, 0, 0.10),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
-  transform: translateY(-1px);
-}
-
-.ant-btn-primary:hover::after {
-  width: 300%;
-  height: 300%;
+  box-shadow: none !important;
+  transform: none;
 }
 
 .ant-btn-primary:active:not(:disabled) {
-  transform: translateY(0) scale(0.98) !important;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.12),
-    inset 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
+/* 次按钮：扁平，hover 仅换色不浮起 */
 .ant-btn-default {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease !important;
 }
 
 .ant-btn-default:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.08),
-    0 1px 3px rgba(0, 0, 0, 0.06);
+  transform: none;
+  box-shadow: none;
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
@@ -261,17 +229,11 @@
 }
 
 [data-theme='dark'] .ant-btn-primary {
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.3),
-    0 4px 16px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: none !important;
 }
 
 [data-theme='dark'] .ant-btn-primary:hover {
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.35),
-    0 8px 24px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: none !important;
 }
 
 [data-theme='dark'] .ant-btn-default {
@@ -283,7 +245,7 @@
   background: var(--background-hover) !important;
   border-color: var(--color-primary) !important;
   color: var(--color-primary) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
 }
 
 /* ==================== 卡片增强效果 ==================== */
@@ -341,15 +303,13 @@
   background: var(--background-card) !important;
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.35),
-    0 1px 3px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+    0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 
 [data-theme='dark'] .ant-card:hover {
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.45),
-    0 6px 16px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    0 6px 16px rgba(0, 0, 0, 0.3) !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
@@ -381,8 +341,7 @@
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.5),
-    0 8px 24px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    0 8px 24px rgba(0, 0, 0, 0.35) !important;
 }
 
 [data-theme='dark'] .ant-modal-header {
@@ -703,18 +662,12 @@
 .sidebar-enhanced {
   position: relative !important;
   background: var(--background-card) !important;
-  border-right: 1px solid var(--border-color-light) !important;
-  box-shadow:
-    inset -1px 0 0 var(--border-color),
-    1px 0 8px -4px rgba(0, 0, 0, 0.06);
+  border-right: 1px solid var(--border-color) !important;
 }
 
 [data-theme='dark'] .sidebar-enhanced {
   background: var(--background-card) !important;
   border-right: 1px solid var(--border-color) !important;
-  box-shadow:
-    inset -1px 0 0 var(--border-color),
-    1px 0 12px -6px rgba(0, 0, 0, 0.4);
 }
 
 /* 侧边栏内容容器统一背景 */
@@ -768,24 +721,24 @@
   color: var(--text-secondary) !important;
 }
 
+/* 连接树节点：扁平行式（无卡片感），与侧边栏顶部搜索区统一 */
 .connection-tree .ant-tree-node-content-wrapper {
-  border-radius: 8px !important;
-  margin: 1px 4px !important;
-  padding: 2px 6px !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 1px 4px !important;
+  transition: background 0.15s ease, color 0.15s ease !important;
   border-left: 2px solid transparent;
 }
 
 .connection-tree .ant-tree-node-content-wrapper:hover {
   background: var(--background-hover) !important;
-  transform: translateX(2px);
-  border-left-color: var(--color-primary);
 }
 
 .connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
-  background: var(--color-primary-alpha-15) !important;
+  background: var(--background-active) !important;
   color: var(--color-primary) !important;
   border-left-color: var(--color-primary);
+  font-weight: 500;
 }
 
 [data-theme='dark'] .connection-tree {
@@ -912,18 +865,19 @@
 }
 
 .toolbar-btn-primary.ant-btn-primary:hover {
-  filter: brightness(1.08);
+  background: var(--color-primary-hover) !important;
   transform: none;
   box-shadow: none !important;
 }
 
 .toolbar-btn-primary.ant-btn-primary:active {
-  filter: brightness(0.96) !important;
+  background: var(--color-primary-active) !important;
   transform: none !important;
   box-shadow: none !important;
 }
 
 [data-theme='dark'] .toolbar-btn-primary.ant-btn-primary:hover {
+  background: var(--color-primary-hover) !important;
   box-shadow: none !important;
 }
 

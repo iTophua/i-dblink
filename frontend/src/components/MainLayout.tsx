@@ -1,7 +1,8 @@
 import React, { useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WindowSetTitle } from '../../wailsjs/runtime/runtime';
-import { Layout, Form, Input, Modal } from 'antd';
+import { Layout, Form, Input, Modal, Tooltip } from 'antd';
+import { ReloadOutlined, AppstoreOutlined } from '@ant-design/icons';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
 import { Favorites } from './Favorites';
@@ -100,7 +101,10 @@ function MainLayoutComponent() {
 
   return (
     <Layout style={layout.styles.root}>
-      <Toolbar />
+      <Toolbar
+        sidebarCollapsed={layout.collapsed}
+        onToggleSidebar={() => layout.setCollapsed(!layout.collapsed)}
+      />
 
       <Layout style={layout.styles.mainLayout}>
         <Sider
@@ -108,21 +112,80 @@ function MainLayoutComponent() {
           collapsed={layout.collapsed}
           onCollapse={(value) => layout.setCollapsed(value)}
           width={320}
+          collapsedWidth={0}
           trigger={null}
           style={{ ...layout.styles.sider }}
           className="sidebar-enhanced"
         >
           <div style={layout.styles.siderContent} className="sidebar-content">
             {!layout.collapsed && (
-              <div style={layout.styles.searchContainer} className="search-container">
+              <div
+                style={{ ...layout.styles.searchContainer, display: 'flex', alignItems: 'center', gap: 4 }}
+                className="search-container"
+              >
                 <GlobalInput
                   placeholder={t('common.tableList.searchPlaceholder')}
                   value={layout.searchText}
                   onChange={(e: any) => layout.handleSearchChange(e.target.value)}
-                  style={layout.styles.searchInput}
+                  style={{ ...layout.styles.searchInput, flex: 1, minWidth: 0 }}
                   size="small"
                   allowClear
                 />
+                {connMgr.connections.length > 0 && (
+                  <Tooltip title={t('common.mainLayout.refreshConnections')}>
+                    <span
+                      className="hoverable hoverable-primary"
+                      onClick={() => {
+                        const currentConns = useAppStore.getState().connections;
+                        const statusMap = new Map(currentConns.map((c) => [c.id, c.status]));
+                        api.getConnections().then((conns) => {
+                          useAppStore.getState().setConnections(
+                            conns.map((c) => ({
+                              ...c,
+                              status: statusMap.get(c.id) || ('disconnected' as const),
+                            }))
+                          );
+                        });
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 12,
+                        color: 'var(--text-tertiary)',
+                        width: 24,
+                        height: 24,
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <ReloadOutlined />
+                    </span>
+                  </Tooltip>
+                )}
+                {connMgr.connections.length > 1 && (
+                  <Tooltip title={t('common.batchManage.title')}>
+                    <span
+                      className="hoverable hoverable-primary"
+                      onClick={() => connMgr.setBatchManageOpen(true)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 12,
+                        color: 'var(--text-tertiary)',
+                        width: 24,
+                        height: 24,
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <AppstoreOutlined />
+                    </span>
+                  </Tooltip>
+                )}
               </div>
             )}
 
@@ -204,18 +267,8 @@ function MainLayoutComponent() {
                        );
                      });
                    }}
-               />
-             </div>
-
-            <div
-              onClick={() => layout.setCollapsed(!layout.collapsed)}
-              style={layout.styles.collapseButton}
-              className="collapse-button hoverable"
-            >
-              <span style={layout.styles.collapseButtonText}>
-                {layout.collapsed ? t('common.expand') : t('common.collapse')}
-              </span>
-            </div>
+             />
+           </div>
           </div>
         </Sider>
 

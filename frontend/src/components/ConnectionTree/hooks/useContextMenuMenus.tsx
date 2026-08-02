@@ -749,6 +749,37 @@ export function useContextMenuMenus(
     [t, dialogSetters]
   );
 
+  // 空白区域右键菜单（没点中任何节点的空白处）
+  // 提供：刷新连接列表、新建连接、新建分组
+  const getEmptyAreaMenu = useCallback((): MenuProps => ({
+    items: [
+      { key: 'refresh-connections', label: t('common.mainLayout.refreshConnections'), icon: <ReloadOutlined /> },
+      { type: 'divider' },
+      { key: 'new-connection', label: t('common.newConnection'), icon: <PlusOutlined /> },
+      { key: 'new-group', label: t('common.newGroup'), icon: <FolderOutlined /> },
+    ],
+    onClick: ({ key }) => {
+      if (key === 'refresh-connections') {
+        callbacks.onRefreshConnections?.();
+      } else if (key === 'new-connection') {
+        callbacks.onEditConnection({
+          id: '',
+          name: '',
+          db_type: 'mysql',
+          host: 'localhost',
+          port: 3306,
+          username: '',
+          status: 'disconnected',
+          group_id: 'default',
+        } as Connection);
+      } else if (key === 'new-group') {
+        dialogSetters.setEditingGroup(null);
+        dialogSetters.setParentGroupId('default');
+        dialogSetters.setGroupDialogOpen(true);
+      }
+    },
+  }), [t, callbacks, dialogSetters]);
+
   return {
     getConnectionMenu,
     getGroupMenu,
@@ -759,5 +790,6 @@ export function useContextMenuMenus(
     getProcedureMenu,
     getFunctionMenu,
     getTriggerMenu,
+    getEmptyAreaMenu,
   };
 }

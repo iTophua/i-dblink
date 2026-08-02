@@ -1,12 +1,10 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { Tree, Spin, Dropdown, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
   DatabaseOutlined,
   PlusOutlined,
   FolderOutlined,
-  AppstoreOutlined,
-  ReloadOutlined,
 } from '@ant-design/icons';
 import type { Connection } from '../../stores/appStore';
 import { EnhancedEmptyState } from '../LoadingStates';
@@ -46,6 +44,24 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   // ── Refs ──
   const connectionDatabasesRef = useRef(connectionDatabases);
   const expandedKeysRef = useRef(expandedKeys);
+  // 记录右键是否点在树节点上（节点有自己的菜单，避免和空白菜单同时弹出）
+  const contextMenuOnNodeRef = useRef(false);
+  const treeContainerRef = useRef<HTMLDivElement>(null);
+  const [emptyMenuOpen, setEmptyMenuOpen] = useState(false);
+
+  // 原生捕获阶段监听 contextmenu：在 antd Dropdown 的 listener 之前执行，
+  // 判断右键目标是否在树节点上，设置标记位供 Dropdown.onOpenChange 读取
+  useEffect(() => {
+    const el = treeContainerRef.current;
+    if (!el) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      contextMenuOnNodeRef.current = !!target.closest('.ant-tree-treenode');
+    };
+    // capture: true 让本 handler 先于 target 上的 antd Dropdown listener 执行
+    el.addEventListener('contextmenu', handler, true);
+    return () => el.removeEventListener('contextmenu', handler, true);
+  }, []);
 
   useEffect(() => { connectionDatabasesRef.current = connectionDatabases; }, [connectionDatabases]);
   useEffect(() => { expandedKeysRef.current = expandedKeys; }, [expandedKeys]);
@@ -256,38 +272,33 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       <Spin spinning={isLoading} size="small" wrapperClassName="connection-tree-spin-wrapper">
         {connections.length === 0 && !isLoading ? emptyState : (
           <>
-            {connections.length > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, padding: '0 4px 2px' }}>
-                <Tooltip title={t('common.mainLayout.refreshConnections')}>
-                  <span
-                    className="hoverable hoverable-primary"
-                    onClick={(e) => { e.stopPropagation(); onRefreshConnections?.(); }}
-                    style={{ display: 'inline-flex', alignItems: 'center', fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4 }}
-                  >
-                    <ReloadOutlined style={{ fontSize: 11 }} />
-                  </span>
-                </Tooltip>
-                {connections.length > 1 && (
-                  <Tooltip title={t('common.batchManage.title')}>
-                    <span
-                      className="hoverable hoverable-primary"
-                      onClick={(e) => { e.stopPropagation(); onBatchManage?.(); }}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: 4 }}
-                    >
-                      <AppstoreOutlined style={{ fontSize: 11 }} />
-                    </span>
-                  </Tooltip>
-                )}
+            <Dropdown
+              menu={menus.getEmptyAreaMenu()}
+              trigger={['contextMenu']}
+              open={emptyMenuOpen}
+              onOpenChange={(open) => {
+                // 节点右键时 contextMenuOnNodeRef 为 true，强制不打开空白菜单
+                if (open && contextMenuOnNodeRef.current) {
+                  setEmptyMenuOpen(false);
+                  return;
+                }
+                setEmptyMenuOpen(open);
+              }}
+            >
+              <div
+                ref={treeContainerRef}
+                style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+              >
+                <Tree
+                  showIcon={false} selectedKeys={selectedId ? [selectedId] : []} expandedKeys={expandedKeys}
+                  onExpand={(keys, info) => treeHandlers.handleExpand(keys, info)}
+                  onSelect={treeHandlers.handleSelect} treeData={treeData}
+                  draggable={isDraggable} onDrop={handleDrop}
+                  style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 14, userSelect: 'none', height: '100%' }}
+                  className="connection-tree" blockNode virtual
+                />
               </div>
-            )}
-            <Tree
-              showIcon={false} selectedKeys={selectedId ? [selectedId] : []} expandedKeys={expandedKeys}
-              onExpand={(keys, info) => treeHandlers.handleExpand(keys, info)}
-              onSelect={treeHandlers.handleSelect} treeData={treeData}
-              draggable={isDraggable} onDrop={handleDrop}
-              style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 14, userSelect: 'none', height: '100%' }}
-              className="connection-tree" blockNode virtual
-            />
+            </Dropdown>
           </>
         )}
       </Spin>

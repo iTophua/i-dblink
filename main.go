@@ -192,6 +192,10 @@ func runGUI() {
 		Height:    900,
 		MinWidth:  1000,
 		MinHeight: 700,
+		// 初始窗口背景色（webview 透明时作为底色显示）
+		// 取 light 默认背景 #F4F5F7，前端主题加载后由 WindowSetBackgroundColour 同步覆盖。
+		// 选浅色而非深色：深色用户启动闪浅色 → 立即被覆盖，比浅色用户闪黑更可接受。
+		BackgroundColour: options.NewRGB(244, 245, 247),
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -207,10 +211,12 @@ func runGUI() {
 			BackdropType:         windows.Mica,
 		},
 		Mac: &mac.Options{
-			// 使用标准 macOS 标题栏（可拖动，有红绿灯按钮，显示标题）
-			// 替代之前的 TitleBarHiddenInset + 自定义 React TitleBar 组件
-			TitleBar:             mac.TitleBarDefault(),
-			WebviewIsTransparent: false,
+			// 隐藏标题栏：内容延伸到窗口顶部，红绿灯按钮保留在左上角。
+			// 配合前端 Toolbar 的 -webkit-app-region: drag 实现窗口拖动。
+			// WebviewIsTransparent: 让 webview 透明，窗口 BackgroundColour 作为底色
+			// （由前端在主题切换时通过 WindowSetBackgroundColour 同步，消除启动白屏）
+			TitleBar:             mac.TitleBarHidden(),
+			WebviewIsTransparent: true,
 			WindowIsTranslucent:  false,
 			About: &mac.AboutInfo{
 				Title:   "iDBLink",
