@@ -43,9 +43,9 @@
   --border-color-light: var(--border-light, #f1f5f9);
   --border-color-dark: var(--border-dark, #cbd5e1);
 
-  --background: #F4F5F7;
-  --background-card: #FAFBFC;
-  --background-toolbar: #F0F1F4;
+  --background: #F2F1ED;
+  --background-card: #F8F7F4;
+  --background-toolbar: #EFEEEA;
   --background-hover: #F1F5F9;
   --background-active: #EFF6FF;
 

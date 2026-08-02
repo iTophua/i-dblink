@@ -193,9 +193,9 @@ func runGUI() {
 		MinWidth:  1000,
 		MinHeight: 700,
 		// 初始窗口背景色（webview 透明时作为底色显示）
-		// 取 light 默认背景 #F4F5F7，前端主题加载后由 WindowSetBackgroundColour 同步覆盖。
+		// 取 light 默认背景 #F2F1ED（护眼米色），前端主题加载后由 WindowSetBackgroundColour 同步覆盖。
 		// 选浅色而非深色：深色用户启动闪浅色 → 立即被覆盖，比浅色用户闪黑更可接受。
-		BackgroundColour: options.NewRGB(244, 245, 247),
+		BackgroundColour: options.NewRGB(242, 241, 237),
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

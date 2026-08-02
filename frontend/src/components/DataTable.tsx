@@ -774,13 +774,15 @@ export const DataTable = memo(function DataTable({
   // ── Glide Data ──
   const glideCols = useMemo(() => {
     const typeMap = new Map(columns.map((c) => [c.column_name, c.data_type]));
+    const commentMap = new Map(columns.map((c) => [c.column_name, c.comment || '']));
     const pkSet = new Set(columns.filter((c) => c.column_key === 'PRI').map((c) => c.column_name));
     // queryColumns 可能为空（查询无数据时），用 columns 元数据兜底
     let cols = queryColumns.length > 0 ? queryColumns : columns.map((c) => c.column_name);
     if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => cols.includes(n)), ...cols.filter((n) => !s.has(n))]; }
     return cols.map((name) => ({
       id: name,
-      title: `${name}|${typeMap.get(name) || ''}|${pkSet.has(name) ? '1' : '0'}`,
+      // title 编码: name|type|isPK|comment（comment 供 hover tooltip 读取）
+      title: `${name}|${typeMap.get(name) || ''}|${pkSet.has(name) ? '1' : '0'}|${commentMap.get(name) || ''}`,
       width: colWidths[name] || undefined,
     }));
   }, [queryColumns, columnOrder, colWidths, columns]);
@@ -1084,7 +1086,7 @@ export const DataTable = memo(function DataTable({
             onCellContextMenu={handleCellContextMenu}
             onPaste={handlePaste}
             onHeaderContextMenu={handleHeaderContextMenu}
-            headerHeight={34} rowHeight={28} editable={true}
+            headerHeight={44} rowHeight={28} editable={true}
             enableFindReplace
           />
         ) : hasLoaded ? (

@@ -1396,16 +1396,7 @@
 
 /* ==================== Ink 墨色主题专属增强 ==================== */
 /* 浓墨淡彩：黑白灰基底 + 朱砂红点缀，东方水墨意境 */
-
-/* --- 亮色：纯白底 --- */
-[data-theme-preset='ink'][data-theme='light'] body {
-  background: #FFFFFF;
-}
-
-/* --- 暗色：纯黑底 --- */
-[data-theme-preset='ink'][data-theme='dark'] body {
-  background: #000000;
-}
+/* body 背景跟随主题变量（--background），不硬编码白/黑 */
 
 [data-theme-preset='ink'][data-theme='dark'] body::before {
   opacity: 0;
@@ -1436,7 +1427,7 @@
 
 [data-theme-preset='ink'][data-theme='dark'] .ant-card {
   border-color: rgba(255, 255, 255, 0.06) !important;
-  background: #000000 !important;
+  background: var(--background-card) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
 }
 
@@ -1549,18 +1540,18 @@
   border-left-color: #000000;
 }
 
-/* --- 侧边栏黑白 --- */
+/* --- 侧边栏：跟随主题变量，不硬编码黑白 --- */
 [data-theme-preset='ink'] .sidebar-enhanced::after {
-  background: #000000;
+  background: var(--text-primary);
 }
 
 [data-theme-preset='ink'] .sidebar-enhanced {
-  border-right-color: #CCCCCC !important;
+  border-right-color: var(--border-color) !important;
 }
 
 [data-theme-preset='ink'][data-theme='dark'] .sidebar-enhanced {
-  background: #000000 !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: var(--background-card) !important;
+  border-right: 1px solid var(--border-color) !important;
 }
 
 [data-theme-preset='ink'][data-theme='dark'] .sidebar-enhanced::after {
@@ -1579,21 +1570,21 @@
   box-shadow: 0 2px 8px rgba(255, 255, 255, 0.08);
 }
 
-/* --- Modal 黑白 --- */
+/* --- Modal：跟随主题变量 --- */
 [data-theme-preset='ink'][data-theme='dark'] .ant-modal-content {
-  background: #000000 !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8), 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+  background: var(--background-card) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8) !important;
 }
 
 [data-theme-preset='ink'][data-theme='dark'] .ant-modal-header {
-  background: #000000 !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: var(--background-card) !important;
+  border-bottom: 1px solid var(--border-color) !important;
 }
 
 [data-theme-preset='ink'][data-theme='dark'] .ant-modal-footer {
-  background: #000000 !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: var(--background-toolbar) !important;
+  border-top: 1px solid var(--border-color) !important;
 }
 
 /* --- 下拉菜单黑白 --- */
@@ -1618,10 +1609,10 @@
   color: #FFFFFF;
 }
 
-/* --- 状态栏黑白 --- */
+/* --- 状态栏：跟随主题变量 --- */
 [data-theme-preset='ink'][data-theme='dark'] .status-bar-enhanced {
-  background: #000000 !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: var(--background-card) !important;
+  border-top: 1px solid var(--border-color) !important;
 }
 
 /* --- Focus ring 黑白 --- */

@@ -18,6 +18,7 @@ import DataEditor, {
   type DataEditorRef,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
+import { Tooltip } from 'antd';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { buildGlideTheme } from './glide-theme';
 import { FindReplaceBar, type FindMatch, type FindOptions } from './FindReplaceBar';
@@ -375,6 +376,23 @@ export function GlideDataTable({
     [processedColumns, hiddenSet]
   );
 
+  // 表头 hover tooltip：onItemHovered 记录 col，原生 mousemove 记录鼠标 clientX/Y
+  // tooltip trigger 用 fixed + clientX/clientY，彻底避免 glide canvas 坐标系转换问题
+  const [hoveredHeaderCol, setHoveredHeaderCol] = useState<number | null>(null);
+  const [mouseClient, setMouseClient] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const onItemHovered = useCallback((args: any) => {
+    // 只处理 header hover（kind === 'header'）
+    if (args?.kind !== 'header') {
+      setHoveredHeaderCol(null);
+      return;
+    }
+    const col = args.location?.[0];
+    setHoveredHeaderCol(typeof col === 'number' ? col : null);
+  }, []);
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    setMouseClient({ x: e.clientX, y: e.clientY });
+  }, []);
+
   const [gridSelection, setGridSelection] = useState<GridSelection>({
     columns: CompactSelection.empty(),
     rows: CompactSelection.empty(),
@@ -573,6 +591,7 @@ export function GlideDataTable({
   );
 
   // ===== drawHeader =====
+  // title 格式: name|type|isPK|comment
   const drawHeader: DrawHeaderCallback = useCallback(
     (args, _drawContent) => {
       const { ctx, rect, column, isSelected, theme: t } = args;
@@ -585,10 +604,12 @@ export function GlideDataTable({
         ctx.fillStyle = t.bgHeaderHasFocus;
         ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       }
+      // 第一行：字段名（加大字号 + 顶部留白）
       ctx.fillStyle = tc.textPrimary;
-      ctx.font = '600 12px sans-serif';
-      ctx.fillText(name, rect.x + 8, rect.y + 16);
-      const secondY = rect.y + 26;
+      ctx.font = '600 13px sans-serif';
+      ctx.fillText(name, rect.x + 8, rect.y + 18);
+      // 第二行：PK 标记 + 类型（与第一行间距加大到 18px）
+      const secondY = rect.y + 36;
       let secondX = rect.x + 8;
       if (isPk) {
         ctx.fillStyle = '#faad14';
@@ -933,7 +954,7 @@ export function GlideDataTable({
             onSearchChange={handleSearchChange}
           />
         )}
-        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }} onMouseMove={onMouseMove}>
         <DataEditor
           ref={gridRef}
           width="100%"
@@ -951,6 +972,7 @@ export function GlideDataTable({
           onCellsEdited={handleCellsEdited}
           onCellContextMenu={handleContextMenu}
           onHeaderClicked={onHeaderClicked}
+          onItemHovered={onItemHovered}
           onHeaderContextMenu={(colIndex, event) => {
             if (!onHeaderContextMenu) return;
             // 优先用鼠标坐标，回退到 header cell bounds 左上角
@@ -971,6 +993,43 @@ export function GlideDataTable({
           onPaste={onPaste}
           provideEditor={provideEditor}
         />
+        {/* 表头 hover tooltip：显示字段注释
+            trigger 用 fixed + 原生 mousemove 的 clientX/clientY，
+            彻底避开 glide canvas 坐标系转换问题 */}
+        {hoveredHeaderCol !== null && (() => {
+          const col = gridColumns[hoveredHeaderCol];
+          if (!col) return null;
+          const parts = (col.title || '').split('|');
+          const name = parts[0] || '';
+          const type = parts[1] || '';
+          const comment = parts[3] || '';
+          if (!comment) return null;
+          return (
+            <Tooltip
+              open
+              title={
+                <div style={{ maxWidth: 320 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 2 }}>{name}</div>
+                  {type && <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>{type}</div>}
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{comment}</div>
+                </div>
+              }
+              overlayStyle={{ pointerEvents: 'none' }}
+            >
+              {/* 虚拟 trigger：跟随鼠标，1x1 不可见 */}
+              <div
+                style={{
+                  position: 'fixed',
+                  left: mouseClient.x,
+                  top: mouseClient.y,
+                  width: 1,
+                  height: 1,
+                  pointerEvents: 'none',
+                }}
+              />
+            </Tooltip>
+          );
+        })()}
         </div>
       </div>
     </RangeEditContext.Provider>
