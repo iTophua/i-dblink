@@ -861,7 +861,7 @@ export const DataTable = memo(function DataTable({
         <Space size={4}>
           <Input prefix={<SearchOutlined style={{ fontSize: 12, color: 'var(--text-tertiary)' }} />} value={quickFilter} onChange={(e) => setQuickFilter(e.target.value)} placeholder={t('common.search')} size="small" className="data-toolbar-input" style={{ width: 160 }} />
           <Tag className="data-toolbar-tag" style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{tableName}</Tag>
-          <Tag color="green" className="data-toolbar-tag">{totalCount.toLocaleString()} {t('common.rows')}</Tag>
+          <Tag color="blue" className="data-toolbar-tag">{totalCount.toLocaleString()} {t('common.rows')}</Tag>
           {selectedRows.length > 0 && <Tag color="orange" className="data-toolbar-tag">{selectedRows.length} {t('common.rows')}</Tag>}
         </Space>
       </div>
@@ -1155,7 +1155,7 @@ export const DataTable = memo(function DataTable({
               <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textAlign: 'center', padding: 8 }}>{t('common.dataGrid.noPendingSql')}</div>
             )}
             {noPkWarning && (
-              <div style={{ fontSize: 11, color: 'var(--color-warning, #faad14)', textAlign: 'center', padding: '4px 8px', borderTop: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: 11, color: 'var(--color-warning, #F59E0B)', textAlign: 'center', padding: '4px 8px', borderTop: '1px solid var(--border-color)' }}>
                 {t('common.dataGrid.noPrimaryKeyWarning')}
               </div>
             )}

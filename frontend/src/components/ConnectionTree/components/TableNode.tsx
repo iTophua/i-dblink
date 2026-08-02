@@ -60,7 +60,7 @@ export const TableNode = React.memo<TableNodeProps>(
           }}
           data-testid={`table-node-${table.table_name}`}
         >
-          <TableOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
+          <TableOutlined style={{ color: 'var(--color-info)', fontSize: 12 }} />
           <span style={{ fontSize: 13 }}>{table.table_name}</span>
           {table.row_count != null && (
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 4 }}>

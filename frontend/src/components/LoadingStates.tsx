@@ -61,15 +61,15 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
           height: 80,
           borderRadius: '50%',
           background:
-            'linear-gradient(135deg, var(--row-hover-bg) 0%, var(--background-card) 100%)',
+            'linear-gradient(135deg, var(--color-info-alpha-15, rgba(59,130,246,0.08)) 0%, var(--background-card) 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 20,
-          border: `2px solid var(--row-selected-bg)`,
+          border: `2px solid var(--color-info-alpha-15, rgba(59,130,246,0.12))`,
         }}
       >
-        {icon || <DatabaseOutlined style={{ fontSize: 36, color: 'var(--color-primary)' }} />}
+        {icon || <DatabaseOutlined style={{ fontSize: 36, color: 'var(--color-info)' }} />}
       </div>
 
       <Title level={4} style={{ marginBottom: 8, textAlign: 'center' }}>

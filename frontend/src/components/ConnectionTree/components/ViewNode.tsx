@@ -66,7 +66,7 @@ export const ViewNode = React.memo<ViewNodeProps>(
           }}
           data-testid={`view-node-${view.table_name}`}
         >
-          <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
+          <EyeOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
           <span style={{ fontSize: 13 }}>{view.table_name}</span>
           {view.row_count != null && (
             <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>

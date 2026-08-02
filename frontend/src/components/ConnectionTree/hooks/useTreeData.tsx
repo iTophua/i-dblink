@@ -244,7 +244,7 @@ export function useTreeData({
                           style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
                           onClick={() => handlers.onOpenRoutine?.(connId, db.database, proc, 'procedure')}
                         >
-                          <CodeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
+                          <CodeOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
                           <span style={{ fontSize: 14 }}>{proc}</span>
                         </span>
                       </Dropdown>
@@ -546,7 +546,7 @@ export function useTreeData({
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <TableOutlined style={{ color: 'var(--color-primary)', fontSize: 14 }} />
+                  <TableOutlined style={{ color: 'var(--color-info)', fontSize: 14 }} />
                   <span>{t('common.tables', { count: items.tables.length })}</span>
                 </span>
               </div>
@@ -579,7 +579,7 @@ export function useTreeData({
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                  <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 14 }} />
+                  <EyeOutlined style={{ color: 'var(--color-warning)', fontSize: 14 }} />
                   <span>{t('common.views', { count: items.views.length })}</span>
                 </span>
               </div>
@@ -668,7 +668,7 @@ export function useTreeData({
               </span>
             ) : (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <TableOutlined style={{ color: 'var(--color-primary)', fontSize: 14 }} />
+                <TableOutlined style={{ color: 'var(--color-info)', fontSize: 14 }} />
                 <span>{t('common.tables', { count: tableItems.length })}</span>
               </span>
             )}
@@ -738,7 +738,7 @@ export function useTreeData({
               </span>
             ) : (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-                <EyeOutlined style={{ color: 'var(--color-primary)', fontSize: 14 }} />
+                <EyeOutlined style={{ color: 'var(--color-warning)', fontSize: 14 }} />
                 <span>{t('common.views', { count: viewItems.length })}</span>
               </span>
             )}
@@ -883,10 +883,10 @@ export function useTreeData({
                           width: 8,
                           height: 8,
                           borderRadius: '50%',
-                           background: 'var(--color-primary)',
+                           background: 'var(--color-success)',
                            display: 'inline-block',
                            marginLeft: 6,
-                           boxShadow: `0 0 4px var(--color-primary-alpha-30)`,
+                           boxShadow: `0 0 4px var(--color-success-alpha-30, rgba(5,150,105,0.3))`,
                         }}
                       />
                     </Tooltip>
@@ -900,6 +900,20 @@ export function useTreeData({
                         borderRadius: '50%',
                         background: 'var(--color-warning)',
                         animation: 'pulse 1s infinite',
+                      }}
+                    />
+                  </Tooltip>
+                )}
+                {conn.status !== 'connected' && conn.status !== 'loading' && (
+                  <Tooltip title={t('common.mainLayout.disconnected')}>
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--text-disabled)',
+                        display: 'inline-block',
+                        marginLeft: 6,
                       }}
                     />
                   </Tooltip>
