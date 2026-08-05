@@ -33,6 +33,23 @@ import { CellPreviewDialog } from './DataTable/CellPreviewDialog';
 import { SqlInput } from './SqlInput';
 import { EnhancedEmptyState, TableDataSkeleton } from './LoadingStates';
 
+/**
+ * 规范化比较两个编辑值是否"相同"——用于判断编辑后值是否真正变化。
+ * 与撤销逻辑（onRestore 里的 isSame）保持一致：
+ *   - null / undefined 互相视为相等
+ *   - DEFAULT_MARKER（Symbol）用引用比较
+ *   - 其他值用 String() 规范化后比较（数字 5 与字符串 "5" 视为相等，与显示/存储类型不一致兼容）
+ */
+function isSameEditValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  // DEFAULT_MARKER 是 Symbol，=== 已在上面处理；这里处理 null/undefined 归一
+  const aNull = a == null;
+  const bNull = b == null;
+  if (aNull && bNull) return true;
+  if (aNull || bNull) return false;
+  return String(a) === String(b);
+}
+
 interface DataTableProps {
   connectionId: string;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -368,6 +385,9 @@ export const DataTable = memo(function DataTable({
     if (!target) return;
     if (target.__status__ === 'deleted') return;
     const capturedOld = target[colId];
+    // 值未真正变化则不入栈、不改 status（避免双击进入编辑模式未改动却标记为可撤销）。
+    // 与撤销逻辑（见 onRestore 的 isSame）保持一致的规范化比较。
+    if (isSameEditValue(capturedOld, newValue)) return;
     setRowData((rows) => rows.map((r) => {
       if (r.__row_id__ !== rowId) return r;
       return { ...r, [colId]: newValue, __status__: r.__status__ === 'new' ? 'new' : 'modified' };
@@ -392,6 +412,8 @@ export const DataTable = memo(function DataTable({
       if (!target) continue;
       if (target.__status__ === 'deleted') continue;
       const oldValue = target[e.colId];
+      // 值未真正变化则跳过（批量编辑同样避免无改动入栈）
+      if (isSameEditValue(oldValue, e.value)) continue;
       if (!editsByRow.has(e.rowId)) editsByRow.set(e.rowId, []);
       editsByRow.get(e.rowId)!.push({ colId: e.colId, oldValue, newValue: e.value });
     }
