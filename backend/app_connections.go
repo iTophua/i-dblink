@@ -220,7 +220,48 @@ func (a *App) GetConnections() ([]ConnectionOutput, error) {
 			result[i].Status = "connected"
 		}
 	}
+
+	// 运行时去重：按 db_type+host+port+username 分组，合并 MCP 旧版 create_connection
+	// 不做去重留下的历史脏数据（同一服务器一条"全量"、一条"固定"）。
+	// 保留策略：优先保留 database 非空的"固定库"连接（信息更具体），
+	// 同组内若多条都有 database 或都无 database，取第一条（按原顺序）。
+	result = dedupeConnections(result)
+
 	return result, nil
+}
+
+// dedupeConnections 按 db_type+host+port+username 去重连接列表。
+// 保留优先级：database 非空 > database 空；同优先级取第一条（保持原顺序）。
+func dedupeConnections(conns []ConnectionOutput) []ConnectionOutput {
+	type groupKey struct {
+		DbType   string
+		Host     string
+		Port     int
+		Username string
+	}
+	// firstIdx: 该组第一个出现的位置（保持顺序）；hasDBSeen: 该组是否已有带 database 的
+	firstIdx := make(map[groupKey]int)
+	hasDBSeen := make(map[groupKey]bool)
+	out := make([]ConnectionOutput, 0, len(conns))
+
+	for _, c := range conns {
+		key := groupKey{DbType: c.DbType, Host: c.Host, Port: c.Port, Username: c.Username}
+		hasDB := c.Database != nil && *c.Database != ""
+		idx, seen := firstIdx[key]
+		if !seen {
+			// 首次出现：加入结果
+			firstIdx[key] = len(out)
+			hasDBSeen[key] = hasDB
+			out = append(out, c)
+			continue
+		}
+		// 已有同组：若新条目有 database 而旧条目无，替换旧条目（优先固定库）
+		if hasDB && !hasDBSeen[key] {
+			out[idx] = c
+			hasDBSeen[key] = true
+		}
+	}
+	return out
 }
 
 // SaveConnection 保存连接

@@ -1,5 +1,6 @@
 import React, { useRef, useMemo, useEffect, useState } from 'react';
-import { Tree, Spin, Dropdown, Tooltip } from 'antd';
+import { Tree, Spin, Dropdown, Menu } from 'antd';
+// Dropdown 仅用于折叠态侧栏连接菜单（见 collapsed 分支）；空白菜单用手动浮动 div
 import { useTranslation } from 'react-i18next';
 import {
   DatabaseOutlined,
@@ -44,29 +45,47 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   // ── Refs ──
   const connectionDatabasesRef = useRef(connectionDatabases);
   const expandedKeysRef = useRef(expandedKeys);
-  // 记录右键是否点在树节点上（节点有自己的菜单，避免和空白菜单同时弹出）
-  const contextMenuOnNodeRef = useRef(false);
   const treeContainerRef = useRef<HTMLDivElement>(null);
+  // 空白区域右键菜单（受控，不参与 contextmenu 事件竞争）
   const [emptyMenuOpen, setEmptyMenuOpen] = useState(false);
+  const [emptyMenuPos, setEmptyMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // 原生捕获阶段监听 contextmenu：在 antd Dropdown 的 listener 之前执行，
-  // 判断右键目标是否在树节点上，设置标记位供 Dropdown.onOpenChange 读取。
-  // 用 .ant-tree-node-content-wrapper（blockNode 下撑满整行的内容区）做判定，
-  // 比 .ant-tree-treenode（含 marginBottom/padding 间隙）更贴合实际可点击区域，
-  // 避免第一个节点因上方紧邻空白 holder 导致右键稍偏就被判成"空白区域"。
+  // 原生捕获阶段监听 contextmenu：彻底解决"节点右键与空白右键双菜单重叠"。
+  // 关键认知：外层 Dropdown 的 trigger 监听器挂在它的 trigger 子元素上，capture 事件流
+  // 是 window → document → 外层trigger → ... → target。要让 capture handler 先于外层
+  // trigger 的监听器，必须挂在 document 上。统一裁决：
+  //   - 命中节点（.ant-tree-node-content-wrapper / .ant-tree-treenode）→ 关空白菜单，
+  //     让节点内层 Dropdown 接管（不阻止事件，内层正常处理）
+  //   - 命中空白 → 阻止默认菜单 + 阻止冒泡（防止内层误触发）+ 记录坐标 + 开空白菜单
   useEffect(() => {
     const el = treeContainerRef.current;
     if (!el) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      contextMenuOnNodeRef.current = !!target.closest(
-        '.ant-tree-node-content-wrapper, .ant-tree-treenode'
-      );
+      if (!el.contains(target)) return;
+      const onNode = !!target.closest('.ant-tree-node-content-wrapper, .ant-tree-treenode');
+      if (onNode) {
+        setEmptyMenuOpen(false);
+        return;
+      }
+      // 空白区域
+      e.preventDefault();
+      setEmptyMenuPos({ x: e.clientX, y: e.clientY });
+      setEmptyMenuOpen(true);
     };
-    // capture: true 让本 handler 先于 target 上的 antd Dropdown listener 执行
-    el.addEventListener('contextmenu', handler, true);
-    return () => el.removeEventListener('contextmenu', handler, true);
+    document.addEventListener('contextmenu', handler, true);
+    return () => document.removeEventListener('contextmenu', handler, true);
   }, []);
+
+  // ESC 关闭空白区域菜单
+  useEffect(() => {
+    if (!emptyMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEmptyMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [emptyMenuOpen]);
 
   useEffect(() => { connectionDatabasesRef.current = connectionDatabases; }, [connectionDatabases]);
   useEffect(() => { expandedKeysRef.current = expandedKeys; }, [expandedKeys]);
@@ -277,34 +296,63 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       <Spin spinning={isLoading} size="small" wrapperClassName="connection-tree-spin-wrapper">
         {connections.length === 0 && !isLoading ? emptyState : (
           <>
-            <Dropdown
-              menu={menus.getEmptyAreaMenu()}
-              trigger={['contextMenu']}
-              open={emptyMenuOpen}
-              onOpenChange={(open) => {
-                // 节点右键时 contextMenuOnNodeRef 为 true，强制不打开空白菜单
-                if (open && contextMenuOnNodeRef.current) {
-                  setEmptyMenuOpen(false);
-                  contextMenuOnNodeRef.current = false; // 复位，防止下次外层菜单误读
-                  return;
-                }
-                setEmptyMenuOpen(open);
-              }}
-            >
-              <div
-                ref={treeContainerRef}
-                style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
-              >
-                <Tree
-                  showIcon={false} selectedKeys={selectedId ? [selectedId] : []} expandedKeys={expandedKeys}
-                  onExpand={(keys, info) => treeHandlers.handleExpand(keys, info)}
-                  onSelect={treeHandlers.handleSelect} treeData={treeData}
-                  draggable={isDraggable} onDrop={handleDrop}
-                  style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 14, userSelect: 'none', height: '100%' }}
-                  className="connection-tree" blockNode virtual
+            {/*
+              空白区域右键菜单：手动渲染的浮动菜单（position: fixed）。
+              不用 antd Dropdown 的 trigger 机制——那样会与节点内层 Dropdown 竞争
+              同一个 contextmenu 事件。改由 document capture handler 判定为"空白"后
+              手动设置 emptyMenuPos + emptyMenuOpen，菜单在指定坐标弹出。
+              点击/右键外部、ESC、菜单项点击后自动关闭。
+            */}
+            {emptyMenuOpen && (
+              <>
+                {/* 透明遮罩：捕获外部点击/右键以关闭菜单 */}
+                <div
+                  style={{ position: 'fixed', inset: 0, zIndex: 1049 }}
+                  onClick={() => setEmptyMenuOpen(false)}
+                  onContextMenu={(e) => {
+                    // 外部右键：先关当前菜单，让默认右键行为正常（如再次触发 capture）
+                    e.preventDefault();
+                    setEmptyMenuOpen(false);
+                  }}
                 />
-              </div>
-            </Dropdown>
+                <div
+                  style={{
+                    position: 'fixed',
+                    left: emptyMenuPos.x,
+                    top: emptyMenuPos.y,
+                    zIndex: 1050,
+                    background: 'var(--background-card)',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    minWidth: 160,
+                  }}
+                  className="connection-tree-empty-menu"
+                >
+                  <Menu
+                    items={menus.getEmptyAreaMenu().items}
+                    onClick={(info) => {
+                      const m = menus.getEmptyAreaMenu();
+                      m.onClick?.(info);
+                      setEmptyMenuOpen(false);
+                    }}
+                  />
+                </div>
+              </>
+            )}
+            <div
+              ref={treeContainerRef}
+              style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+            >
+              <Tree
+                showIcon={false} selectedKeys={selectedId ? [selectedId] : []} expandedKeys={expandedKeys}
+                onExpand={(keys, info) => treeHandlers.handleExpand(keys, info)}
+                onSelect={treeHandlers.handleSelect} treeData={treeData}
+                draggable={isDraggable} onDrop={handleDrop}
+                style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 14, userSelect: 'none', height: '100%' }}
+                className="connection-tree" blockNode virtual
+              />
+            </div>
           </>
         )}
       </Spin>
