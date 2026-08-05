@@ -4,7 +4,7 @@
  * 完整功能：拖拽多选、内联编辑、新增行Modal、右键菜单(INSERT/UPDATE/DELETE)、
  * 多格式导出(CSV/JSON/Excel/TXT/XML/MD)、底部SQL预览、提交/撤销。
  */
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Button, Space, Empty, Tag, App, Modal, Dropdown } from 'antd';
 import {
   DeleteOutlined, SaveOutlined, UndoOutlined, CodeOutlined,
@@ -23,6 +23,7 @@ import { namesToGlideColumns, createResultCellModified } from '../DataTable/adap
 import { useContextMenu } from '../ContextMenu';
 import { ResultGridContextMenu } from './ResultGridContextMenu';
 import { useEditHistory } from '../../hooks/useEditHistory';
+import { isSameEditValue } from '../DataTable/utils';
 import { ConditionalFormattingPanel, type FormatRule } from '../DataTable/ConditionalFormattingPanel';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 
@@ -114,6 +115,9 @@ export function ResultGrid({
 
   // 编辑状态
   const [modifiedRows, setModifiedRows] = useState<Map<number, unknown[]>>(new Map());
+  // ref 同步最新 modifiedRows，供 handleCellEdited 同步读取「当前值」避免闭包陈旧
+  const modifiedRowsRef = useRef(modifiedRows);
+  useEffect(() => { modifiedRowsRef.current = modifiedRows; }, [modifiedRows]);
   const [deletedIndices, setDeletedIndices] = useState<Set<number>>(new Set());
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [newRows, setNewRows] = useState<unknown[][]>([]);
@@ -219,30 +223,44 @@ export function ResultGrid({
       return;
     }
 
-    const oldValue = queryResult.rows[rowId][col];
-    const originalStr = oldValue === null ? 'NULL' : String(oldValue);
+    const originalRow = queryResult.rows[rowId];
+    const originalValue = originalRow[col];
 
-    if (originalStr === newValue) {
+    // 取「当前值」：modifiedRows 里有则用已修改值，否则用原始值。
+    // 之前用原始值做比较，导致已修改过的单元格再次双击不改动时误入栈（oldValue=原始，newValue=已改值，不等就 recordEdit）。
+    const currentModified = modifiedRowsRef.current.get(rowId);
+    const currentValue = currentModified ? currentModified[col] : originalValue;
+
+    const resolvedNew = newValue === 'NULL' ? null : newValue;
+
+    // 值未真正变化（与当前显示值一致）则不入栈、不改 modifiedRows
+    if (isSameEditValue(currentValue, resolvedNew)) return;
+
+    // 值被改回原始值：从 modifiedRows 移除该列的修改标记（若整行恢复则删除该行）
+    if (isSameEditValue(originalValue, resolvedNew)) {
       setModifiedRows((prev) => {
         if (!prev.has(rowId)) return prev;
         const next = new Map(prev);
         const current = [...next.get(rowId)!];
-        current[col] = oldValue;
-        const originalRow = queryResult.rows[rowId];
-        const allSame = originalRow.every((v, i) => v === current[i]);
+        current[col] = originalValue;
+        const allSame = originalRow.every((v, i) => {
+          const cv = current[i];
+          return (v == null && cv == null) || (v != null && cv != null && String(v) === String(cv));
+        });
         if (allSame) next.delete(rowId);
         else next.set(rowId, current);
         return next;
       });
+      // 仍需入栈一条记录（记录"从已修改值恢复到原始值"），以便撤销时恢复之前的修改
+      recordEdit([{ rowId: String(rowId), colId: String(col), oldValue: currentValue, newValue: resolvedNew }]);
       return;
     }
 
-    const resolvedNew = newValue === 'NULL' ? null : newValue;
-    recordEdit([{ rowId: String(rowId), colId: String(col), oldValue, newValue: resolvedNew }]);
+    recordEdit([{ rowId: String(rowId), colId: String(col), oldValue: currentValue, newValue: resolvedNew }]);
 
     setModifiedRows((prev) => {
       const next = new Map(prev);
-      const current = next.get(rowId) ? [...next.get(rowId)!] : [...queryResult.rows[rowId]];
+      const current = next.get(rowId) ? [...next.get(rowId)!] : [...originalRow];
       current[col] = resolvedNew;
       next.set(rowId, current);
       return next;

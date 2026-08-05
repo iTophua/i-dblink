@@ -21,7 +21,7 @@ import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useAppStore } from '../stores/appStore';
 import type { ColumnInfo, DatabaseType } from '../types/api';
-import { type RowData, buildQuery, buildCountQuery, DEFAULT_MARKER } from './DataTable/utils';
+import { type RowData, buildQuery, buildCountQuery, DEFAULT_MARKER, isSameEditValue } from './DataTable/utils';
 import { useEditHistory } from '../hooks/useEditHistory';
 import { getDialect } from '../utils/sqlDialects';
 import { exportToExcel } from '../utils/exportUtils';
@@ -32,23 +32,6 @@ import { DataTableContextMenu } from './DataTable/DataTableContextMenu';
 import { CellPreviewDialog } from './DataTable/CellPreviewDialog';
 import { SqlInput } from './SqlInput';
 import { EnhancedEmptyState, TableDataSkeleton } from './LoadingStates';
-
-/**
- * 规范化比较两个编辑值是否"相同"——用于判断编辑后值是否真正变化。
- * 与撤销逻辑（onRestore 里的 isSame）保持一致：
- *   - null / undefined 互相视为相等
- *   - DEFAULT_MARKER（Symbol）用引用比较
- *   - 其他值用 String() 规范化后比较（数字 5 与字符串 "5" 视为相等，与显示/存储类型不一致兼容）
- */
-function isSameEditValue(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  // DEFAULT_MARKER 是 Symbol，=== 已在上面处理；这里处理 null/undefined 归一
-  const aNull = a == null;
-  const bNull = b == null;
-  if (aNull && bNull) return true;
-  if (aNull || bNull) return false;
-  return String(a) === String(b);
-}
 
 interface DataTableProps {
   connectionId: string;

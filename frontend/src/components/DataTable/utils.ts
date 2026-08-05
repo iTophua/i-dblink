@@ -3,6 +3,23 @@ import { getDialect } from '../../utils/sqlDialects';
 
 export const DEFAULT_MARKER = Symbol('DEFAULT');
 
+/**
+ * 规范化比较两个编辑值是否"相同"——用于判断编辑后值是否真正变化。
+ * 与撤销逻辑（DataTable onRestore / ResultGrid handleCellEdited）保持一致：
+ *   - null / undefined 互相视为相等
+ *   - DEFAULT_MARKER（Symbol）用引用比较（=== 已覆盖）
+ *   - 其他值用 String() 规范化后比较（数字 5 与字符串 "5" 视为相等，
+ *     兼容 glide 显示值字符串化 vs 存储值原始类型的不一致）
+ */
+export function isSameEditValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  const aNull = a == null;
+  const bNull = b == null;
+  if (aNull && bNull) return true;
+  if (aNull || bNull) return false;
+  return String(a) === String(b);
+}
+
 export interface FilterCondition {
   id: string;
   field: string;
