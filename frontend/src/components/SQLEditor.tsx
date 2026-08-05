@@ -690,6 +690,13 @@ export function SQLEditor({
             autoClosingBrackets: 'never',
             autoClosingQuotes: 'never',
             mouseWheelZoom: false,
+            scrollbar: {
+              vertical: 'auto',
+              horizontal: 'auto',
+              verticalScrollbarSize: 6,
+              horizontalScrollbarSize: 6,
+              useShadows: false,
+            },
           }}
         />
 
