@@ -1147,7 +1147,7 @@ export const DataTable = memo(function DataTable({
             <div style={{ flex: 1 }} />
             <Space size={4}>
               <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} loading={loading} style={{ fontSize: 11, height: 20 }}>{t('common.submit')}</Button>
-              <Button size="small" icon={<UndoOutlined />} onClick={handleUndoAll} style={{ fontSize: 11, height: 20 }}>{t('common.undo')}</Button>
+              <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} disabled={!hasEditHistory} style={{ fontSize: 11, height: 20 }}>{t('common.undo')}</Button>
             </Space>
             <Button size="small" type="text" icon={<CloseOutlined />} onClick={() => setShowSqlPanel(false)} style={{ height: 18, width: 18, fontSize: 10 }} />
           </div>
