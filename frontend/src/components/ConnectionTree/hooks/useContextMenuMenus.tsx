@@ -103,11 +103,6 @@ export function useContextMenuMenus(
                 icon: <DisconnectOutlined />,
               },
               { key: 'refresh', label: t('common.refresh'), icon: <ReloadOutlined /> },
-              {
-                key: 'refresh-connections',
-                label: t('common.mainLayout.refreshConnections'),
-                icon: <SyncOutlined />,
-              },
               { type: 'divider' },
               { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
               { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },
@@ -164,11 +159,6 @@ export function useContextMenuMenus(
             ]
           : [
               { key: 'connect', label: t('common.mainLayout.connect'), icon: <LinkOutlined /> },
-              {
-                key: 'refresh-connections',
-                label: t('common.mainLayout.refreshConnections'),
-                icon: <SyncOutlined />,
-              },
               { type: 'divider' },
               { key: 'edit', label: t('common.editConnection'), icon: <EditOutlined /> },
               { key: 'copy', label: t('common.copyConnectionConfig'), icon: <CopyOutlined /> },

@@ -224,10 +224,10 @@ export function useMonacoEditor({
 
       const startTime = performance.now();
       
-      // 并行获取表和列信息
+      // 并行获取表和列信息（silent=true：编辑器补全用独立 loading，不翻转全局 isLoading，避免整棵连接树错误转圈）
       const [tables, allColumnsResult] = await Promise.all([
-        getTables(connectionId, database, false),
-        getAllColumns(connectionId, database)
+        getTables(connectionId, database, false, undefined, true),
+        getAllColumns(connectionId, database, true)
       ]);
 
       const tablesMap = new Map<string, string[]>();

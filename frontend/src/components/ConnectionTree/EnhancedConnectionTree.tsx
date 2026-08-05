@@ -50,13 +50,18 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   const [emptyMenuOpen, setEmptyMenuOpen] = useState(false);
 
   // 原生捕获阶段监听 contextmenu：在 antd Dropdown 的 listener 之前执行，
-  // 判断右键目标是否在树节点上，设置标记位供 Dropdown.onOpenChange 读取
+  // 判断右键目标是否在树节点上，设置标记位供 Dropdown.onOpenChange 读取。
+  // 用 .ant-tree-node-content-wrapper（blockNode 下撑满整行的内容区）做判定，
+  // 比 .ant-tree-treenode（含 marginBottom/padding 间隙）更贴合实际可点击区域，
+  // 避免第一个节点因上方紧邻空白 holder 导致右键稍偏就被判成"空白区域"。
   useEffect(() => {
     const el = treeContainerRef.current;
     if (!el) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      contextMenuOnNodeRef.current = !!target.closest('.ant-tree-treenode');
+      contextMenuOnNodeRef.current = !!target.closest(
+        '.ant-tree-node-content-wrapper, .ant-tree-treenode'
+      );
     };
     // capture: true 让本 handler 先于 target 上的 antd Dropdown listener 执行
     el.addEventListener('contextmenu', handler, true);
@@ -280,6 +285,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
                 // 节点右键时 contextMenuOnNodeRef 为 true，强制不打开空白菜单
                 if (open && contextMenuOnNodeRef.current) {
                   setEmptyMenuOpen(false);
+                  contextMenuOnNodeRef.current = false; // 复位，防止下次外层菜单误读
                   return;
                 }
                 setEmptyMenuOpen(open);

@@ -1087,6 +1087,11 @@
   transition: width 0.2s ease, height 0.2s ease;
 }
 
+/* Monaco Editor 滚动条圆角（自渲染 DOM，不响应 ::-webkit-scrollbar） */
+.monaco-editor .monaco-scrollable-element > .scrollbar > .slider {
+  border-radius: 3px !important;
+}
+
 ::-webkit-scrollbar:hover {
   width: 8px;
   height: 8px;

@@ -447,7 +447,13 @@ export const useDatabase = () => {
   );
 
   const getTables = useCallback(
-    async (connectionId: string, database?: string, forceRefresh = false, search?: string) => {
+    async (
+      connectionId: string,
+      database?: string,
+      forceRefresh = false,
+      search?: string,
+      silent = false
+    ) => {
       const cacheKey = `${connectionId}::${database || ''}`;
 
       // 如果已有正在进行的请求，复用该 Promise
@@ -497,7 +503,8 @@ export const useDatabase = () => {
           // 移除加载标记
           loadingTablesKeys.delete(cacheKey);
           tableLoadingPromises.delete(cacheKey);
-          setLoading(false);
+          // silent 模式（如编辑器补全）不翻转全局 loading，避免整棵连接树错误转圈
+          if (!silent) setLoading(false);
         }
       })();
 
@@ -573,18 +580,18 @@ export const useDatabase = () => {
   );
 
   const getAllColumns = useCallback(
-    async (connectionId: string, database?: string) => {
+    async (connectionId: string, database?: string, silent = false) => {
       try {
-        setLoading(true);
+        if (!silent) setLoading(true);
         const result = await api.getAllColumns(connectionId, database);
         return result;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '批量获取列信息失败';
         setError(errorMsg);
-        message.error(errorMsg);
+        if (!silent) message.error(errorMsg);
         throw err;
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     },
     [setLoading, setError]

@@ -148,43 +148,73 @@ func damengGetAllColumns(ctx context.Context, dbConn db.Executor, database *stri
 	}
 	schema = strings.ToUpper(schema)
 
-	// 含主键子查询，确保批量获取时也能识别主键列
-	query := `
-		SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE,
-			CASE WHEN c.NULLABLE = 'N' THEN 'NO' ELSE 'YES' END AS IS_NULLABLE,
-			CASE WHEN EXISTS (
-				SELECT 1 FROM ALL_CONS_COLUMNS cc
-				JOIN ALL_CONSTRAINTS co ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME AND cc.OWNER = co.OWNER
-				WHERE co.CONSTRAINT_TYPE = 'P'
-					AND co.OWNER = c.OWNER
-					AND co.TABLE_NAME = c.TABLE_NAME
-					AND cc.COLUMN_NAME = c.COLUMN_NAME
-			) THEN 'PRI' ELSE '' END AS COLUMN_KEY,
-			c.DATA_DEFAULT AS COLUMN_DEFAULT,
-			NULL AS EXTRA,
-			NULL AS COMMENT
-		FROM ALL_TAB_COLUMNS c
-		WHERE c.OWNER = ?
-		ORDER BY c.TABLE_NAME, c.COLUMN_ID
-	`
-	rows, err := dbConn.QueryContext(ctx, query, schema)
-	if err != nil {
-		// fallback：USER_* 视图
-		query = `
+	// 优化策略：
+	// 1. 当目标 schema == 当前登录用户时，优先用 USER_* 视图（体积小、有统计信息，远快于 ALL_*）。
+	// 2. 用 LEFT JOIN 替代原 EXISTS 关联子查询——原 EXISTS 对 ALL_TAB_COLUMNS 的每一行都重新
+	//    扫描 ALL_CONSTRAINTS ⋈ ALL_CONS_COLUMNS，在大库下呈线性爆炸；LEFT JOIN 只扫描一次。
+	// 3. ALL_* 失败时回退到 USER_* 视图。
+	var currentUser string
+	if ru, err := dbConn.QueryContext(ctx, `SELECT USER FROM DUAL`); err == nil {
+		ru.Next()
+		_ = ru.Scan(&currentUser)
+		ru.Close()
+	}
+	currentUser = strings.ToUpper(currentUser)
+	useUserViews := currentUser != "" && currentUser == schema
+
+	var rows *sql.Rows
+	var err error
+	if useUserViews {
+		// USER_* 路径：无需 OWNER 过滤，USER_CONSTRAINTS 仅含当前用户约束，数据量最小
+		query := `
 			SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE,
 				CASE WHEN c.NULLABLE = 'N' THEN 'NO' ELSE 'YES' END,
-				CASE WHEN EXISTS (
-					SELECT 1 FROM USER_CONS_COLUMNS cc
-					JOIN USER_CONSTRAINTS co ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME
-					WHERE co.CONSTRAINT_TYPE = 'P'
-						AND co.TABLE_NAME = c.TABLE_NAME
-						AND cc.COLUMN_NAME = c.COLUMN_NAME
-				) THEN 'PRI' ELSE '' END,
+				CASE WHEN pk.COLUMN_NAME IS NULL THEN '' ELSE 'PRI' END,
 				c.DATA_DEFAULT, NULL, NULL
 			FROM USER_TAB_COLUMNS c
+			LEFT JOIN (
+				SELECT cc.TABLE_NAME, cc.COLUMN_NAME
+				FROM USER_CONS_COLUMNS cc
+				JOIN USER_CONSTRAINTS co
+				  ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME
+				WHERE co.CONSTRAINT_TYPE = 'P'
+			) pk ON pk.TABLE_NAME = c.TABLE_NAME AND pk.COLUMN_NAME = c.COLUMN_NAME
 			ORDER BY c.TABLE_NAME, c.COLUMN_ID
 		`
 		rows, err = dbConn.QueryContext(ctx, query)
+	} else {
+		// ALL_* 路径：跨 schema 查询，用 LEFT JOIN 一次性完成主键判定
+		query := `
+			SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE,
+				CASE WHEN c.NULLABLE = 'N' THEN 'NO' ELSE 'YES' END AS IS_NULLABLE,
+				CASE WHEN pk.COLUMN_NAME IS NULL THEN '' ELSE 'PRI' END AS COLUMN_KEY,
+				c.DATA_DEFAULT AS COLUMN_DEFAULT,
+				NULL AS EXTRA,
+				NULL AS COMMENT
+			FROM ALL_TAB_COLUMNS c
+			LEFT JOIN (
+				SELECT cc.TABLE_NAME, cc.COLUMN_NAME, cc.OWNER
+				FROM ALL_CONS_COLUMNS cc
+				JOIN ALL_CONSTRAINTS co
+				  ON cc.CONSTRAINT_NAME = co.CONSTRAINT_NAME AND cc.OWNER = co.OWNER
+				WHERE co.CONSTRAINT_TYPE = 'P' AND co.OWNER = ?
+			) pk ON pk.TABLE_NAME = c.TABLE_NAME AND pk.COLUMN_NAME = c.COLUMN_NAME AND pk.OWNER = c.OWNER
+			WHERE c.OWNER = ?
+			ORDER BY c.TABLE_NAME, c.COLUMN_ID
+		`
+		rows, err = dbConn.QueryContext(ctx, query, schema, schema)
+	}
+	if err != nil {
+		// fallback：权限不足或视图缺失时，用最简形式查（无主键信息）
+		fallback := `
+			SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE,
+				CASE WHEN NULLABLE = 'N' THEN 'NO' ELSE 'YES' END,
+				'', DATA_DEFAULT, NULL, NULL
+			FROM ALL_TAB_COLUMNS
+			WHERE OWNER = ?
+			ORDER BY TABLE_NAME, COLUMN_ID
+		`
+		rows, err = dbConn.QueryContext(ctx, fallback, schema)
 		if err != nil {
 			return models.AllColumnsResult{}, err
 		}
