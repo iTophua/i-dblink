@@ -32,6 +32,7 @@ import { DataTableContextMenu } from './DataTable/DataTableContextMenu';
 import { CellPreviewDialog } from './DataTable/CellPreviewDialog';
 import { SqlInput } from './SqlInput';
 import { EnhancedEmptyState, TableDataSkeleton } from './LoadingStates';
+import { appModal } from '../utils/appModal';
 
 interface DataTableProps {
   connectionId: string;
@@ -625,7 +626,7 @@ export const DataTable = memo(function DataTable({
     const hasDestructive = pendingSqls.some((p) => p.type === 'delete');
     if (hasDestructive) {
       const confirmed = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
+        appModal.confirm({
           title: t('common.confirmSubmit'),
           content: t('common.dataGrid.deleteConfirm'),
           okText: t('common.confirm'),
@@ -697,7 +698,7 @@ export const DataTable = memo(function DataTable({
 
   // ── Undo all ──
   const handleUndoAll = useCallback(() => {
-    Modal.confirm({
+    appModal.confirm({
       title: t('common.undoModifications'),
       content: t('common.dataGrid.undoAllConfirm'),
       okText: t('common.confirm'),
@@ -901,7 +902,7 @@ export const DataTable = memo(function DataTable({
               size="small"
               onClick={() => {
                 const sql = buildWhereClause(filterConditions, dbType);
-                Modal.info({
+                appModal.info({
                   title: t('common.importExport.sqlPreview'),
                   transitionName: '',
                   maskTransitionName: '',
@@ -1144,6 +1145,10 @@ export const DataTable = memo(function DataTable({
             <CodeOutlined style={{ fontSize: 11, color: 'var(--color-primary)' }} />
             <span style={{ fontSize: 11, fontWeight: 500 }}>{t('common.dataGrid.pendingSql')} ({pendingSqls.length})</span>
             <div style={{ flex: 1 }} />
+            <Space size={4}>
+              <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} loading={loading} style={{ fontSize: 11, height: 20 }}>{t('common.submit')}</Button>
+              <Button size="small" icon={<UndoOutlined />} onClick={handleUndoAll} style={{ fontSize: 11, height: 20 }}>{t('common.undo')}</Button>
+            </Space>
             <Button size="small" type="text" icon={<CloseOutlined />} onClick={() => setShowSqlPanel(false)} style={{ height: 18, width: 18, fontSize: 10 }} />
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '4px 8px' }}>

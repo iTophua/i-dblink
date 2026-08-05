@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, Form } from 'antd';
+import { Form } from 'antd';
+import { appModal } from '../../../utils/appModal';
 import { useConnections, useDatabase, useGroups } from '../../../hooks/useApi';
 import { DatabaseProperties } from '../../DatabaseProperties';
 import type { TabPanelRef } from '../../TabPanel';
@@ -409,7 +410,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
   );
 
   const handleDatabaseProperties = useCallback((connectionId: string, databaseName: string) => {
-    Modal.info({
+    appModal.info({
       title: `${t('common.databasePropertiesTitle')}: ${databaseName}`,
       width: 800,
       transitionName: '',
@@ -471,7 +472,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
         ]
           .filter(Boolean)
           .join(t('common.enumerationSeparator'));
-        Modal.confirm({
+        appModal.confirm({
           title: t('common.closeRelatedTabsTitle'),
           content: t('common.closeDatabaseTabsContent', { tabs: tabDesc }),
           okText: t('common.closeAndCloseDatabase'),
@@ -595,7 +596,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
         ]
           .filter(Boolean)
           .join(t('common.enumerationSeparator'));
-        Modal.confirm({
+        appModal.confirm({
           title: t('common.closeRelatedTabsTitle'),
           content: t('common.disconnectTabsContent', { tabs: tabDesc }),
           okText: t('common.closeAndDisconnect'),

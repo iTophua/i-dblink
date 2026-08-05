@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Drawer, Form, Input, Button, List, Tag, Space, Typography, App, Modal } from 'antd';
+import { Drawer, Form, Input, Button, List, Tag, Space, Typography, App } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, CodeOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
+import { appModal } from '../../utils/appModal';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 
 const { Text } = Typography;
@@ -82,7 +83,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
   };
 
   const handleDelete = (id: string) => {
-    Modal.confirm({
+    appModal.confirm({
       title: t('common.confirmDelete'),
       content: t('common.confirmDeleteSnippet'),
       okText: t('common.delete'),

@@ -24,6 +24,7 @@ import { useContextMenu } from '../ContextMenu';
 import { ResultGridContextMenu } from './ResultGridContextMenu';
 import { useEditHistory } from '../../hooks/useEditHistory';
 import { isSameEditValue } from '../DataTable/utils';
+import { appModal } from '../../utils/appModal';
 import { ConditionalFormattingPanel, type FormatRule } from '../DataTable/ConditionalFormattingPanel';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 
@@ -364,7 +365,7 @@ export function ResultGrid({
       return;
     }
     if (modifiedRows.size === 0 && deletedIndices.size === 0 && newRows.length === 0) return;
-    Modal.confirm({ title: t('common.undoModifications'), content: t('common.confirmDiscardAllChanges'), transitionName: '', maskTransitionName: '',
+    appModal.confirm({ title: t('common.undoModifications'), content: t('common.confirmDiscardAllChanges'), transitionName: '', maskTransitionName: '',
       onOk: () => { setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); message.info(t('common.allChangesRevoked')); },
     });
   }, [hasEditHistory, handleUndoStep, modifiedRows, deletedIndices, newRows, message, t]);
@@ -393,7 +394,7 @@ export function ResultGrid({
     const count = newRowKs.length + existingIds.length;
     if (count === 0) return;
 
-    Modal.confirm({
+    appModal.confirm({
       title: t('common.confirmDelete'),
       content: t('common.confirmMarkRowsForDeletion', { count }),
       okText: existingIds.length > 0 ? t('common.markForDeletion') : t('common.delete'),
@@ -488,7 +489,7 @@ export function ResultGrid({
           <Space size={4}>
             <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 11, height: 22 }}>{t('common.submit')}</Button>
             <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 11, height: 22 }}>{t('common.undo')}</Button>
-            <Button size="small" icon={<CodeOutlined />} onClick={() => Modal.info({ title: t('common.operationSqlPreview'), width: 800, content: <pre style={{ maxHeight: 400, overflow: 'auto', background: 'var(--background-toolbar)', padding: 12, borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }}>{operationSql}</pre>, transitionName: '', maskTransitionName: '' })} style={{ fontSize: 11, height: 22 }}>{t('common.sqlQuery')}</Button>
+            <Button size="small" icon={<CodeOutlined />} onClick={() => appModal.info({ title: t('common.operationSqlPreview'), width: 800, content: <pre style={{ maxHeight: 400, overflow: 'auto', background: 'var(--background-toolbar)', padding: 12, borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }}>{operationSql}</pre>, transitionName: '', maskTransitionName: '' })} style={{ fontSize: 11, height: 22 }}>{t('common.sqlQuery')}</Button>
           </Space>
         )}
         {isEditable && (
@@ -571,10 +572,30 @@ export function ResultGrid({
         }}
       />
 
-      {/* SQL Preview */}
+      {/* SQL Preview + 快捷提交/撤销 */}
       {isEditable && operationSql && (
-        <div style={{ padding: '4px 12px', borderTop: '1px solid var(--border)', background: 'var(--background-toolbar)', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 60, overflow: 'auto', flexShrink: 0 }}>
-          <span style={{ color: 'var(--color-primary)', marginRight: 8 }}>SQL ▶</span>{operationSql}
+        <div
+          style={{
+            padding: '4px 12px',
+            borderTop: '1px solid var(--border)',
+            background: 'var(--background-toolbar)',
+            fontSize: 11,
+            fontFamily: 'monospace',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ color: 'var(--color-primary)', flexShrink: 0 }}>SQL ▶</span>
+          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 48, overflow: 'auto' }}>
+            {operationSql}
+          </span>
+          <Space size={4} style={{ flexShrink: 0 }}>
+            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 11, height: 22 }}>{t('common.submit')}</Button>
+            <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 11, height: 22 }}>{t('common.undo')}</Button>
+          </Space>
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { Tag, Spin, Empty, Button, Space, Tooltip, Modal, App, Dropdown } from 'antd';
+import { Tag, Spin, Empty, Button, Space, Tooltip, App, Dropdown } from 'antd';
+import { appModal } from '../utils/appModal';
 import { GlobalInput } from './GlobalInput';
 import { TableDetailSidebar } from './TableDetailSidebar';
 import { useTranslation } from 'react-i18next';
@@ -669,7 +670,7 @@ function TableListComponent({
           disabled: !table,
           onClick: () => {
             if (!table) return;
-            Modal.confirm({
+            appModal.confirm({
               title: t('common.confirmTruncateTable'),
               content: t('common.confirmTruncateTableContent', { tableName: table }),
               okText: t('common.truncate'),
@@ -686,7 +687,7 @@ function TableListComponent({
           disabled: !table,
           onClick: () => {
             if (!table) return;
-            Modal.confirm({
+            appModal.confirm({
               title: t('common.confirmDelete'),
               content: t('common.confirmDropTable', { tableName: table }),
               okText: t('common.delete'),
@@ -886,7 +887,7 @@ function TableListComponent({
                 danger
                 onClick={() => {
                   if (selectedRow) {
-                    Modal.confirm({
+                    appModal.confirm({
                       title: t('common.confirmTruncateTable'),
                       content: t('common.confirmTruncateTableContent', { tableName: selectedRow }),
                       okText: t('common.truncate'),
@@ -909,7 +910,7 @@ function TableListComponent({
                   if (selectedRow) {
                     const newName = `${selectedRow}_copy`;
                     const inputId = `copy-table-name-${++nextCopyIdRef.current}`;
-                    Modal.confirm({
+                    appModal.confirm({
                       title: t('common.copyTable.title'),
                       okText: t('common.copy'),
                       content: (
@@ -961,7 +962,7 @@ function TableListComponent({
                 danger
                 onClick={() => {
                   if (selectedRow) {
-                    Modal.confirm({
+                    appModal.confirm({
                       title: t('common.confirmDelete'),
                       content: t('common.confirmDropTable', { tableName: selectedRow }),
                       okText: t('common.delete'),

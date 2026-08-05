@@ -1,7 +1,8 @@
 import { useCallback, useRef } from 'react';
-import { Modal, App } from 'antd';
+import { App } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { appModal } from '../../../utils/appModal';
 import {
   DatabaseOutlined,
   LinkOutlined,
@@ -218,7 +219,7 @@ export function useContextMenuMenus(
         } else if (key === 'edit') {
           callbacks.onEditConnection(conn);
         } else if (key === 'delete') {
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.confirmDeleteConnectionTitle'),
             content: t('common.confirmDeleteConnectionContent', { name: conn.name }),
             okText: t('common.delete'),
@@ -312,7 +313,7 @@ export function useContextMenuMenus(
           dialogSetters.setRenameValue(group.name);
         } else if (key === 'delete') {
           const connCount = groupedConnections[group.id]?.length || 0;
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.confirmDeleteGroupTitle'),
             content:
               connCount > 0
@@ -365,7 +366,7 @@ export function useContextMenuMenus(
         } else if (key === 'close-db') {
           if (closingDbModalRef.current) return;
           closingDbModalRef.current = true;
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.confirmCloseDatabaseTitle'),
             content: t('common.confirmCloseDatabaseContent', { name: dbName }),
             okText: t('common.close'),
@@ -434,7 +435,7 @@ export function useContextMenuMenus(
           callbacks.onDatabaseRefresh?.(connId, database);
         } else if (action === 'create-schema') {
           let inputVal = '';
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.createSchemaTitle'),
             content: (
               <div style={{ marginTop: 8 }}>
@@ -470,7 +471,7 @@ export function useContextMenuMenus(
             },
           });
         } else if (action === 'drop-schema') {
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.confirmDropSchemaTitle'),
             content: t('common.confirmDropSchemaContent', { name: schemaName }),
             okText: t('common.delete'),
@@ -545,7 +546,7 @@ export function useContextMenuMenus(
         } else if (key === 'import-csv') {
           callbacks.onTableOpen(tableName, database);
         } else if (key === 'truncate-table') {
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.confirmClearTableTitle'),
             content: t('common.confirmClearTableContent', { name: tableName }),
             okText: t('common.clearLabel'),
@@ -564,7 +565,7 @@ export function useContextMenuMenus(
             },
           });
         } else if (key === 'drop-table') {
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.confirmDeleteTableTitle'),
             content: t('common.confirmDeleteTableContent', { name: tableName }),
             okText: t('common.delete'),
@@ -640,7 +641,7 @@ export function useContextMenuMenus(
         } else if (key === 'design-view') {
           callbacks.onOpenViewDefinition?.(viewName, database);
         } else if (key === 'drop-view') {
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.confirmDeleteViewTitle'),
             content: t('common.confirmDeleteViewContent', { name: viewName }),
             okText: t('common.delete'),

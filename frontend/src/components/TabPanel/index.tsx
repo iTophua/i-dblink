@@ -6,9 +6,10 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from 'react';
-import { Tabs, Breadcrumb, Menu, App, Modal, Tooltip } from 'antd';
+import { Tabs, Breadcrumb, Menu, App, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { TabsProps } from 'antd';
+import { appModal } from '../../utils/appModal';
 import {
   DatabaseOutlined,
   TableOutlined,
@@ -888,7 +889,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
         if (table?.isDirty) {
           // 有未保存的更改，显示确认对话框
-          Modal.confirm({
+          appModal.confirm({
             title: t('common.unsavedChangesTitle'),
             content: t('common.unsavedChangesContent'),
             okText: t('common.close'),
@@ -1263,7 +1264,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               onContextMenu={(e) => handleTabContextMenu(e, sqlTab.key)}
               style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
               onDoubleClick={() => {
-                Modal.confirm({
+                appModal.confirm({
                   title: t('common.renameTabTitle'),
                   content: (
                     <input

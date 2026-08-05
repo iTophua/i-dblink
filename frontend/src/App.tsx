@@ -1,5 +1,6 @@
 import { MainLayout } from './components/MainLayout';
 import { ConfigProvider, Modal, theme, App as AntdApp } from 'antd';
+import { registerAppModal } from './utils/appModal';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import { useEffect, useMemo, useState } from 'react';
@@ -322,10 +323,19 @@ function App() {
   return (
     <ConfigProvider locale={antdLocale} theme={antdThemeConfig}>
       <AntdApp>
-        <MainLayout />
+        <AppInner />
       </AntdApp>
     </ConfigProvider>
   );
+}
+
+/** 内部组件：在 AntdApp 内注册 modal 实例，使 appModal.confirm 等继承主题 */
+function AppInner() {
+  const { modal } = AntdApp.useApp();
+  useEffect(() => {
+    registerAppModal(modal);
+  }, [modal]);
+  return <MainLayout />;
 }
 
 export default App;

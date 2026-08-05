@@ -4,6 +4,7 @@
  */
 import * as XLSX from 'xlsx';
 import { Modal } from 'antd';
+import { appModal } from './appModal';
 
 export interface ExportOptions {
   filename?: string;
@@ -434,7 +435,7 @@ function showExportProgress(current: number, total: number) {
   // 使用 ant Modal 显示进度
   if (typeof Modal !== 'undefined') {
     if (!progressModal) {
-      progressModal = Modal.confirm({
+      progressModal = appModal.confirm({
         title: '导出进度',
         content: `正在处理数据... ${current}/${total} (${percent}%)`,
         okText: '等待',
