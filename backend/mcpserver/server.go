@@ -53,7 +53,10 @@ func (s *Server) registerConnectionTools() {
 		mcp.NewTool("list_connections",
 			mcp.WithDescription("List all saved database connections in iDBLink. "+
 				"Returns connection_id, name, db_type, host, port, and connection status. "+
-				"Use the connection_id from the result to call other tools."),
+				"Use the connection_id from the result to call other tools. "+
+				"Optionally filter by a search keyword matching name, host, db_type, or username."),
+			mcp.WithString("search",
+				mcp.Description("Optional keyword to filter connections by name, host, db_type, or username")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListConnections,
@@ -172,7 +175,9 @@ func (s *Server) registerQueryTools() {
 				"to understand the schema."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("table_name", mcp.Required(), mcp.Description("Table name")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleDescribeTable,
@@ -185,7 +190,9 @@ func (s *Server) registerQueryTools() {
 				"Useful to understand exact column definitions, constraints, and indexes."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("table_name", mcp.Required(), mcp.Description("Table name")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleGetTableDDL,
@@ -201,7 +208,9 @@ func (s *Server) registerQueryTools() {
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single read-only SQL statement (SELECT, WITH, SHOW, EXPLAIN, DESCRIBE)")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleExecuteQuery,
@@ -220,7 +229,9 @@ func (s *Server) registerMutationTools() {
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single INSERT, UPDATE, or DELETE statement")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithDestructiveHintAnnotation(true),
 		),
 			s.handleExecuteUpdate,
@@ -239,7 +250,9 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single DDL statement (CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE VIEW, etc.)")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithDestructiveHintAnnotation(true),
 		),
 		s.handleExecuteDDL,
@@ -251,7 +264,9 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithDescription("List all views in a database/schema. "+
 				"Returns view names. Use get_table_ddl to get the view definition."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListViews,
@@ -263,7 +278,9 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithDescription("List all stored procedures in a database/schema. "+
 				"Use get_procedure_body to get the source code of a specific procedure."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListProcedures,
@@ -275,7 +292,9 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithDescription("Get the source code (body) of a stored procedure."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("procedure_name", mcp.Required(), mcp.Description("Procedure name")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleGetProcedureBody,
@@ -287,7 +306,9 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithDescription("List all functions in a database/schema. "+
 				"Use get_function_body to get the source code of a specific function."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListFunctions,
@@ -299,7 +320,9 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithDescription("Get the source code (body) of a function."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("function_name", mcp.Required(), mcp.Description("Function name")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleGetFunctionBody,
@@ -311,7 +334,9 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithDescription("List all triggers in a database/schema, "+
 				"including their associated table, timing (BEFORE/AFTER), and event (INSERT/UPDATE/DELETE)."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListTriggers,
@@ -323,7 +348,9 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithDescription("List all sequences in a database/schema, "+
 				"including current value, min/max, and increment."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
-			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
+					"If omitted, uses the connection's default database)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListSequences,

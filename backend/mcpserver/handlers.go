@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -69,7 +70,31 @@ func jsonResult(data any, err error, errMsg string) (*mcp.CallToolResult, error)
 
 func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	conns, err := s.app.GetConnections()
-	return jsonResult(conns, err, "failed to list connections")
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to list connections", err), nil
+	}
+
+	// 内存过滤：按 name/host/db_type/username/database 模糊匹配
+	search := strings.ToLower(strings.TrimSpace(argStr(req.GetArguments(), "search")))
+	if search != "" {
+		filtered := make([]backend.ConnectionOutput, 0, len(conns))
+		for _, c := range conns {
+			db := ""
+			if c.Database != nil {
+				db = *c.Database
+			}
+			if strings.Contains(strings.ToLower(c.Name), search) ||
+				strings.Contains(strings.ToLower(c.Host), search) ||
+				strings.Contains(strings.ToLower(c.DbType), search) ||
+				strings.Contains(strings.ToLower(c.Username), search) ||
+				strings.Contains(strings.ToLower(db), search) {
+				filtered = append(filtered, c)
+			}
+		}
+		conns = filtered
+	}
+
+	return mcp.NewToolResultJSON(conns)
 }
 
 func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
