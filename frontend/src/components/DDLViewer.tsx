@@ -54,7 +54,13 @@ export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight, style }) =
 
   const formattedDDL = useMemo(() => {
     try {
-      return formatSql(ddl, { keywordCase: 'upper', indentStyle: 'standard', linesBetweenQueries: 2 });
+      const formatted = formatSql(ddl, { keywordCase: 'upper', indentStyle: 'standard', linesBetweenQueries: 2 });
+      // 后处理：sql-formatter 会在 DDL 表选项的 = 两边加空格（ENGINE = InnoDB），
+      // 但 DDL 约定表选项的 = 无空格（ENGINE=InnoDB）。这里只针对表选项关键字去空格。
+      return formatted.replace(
+        /(ENGINE|CHARSET|COLLATE|AUTO_INCREMENT|ROW_FORMAT)\s*=\s*/gi,
+        '$1='
+      );
     } catch {
       return ddl;
     }
