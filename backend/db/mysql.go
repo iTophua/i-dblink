@@ -61,10 +61,13 @@ func openMySQL(args ConnectArgs) (*sql.DB, error) {
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
 
-		if err := mysql.RegisterTLSConfig("custom", tlsConfig); err != nil {
+		// 用 host:port 生成唯一 TLS 配置名，避免多个 SSL 连接并发建立时
+		// 用固定名称 "custom" 互相覆盖（RegisterTLSConfig 是全局注册表）。
+		tlsName := fmt.Sprintf("idblink-%s-%d", args.Host, args.Port)
+		if err := mysql.RegisterTLSConfig(tlsName, tlsConfig); err != nil {
 			return nil, fmt.Errorf("failed to register TLS config: %w", err)
 		}
-		cfg.TLSConfig = "custom"
+		cfg.TLSConfig = tlsName
 		dsn = cfg.FormatDSN()
 	}
 

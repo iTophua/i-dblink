@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -110,26 +111,21 @@ func getTableDDL(pool *db.DBPool, tableName string, database string) ([]string, 
 		}
 
 	case "dameng", "kingbase":
+		ctx := context.Background()
+		schema := database
+		schemaPtr := &schema
+
+		// 1. 先尝试视图定义：用达梦/Oracle 兼容的系统视图 ALL_VIEWS
 		var viewDef string
-		err := db.QueryRow(
-			"SELECT text FROM all_views WHERE schema_name=? AND view_name=?",
-			database, tableName,
+		err := db.QueryRowContext(ctx,
+			"SELECT TEXT FROM ALL_VIEWS WHERE OWNER = ? AND VIEW_NAME = ?",
+			strings.ToUpper(schema), strings.ToUpper(tableName),
 		).Scan(&viewDef)
 		if err == nil && viewDef != "" {
-			ddls = append(ddls, viewDef)
+			ddls = append(ddls, "CREATE OR REPLACE VIEW "+tableName+" AS\n"+viewDef+";")
 		} else {
-			// 尝试获取表定义
-			var tableSQL string
-			err = db.QueryRow(
-				"SELECT 'CREATE TABLE ' || ? || ' (' || array_to_string(array_agg(col_def), ', ') || ');'"+
-					" FROM ("+
-					"   SELECT column_name || ' ' || data_type"+
-					"   FROM user_tables_columns WHERE table_name = ?"+
-					"   ORDER BY column_id"+
-					" ) AS cols",
-				tableName, tableName,
-			).Scan(&tableSQL)
-			if err == nil && tableSQL != "" {
+			// 2. 表定义：复用 doc.go 的 getTableDDLForDoc（通过 ALL_TAB_COLUMNS 拼列）
+			if tableSQL := getTableDDLForDoc(ctx, db, pool.DbType, tableName, schemaPtr); tableSQL != "" {
 				ddls = append(ddls, tableSQL)
 			}
 		}

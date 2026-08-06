@@ -43,11 +43,16 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
     setLoading(true);
     api
       .getTableDDL(connectionId, tableName, database)
-      .catch(() => [])
       .then((ddlResult) => {
         if (cancelled || !isMountedRef.current) return;
         setDdl(Array.isArray(ddlResult) ? ddlResult.join('\n') : String(ddlResult));
         setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled || !isMountedRef.current) return;
+        setDdl('');
+        setLoading(false);
+        message.error(typeof err === 'string' ? err : err?.message || '获取 DDL 失败');
       });
     return () => {
       cancelled = true;

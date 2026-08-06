@@ -271,7 +271,14 @@ export const ConnectionTree: React.FC<ConnectionTreeProps> = ({
       await api.connectConnection(connectionId);
       message.success(t('common.connectionSuccess'));
     } catch (error) {
-      message.error(t('common.connectFailed'));
+      // 偶现连接失败（TLS 握手竞态、TCP 首包超时等）等 1s 重试一次
+      try {
+        await new Promise((r) => setTimeout(r, 1000));
+        await api.connectConnection(connectionId);
+        message.success(t('common.connectionSuccess'));
+      } catch (error2) {
+        message.error(t('common.connectFailed'));
+      }
     }
   }, []);
 
