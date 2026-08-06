@@ -378,3 +378,161 @@ func (s *Server) handleExecuteUpdate(ctx context.Context, req mcp.CallToolReques
 	result, err := s.app.ExecuteQuery(connID, sqlText, database)
 	return jsonResult(result, err, "update failed")
 }
+
+// ==================== 元数据/DDL handlers ====================
+
+func (s *Server) handleExecuteDDL(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	sqlText := argStr(args, "sql")
+	if connID == "" || sqlText == "" {
+		return mcp.NewToolResultError("connection_id and sql are required"), nil
+	}
+
+	// 安全检查：仅允许 DDL
+	if !IsDDLStatement(sqlText) {
+		return mcp.NewToolResultError(
+			"execute_ddl only allows DDL statements (CREATE, DROP, ALTER, TRUNCATE, RENAME). " +
+				"For INSERT/UPDATE/DELETE, use execute_update."), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	if err := s.app.ExecuteDDL(connID, sqlText, database); err != nil {
+		return mcp.NewToolResultErrorFromErr("DDL execution failed", err), nil
+	}
+	return mcp.NewToolResultJSON(map[string]any{"success": true, "message": "DDL executed successfully"})
+}
+
+func (s *Server) handleListViews(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	// 复用 GetTablesCategorized，只返回 views 部分
+	result, err := s.app.GetTablesCategorized(connID, database, nil)
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to list views", err), nil
+	}
+	return mcp.NewToolResultJSON(result.Views)
+}
+
+func (s *Server) handleListProcedures(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	procs, err := s.app.GetProcedures(connID, database)
+	return jsonResult(procs, err, "failed to list procedures")
+}
+
+func (s *Server) handleGetProcedureBody(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	procName := argStr(args, "procedure_name")
+	if connID == "" || procName == "" {
+		return mcp.NewToolResultError("connection_id and procedure_name are required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	body, err := s.app.GetProcedureBody(connID, procName, database)
+	return jsonResult(body, err, "failed to get procedure body")
+}
+
+func (s *Server) handleListFunctions(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	funcs, err := s.app.GetFunctions(connID, database)
+	return jsonResult(funcs, err, "failed to list functions")
+}
+
+func (s *Server) handleGetFunctionBody(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	funcName := argStr(args, "function_name")
+	if connID == "" || funcName == "" {
+		return mcp.NewToolResultError("connection_id and function_name are required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	body, err := s.app.GetFunctionBody(connID, funcName, database)
+	return jsonResult(body, err, "failed to get function body")
+}
+
+func (s *Server) handleListTriggers(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	triggers, err := s.app.GetTriggers(connID, database)
+	return jsonResult(triggers, err, "failed to list triggers")
+}
+
+func (s *Server) handleListSequences(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	seqs, err := s.app.GetSequences(connID, database)
+	return jsonResult(seqs, err, "failed to list sequences")
+}
+
+func (s *Server) handleGetDatabaseDDL(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	dbName := argStr(args, "database")
+	if connID == "" || dbName == "" {
+		return mcp.NewToolResultError("connection_id and database are required"), nil
+	}
+
+	ddl, err := s.app.GetDatabaseDDL(connID, dbName)
+	return jsonResult(ddl, err, "failed to get database DDL")
+}

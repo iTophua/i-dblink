@@ -42,6 +42,7 @@ func (s *Server) registerTools() {
 	s.registerConnectionTools()
 	s.registerQueryTools()
 	s.registerMutationTools()
+	s.registerMetadataTools()
 }
 
 // ==================== 连接管理 tools ====================
@@ -194,8 +195,9 @@ func (s *Server) registerQueryTools() {
 	s.mcp.AddTool(
 		mcp.NewTool("execute_query",
 			mcp.WithDescription("Execute a read-only SQL query (SELECT, WITH, EXPLAIN, SHOW, DESCRIBE). "+
-				"Returns column names and rows as JSON. Only read-only statements are allowed; "+
-				"use execute_update for INSERT/UPDATE/DELETE."),
+					"Returns column names and rows as JSON. Only read-only statements are allowed; "+
+					"use execute_update for INSERT/UPDATE/DELETE, execute_ddl for schema changes. "+
+					"Call list_connections first to get a valid connection_id."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single read-only SQL statement (SELECT, WITH, SHOW, EXPLAIN, DESCRIBE)")),
@@ -212,15 +214,130 @@ func (s *Server) registerMutationTools() {
 	// execute_update — DML only
 	s.mcp.AddTool(
 		mcp.NewTool("execute_update",
-			mcp.WithDescription("Execute a data modification statement (INSERT, UPDATE, DELETE). "+
-				"Returns the number of rows affected. "+
-				"DDL statements (CREATE, DROP, ALTER, TRUNCATE) are rejected."),
+			mcp.WithDescription("Execute a data modification statement (INSERT, UPDATE, DELETE, MERGE). "+
+					"Returns the number of rows affected. "+
+					"For schema changes (CREATE/DROP/ALTER TABLE), use execute_ddl."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single INSERT, UPDATE, or DELETE statement")),
 			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
 			mcp.WithDestructiveHintAnnotation(true),
 		),
-		s.handleExecuteUpdate,
+			s.handleExecuteUpdate,
+		)
+}
+
+// ==================== 元数据/DDL tools ====================
+
+func (s *Server) registerMetadataTools() {
+	// execute_ddl — DDL（CREATE/DROP/ALTER/TRUNCATE/RENAME）
+	s.mcp.AddTool(
+		mcp.NewTool("execute_ddl",
+			mcp.WithDescription("Execute a DDL statement (CREATE, DROP, ALTER, TRUNCATE, RENAME) "+
+				"to create or modify database structure (tables, views, indexes, etc). "+
+				"DML (INSERT/UPDATE/DELETE) is rejected; use execute_update for data changes."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("sql", mcp.Required(),
+				mcp.Description("A single DDL statement (CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE VIEW, etc.)")),
+			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithDestructiveHintAnnotation(true),
+		),
+		s.handleExecuteDDL,
+	)
+
+	// list_views — 列出视图
+	s.mcp.AddTool(
+		mcp.NewTool("list_views",
+			mcp.WithDescription("List all views in a database/schema. "+
+				"Returns view names. Use get_table_ddl to get the view definition."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListViews,
+	)
+
+	// list_procedures — 列出存储过程
+	s.mcp.AddTool(
+		mcp.NewTool("list_procedures",
+			mcp.WithDescription("List all stored procedures in a database/schema. "+
+				"Use get_procedure_body to get the source code of a specific procedure."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListProcedures,
+	)
+
+	// get_procedure_body — 获取存储过程源码
+	s.mcp.AddTool(
+		mcp.NewTool("get_procedure_body",
+			mcp.WithDescription("Get the source code (body) of a stored procedure."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("procedure_name", mcp.Required(), mcp.Description("Procedure name")),
+			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleGetProcedureBody,
+	)
+
+	// list_functions — 列出函数
+	s.mcp.AddTool(
+		mcp.NewTool("list_functions",
+			mcp.WithDescription("List all functions in a database/schema. "+
+				"Use get_function_body to get the source code of a specific function."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListFunctions,
+	)
+
+	// get_function_body — 获取函数源码
+	s.mcp.AddTool(
+		mcp.NewTool("get_function_body",
+			mcp.WithDescription("Get the source code (body) of a function."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("function_name", mcp.Required(), mcp.Description("Function name")),
+			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleGetFunctionBody,
+	)
+
+	// list_triggers — 列出触发器
+	s.mcp.AddTool(
+		mcp.NewTool("list_triggers",
+			mcp.WithDescription("List all triggers in a database/schema, "+
+				"including their associated table, timing (BEFORE/AFTER), and event (INSERT/UPDATE/DELETE)."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListTriggers,
+	)
+
+	// list_sequences — 列出序列
+	s.mcp.AddTool(
+		mcp.NewTool("list_sequences",
+			mcp.WithDescription("List all sequences in a database/schema, "+
+				"including current value, min/max, and increment."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("database", mcp.Description("Database/schema (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListSequences,
+	)
+
+	// get_database_ddl — 整库 DDL
+	s.mcp.AddTool(
+		mcp.NewTool("get_database_ddl",
+			mcp.WithDescription("Get DDL statements for all tables (and optionally views) in a database/schema. "+
+				"Returns a concatenated script of CREATE statements. Useful for schema export and documentation."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("database", mcp.Required(), mcp.Description("Database/schema name")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleGetDatabaseDDL,
 	)
 }

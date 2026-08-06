@@ -57,10 +57,18 @@ func (a *App) GetMCPConfig() (MCPConfigInfo, error) {
 	}
 
 	tools := strings.Join([]string{
+		// 连接管理
 		"list_connections", "create_connection", "update_connection",
 		"delete_connection", "test_connection",
+		// 查询
 		"list_databases", "list_tables", "describe_table", "get_table_ddl",
-		"execute_query", "execute_update",
+		"execute_query",
+		// 写操作
+		"execute_update", "execute_ddl",
+		// 元数据
+		"list_views", "list_procedures", "get_procedure_body",
+		"list_functions", "get_function_body",
+		"list_triggers", "list_sequences", "get_database_ddl",
 	}, ", ")
 
 	return MCPConfigInfo{
