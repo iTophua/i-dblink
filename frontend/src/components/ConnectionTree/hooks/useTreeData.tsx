@@ -904,20 +904,6 @@ export function useTreeData({
                     />
                   </Tooltip>
                 )}
-                {conn.status !== 'connected' && conn.status !== 'loading' && (
-                  <Tooltip title={t('common.mainLayout.disconnected')}>
-                    <span
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: 'var(--text-disabled)',
-                        display: 'inline-block',
-                        marginLeft: 6,
-                      }}
-                    />
-                  </Tooltip>
-                )}
               </span>
               {conn.database && (
                 <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
