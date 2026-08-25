@@ -8,9 +8,6 @@ import type { ConnectionInput, GroupInput } from '../types/api';
 
 import { getDialect } from '../utils/sqlDialects';
 
-// 防重复调用：跟踪正在加载的 cacheKey
-const loadingTablesKeys = new Set<string>();
-
 // 性能优化：带 TTL 的 LRU 缓存
 interface CacheEntry<T> {
   data: T;
@@ -422,7 +419,21 @@ export const useGroups = () => {
 };
 
 // 性能优化：Promise 锁，防止同一 cacheKey 的并发请求重复发送
-const tableLoadingPromises = new Map<string, Promise<import('../types/api').TableInfo[]>>();
+// in-flight 去重：同 cacheKey 且同 search 的并发调用复用同一个请求。
+// search 不同则不复用——否则新搜索值会被静默丢弃（复用旧搜索的 Promise），
+// 表现为"输入结束后结果对不上搜索词"。
+const tableLoadingPromises = new Map<
+  string,
+  {
+    promise: Promise<import('../types/api').TableInfo[]>;
+    search?: string;
+    requestId: number;
+  }
+>();
+// 每个 cacheKey 的最新请求序号：搜索快速变化时旧请求可能后返回，
+// 只有最新请求才允许写缓存，防止过期响应覆盖新结果
+let tableRequestSeq = 0;
+const latestTableRequestId = new Map<string, number>();
 
 export const useDatabase = () => {
   const { message } = App.useApp();
@@ -456,17 +467,10 @@ export const useDatabase = () => {
     ) => {
       const cacheKey = `${connectionId}::${database || ''}`;
 
-      // 如果已有正在进行的请求，复用该 Promise
-      const existingPromise = tableLoadingPromises.get(cacheKey);
-      if (existingPromise) {
-        return existingPromise;
-      }
-
-      // 防重复调用：如果正在加载中，直接返回
-      if (loadingTablesKeys.has(cacheKey)) {
-        // 等待现有请求完成，返回缓存的数据（如果有）
-        const cached = getTableData(cacheKey);
-        return cached?.tables || [];
+      // 如果已有正在进行的请求且搜索词相同，复用该 Promise
+      const existing = tableLoadingPromises.get(cacheKey);
+      if (existing && existing.search === search) {
+        return existing.promise;
       }
 
       const cached = getTableData(cacheKey);
@@ -479,8 +483,8 @@ export const useDatabase = () => {
         return cached.tables;
       }
 
-      // 标记正在加载
-      loadingTablesKeys.add(cacheKey);
+      const requestId = ++tableRequestSeq;
+      latestTableRequestId.set(cacheKey, requestId);
 
       const promise = (async () => {
         try {
@@ -490,25 +494,33 @@ export const useDatabase = () => {
           console.log('[DEBUG] getTablesCategorized result:', JSON.stringify(result, null, 2));
           const allTables = [...(result.tables || []), ...(result.views || [])];
           console.log('[DEBUG] allTables count:', allTables.length, 'tables:', result.tables?.length, 'views:', result.views?.length);
-          setTableData(cacheKey, allTables);
+          // 过期响应仲裁：仅当本请求仍是该 cacheKey 的最新请求时才写缓存/报错
+          if (latestTableRequestId.get(cacheKey) === requestId) {
+            setTableData(cacheKey, allTables);
+          }
           return allTables;
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : '获取表列表失败';
-          console.error('获取表列表失败:', connectionId, database, err);
-          setError(errorMsg);
-          message.error(errorMsg);
-          setTableDataFailed(cacheKey, true);
+          if (latestTableRequestId.get(cacheKey) === requestId) {
+            console.error('获取表列表失败:', connectionId, database, err);
+            setError(errorMsg);
+            message.error(errorMsg);
+            setTableDataFailed(cacheKey, true);
+          }
           return [];
         } finally {
-          // 移除加载标记
-          loadingTablesKeys.delete(cacheKey);
-          tableLoadingPromises.delete(cacheKey);
+          if (tableLoadingPromises.get(cacheKey)?.requestId === requestId) {
+            tableLoadingPromises.delete(cacheKey);
+          }
+          if (latestTableRequestId.get(cacheKey) === requestId) {
+            latestTableRequestId.delete(cacheKey);
+          }
           // silent 模式（如编辑器补全）不翻转全局 loading，避免整棵连接树错误转圈
           if (!silent) setLoading(false);
         }
       })();
 
-      tableLoadingPromises.set(cacheKey, promise);
+      tableLoadingPromises.set(cacheKey, { promise, search, requestId });
       return promise;
     },
     [setLoading, setError, setTableData, setTableDataLoading, setTableDataFailed, getTableData]
