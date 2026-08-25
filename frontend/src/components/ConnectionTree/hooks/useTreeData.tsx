@@ -11,7 +11,7 @@ import {
   FunctionOutlined,
   ThunderboltOutlined,
   SortAscendingOutlined,
-  CloseCircleOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
 import type { TableInfo } from '../../../types/api';
@@ -933,18 +933,26 @@ export function useTreeData({
                       />
                     </Tooltip>
                     <Tooltip title={t('common.cancelConnection')}>
-                      <CloseCircleOutlined
+                      <span
+                        className="hoverable hoverable-danger"
                         onClick={(e) => {
                           e.stopPropagation();
                           handlers.onCancelConnect?.(conn.id);
                         }}
                         style={{
-                          fontSize: 13,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 18,
+                          height: 18,
+                          borderRadius: 4,
+                          marginLeft: 8,
                           color: 'var(--text-tertiary)',
-                          marginLeft: 10,
-                          cursor: 'pointer',
+                          flexShrink: 0,
                         }}
-                      />
+                      >
+                        <CloseOutlined style={{ fontSize: 10 }} />
+                      </span>
                     </Tooltip>
                   </>
                 )}

@@ -122,6 +122,11 @@
   background: var(--background-hover);
   color: var(--color-primary) !important;
 }
+/* hover 时变错误色（用于取消/删除类图标按钮） */
+.hoverable-danger:hover {
+  background: var(--background-hover);
+  color: var(--color-error) !important;
+}
 
 /* 编辑器↔结果区拖拽手柄：hover 变主色提示可拖拽 */
 .resize-handle {
