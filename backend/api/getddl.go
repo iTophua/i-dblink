@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -50,6 +51,17 @@ func getTableDDL(pool *db.DBPool, tableName string, database string) ([]string, 
 
 	switch pool.DbType {
 	case "mysql", "mariadb":
+		// 连接未存默认库且调用方未传 database 时，取服务器端当前默认库；
+		// 仍拿不到则报可行动的错误，而不是拼出 ``.`` 触发 Error 1102 (Incorrect database name '')
+		if database == "" {
+			var cur sql.NullString
+			if err := db.QueryRow("SELECT DATABASE()").Scan(&cur); err != nil || !cur.Valid || cur.String == "" {
+				return nil, fmt.Errorf(
+					"no database selected for table %s: the connection has no default database, pass the 'database' parameter (use list_databases to find it)",
+					tableName)
+			}
+			database = cur.String
+		}
 		escapedDb := strings.ReplaceAll(database, "`", "``")
 		escapedTable := strings.ReplaceAll(tableName, "`", "``")
 		rows, err := db.Query(fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", escapedDb, escapedTable))
@@ -113,6 +125,15 @@ func getTableDDL(pool *db.DBPool, tableName string, database string) ([]string, 
 	case "dameng", "kingbase":
 		ctx := context.Background()
 		schema := database
+		if schema == "" {
+			// 未指定 schema 时用当前 schema 兜底（达梦走 Oracle 语法，金仓走 PG 语法）
+			schema = currentSchemaFallback(db, pool.DbType)
+		}
+		if schema == "" {
+			return nil, fmt.Errorf(
+				"no schema selected for table %s: the connection has no default schema, pass the 'database' parameter",
+				tableName)
+		}
 		schemaPtr := &schema
 
 		// 1. 先尝试视图定义：用达梦/Oracle 兼容的系统视图 ALL_VIEWS
@@ -139,4 +160,17 @@ func getTableDDL(pool *db.DBPool, tableName string, database string) ([]string, 
 	}
 
 	return ddls, nil
+}
+
+// currentSchemaFallback 查询当前 schema（连接未存默认 schema 时兜底），查询失败返回空串。
+func currentSchemaFallback(db *sql.DB, dbType string) string {
+	query := "SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA') FROM DUAL"
+	if dbType == "kingbase" {
+		query = "SELECT current_schema"
+	}
+	var s string
+	if err := db.QueryRow(query).Scan(&s); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(s)
 }

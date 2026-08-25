@@ -66,6 +66,16 @@ func jsonResult(data any, err error, errMsg string) (*mcp.CallToolResult, error)
 	return mcp.NewToolResultJSON(data)
 }
 
+// jsonListResult 构造列表结果：数组包裹为 {"<key>": [...]}。
+// MCP 规范要求 structuredContent 必须是 JSON object（record），
+// 顶层数组会被严格客户端直接拒绝（"expected record, received array"），导致工具完全不可用。
+func jsonListResult(key string, data any, err error, errMsg string) (*mcp.CallToolResult, error) {
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr(errMsg, err), nil
+	}
+	return mcp.NewToolResultJSON(map[string]any{key: data})
+}
+
 // ==================== 连接管理 handlers ====================
 
 func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -94,7 +104,7 @@ func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequ
 		conns = filtered
 	}
 
-	return mcp.NewToolResultJSON(conns)
+	return mcp.NewToolResultJSON(map[string]any{"connections": conns})
 }
 
 func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -124,7 +134,7 @@ func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolReq
 				return mcp.NewToolResultErrorFromErr("failed to update connection password", err), nil
 			}
 		}
-		return mcp.NewToolResultJSON(hit)
+		return s.connectionResult(hit.ID, *hit)
 	}
 
 	// 无匹配：正常新建
@@ -141,7 +151,21 @@ func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolReq
 	}
 
 	conn, err := s.app.SaveConnection(input)
-	return jsonResult(conn, err, "failed to create connection")
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to create connection", err), nil
+	}
+	return s.connectionResult(conn.ID, conn)
+}
+
+// connectionResult 返回连接信息，附带其真实可用状态。
+// MCP 调用查询时会自动建连（ensureConnected），所以"未连接"不代表不可用；
+// 这里立即建立连接（幂等）让 status 字段反映真实状态，避免 AI 误判连接失败。
+// 建连失败不阻塞创建——首次查询时会再次尝试并报出具体的凭证/网络错误。
+func (s *Server) connectionResult(connID string, conn backend.ConnectionOutput) (*mcp.CallToolResult, error) {
+	if s.app.ConnectDatabase(connID) == nil {
+		conn.Status = "connected"
+	}
+	return mcp.NewToolResultJSON(conn)
 }
 
 // findReusableConnection 查找可复用的已存在连接（同一服务器+账号）。
@@ -301,7 +325,7 @@ func (s *Server) handleListDatabases(ctx context.Context, req mcp.CallToolReques
 	}
 
 	dbs, err := s.app.GetDatabases(connID)
-	return jsonResult(dbs, err, "failed to list databases")
+	return jsonListResult("databases", dbs, err, "failed to list databases")
 }
 
 func (s *Server) handleListTables(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -351,7 +375,7 @@ func (s *Server) handleGetTableDDL(ctx context.Context, req mcp.CallToolRequest)
 	}
 
 	ddls, err := s.app.GetTableDDL(connID, table, database)
-	return jsonResult(ddls, err, "failed to get table DDL")
+	return jsonListResult("ddls", ddls, err, "failed to get table DDL")
 }
 
 func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -449,7 +473,7 @@ func (s *Server) handleListViews(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("failed to list views", err), nil
 	}
-	return mcp.NewToolResultJSON(result.Views)
+	return mcp.NewToolResultJSON(map[string]any{"views": result.Views})
 }
 
 func (s *Server) handleListProcedures(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -465,7 +489,7 @@ func (s *Server) handleListProcedures(ctx context.Context, req mcp.CallToolReque
 	}
 
 	procs, err := s.app.GetProcedures(connID, database)
-	return jsonResult(procs, err, "failed to list procedures")
+	return jsonListResult("procedures", procs, err, "failed to list procedures")
 }
 
 func (s *Server) handleGetProcedureBody(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -482,7 +506,7 @@ func (s *Server) handleGetProcedureBody(ctx context.Context, req mcp.CallToolReq
 	}
 
 	body, err := s.app.GetProcedureBody(connID, procName, database)
-	return jsonResult(body, err, "failed to get procedure body")
+	return jsonResult(map[string]any{"body": body}, err, "failed to get procedure body")
 }
 
 func (s *Server) handleListFunctions(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -498,7 +522,7 @@ func (s *Server) handleListFunctions(ctx context.Context, req mcp.CallToolReques
 	}
 
 	funcs, err := s.app.GetFunctions(connID, database)
-	return jsonResult(funcs, err, "failed to list functions")
+	return jsonListResult("functions", funcs, err, "failed to list functions")
 }
 
 func (s *Server) handleGetFunctionBody(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -515,7 +539,7 @@ func (s *Server) handleGetFunctionBody(ctx context.Context, req mcp.CallToolRequ
 	}
 
 	body, err := s.app.GetFunctionBody(connID, funcName, database)
-	return jsonResult(body, err, "failed to get function body")
+	return jsonResult(map[string]any{"body": body}, err, "failed to get function body")
 }
 
 func (s *Server) handleListTriggers(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -531,7 +555,7 @@ func (s *Server) handleListTriggers(ctx context.Context, req mcp.CallToolRequest
 	}
 
 	triggers, err := s.app.GetTriggers(connID, database)
-	return jsonResult(triggers, err, "failed to list triggers")
+	return jsonListResult("triggers", triggers, err, "failed to list triggers")
 }
 
 func (s *Server) handleListSequences(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -547,7 +571,7 @@ func (s *Server) handleListSequences(ctx context.Context, req mcp.CallToolReques
 	}
 
 	seqs, err := s.app.GetSequences(connID, database)
-	return jsonResult(seqs, err, "failed to list sequences")
+	return jsonListResult("sequences", seqs, err, "failed to list sequences")
 }
 
 func (s *Server) handleGetDatabaseDDL(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -559,5 +583,5 @@ func (s *Server) handleGetDatabaseDDL(ctx context.Context, req mcp.CallToolReque
 	}
 
 	ddl, err := s.app.GetDatabaseDDL(connID, dbName)
-	return jsonResult(ddl, err, "failed to get database DDL")
+	return jsonResult(map[string]any{"ddl": ddl}, err, "failed to get database DDL")
 }

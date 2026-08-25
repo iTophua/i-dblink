@@ -22,6 +22,16 @@ func TestIsReadOnlyQuery(t *testing.T) {
 		{"use database", "USE mydb", true},
 		{"table keyword", "TABLE users", true},
 		{"complex select", "SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(*) > 5", true},
+		// 注释前缀（剥离后再判定）
+		{"line comment then select", "-- 查用户\nSELECT * FROM users", true},
+		{"multiple line comments then select", "-- note\n-- note2\nSELECT 1", true},
+		{"block comment then select", "/* header */ SELECT * FROM users", true},
+		{"multiline block comment", "/*\n * header\n */\nSELECT 1", true},
+		{"comment inside select", "SELECT * -- trailing comment\nFROM users", true},
+		{"block comment inside select", "SELECT /* cols */ * FROM users", true},
+		{"dashes in string literal not comment", "SELECT * FROM t WHERE c = 'a--b' AND d = '/*x*/'", true},
+		{"comment hides semicolon", "SELECT 1 -- ; DROP\nFROM t", true},
+		{"block comment hides semicolon", "SELECT 1 /* ; */ FROM t", true},
 
 		// 反例
 		{"insert", "INSERT INTO users VALUES (1)", false},
@@ -37,6 +47,8 @@ func TestIsReadOnlyQuery(t *testing.T) {
 		{"semicolon in middle", "SELECT 1; SELECT 2", false},
 		{"empty", "", false},
 		{"call procedure", "CALL my_proc()", false},
+		{"comment hides drop is still rejected", "/* SELECT */ DROP TABLE users", false},
+		{"comment only", "-- just a comment\n", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -75,6 +87,8 @@ func TestIsDMLStatement(t *testing.T) {
 		{"insert with drop", "INSERT INTO t VALUES(1); DROP TABLE users; --", false},
 		{"insert with select", "INSERT INTO t VALUES(1); SELECT * FROM users", false},
 		{"insert trailing semicolon ok", "INSERT INTO t VALUES(1);", true},
+		{"comment then insert", "-- insert more\nINSERT INTO t VALUES(1)", true},
+		{"block comment then insert", "/* x */ INSERT INTO t VALUES(1)", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -97,6 +111,7 @@ func TestIsDDLStatement(t *testing.T) {
 		{"alter", "ALTER TABLE users ADD x INT", true},
 		{"truncate", "TRUNCATE TABLE users", true},
 		{"rename", "RENAME TABLE a TO b", true},
+		{"comment then create", "-- init\nCREATE TABLE t (id INT)", true},
 		{"select", "SELECT * FROM users", false},
 		{"insert", "INSERT INTO users VALUES (1)", false},
 		{"empty", "", false},
