@@ -1659,6 +1659,8 @@
     "confirmImport": "Confirm Import",
     "connectionList": "Connection List",
     "connectionTreeEmpty": "Connection tree is empty",
+    "connectionTreeSearchPlaceholder": "Search connections / databases / tables...",
+    "connectionTreeNoMatch": "No results matching \"{{query}}\"",
     "copyType": "Copy Type",
     "createFirstConnection": "Create your first connection",
     "createNew": "Create New",

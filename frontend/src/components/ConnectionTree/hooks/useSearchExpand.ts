@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Connection } from '../../../stores/appStore';
 import { isBaseTable } from '../utils/tableTypeHelpers';
 
 /**
- * Auto-expand tree nodes when search text matches databases/tables.
+ * 搜索时自动展开命中节点的父级；搜索清空后恢复搜索前的展开状态。
+ * 快照在"无搜索词 → 有搜索词"的切换时刻拍下，避免把搜索期间自动展开的节点也存进去。
  */
 export function useSearchExpand(
   searchText: string,
@@ -12,9 +13,24 @@ export function useSearchExpand(
   expandedKeysRef: React.MutableRefObject<string[]>,
   onExpandKeys: (keys: string[]) => void
 ) {
+  const preSearchKeysRef = useRef<string[] | null>(null);
+
   useEffect(() => {
     const q = searchText.trim().toLowerCase();
-    if (!q) return;
+
+    // 搜索结束：恢复搜索前的展开状态（仅当搜索期间拍过快照）
+    if (!q) {
+      const snapshot = preSearchKeysRef.current;
+      if (snapshot) {
+        preSearchKeysRef.current = null;
+        onExpandKeys(snapshot);
+      }
+      return;
+    }
+
+    if (preSearchKeysRef.current == null) {
+      preSearchKeysRef.current = [...expandedKeysRef.current];
+    }
 
     const expandSet = new Set<string>();
 

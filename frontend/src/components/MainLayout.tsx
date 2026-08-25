@@ -124,7 +124,7 @@ function MainLayoutComponent() {
                 className="search-container"
               >
                 <GlobalInput
-                  placeholder={t('common.tableList.searchPlaceholder')}
+                  placeholder={t('common.connectionTreeSearchPlaceholder')}
                   value={layout.searchText}
                   onChange={(e: any) => layout.handleSearchChange(e.target.value)}
                   style={{ ...layout.styles.searchInput, flex: 1, minWidth: 0 }}
@@ -231,7 +231,7 @@ function MainLayoutComponent() {
                    }
                  }}
                  collapsed={layout.collapsed}
-                 searchText={layout.searchText}
+                 searchText={layout.debouncedSearch}
                  expandedKeys={connMgr.expandedKeys}
                  onExpandKeys={connMgr.setExpandedKeys}
                  connectionDatabases={connMgr.connectionDatabases}

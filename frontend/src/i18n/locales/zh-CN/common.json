@@ -1671,6 +1671,8 @@
     "confirmImport": "确认导入",
     "connectionList": "连接列表",
     "connectionTreeEmpty": "连接树为空",
+    "connectionTreeSearchPlaceholder": "搜索连接 / 库 / 表...",
+    "connectionTreeNoMatch": "没有匹配 \"{{query}}\" 的结果",
     "copyType": "复制类型",
     "createFirstConnection": "创建第一个连接",
     "createNew": "新建",

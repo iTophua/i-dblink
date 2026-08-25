@@ -6,11 +6,13 @@ import {
   DatabaseOutlined,
   PlusOutlined,
   FolderOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import type { Connection } from '../../stores/appStore';
 import { EnhancedEmptyState } from '../LoadingStates';
 import { DatabaseIcon } from '../DatabaseIcon';
 import { isBaseTable } from './utils/tableTypeHelpers';
+import { matchesConnection } from './utils/searchUtils';
 import type { ConnectionTreeProps } from './types';
 import { useTreeDialogs } from './hooks/useTreeDialogs';
 import { useConnectionActions } from './hooks/useConnectionActions';
@@ -116,12 +118,12 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
     return map;
   }, [connections]);
 
+  // 与 useTreeData 的连接匹配口径一致（名称/主机/用户名/类型/默认库），
+  // 供 useSearchExpand 决定在哪些连接里自动展开命中节点
   const filteredConnections = useMemo(() => {
     const q = searchText.trim().toLowerCase();
     if (!q) return connections;
-    return connections.filter(
-      (conn) => conn.name.toLowerCase().includes(q) || conn.host.toLowerCase().includes(q)
-    );
+    return connections.filter((conn) => matchesConnection(conn, q));
   }, [connections, searchText]);
 
   // ── Hooks ──
@@ -294,7 +296,19 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
         .connection-tree-spin-wrapper > .ant-spin-container > .ant-tree { flex: 1; min-height: 0; }
       `}</style>
       <Spin spinning={isLoading} size="small" wrapperClassName="connection-tree-spin-wrapper">
-        {connections.length === 0 && !isLoading ? emptyState : (
+        {connections.length === 0 && !isLoading ? emptyState : searchText.trim() && treeData.length === 0 ? (
+          <div
+            style={{
+              padding: '32px 16px',
+              textAlign: 'center',
+              color: 'var(--text-tertiary)',
+              fontSize: 12,
+            }}
+          >
+            <SearchOutlined style={{ fontSize: 20, display: 'block', marginBottom: 8, opacity: 0.5 }} />
+            {t('common.connectionTreeNoMatch', { query: searchText.trim() })}
+          </div>
+        ) : (
           <>
             {/*
               空白区域右键菜单：手动渲染的浮动菜单（position: fixed）。

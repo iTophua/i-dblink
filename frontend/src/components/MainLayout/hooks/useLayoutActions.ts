@@ -122,7 +122,7 @@ export function useLayoutActions({
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
       setDebouncedSearch(newValue);
-    }, 500);
+    }, 300);
   }, []);
 
   useEffect(() => {
@@ -407,6 +407,7 @@ export function useLayoutActions({
     setCollapsed,
     searchText,
     setSearchText,
+    debouncedSearch,
     handleSearchChange,
     settingsDialogOpen,
     setSettingsDialogOpen,

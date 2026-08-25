@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Spin, Dropdown, Badge, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -17,8 +17,10 @@ import type { TableInfo } from '../../../types/api';
 import { GlobalInput } from '../../GlobalInput';
 import { DatabaseIcon } from '../../DatabaseIcon';
 import { isBaseTable, isView } from '../utils/tableTypeHelpers';
+import { matchesConnection } from '../utils/searchUtils';
 import { TableNode } from '../components/TableNode';
 import { ViewNode } from '../components/ViewNode';
+import { HighlightText } from '../components/HighlightText';
 import type { ChangeEvent, MouseEvent } from 'react';
 
 function getConnIcon(dbType: string, connected = true) {
@@ -146,6 +148,7 @@ export function useTreeData({
                 table={item}
                 schema={item.schema || folderSchema}
                 selectedTableId={selectedTableId}
+                searchQuery={searchText}
                 onTableClick={handlers.handleTableClick}
                 onTableOpen={handlers.onTableOpen}
                 onContextMenu={menus.getTableMenu}
@@ -158,6 +161,7 @@ export function useTreeData({
                 view={item}
                 schema={item.schema || folderSchema}
                 selectedTableId={selectedTableId}
+                searchQuery={searchText}
                 onTableClick={handlers.handleTableClick}
                 onTableOpen={handlers.onTableOpen}
                 onViewOpen={handlers.onViewOpen}
@@ -245,7 +249,9 @@ export function useTreeData({
                           onClick={() => handlers.onOpenRoutine?.(connId, db.database, proc, 'procedure')}
                         >
                           <CodeOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
-                          <span style={{ fontSize: 14 }}>{proc}</span>
+                          <span style={{ fontSize: 14 }}>
+                            <HighlightText text={proc} query={searchText} />
+                          </span>
                         </span>
                       </Dropdown>
                     ),
@@ -312,7 +318,9 @@ export function useTreeData({
                           onClick={() => handlers.onOpenRoutine?.(connId, db.database, func, 'function')}
                         >
                           <FunctionOutlined style={{ color: 'var(--color-info)', fontSize: 14 }} />
-                          <span style={{ fontSize: 14 }}>{func}</span>
+                          <span style={{ fontSize: 14 }}>
+                            <HighlightText text={func} query={searchText} />
+                          </span>
                         </span>
                       </Dropdown>
                     ),
@@ -379,7 +387,9 @@ export function useTreeData({
                           onClick={() => handlers.onOpenTrigger?.(connId, db.database, trigger.name)}
                         >
                           <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
-                          <span style={{ fontSize: 14 }}>{trigger.name}</span>
+                          <span style={{ fontSize: 14 }}>
+                            <HighlightText text={trigger.name} query={searchText} />
+                          </span>
                         </span>
                       </Dropdown>
                     ),
@@ -442,7 +452,9 @@ export function useTreeData({
                     title: (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <SortAscendingOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-                        <span style={{ fontSize: 14 }}>{seq.sequence_name}</span>
+                        <span style={{ fontSize: 14 }}>
+                          <HighlightText text={seq.sequence_name} query={searchText} />
+                        </span>
                       </span>
                     ),
                   }))
@@ -499,7 +511,7 @@ export function useTreeData({
                         userSelect: 'none',
                       }}
                     >
-                      {db.database}
+                      <HighlightText text={db.database} query={searchText} />
                     </span>
                   </>
                 );
@@ -698,6 +710,7 @@ export function useTreeData({
                     database={db.database}
                     table={table}
                     selectedTableId={selectedTableId}
+                    searchQuery={searchText}
                     onTableClick={handlers.handleTableClick}
                     onTableOpen={handlers.onTableOpen}
                     onContextMenu={menus.getTableMenu}
@@ -768,6 +781,7 @@ export function useTreeData({
                     database={db.database}
                     view={view}
                     selectedTableId={selectedTableId}
+                    searchQuery={searchText}
                     onTableClick={handlers.handleTableClick}
                     onTableOpen={handlers.onTableOpen}
                     onViewOpen={handlers.onViewOpen}
@@ -812,8 +826,7 @@ export function useTreeData({
 
     const buildConnNode = (conn: Connection) => {
       const dbList = connectionDatabases[conn.id] || [];
-      const connNameMatch = !q || conn.name.toLowerCase().includes(q);
-      const isExpanded = expandedKeys.includes(conn.id);
+      const connMatch = matchesConnection(conn, q);
 
       const dbNodes: any[] = [];
       for (const db of dbList) {
@@ -833,15 +846,25 @@ export function useTreeData({
             : [];
 
         const tablesMatch = matchTables(tableItems || []);
-        const viewsMatch = matchViews(db.tables || []);
+        const viewsMatch = matchViews(viewItems || []);
+        // 存储过程/函数/触发器/序列也参与匹配（需已加载 routines）
+        const routinesMatch =
+          !q ||
+          (db.procedures || []).some((p: string) => p.toLowerCase().includes(q)) ||
+          (db.functions || []).some((f: string) => f.toLowerCase().includes(q)) ||
+          (db.triggers || []).some((tr: { name?: string }) => tr?.name?.toLowerCase().includes(q)) ||
+          (db.sequences || []).some(
+            (s: { sequence_name?: string }) => s?.sequence_name?.toLowerCase().includes(q)
+          );
 
-        if (q && !dbMatch && !tablesMatch && !viewsMatch && !isDbExpanded) continue;
+        if (q && !dbMatch && !tablesMatch && !viewsMatch && !routinesMatch && !isDbExpanded) continue;
 
         const dbNode = buildTableNodes(conn.id, db, tableItems, viewItems, isDbExpanded);
         if (dbNode) dbNodes.push(dbNode);
       }
 
-      if (q && !connNameMatch && dbNodes.length === 0 && !isExpanded) return null;
+      // 搜索时无命中的连接一律隐藏（含已展开的），避免残留的连接显示误导性的"暂无数据库"占位
+      if (q && !connMatch && dbNodes.length === 0) return null;
 
       const connTitle = (
         <div
@@ -862,7 +885,7 @@ export function useTreeData({
                   userSelect: 'none',
                 }}
               >
-                {conn.name}
+                {conn.name && <HighlightText text={conn.name} query={searchText} />}
                 {conn.color && (
                   <span
                     style={{

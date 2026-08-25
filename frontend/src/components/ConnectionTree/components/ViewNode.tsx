@@ -6,6 +6,7 @@ import { EyeOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import type { TableInfo } from '../../../types/api';
 import { TABLE_NODE_STYLE, formatRowCount } from '../utils/tableTypeHelpers';
 import { QuickActionButton } from './QuickActionButton';
+import { HighlightText } from './HighlightText';
 
 interface ViewNodeProps {
   connId: string;
@@ -13,6 +14,7 @@ interface ViewNodeProps {
   view: TableInfo;
   schema?: string;
   selectedTableId: string | null;
+  searchQuery?: string;
   onTableClick: (tableName: string, database: string, schema?: string) => void;
   onTableOpen: (tableName: string, database: string) => void;
   onViewOpen?: (viewName: string, database: string) => void;
@@ -27,6 +29,7 @@ export const ViewNode = React.memo<ViewNodeProps>(
     view,
     schema,
     selectedTableId,
+    searchQuery,
     onTableClick,
     onTableOpen,
     onViewOpen,
@@ -67,7 +70,9 @@ export const ViewNode = React.memo<ViewNodeProps>(
           data-testid={`view-node-${view.table_name}`}
         >
           <EyeOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-          <span style={{ fontSize: 13 }}>{view.table_name}</span>
+          <span style={{ fontSize: 13 }}>
+            <HighlightText text={view.table_name} query={searchQuery} />
+          </span>
           {view.row_count != null && (
             <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
               ({formatRowCount(view.row_count)})

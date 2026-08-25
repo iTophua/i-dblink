@@ -6,6 +6,7 @@ import { TableOutlined, PlayCircleOutlined, SwapOutlined } from '@ant-design/ico
 import type { TableInfo } from '../../../types/api';
 import { TABLE_NODE_STYLE, formatRowCount } from '../utils/tableTypeHelpers';
 import { QuickActionButton } from './QuickActionButton';
+import { HighlightText } from './HighlightText';
 
 interface TableNodeProps {
   connId: string;
@@ -13,6 +14,7 @@ interface TableNodeProps {
   table: TableInfo;
   schema?: string;
   selectedTableId: string | null;
+  searchQuery?: string;
   onTableClick: (tableName: string, database: string, schema?: string) => void;
   onTableOpen: (tableName: string, database: string) => void;
   onContextMenu: (connId: string, tableName: string, database?: string) => MenuProps;
@@ -26,6 +28,7 @@ export const TableNode = React.memo<TableNodeProps>(
     table,
     schema,
     selectedTableId,
+    searchQuery,
     onTableClick,
     onTableOpen,
     onContextMenu,
@@ -61,7 +64,9 @@ export const TableNode = React.memo<TableNodeProps>(
           data-testid={`table-node-${table.table_name}`}
         >
           <TableOutlined style={{ color: 'var(--color-info)', fontSize: 12 }} />
-          <span style={{ fontSize: 13 }}>{table.table_name}</span>
+          <span style={{ fontSize: 13 }}>
+            <HighlightText text={table.table_name} query={searchQuery} />
+          </span>
           {table.row_count != null && (
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 4 }}>
               ({formatRowCount(table.row_count)})
