@@ -12,7 +12,6 @@ import {
   ThunderboltOutlined,
   SortAscendingOutlined,
   CloseCircleOutlined,
-  LoadingOutlined,
 } from '@ant-design/icons';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
 import type { TableInfo } from '../../../types/api';
@@ -923,20 +922,14 @@ export function useTreeData({
                     <Tooltip title={t('common.mainLayout.connecting')}>
                       <span
                         style={{
-                          width: 6,
-                          height: 6,
+                          width: 8,
+                          height: 8,
                           borderRadius: '50%',
                           background: 'var(--color-warning)',
                           display: 'inline-block',
                           marginLeft: 6,
                           animation: 'pulse 1s infinite',
                         }}
-                      />
-                    </Tooltip>
-                    <Tooltip title={t('common.mainLayout.connecting')}>
-                      <LoadingOutlined
-                        spin
-                        style={{ fontSize: 10, color: 'var(--color-warning)', marginLeft: 4 }}
                       />
                     </Tooltip>
                     <Tooltip title={t('common.cancelConnection')}>
@@ -946,9 +939,9 @@ export function useTreeData({
                           handlers.onCancelConnect?.(conn.id);
                         }}
                         style={{
-                          fontSize: 11,
+                          fontSize: 13,
                           color: 'var(--text-tertiary)',
-                          marginLeft: 6,
+                          marginLeft: 10,
                           cursor: 'pointer',
                         }}
                       />
