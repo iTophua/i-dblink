@@ -12,6 +12,7 @@ import {
   ThunderboltOutlined,
   SortAscendingOutlined,
   CloseCircleOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
 import type { TableInfo } from '../../../types/api';
@@ -918,33 +919,41 @@ export function useTreeData({
                     </Tooltip>
                   ) : null}
                 {conn.status === 'loading' && (
-                  <Tooltip title={t('common.mainLayout.connecting')}>
-                    <span
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: 'var(--color-warning)',
-                        animation: 'pulse 1s infinite',
-                      }}
-                    />
-                  </Tooltip>
-                )}
-                {conn.status === 'loading' && (
-                  <Tooltip title={t('common.cancelConnection')}>
-                    <CloseCircleOutlined
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlers.onCancelConnect?.(conn.id);
-                      }}
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-tertiary)',
-                        marginLeft: 2,
-                        cursor: 'pointer',
-                      }}
-                    />
-                  </Tooltip>
+                  <>
+                    <Tooltip title={t('common.mainLayout.connecting')}>
+                      <span
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: 'var(--color-warning)',
+                          display: 'inline-block',
+                          marginLeft: 6,
+                          animation: 'pulse 1s infinite',
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip title={t('common.mainLayout.connecting')}>
+                      <LoadingOutlined
+                        spin
+                        style={{ fontSize: 10, color: 'var(--color-warning)', marginLeft: 4 }}
+                      />
+                    </Tooltip>
+                    <Tooltip title={t('common.cancelConnection')}>
+                      <CloseCircleOutlined
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlers.onCancelConnect?.(conn.id);
+                        }}
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--text-tertiary)',
+                          marginLeft: 6,
+                          cursor: 'pointer',
+                        }}
+                      />
+                    </Tooltip>
+                  </>
                 )}
               </span>
               {conn.database && (
