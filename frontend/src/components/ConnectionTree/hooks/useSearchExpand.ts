@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Connection } from '../../../stores/appStore';
 import { isBaseTable } from '../utils/tableTypeHelpers';
 
@@ -19,6 +19,19 @@ export function useSearchExpand(
   const preSearchKeysRef = useRef<string[] | null>(null);
   // 搜索期间由自动展开新增的键（恢复时收起）
   const searchAddedKeysRef = useRef<Set<string>>(new Set());
+
+  /**
+   * 保护连接子树不被"清空搜索后的差量恢复"收起：
+   * 用户主动展开的连接（含其所在分组、库、表目录等全部子键）应保持展开，
+   * 即使这些键最初是搜索自动展开的。子键统一含 ::connId:: 分隔符（ID 为 UUID，无歧义）。
+   */
+  const protectConnectionKeys = useCallback((connId: string, groupKeys: string[] = []) => {
+    const added = searchAddedKeysRef.current;
+    if (added.size === 0) return;
+    for (const k of Array.from(added)) {
+      if (k === connId || k.includes(`::${connId}::`) || groupKeys.includes(k)) added.delete(k);
+    }
+  }, []);
 
   useEffect(() => {
     const q = searchText.trim().toLowerCase();
@@ -45,6 +58,10 @@ export function useSearchExpand(
     const expandSet = new Set<string>();
 
     for (const conn of filteredConnections) {
+      // 命中连接所在分组也要展开——分组折叠时子连接不可见，搜索结果无从点起
+      if (conn.group_id && conn.group_id !== 'default') {
+        expandSet.add(`group-${conn.group_id}`);
+      }
       const dbList = connectionDatabases[conn.id] || [];
       for (const db of dbList) {
         if (db.database.toLowerCase().includes(q)) {
@@ -91,4 +108,6 @@ export function useSearchExpand(
       onExpandKeys(Array.from(merged));
     }
   }, [searchText, filteredConnections, connectionDatabases, onExpandKeys, expandedKeysRef]);
+
+  return { protectConnectionKeys };
 }

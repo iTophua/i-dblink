@@ -9,8 +9,8 @@ interface TreeHandlerCallbacks {
   onDatabaseExpand: (connectionId: string, database: string) => void;
   onTableExpand: (connectionId: string, database: string, tableName: string) => void;
   onLoadDatabases?: (connectionId: string) => void;
-  /** 用户主动展开连接节点时清除搜索：避免搜索关键字继续过滤连接内的数据库 */
-  onClearSearch?: () => void;
+  /** 用户主动展开连接节点时清除搜索（携带连接 ID，供滚动定位等后续处理） */
+  onClearSearch?: (connectionId?: string) => void;
   onTableOpen: (tableName: string, database?: string) => void;
   onViewOpen?: (viewName: string, database?: string) => void;
   onSelect: (id: string | null) => void;
@@ -89,7 +89,7 @@ export function useTreeHandlers(
         if (!conn) return;
 
         // 双击连接 = 打开连接浏览内容，清除搜索避免关键字过滤其内部数据库
-        callbacks.onClearSearch?.();
+        callbacks.onClearSearch?.(parsed.connectionId);
 
         if (conn.status !== 'connected') {
           await callbacks.onConnect(parsed.connectionId);
@@ -126,7 +126,7 @@ export function useTreeHandlers(
         parsed.connectionId
       ) {
         // 展开连接 = 浏览连接内容，清除搜索避免关键字过滤其内部数据库
-        if (info.expanded) callbacks.onClearSearch?.();
+        if (info.expanded) callbacks.onClearSearch?.(parsed.connectionId);
         const conn = connections.find((c) => c.id === parsed.connectionId);
         if (info.expanded && conn && conn.status !== 'connected') {
           await callbacks.onConnect(parsed.connectionId);

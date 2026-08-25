@@ -48,6 +48,9 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   const connectionDatabasesRef = useRef(connectionDatabases);
   const expandedKeysRef = useRef(expandedKeys);
   const treeContainerRef = useRef<HTMLDivElement>(null);
+  const treeRef = useRef<React.ComponentRef<typeof Tree>>(null);
+  // 搜索清除后需要滚动定位到的连接节点
+  const pendingScrollKeyRef = useRef<string | null>(null);
   // 空白区域右键菜单（受控，不参与 contextmenu 事件竞争）
   const [emptyMenuOpen, setEmptyMenuOpen] = useState(false);
   const [emptyMenuPos, setEmptyMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -91,6 +94,18 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
 
   useEffect(() => { connectionDatabasesRef.current = connectionDatabases; }, [connectionDatabases]);
   useEffect(() => { expandedKeysRef.current = expandedKeys; }, [expandedKeys]);
+
+  // 搜索清除后（防抖值变空、树已恢复完整数据），滚动到用户打开的连接
+  useEffect(() => {
+    if (!searchText && pendingScrollKeyRef.current) {
+      const key = pendingScrollKeyRef.current;
+      pendingScrollKeyRef.current = null;
+      const timer = setTimeout(() => {
+        treeRef.current?.scrollTo({ key, align: 'top' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [searchText]);
 
   // Keep prevTableCountsRef in sync (preserves original behavior)
   const prevTableCountsRef = useRef<Map<string, number>>(new Map());
@@ -174,9 +189,27 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
     }
   );
 
+  // 搜索自动展开/恢复（提前调用以获取 protectConnectionKeys）
+  const { protectConnectionKeys } = useSearchExpand(
+    searchText, filteredConnections, connectionDatabases, expandedKeysRef, onExpandKeys
+  );
+
+  // 搜索态下用户展开/双击连接：保护其子树不被恢复收起 + 清空搜索后滚动定位到该连接
+  const handleClearSearchWithScroll = (connectionId?: string) => {
+    if (connectionId && searchText.trim()) {
+      const conn = connections.find((c) => c.id === connectionId);
+      protectConnectionKeys(
+        connectionId,
+        conn?.group_id && conn.group_id !== 'default' ? [`group-${conn.group_id}`] : []
+      );
+      pendingScrollKeyRef.current = connectionId;
+    }
+    onClearSearch?.();
+  };
+
   const treeHandlers = useTreeHandlers(
     connections,
-    { onExpandKeys, onConnect, onExpand, onDatabaseExpand, onTableExpand, onLoadDatabases, onTableOpen, onViewOpen, onSelect, onTableSelect, onObjectTypeSelect, onClearSearch },
+    { onExpandKeys, onConnect, onExpand, onDatabaseExpand, onTableExpand, onLoadDatabases, onTableOpen, onViewOpen, onSelect, onTableSelect, onObjectTypeSelect, onClearSearch: handleClearSearchWithScroll },
     { expandedKeysRef, connectionDatabasesRef }
   );
 
@@ -201,8 +234,6 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       onTableOpen, onViewOpen, onNewQuery, onOpenRoutine, onOpenTrigger,
     },
   });
-
-  useSearchExpand(searchText, filteredConnections, connectionDatabases, expandedKeysRef, onExpandKeys);
 
   // ── Group dialog cancel helper ──
   const handleGroupCancel = () => { dialogs.setGroupDialogOpen(false); dialogs.setEditingGroup(null); dialogs.setParentGroupId(null); };
@@ -359,6 +390,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
               style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             >
               <Tree
+                ref={treeRef}
                 showIcon={false} selectedKeys={selectedId ? [selectedId] : []} expandedKeys={expandedKeys}
                 onExpand={(keys, info) => treeHandlers.handleExpand(keys, info)}
                 onSelect={treeHandlers.handleSelect} treeData={treeData}
