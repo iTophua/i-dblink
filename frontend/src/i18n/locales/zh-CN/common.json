@@ -1849,6 +1849,8 @@
     "featureNotImplemented": "功能尚未实现",
     "connectionDeleted": "连接已删除",
     "connectionSuccess": "连接成功",
+    "cancelConnection": "取消连接",
+    "connectionCancelled": "连接已取消",
     "connectionDisconnected": "已断开连接",
     "groupDeleted": "分组已删除",
     "deleteConnectionFailed": "删除连接失败",

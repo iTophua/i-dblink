@@ -238,6 +238,7 @@ function MainLayoutComponent() {
                  connectionDatabases={connMgr.connectionDatabases}
                  isLoading={connMgr.isLoading}
                  onConnect={connMgr.handleConnect}
+                 onCancelConnect={connMgr.cancelConnect}
                  onDisconnect={connMgr.handleDisconnect}
                  onEditConnection={connMgr.handleEditConnection}
                  onDeleteConnection={connMgr.handleDeleteConnection}

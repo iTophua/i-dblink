@@ -36,18 +36,23 @@ type txInfo struct {
 	done chan struct{}
 }
 
+// connectCancelEntry 包装取消函数：Go 的函数值不可用 == 比较，用指针做身份判断
+type connectCancelEntry struct{ cancel context.CancelFunc }
+
 // Manager 管理所有数据库连接池
 type Manager struct {
-	mu    sync.RWMutex
-	pools map[string]*connInfo
-	txs   map[string]*txInfo
+	mu             sync.RWMutex
+	pools          map[string]*connInfo
+	txs            map[string]*txInfo
+	connectCancels map[string]*connectCancelEntry // 进行中的连接，可被 CancelConnect 取消
 }
 
 // NewManager 创建连接管理器
 func NewManager() *Manager {
 	return &Manager{
-		pools: make(map[string]*connInfo),
-		txs:   make(map[string]*txInfo),
+		pools:          make(map[string]*connInfo),
+		txs:            make(map[string]*txInfo),
+		connectCancels: make(map[string]*connectCancelEntry),
 	}
 }
 
@@ -114,10 +119,29 @@ func (m *Manager) Connect(connectionID string, req ConnectArgs) error {
 	db.SetConnMaxLifetime(time.Hour)
 	db.SetConnMaxIdleTime(time.Minute * 10)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// ping ctx 可被 CancelConnect 取消（网络不通时用户不必等拨号超时）
+	pingCtx, cancelPing := context.WithCancel(context.Background())
+	cancelEntry := &connectCancelEntry{cancel: cancelPing}
+	m.mu.Lock()
+	m.connectCancels[connectionID] = cancelEntry
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		// 仅当仍是本次注册的条目才清理（CancelConnect 已抢先删除时不动作）
+		if cur, ok := m.connectCancels[connectionID]; ok && cur == cancelEntry {
+			delete(m.connectCancels, connectionID)
+		}
+		m.mu.Unlock()
+		cancelPing()
+	}()
+
+	pingTimeoutCtx, cancel := context.WithTimeout(pingCtx, 15*time.Second)
 	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
+	if err := db.PingContext(pingTimeoutCtx); err != nil {
 		_ = db.Close()
+		if pingCtx.Err() != nil {
+			return fmt.Errorf("connection cancelled")
+		}
 		return fmt.Errorf("ping failed: %w", err)
 	}
 
@@ -125,6 +149,31 @@ func (m *Manager) Connect(connectionID string, req ConnectArgs) error {
 	m.pools[connectionID] = &connInfo{db: db, dbType: req.DbType, args: req}
 	m.mu.Unlock()
 
+	return nil
+}
+
+// CancelConnect 取消进行中的连接（或断开刚建立完成的连接）。
+// 网络不通时拨号可能长时间等待，用户可主动取消而不必等超时。
+func (m *Manager) CancelConnect(connectionID string) error {
+	m.mu.Lock()
+	// 进行中：取消拨号/握手等待
+	cancelEntry, connecting := m.connectCancels[connectionID]
+	if connecting {
+		delete(m.connectCancels, connectionID)
+	}
+	// 已完成注册：取消语义等同断开
+	info, connected := m.pools[connectionID]
+	if connected {
+		delete(m.pools, connectionID)
+	}
+	m.mu.Unlock()
+
+	if connecting {
+		cancelEntry.cancel()
+	}
+	if connected {
+		_ = info.db.Close()
+	}
 	return nil
 }
 
@@ -206,8 +255,8 @@ func (m *Manager) GetPool(connectionID string) (*DBPool, error) {
 		db:      info.db,
 		DbType:  info.dbType,
 		pool:    info.db,
-		maxPool: 10,  // 默认最大连接数
-		minPool: 2,   // 默认最小连接数
+		maxPool: 10, // 默认最大连接数
+		minPool: 2,  // 默认最小连接数
 	}, nil
 }
 

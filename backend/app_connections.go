@@ -179,6 +179,14 @@ func (a *App) DisconnectDatabase(connectionID string) error {
 	return nil
 }
 
+// CancelDatabaseConnect 取消进行中的连接（或断开刚完成的连接）。
+// 网络不通时拨号会长时间等待，前端提供取消入口调用此方法立即中止。
+func (a *App) CancelDatabaseConnect(connectionID string) error {
+	_ = a.tunnel.StopTunnel(connectionID)
+	a.setActiveConn(connectionID, false)
+	return a.dbManager.CancelConnect(connectionID)
+}
+
 // GetConnectionPassword 获取连接的已存密码明文（供编辑时回显）。
 // 仅在用户主动编辑某个连接时调用，列表接口 GetConnections 仍不返回密码。
 // 密码以加密形式存储，此处解密后返回明文。

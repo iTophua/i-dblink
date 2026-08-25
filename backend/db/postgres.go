@@ -23,6 +23,7 @@ func openPostgres(args ConnectArgs) (*sql.DB, error) {
 		RawQuery: url.Values{
 			"sslmode":           {sslMode},
 			"application_name":  {"iDBLink"},
+			"connect_timeout":   {"10"},  // 拨号兜底超时，网络不通时避免长时间挂起
 			"statement_timeout": {"30000"}, // 30s,防止慢查询把 PG 拖死
 			"lock_timeout":      {"10000"}, // 10s,防止锁等待堆积
 		}.Encode(),

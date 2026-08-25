@@ -92,6 +92,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     saveConnection,
     deleteConnection,
     connect,
+    cancelConnect,
     disconnect,
   } = useConnections();
 
@@ -720,6 +721,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     saveConnection,
     deleteConnection,
     connect,
+    cancelConnect,
     disconnect,
     groups,
     saveGroup,

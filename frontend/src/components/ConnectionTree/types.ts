@@ -14,6 +14,8 @@ export type ConnectionTreeProps = {
   onOpenDesigner?: (tableName: string, database?: string) => void;
   onOpenViewDefinition?: (viewName: string, database?: string) => void;
   onExpand: (connectionId: string, expanded: boolean) => void;
+  /** 取消进行中的连接（网络不通时不必等拨号超时） */
+  onCancelConnect?: (connectionId: string) => void;
   collapsed: boolean;
   searchText: string;
   /** 搜索态下用户展开/双击连接节点时自动清除搜索（意图从"找连接"转为"浏览连接"） */

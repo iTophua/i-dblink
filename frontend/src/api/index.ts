@@ -8,6 +8,7 @@ import {
   CommitTransaction,
   CompareSchema,
   ConnectDatabase,
+  CancelDatabaseConnect,
   CreateUser,
   DeleteConnection,
   DeleteGroup,
@@ -242,6 +243,10 @@ export const api = {
 
   async connectConnection(connectionId: string): Promise<void> {
     await ConnectDatabase(connectionId);
+  },
+
+  async cancelConnection(connectionId: string): Promise<void> {
+    await CancelDatabaseConnect(connectionId);
   },
 
   async disconnectConnection(connectionId: string): Promise<void> {

@@ -11,6 +11,7 @@ import {
   FunctionOutlined,
   ThunderboltOutlined,
   SortAscendingOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import type { Connection, ConnectionGroup } from '../../../stores/appStore';
 import type { TableInfo } from '../../../types/api';
@@ -53,6 +54,8 @@ interface HandlerCallbacks {
     type: 'procedure' | 'function'
   ) => void;
   onOpenTrigger?: (connectionId: string, database: string, name: string) => void;
+  /** 取消进行中的连接（loading 指示灯旁的 ✕） */
+  onCancelConnect?: (connectionId: string) => void;
 }
 
 interface TreeDataProps {
@@ -923,6 +926,22 @@ export function useTreeData({
                         borderRadius: '50%',
                         background: 'var(--color-warning)',
                         animation: 'pulse 1s infinite',
+                      }}
+                    />
+                  </Tooltip>
+                )}
+                {conn.status === 'loading' && (
+                  <Tooltip title={t('common.cancelConnection')}>
+                    <CloseCircleOutlined
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlers.onCancelConnect?.(conn.id);
+                      }}
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-tertiary)',
+                        marginLeft: 2,
+                        cursor: 'pointer',
                       }}
                     />
                   </Tooltip>

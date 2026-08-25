@@ -22,7 +22,9 @@ func openMySQL(args ConnectArgs) (*sql.DB, error) {
 		password = password[:atIdx] + "%40" + password[atIdx+1:]
 	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=true&loc=Local",
+	// timeout/readTimeout/writeTimeout：拨号与握手兜底超时，
+	// 网络不通（TCP SYN 无响应）时避免驱动层等 OS 级重试（可达数分钟）
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=true&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
 		args.Username,
 		password,
 		args.Host,

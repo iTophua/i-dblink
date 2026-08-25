@@ -32,7 +32,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
     connections, groups, selectedId, selectedTableId,
     onSelect, onTableSelect, onObjectTypeSelect,
     onTableOpen, onViewOpen, onOpenDesigner, onOpenViewDefinition,
-    onExpand, collapsed, searchText, expandedKeys, onExpandKeys, onClearSearch,
+    onExpand, collapsed, searchText, expandedKeys, onExpandKeys, onClearSearch, onCancelConnect,
     connectionDatabases, isLoading,
     onConnect, onDisconnect, onEditConnection, onDeleteConnection, onNewQuery,
     onOpenRoutine, onOpenTrigger,
@@ -232,6 +232,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       handleDoubleClick: treeHandlers.handleDoubleClick,
       handleRenameCommit,
       onTableOpen, onViewOpen, onNewQuery, onOpenRoutine, onOpenTrigger,
+      onCancelConnect,
     },
   });
 

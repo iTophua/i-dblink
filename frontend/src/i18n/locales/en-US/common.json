@@ -1837,6 +1837,8 @@
     "featureNotImplemented": "Feature not yet implemented",
     "connectionDeleted": "Connection deleted",
     "connectionSuccess": "Connected",
+    "cancelConnection": "Cancel connection",
+    "connectionCancelled": "Connection cancelled",
     "connectionDisconnected": "Disconnected",
     "groupDeleted": "Group deleted",
     "deleteConnectionFailed": "Failed to delete connection",

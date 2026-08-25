@@ -185,6 +185,10 @@ class SchemaCompletionCache {
 
 const schemaCompletionCache = new SchemaCompletionCache();
 
+// 连接尝试代数（键为 connectionID）：取消时递增，作废迟到的结果——
+// 避免用户取消后又跳成"已连接"，或取消引发的后端错误弹提示
+const connectGenerations = new Map<string, number>();
+
 export const useConnections = () => {
   const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
@@ -292,14 +296,30 @@ export const useConnections = () => {
 
   const connect = useCallback(
     async (connectionId: string) => {
+      const generation = (connectGenerations.get(connectionId) || 0) + 1;
+      connectGenerations.set(connectionId, generation);
+      // 只亮连接自身的指示灯（status='loading'，树上橙色脉冲），不再翻转全局
+      // loading 让整棵树面板转圈
+      setConnections((prev) =>
+        prev.map((c) => (c.id === connectionId ? { ...c, status: 'loading' as const } : c))
+      );
       try {
-        setLoading(true);
         await api.connectConnection(connectionId);
+        if (connectGenerations.get(connectionId) !== generation) {
+          throw new Error(i18n.t('common.connectionCancelled'));
+        }
         setConnections((prev) =>
           prev.map((c) => (c.id === connectionId ? { ...c, status: 'connected' as const } : c))
         );
         message.success(i18n.t('common.connectionSuccess'));
       } catch (err) {
+        // 用户已取消：静默中止（状态已由 cancelConnect 重置），不弹错误
+        if (connectGenerations.get(connectionId) !== generation) {
+          throw new Error(i18n.t('common.connectionCancelled'), { cause: err });
+        }
+        setConnections((prev) =>
+          prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
+        );
         const errorMsg = err instanceof Error ? err.message : String(err);
         // 检查是否是密码错误（后端返回 PASSWORD_REQUIRED）
         if (
@@ -309,7 +329,6 @@ export const useConnections = () => {
             'code' in err &&
             (err as Record<string, unknown>).code === 'PASSWORD_REQUIRED')
         ) {
-          setLoading(false);
           const error = new Error('密码错误，请重新输入') as Error & { code: string };
           error.code = 'PASSWORD_REQUIRED';
           throw error;
@@ -317,11 +336,25 @@ export const useConnections = () => {
         setError(errorMsg);
         message.error(errorMsg);
         throw err;
-      } finally {
-        setLoading(false);
       }
     },
-    [setConnections, setLoading, setError]
+    [setConnections, setError]
+  );
+
+  /** 取消进行中的连接：立即重置状态并中止后端拨号，迟到的结果作废 */
+  const cancelConnect = useCallback(
+    async (connectionId: string) => {
+      connectGenerations.set(connectionId, (connectGenerations.get(connectionId) || 0) + 1);
+      setConnections((prev) =>
+        prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
+      );
+      try {
+        await api.cancelConnection(connectionId);
+      } catch {
+        // 后端可能从未开始连接或已完成——无需反馈
+      }
+    },
+    [setConnections]
   );
 
   const disconnect = useCallback(
@@ -356,6 +389,7 @@ export const useConnections = () => {
     deleteConnection,
     testConnection,
     connect,
+    cancelConnect,
     disconnect,
     setActiveConnection,
   };
