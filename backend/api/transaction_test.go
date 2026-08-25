@@ -143,7 +143,9 @@ func TestTransactionStatus(t *testing.T) {
 func TestTransactionRequestValidation(t *testing.T) {
 	handler, _ := setupTestHandler(t)
 
-	t.Run("commit without transaction returns error", func(t *testing.T) {
+	t.Run("commit without transaction is idempotent success", func(t *testing.T) {
+		// 没有活跃事务 = 已处于自动提交模式，提交应幂等成功而非报错，
+		// 否则前端事务状态可能永久卡死（事务被看门狗超时回滚后无法退出）
 		body := TransactionRequest{ConnectionID: "test"}
 		bodyBytes, _ := json.Marshal(body)
 		req := httptest.NewRequest("POST", "/commit-transaction", bytes.NewReader(bodyBytes))
@@ -155,10 +157,10 @@ func TestTransactionRequestValidation(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 		var resp models.GenericResponse
 		require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
-		assert.NotEmpty(t, resp.Error)
+		assert.Empty(t, resp.Error)
 	})
 
-	t.Run("rollback without transaction returns error", func(t *testing.T) {
+	t.Run("rollback without transaction is idempotent success", func(t *testing.T) {
 		body := TransactionRequest{ConnectionID: "test"}
 		bodyBytes, _ := json.Marshal(body)
 		req := httptest.NewRequest("POST", "/rollback-transaction", bytes.NewReader(bodyBytes))
@@ -170,7 +172,7 @@ func TestTransactionRequestValidation(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 		var resp models.GenericResponse
 		require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
-		assert.NotEmpty(t, resp.Error)
+		assert.Empty(t, resp.Error)
 	})
 }
 

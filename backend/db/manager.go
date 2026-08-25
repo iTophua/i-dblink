@@ -313,7 +313,8 @@ func (m *Manager) BeginTransaction(connectionID string) error {
 	defer m.mu.Unlock()
 
 	if _, exists := m.txs[connectionID]; exists {
-		return fmt.Errorf("transaction already active for connection %s", connectionID)
+		// 幂等：已在事务中视为成功，避免前端状态错位后再也无法进入事务
+		return nil
 	}
 
 	info, ok := m.pools[connectionID]
@@ -379,7 +380,10 @@ func (m *Manager) CommitTransaction(connectionID string) error {
 	m.mu.Unlock()
 
 	if !exists {
-		return fmt.Errorf("no active transaction for connection %s", connectionID)
+		// 幂等：没有活跃事务 = 已处于自动提交模式，直接成功。
+		// 事务可能已被 5 分钟看门狗超时回滚，此前这里报错会导致前端
+		// 事务状态永久卡死、无法退出事务模式
+		return nil
 	}
 
 	// 通知看门狗停止
@@ -401,7 +405,8 @@ func (m *Manager) RollbackTransaction(connectionID string) error {
 	m.mu.Unlock()
 
 	if !exists {
-		return fmt.Errorf("no active transaction for connection %s", connectionID)
+		// 幂等：同 CommitTransaction——没有活跃事务即已是自动提交模式
+		return nil
 	}
 
 	// 通知看门狗停止

@@ -169,6 +169,15 @@ export function SQLEditorToolbar({
           />
         </Tooltip>
 
+        <div
+          style={{
+            width: 1,
+            height: 16,
+            background: 'var(--border)',
+            margin: '0 2px',
+          }}
+        />
+
         {/* 事务：与执行/停止同组的常用操作 */}
         {!transactionActive ? (
           <Tooltip title={t('common.beginTransaction')}>
