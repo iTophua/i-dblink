@@ -169,6 +169,18 @@ export function SQLEditorToolbar({
           />
         </Tooltip>
 
+        {/* 执行状态条：loading 时实时显示已用时间；非 loading 显示上次查询耗时 */}
+        {loading ? (
+          <span style={{ fontSize: 11, color: tc.primary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
+            <LoadingOutlined style={{ marginRight: 4 }} />
+            {t('common.executingLabel')} {execElapsed.toFixed(1)}s
+          </span>
+        ) : execElapsed > 0 ? (
+          <span style={{ fontSize: 11, color: tc.textTertiary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
+            {execElapsed.toFixed(2)}s
+          </span>
+        ) : null}
+
         <div
           style={{
             width: 1,
@@ -210,18 +222,6 @@ export function SQLEditorToolbar({
             </Tooltip>
           </>
         )}
-
-        {/* 执行状态条：loading 时实时显示已用时间；非 loading 显示上次查询耗时 */}
-        {loading ? (
-          <span style={{ fontSize: 11, color: tc.primary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
-            <LoadingOutlined style={{ marginRight: 4 }} />
-            {t('common.executingLabel')} {execElapsed.toFixed(1)}s
-          </span>
-        ) : execElapsed > 0 ? (
-          <span style={{ fontSize: 11, color: tc.textTertiary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
-            {execElapsed.toFixed(2)}s
-          </span>
-        ) : null}
 
         <div
           style={{
