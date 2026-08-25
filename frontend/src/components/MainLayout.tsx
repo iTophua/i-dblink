@@ -291,6 +291,15 @@ function MainLayoutComponent() {
               onSqlTabCountChange={tabMgr.setSqlTabCount}
               onActiveTabChange={tabMgr.setActiveTabInfo}
               onQueryStatusChange={tabMgr.setIsQuerying}
+              onEnsureConnectionReady={(connectionId) => {
+                const conn = useAppStore.getState().connections.find((c) => c.id === connectionId);
+                if (conn && conn.status !== 'connected') {
+                  // 复用连接树的连接流程：建连 + 加载数据库列表 + 密码弹框兜底
+                  connMgr.handleConnect(connectionId).catch(() => {
+                    // 连接失败时连接树/全局提示已有反馈，查询 Tab 保持数据库"未加载"态
+                  });
+                }
+              }}
               pageSize={useSettingsStore.getState().settings.pageSize}
               connectionDatabases={connMgr.connectionDatabases}
             />

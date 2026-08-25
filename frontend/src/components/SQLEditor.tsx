@@ -14,6 +14,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useAppStore } from '../stores/appStore';
+import { DatabaseIcon } from './DatabaseIcon';
 import { format as formatSql } from 'sql-formatter';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
@@ -56,6 +57,8 @@ interface SQLEditorProps {
   availableDatabases?: string[];
   recentDatabases?: RecentDatabaseEntry[];
   onDatabaseChange?: (database: string) => void;
+  /** 查询 Tab 内切换目标连接 */
+  onConnectionChange?: (connectionId: string) => void;
   dbType?: DatabaseType;
   onQueryStatusChange?: (isQuerying: boolean) => void;
 }
@@ -67,6 +70,7 @@ export function SQLEditor({
   availableDatabases,
   recentDatabases,
   onDatabaseChange,
+  onConnectionChange,
   dbType: propDbType,
   onQueryStatusChange,
 }: SQLEditorProps) {
@@ -80,6 +84,24 @@ export function SQLEditor({
   }, [connections, connectionId]);
 
   const dbType = propDbType || dbTypeFromStore;
+  // 连接切换下拉选项：搜索覆盖 名称/主机/类型/默认库（label 是 ReactNode，用 searchText 字段过滤）
+  const connectionOptions = useMemo(
+    () =>
+      connections.map((c) => ({
+        value: c.id,
+        label: (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <DatabaseIcon type={c.db_type} size={14} grayscale={c.status !== 'connected'} />
+            <span>{c.name}</span>
+            {c.host && (
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{c.host}</span>
+            )}
+          </span>
+        ),
+        searchText: `${c.name} ${c.host || ''} ${c.db_type} ${c.database || ''}`,
+      })),
+    [connections]
+  );
   const [sql, setSql] = useState(defaultQuery || '');
   const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
@@ -613,6 +635,8 @@ export function SQLEditor({
         availableDatabases={availableDatabases}
         recentDatabases={recentDatabases}
         onDatabaseChange={onDatabaseChange}
+        connectionOptions={connectionOptions}
+        onConnectionChange={onConnectionChange}
         isFullscreen={isFullscreen}
         setIsFullscreen={setIsFullscreen}
         dbType={dbType}

@@ -70,6 +70,10 @@ export interface SQLEditorToolbarProps {
   recentDatabases?: RecentDatabaseEntry[];
   onDatabaseChange?: (database: string) => void;
 
+  // Connection selection（查询 Tab 内切换连接，支持搜索）
+  connectionOptions?: { value: string; label: React.ReactNode; searchText: string }[];
+  onConnectionChange?: (connectionId: string) => void;
+
   // Fullscreen
   isFullscreen: boolean;
   setIsFullscreen: (v: boolean) => void;
@@ -100,6 +104,8 @@ export function SQLEditorToolbar({
   availableDatabases,
   recentDatabases,
   onDatabaseChange,
+  connectionOptions,
+  onConnectionChange,
   isFullscreen,
   setIsFullscreen,
   dbType,
@@ -333,6 +339,23 @@ export function SQLEditorToolbar({
       </Space>
 
       <Space>
+        {/* 连接切换（支持按名称/主机/类型搜索） */}
+        <Select
+          value={connectionId || undefined}
+          onChange={(value) => onConnectionChange?.(value)}
+          placeholder={t('common.selectConnection')}
+          showSearch
+          filterOption={(input, option) =>
+            String(option?.searchText ?? '')
+              .toLowerCase()
+              .includes(input.toLowerCase())
+          }
+          style={{ minWidth: 140, maxWidth: 220 }}
+          size="small"
+          popupMatchSelectWidth={false}
+          options={connectionOptions}
+        />
+
         {/* 数据库选择 */}
         {connectionId ? (
           availableDatabases && availableDatabases.length > 0 ? (

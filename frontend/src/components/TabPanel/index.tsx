@@ -58,6 +58,8 @@ interface TabPanelProps {
   onActiveTabChange?: (info: ActiveTabInfo) => void;
   /** 查询状态变化回调 */
   onQueryStatusChange?: (isQuerying: boolean) => void;
+  /** 查询 Tab 内切换连接时，确保目标连接已连接并加载数据库列表 */
+  onEnsureConnectionReady?: (connectionId: string) => void;
   /** 分页大小 */
   pageSize?: number;
   /** 当前连接的数据库列表 */
@@ -159,6 +161,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     onSqlTabCountChange,
     onActiveTabChange,
     onQueryStatusChange,
+    onEnsureConnectionReady,
     pageSize,
     connectionDatabases,
   },
@@ -1330,6 +1333,26 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                     });
                   }
                 }
+              }}
+              onConnectionChange={(newConnId) => {
+                const prevConnId = sqlTab.connectionId || selectedConnectionId;
+                if (!newConnId || newConnId === prevConnId) return;
+                const conn = connections.find((c) => c.id === newConnId);
+                // 切换连接：库必须重置（不同服务器的库名不通用），SQL 文本保留
+                setOpenedSqlTabs((prev) =>
+                  prev.map((t) =>
+                    t.key === sqlTab.key
+                      ? {
+                          ...t,
+                          connectionId: newConnId,
+                          connectionName: conn?.name,
+                          database: undefined,
+                        }
+                      : t
+                  )
+                );
+                // 目标连接未连接时自动连接并加载数据库列表
+                onEnsureConnectionReady?.(newConnId);
               }}
               onQueryStatusChange={onQueryStatusChange}
             />
