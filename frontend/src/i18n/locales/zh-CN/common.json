@@ -1673,6 +1673,7 @@
     "connectionTreeEmpty": "连接树为空",
     "connectionTreeSearchPlaceholder": "搜索连接 / 库 / 表...",
     "connectionTreeNoMatch": "没有匹配 \"{{query}}\" 的结果",
+    "connectionTreeFilteredEmpty": "没有匹配 \"{{query}}\" 的数据库，清除搜索可查看全部",
     "copyType": "复制类型",
     "createFirstConnection": "创建第一个连接",
     "createNew": "新建",

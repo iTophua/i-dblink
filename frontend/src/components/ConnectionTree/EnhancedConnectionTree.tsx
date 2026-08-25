@@ -32,7 +32,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
     connections, groups, selectedId, selectedTableId,
     onSelect, onTableSelect, onObjectTypeSelect,
     onTableOpen, onViewOpen, onOpenDesigner, onOpenViewDefinition,
-    onExpand, collapsed, searchText, expandedKeys, onExpandKeys,
+    onExpand, collapsed, searchText, expandedKeys, onExpandKeys, onClearSearch,
     connectionDatabases, isLoading,
     onConnect, onDisconnect, onEditConnection, onDeleteConnection, onNewQuery,
     onOpenRoutine, onOpenTrigger,
@@ -176,7 +176,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
 
   const treeHandlers = useTreeHandlers(
     connections,
-    { onExpandKeys, onConnect, onExpand, onDatabaseExpand, onTableExpand, onLoadDatabases, onTableOpen, onViewOpen, onSelect, onTableSelect, onObjectTypeSelect },
+    { onExpandKeys, onConnect, onExpand, onDatabaseExpand, onTableExpand, onLoadDatabases, onTableOpen, onViewOpen, onSelect, onTableSelect, onObjectTypeSelect, onClearSearch },
     { expandedKeysRef, connectionDatabasesRef }
   );
 

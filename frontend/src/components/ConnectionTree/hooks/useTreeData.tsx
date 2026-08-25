@@ -951,7 +951,9 @@ export function useTreeData({
                     key: `loading::${conn.id}`,
                     title: (
                       <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                        {t('common.noDatabases')}
+                        {q && dbList.length > 0
+                          ? t('common.connectionTreeFilteredEmpty', { query: searchText.trim() })
+                          : t('common.noDatabases')}
                       </span>
                     ),
                     isLeaf: true,

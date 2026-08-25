@@ -232,6 +232,7 @@ function MainLayoutComponent() {
                  }}
                  collapsed={layout.collapsed}
                  searchText={layout.debouncedSearch}
+                 onClearSearch={() => layout.handleSearchChange('')}
                  expandedKeys={connMgr.expandedKeys}
                  onExpandKeys={connMgr.setExpandedKeys}
                  connectionDatabases={connMgr.connectionDatabases}

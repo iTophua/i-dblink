@@ -1661,6 +1661,7 @@
     "connectionTreeEmpty": "Connection tree is empty",
     "connectionTreeSearchPlaceholder": "Search connections / databases / tables...",
     "connectionTreeNoMatch": "No results matching \"{{query}}\"",
+    "connectionTreeFilteredEmpty": "No databases matching \"{{query}}\", clear the search to see all",
     "copyType": "Copy Type",
     "createFirstConnection": "Create your first connection",
     "createNew": "Create New",

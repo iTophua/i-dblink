@@ -16,6 +16,8 @@ export type ConnectionTreeProps = {
   onExpand: (connectionId: string, expanded: boolean) => void;
   collapsed: boolean;
   searchText: string;
+  /** 搜索态下用户展开/双击连接节点时自动清除搜索（意图从"找连接"转为"浏览连接"） */
+  onClearSearch?: () => void;
   expandedKeys: string[];
   onExpandKeys: (keys: string[]) => void;
   connectionDatabases: Record<
