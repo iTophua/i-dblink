@@ -5,7 +5,6 @@ import {
   Tooltip,
   Dropdown,
   Select,
-  Tag,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,24 +16,25 @@ import {
   StopOutlined,
   LineChartOutlined,
   CopyOutlined,
-  FileTextOutlined,
   HistoryOutlined,
   ThunderboltOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  WarningOutlined,
   FullscreenOutlined,
   BookOutlined,
   DownloadOutlined,
   LoadingOutlined,
   RobotOutlined,
+  MoreOutlined,
+  CommentOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { useThemeColors } from '../../../hooks/useThemeColors';
+import { DatabaseIcon } from '../../DatabaseIcon';
 import { formatShortcutForDisplay, getEffectiveShortcut } from '../../../constants/menuShortcuts';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useAIChatStore } from '../../../stores/aiChatStore';
 import type { DatabaseType } from '../../../types/api';
-import type { RecentDatabaseEntry } from '../../../stores/workspaceStore';
 
 export interface SQLEditorToolbarProps {
   // Execution
@@ -64,20 +64,18 @@ export interface SQLEditorToolbarProps {
   setHistoryPanelVisible: (v: boolean) => void;
   setSnippetManagerOpen: (v: boolean) => void;
 
-  // Database selection
-  database?: string;
-  availableDatabases?: string[];
-  recentDatabases?: RecentDatabaseEntry[];
-  onDatabaseChange?: (database: string) => void;
-
-  // Connection selection（查询 Tab 内切换连接，支持搜索）
-  connectionOptions?: { value: string; label: React.ReactNode; searchText: string }[];
-  onConnectionChange?: (connectionId: string) => void;
+  // Connection + database combined selector（合并选择器：一个下拉完成连接+库切换，节省工具栏空间）
+  connDbOptions?: {
+    label: React.ReactNode;
+    options: { value: string; label: React.ReactNode; searchText: string }[];
+  }[];
+  connDbValue?: { value: string } | null;
+  connInfoById?: Record<string, { name: string; dbType?: DatabaseType }>;
+  onConnDbChange?: (connectionId: string, database: string | undefined) => void;
 
   // Fullscreen
   isFullscreen: boolean;
   setIsFullscreen: (v: boolean) => void;
-  dbType?: DatabaseType;
 }
 
 export function SQLEditorToolbar({
@@ -100,15 +98,12 @@ export function SQLEditorToolbar({
   exportResult,
   setHistoryPanelVisible,
   setSnippetManagerOpen,
-  database,
-  availableDatabases,
-  recentDatabases,
-  onDatabaseChange,
-  connectionOptions,
-  onConnectionChange,
+  connDbOptions,
+  connDbValue,
+  connInfoById,
+  onConnDbChange,
   isFullscreen,
   setIsFullscreen,
-  dbType,
 }: SQLEditorToolbarProps) {
   const { t } = useTranslation();
   const tc = useThemeColors();
@@ -126,7 +121,7 @@ export function SQLEditorToolbar({
       className="sql-editor-toolbar"
     >
       <style>{`.sql-editor-toolbar .ant-btn { height: 22px; font-size: 12px; }`}</style>
-      <Space size="small">
+      <Space size={6}>
         <Tooltip
           title={`${t('common.sqlEditor.execute')} (${formatShortcutForDisplay(getEffectiveShortcut('execute-query', useSettingsStore.getState().settings.shortcuts || {}))})`}
         >
@@ -137,13 +132,13 @@ export function SQLEditorToolbar({
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              padding: '0 10px',
-              height: 22,
-              borderRadius: 6,
+              padding: '0 14px',
+              height: 26,
+              borderRadius: 7,
               background: 'var(--color-primary-gradient, var(--color-primary))',
               color: tc.isDark ? '#000000' : '#FFFFFF',
-              fontSize: 12,
-              fontWeight: 500,
+              fontSize: 12.5,
+              fontWeight: 600,
               cursor: !connectionId || loading ? 'not-allowed' : 'pointer',
               opacity: !connectionId ? 0.5 : 1,
               transition: 'all 0.2s ease',
@@ -164,24 +159,25 @@ export function SQLEditorToolbar({
             {t('common.executeButton')}
           </div>
         </Tooltip>
-        <Button
-          icon={<StopOutlined />}
-          onClick={stopQuery}
-          disabled={!loading}
-          danger
-          size="small"
-        >
-          {t('common.stopButton')}
-        </Button>
+        <Tooltip title={t('common.stopButton')}>
+          <Button
+            icon={<StopOutlined />}
+            onClick={stopQuery}
+            disabled={!loading}
+            type="text"
+            danger
+            size="small"
+          />
+        </Tooltip>
 
         {/* 执行状态条：loading 时实时显示已用时间；非 loading 显示上次查询耗时 */}
         {loading ? (
-          <span style={{ fontSize: 11, color: tc.primary, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 11, color: tc.primary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
             <LoadingOutlined style={{ marginRight: 4 }} />
             {t('common.executingLabel')} {execElapsed.toFixed(1)}s
           </span>
         ) : execElapsed > 0 ? (
-          <span style={{ fontSize: 11, color: tc.textTertiary, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 11, color: tc.textTertiary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
             {execElapsed.toFixed(2)}s
           </span>
         ) : null}
@@ -191,31 +187,32 @@ export function SQLEditorToolbar({
             width: 1,
             height: 16,
             background: 'var(--border)',
-            margin: '0 4px',
+            margin: '0 2px',
           }}
         />
 
         <Button
           icon={isFormatted ? <UndoOutlined /> : <FormatPainterOutlined />}
           onClick={formatSQL}
+          type="text"
           size="small"
         >
           {isFormatted ? t('common.unformatButton') : t('common.formatButton')}
         </Button>
 
-        <Tooltip title={t('common.ai')}>
-          <Button
-            icon={<RobotOutlined />}
-            onClick={() => useAIChatStore.getState().setPanelVisible(true)}
-            size="small"
-          >
-            {t('common.ai')}
-          </Button>
-        </Tooltip>
+        <Button
+          icon={<RobotOutlined />}
+          onClick={() => useAIChatStore.getState().setPanelVisible(true)}
+          type="text"
+          size="small"
+        >
+          {t('common.ai')}
+        </Button>
         <Button
           icon={<LineChartOutlined />}
           onClick={showExplainPlan}
           disabled={!connectionId}
+          type="text"
           size="small"
         >
           {t('common.explainPlanButton')}
@@ -226,7 +223,7 @@ export function SQLEditorToolbar({
             width: 1,
             height: 16,
             background: 'var(--border)',
-            margin: '0 4px',
+            margin: '0 2px',
           }}
         />
 
@@ -235,6 +232,7 @@ export function SQLEditorToolbar({
             icon={<ThunderboltOutlined />}
             onClick={handleBeginTransaction}
             disabled={!connectionId}
+            type="text"
             size="small"
           >
             {t('common.beginTransaction')}
@@ -242,9 +240,9 @@ export function SQLEditorToolbar({
         ) : (
           <>
             <Button
-              icon={<CheckCircleOutlined />}
+              icon={<CheckCircleOutlined style={{ color: 'var(--color-success)' }} />}
               onClick={handleCommitTransaction}
-              type="primary"
+              type="text"
               size="small"
             >
               {t('common.commitTransaction')}
@@ -252,6 +250,7 @@ export function SQLEditorToolbar({
             <Button
               icon={<CloseCircleOutlined />}
               onClick={handleRollbackTransaction}
+              type="text"
               danger
               size="small"
             >
@@ -260,55 +259,24 @@ export function SQLEditorToolbar({
           </>
         )}
 
-        <div
-          style={{
-            width: 1,
-            height: 16,
-            background: 'var(--border)',
-            margin: '0 4px',
-          }}
-        />
-
-        <Tooltip title={t('common.sqlEditor.commentSQL') + ' (Ctrl+/)'}>
-          <Button
-            icon={<FileTextOutlined />}
-            onClick={() => editorRef.current?.getAction('editor.action.commentLine')?.run()}
-            size="small"
-          >
-            {t('common.commentButton')}
-          </Button>
-        </Tooltip>
-
         <Dropdown
           menu={{
             items: [
-              { key: 'upper', label: t('common.uppercase') },
-              { key: 'lower', label: t('common.lowercase') },
-            ],
-            onClick: ({ key }) => {
-              const editor = editorRef.current;
-              if (!editor) return;
-              const model = editor.getModel();
-              const selection = editor.getSelection();
-              if (!model || !selection) return;
-              const selectedText = model.getValueInRange(selection);
-              if (!selectedText) return;
-              const replaced =
-                key === 'upper' ? selectedText.toUpperCase() : selectedText.toLowerCase();
-              editor.executeEdits('case-transform', [
-                { range: selection, text: replaced, forceMoveMarkers: true },
-              ]);
-            },
-          }}
-        >
-          <Button icon={<FormatPainterOutlined />} size="small">
-            {t('common.caseButton')}
-          </Button>
-        </Dropdown>
-
-        <Dropdown
-          menu={{
-            items: [
+              {
+                key: 'comment',
+                label: `${t('common.commentButton')} (Ctrl+/)`,
+                icon: <CommentOutlined />,
+              },
+              {
+                key: 'case',
+                label: t('common.caseButton'),
+                icon: <SwapOutlined />,
+                children: [
+                  { key: 'upper', label: t('common.uppercase') },
+                  { key: 'lower', label: t('common.lowercase') },
+                ],
+              },
+              { type: 'divider' },
               { key: 'save', label: t('common.saveSql'), icon: <SaveOutlined /> },
               { key: 'copy', label: t('common.copySqlMenu'), icon: <CopyOutlined /> },
               { key: 'clear', label: t('common.clearEditor'), icon: <ClearOutlined /> },
@@ -323,7 +291,22 @@ export function SQLEditorToolbar({
               },
             ],
             onClick: ({ key }) => {
-              if (key === 'save') saveSQL();
+              if (key === 'comment') {
+                editorRef.current?.getAction('editor.action.commentLine')?.run();
+              } else if (key === 'upper' || key === 'lower') {
+                const editor = editorRef.current;
+                if (!editor) return;
+                const model = editor.getModel();
+                const selection = editor.getSelection();
+                if (!model || !selection) return;
+                const selectedText = model.getValueInRange(selection);
+                if (!selectedText) return;
+                const replaced =
+                  key === 'upper' ? selectedText.toUpperCase() : selectedText.toLowerCase();
+                editor.executeEdits('case-transform', [
+                  { range: selection, text: replaced, forceMoveMarkers: true },
+                ]);
+              } else if (key === 'save') saveSQL();
               else if (key === 'copy') copySQL();
               else if (key === 'clear') clearEditor();
               else if (key === 'export') exportResult();
@@ -332,86 +315,60 @@ export function SQLEditorToolbar({
             },
           }}
         >
-          <Button icon={<FileTextOutlined />} size="small">
+          <Button icon={<MoreOutlined />} type="text" size="small">
             {t('common.moreButton')}
           </Button>
         </Dropdown>
       </Space>
 
       <Space>
-        {/* 连接切换（支持按名称/主机/类型搜索） */}
+        {/* 连接 · 库合并选择（按名称/主机/类型/库名搜索，选中即切换） */}
         <Select
-          value={connectionId || undefined}
-          onChange={(value) => onConnectionChange?.(value)}
+          labelInValue
+          labelRender={(item) => {
+            // 收起态：连接名 · 库名（或 连接名（未选库））
+            const v = String(item.value ?? '');
+            const sep = v.indexOf('::');
+            const connId = sep >= 0 ? v.slice(0, sep) : v;
+            const db = sep >= 0 ? v.slice(sep + 2) : '';
+            const info = connInfoById?.[connId];
+            return (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                {info?.dbType && <DatabaseIcon type={info.dbType} size={13} />}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {info?.name || t('common.selectConnection')}
+                </span>
+                {db ? (
+                  <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    · {db}
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                    {t('common.noDatabaseOption')}
+                  </span>
+                )}
+              </span>
+            );
+          }}
+          value={connDbValue ?? undefined}
+          onChange={(item: { value: string }) => {
+            const v = String(item.value ?? '');
+            const sep = v.indexOf('::');
+            if (sep < 0) return;
+            onConnDbChange?.(v.slice(0, sep), v.slice(sep + 2) || undefined);
+          }}
           placeholder={t('common.selectConnection')}
           showSearch
-          filterOption={(input, option) =>
+          filterOption={(input, option: any) =>
             String(option?.searchText ?? '')
               .toLowerCase()
               .includes(input.toLowerCase())
           }
-          style={{ minWidth: 140, maxWidth: 220 }}
+          style={{ minWidth: 120, maxWidth: 260 }}
           size="small"
           popupMatchSelectWidth={false}
-          options={connectionOptions}
+          options={connDbOptions}
         />
-
-        {/* 数据库选择 */}
-        {connectionId ? (
-          availableDatabases && availableDatabases.length > 0 ? (
-            <Select
-              value={database || undefined}
-              onChange={(value) => onDatabaseChange?.(value)}
-              placeholder={t('common.selectDatabasePlaceholder')}
-              showSearch
-              optionFilterProp="label"
-              filterOption={(input, option) => {
-                const lbl = typeof option?.label === 'string' ? option.label : String(option?.label ?? '');
-                return lbl.toLowerCase().includes(input.toLowerCase());
-              }}
-              style={{ minWidth: 140 }}
-              size="small"
-              options={(() => {
-                const recentList = (recentDatabases || [])
-                  .filter((r) => r.connectionId === connectionId && availableDatabases.includes(r.database))
-                  .slice(0, 5);
-                if (recentList.length > 0) {
-                  return [
-                    {
-                      label: t('common.recentDatabases'),
-                      options: recentList.map((r) => ({
-                        label: `${r.connectionName} · ${r.database}`,
-                        value: r.database,
-                      })),
-                    },
-                    {
-                      label: t('common.allDatabases'),
-                      options: availableDatabases.map((db) => ({ label: db, value: db })),
-                    },
-                  ];
-                }
-                return availableDatabases.map((db) => ({ label: db, value: db }));
-              })() as any}
-            />
-          ) : (
-            <span
-              style={{
-                color: 'var(--color-error)',
-                fontSize: 12,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              <WarningOutlined />
-              {t('common.notLoaded')}
-            </span>
-          )
-        ) : (
-          <span style={{ color: 'var(--color-error)', fontSize: 12 }}>
-            {t('common.notSelected')}
-          </span>
-        )}
 
         <Button
           icon={<FullscreenOutlined />}

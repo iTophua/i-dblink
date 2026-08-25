@@ -5,6 +5,7 @@ import React, {
   useRef,
   forwardRef,
   useImperativeHandle,
+  useMemo,
 } from 'react';
 import { Tabs, Breadcrumb, Menu, App, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -177,6 +178,14 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     },
     [connections]
   );
+  // 各连接的库名列表（查询 Tab 合并选择器用：跨连接切换连接+库）
+  const availableDatabasesByConnection = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const [connId, dbs] of Object.entries(connectionDatabases || {})) {
+      map[connId] = (dbs || []).map((d) => d.database);
+    }
+    return map;
+  }, [connectionDatabases]);
   // 已打开的数据浏览 Tab 列表
   const [openedTables, setOpenedTables] = useState<OpenedTable[]>([]);
   // SQL 查询 Tab 列表（动态添加/删除）
@@ -1312,33 +1321,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               database={sqlTab.database}
               defaultQuery={sqlTab.defaultQuery}
               dbType={getDbType(sqlTab.connectionId || selectedConnectionId)}
-              availableDatabases={
-                (sqlTab.connectionId || selectedConnectionId) && connectionDatabases?.[sqlTab.connectionId || selectedConnectionId || '']
-                  ? connectionDatabases[sqlTab.connectionId || selectedConnectionId || ''].map((db) => db.database)
-                  : []
-              }
-              recentDatabases={useWorkspaceStore.getState().recentDatabases || []}
-              onDatabaseChange={(database) => {
-                setOpenedSqlTabs((prev) =>
-                  prev.map((t) => (t.key === sqlTab.key ? { ...t, database } : t))
-                );
-                const connId = sqlTab.connectionId || selectedConnectionId;
-                if (connId) {
-                  const conn = connections.find((c) => c.id === connId);
-                  if (conn) {
-                    useWorkspaceStore.getState().addRecentDatabase({
-                      connectionId: connId,
-                      connectionName: conn.name,
-                      database,
-                    });
-                  }
-                }
-              }}
-              onConnectionChange={(newConnId) => {
+              availableDatabasesByConnection={availableDatabasesByConnection}
+              onConnectionDatabaseChange={(newConnId, newDb) => {
                 const prevConnId = sqlTab.connectionId || selectedConnectionId;
-                if (!newConnId || newConnId === prevConnId) return;
+                if (newConnId === prevConnId && newDb === sqlTab.database) return;
                 const conn = connections.find((c) => c.id === newConnId);
-                // 切换连接：库必须重置（不同服务器的库名不通用），SQL 文本保留
+                // 切换连接或库：SQL 文本保留；换连接时未选库则 database 置空
                 setOpenedSqlTabs((prev) =>
                   prev.map((t) =>
                     t.key === sqlTab.key
@@ -1346,13 +1334,22 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                           ...t,
                           connectionId: newConnId,
                           connectionName: conn?.name,
-                          database: undefined,
+                          database: newDb,
                         }
                       : t
                   )
                 );
-                // 目标连接未连接时自动连接并加载数据库列表
-                onEnsureConnectionReady?.(newConnId);
+                if (newConnId !== prevConnId) {
+                  // 目标连接未连接时自动连接并加载数据库列表
+                  onEnsureConnectionReady?.(newConnId);
+                }
+                if (newDb && conn) {
+                  useWorkspaceStore.getState().addRecentDatabase({
+                    connectionId: newConnId,
+                    connectionName: conn.name,
+                    database: newDb,
+                  });
+                }
               }}
               onQueryStatusChange={onQueryStatusChange}
             />

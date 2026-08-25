@@ -35,7 +35,6 @@ import { useSqlDialectDetection } from './SQLEditor/hooks/useSqlDialectDetection
 import { SQLEditorToolbar } from './SQLEditor/components/SQLEditorToolbar';
 import { SQLEditorContextMenu } from './SQLEditor/components/SQLEditorContextMenu';
 import { getErrorMessage } from '../utils/getErrorMessage';
-import type { RecentDatabaseEntry } from '../stores/workspaceStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { EnhancedEmptyState, QueryResultSkeleton } from './LoadingStates';
 
@@ -54,11 +53,10 @@ interface SQLEditorProps {
   connectionId?: string | null;
   database?: string;
   defaultQuery?: string;
-  availableDatabases?: string[];
-  recentDatabases?: RecentDatabaseEntry[];
-  onDatabaseChange?: (database: string) => void;
-  /** 查询 Tab 内切换目标连接 */
-  onConnectionChange?: (connectionId: string) => void;
+  /** 各连接可用的数据库列表（合并选择器用） */
+  availableDatabasesByConnection?: Record<string, string[]>;
+  /** 合并选择器切换 连接+库（库为 undefined 表示仅切换连接） */
+  onConnectionDatabaseChange?: (connectionId: string, database: string | undefined) => void;
   dbType?: DatabaseType;
   onQueryStatusChange?: (isQuerying: boolean) => void;
 }
@@ -67,10 +65,8 @@ export function SQLEditor({
   connectionId,
   database,
   defaultQuery,
-  availableDatabases,
-  recentDatabases,
-  onDatabaseChange,
-  onConnectionChange,
+  availableDatabasesByConnection,
+  onConnectionDatabaseChange,
   dbType: propDbType,
   onQueryStatusChange,
 }: SQLEditorProps) {
@@ -84,24 +80,44 @@ export function SQLEditor({
   }, [connections, connectionId]);
 
   const dbType = propDbType || dbTypeFromStore;
-  // 连接切换下拉选项：搜索覆盖 名称/主机/类型/默认库（label 是 ReactNode，用 searchText 字段过滤）
-  const connectionOptions = useMemo(
-    () =>
-      connections.map((c) => ({
-        value: c.id,
+  // 合并选择器数据：按连接分组（组头=图标+名称+主机），选项=各库 + "未选库"项；
+  // 值编码为 `${connId}::${db}`（connId 是 UUID 不含分隔符，库名可能含 ::，解析取第一个分隔符）
+  const { connDbOptions, connInfoById, connDbValue } = useMemo(() => {
+    const infoById: Record<string, { name: string; dbType?: DatabaseType }> = {};
+    const groups = connections.map((c) => {
+      infoById[c.id] = { name: c.name, dbType: c.db_type };
+      const dbs = availableDatabasesByConnection?.[c.id] || [];
+      const connSearch = `${c.name} ${c.host || ''} ${c.db_type}`;
+      return {
         label: (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <DatabaseIcon type={c.db_type} size={14} grayscale={c.status !== 'connected'} />
+            <DatabaseIcon type={c.db_type} size={13} grayscale={c.status !== 'connected'} />
             <span>{c.name}</span>
             {c.host && (
               <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{c.host}</span>
             )}
           </span>
         ),
-        searchText: `${c.name} ${c.host || ''} ${c.db_type} ${c.database || ''}`,
-      })),
-    [connections]
-  );
+        options: [
+          {
+            value: `${c.id}::`,
+            label: <span style={{ color: 'var(--text-tertiary)' }}>{t('common.noDatabaseOption')}</span>,
+            searchText: connSearch,
+          },
+          ...dbs.map((db) => ({
+            value: `${c.id}::${db}`,
+            label: <span>{db}</span>,
+            searchText: `${connSearch} ${db}`,
+          })),
+        ],
+      };
+    });
+    const value =
+      connectionId != null && connectionId !== ''
+        ? { value: database ? `${connectionId}::${database}` : `${connectionId}::` }
+        : null;
+    return { connDbOptions: groups, connInfoById: infoById, connDbValue: value };
+  }, [connections, availableDatabasesByConnection, connectionId, database, t]);
   const [sql, setSql] = useState(defaultQuery || '');
   const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
@@ -140,6 +156,12 @@ export function SQLEditor({
 
   // SQL 编辑器自动换行设置（默认关闭）
   const editorWordWrap = useSettingsStore((s) => s.settings.editorWordWrap);
+
+  // Monaco 补全用：当前连接的库列表（从合并数据派生）
+  const availableDatabases = useMemo(
+    () => (connectionId ? availableDatabasesByConnection?.[connectionId] : undefined),
+    [availableDatabasesByConnection, connectionId]
+  );
 
   // Monaco editor (must be initialized before useQueryExecution since it provides highlightError/clearErrorMarkers)
   const {
@@ -631,15 +653,12 @@ export function SQLEditor({
         exportResult={exportResult}
         setHistoryPanelVisible={setHistoryPanelVisible}
         setSnippetManagerOpen={setSnippetManagerOpen}
-        database={database}
-        availableDatabases={availableDatabases}
-        recentDatabases={recentDatabases}
-        onDatabaseChange={onDatabaseChange}
-        connectionOptions={connectionOptions}
-        onConnectionChange={onConnectionChange}
+        connDbOptions={connDbOptions}
+        connDbValue={connDbValue}
+        connInfoById={connInfoById}
+        onConnDbChange={onConnectionDatabaseChange}
         isFullscreen={isFullscreen}
         setIsFullscreen={setIsFullscreen}
-        dbType={dbType}
       />
 
       {/* SQL 方言转换提示 Banner */}
