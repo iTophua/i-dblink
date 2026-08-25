@@ -4,7 +4,7 @@ import {
   Space,
   Tooltip,
   Dropdown,
-  Select,
+  Cascader,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -31,10 +31,20 @@ import {
 } from '@ant-design/icons';
 import { useThemeColors } from '../../../hooks/useThemeColors';
 import { DatabaseIcon } from '../../DatabaseIcon';
-import { formatShortcutForDisplay, getEffectiveShortcut } from '../../../constants/menuShortcuts';
+import { formatShortcutForDisplay, getEffectiveShortcut, isMacOS } from '../../../constants/menuShortcuts';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useAIChatStore } from '../../../stores/aiChatStore';
-import type { DatabaseType } from '../../../types/api';
+
+/** 连接→库 级联选项（一级连接，二级库）。host/dbType/connected 供 optionRender 渲染，searchStr 供搜索 */
+export interface ConnDbCascaderOption {
+  value: string;
+  label: string;
+  host?: string;
+  dbType?: string;
+  connected?: boolean;
+  searchStr?: string;
+  children?: ConnDbCascaderOption[];
+}
 
 export interface SQLEditorToolbarProps {
   // Execution
@@ -64,13 +74,9 @@ export interface SQLEditorToolbarProps {
   setHistoryPanelVisible: (v: boolean) => void;
   setSnippetManagerOpen: (v: boolean) => void;
 
-  // Connection + database combined selector（合并选择器：一个下拉完成连接+库切换，节省工具栏空间）
-  connDbOptions?: {
-    label: React.ReactNode;
-    options: { value: string; label: React.ReactNode; searchText: string }[];
-  }[];
-  connDbValue?: { value: string } | null;
-  connInfoById?: Record<string, { name: string; dbType?: DatabaseType }>;
+  // Connection → database cascader（级联选择：一级连接、二级库；选一级=仅切连接）
+  connDbCascaderOptions?: ConnDbCascaderOption[];
+  connDbCascaderValue?: string[] | null;
   onConnDbChange?: (connectionId: string, database: string | undefined) => void;
 
   // Fullscreen
@@ -98,9 +104,8 @@ export function SQLEditorToolbar({
   exportResult,
   setHistoryPanelVisible,
   setSnippetManagerOpen,
-  connDbOptions,
-  connDbValue,
-  connInfoById,
+  connDbCascaderOptions,
+  connDbCascaderValue,
   onConnDbChange,
   isFullscreen,
   setIsFullscreen,
@@ -112,6 +117,9 @@ export function SQLEditorToolbar({
     <div
       style={{
         padding: '4px 8px',
+        // 全屏时编辑器 fixed 铺满整窗，macOS 红绿灯悬浮在左上角——
+        // 与顶部工具栏一致留 92px，避免执行按钮被遮挡（非 macOS 正常留白）
+        ...(isFullscreen && isMacOS() ? { paddingLeft: 92 } : {}),
         borderBottom: '1px solid var(--border)',
         display: 'flex',
         justifyContent: 'space-between',
@@ -322,53 +330,48 @@ export function SQLEditorToolbar({
       </Space>
 
       <Space>
-        {/* 连接 · 库合并选择（按名称/主机/类型/库名搜索，选中即切换） */}
-        <Select
-          labelInValue
-          labelRender={(item) => {
-            // 收起态：连接名 · 库名（或 连接名（未选库））
-            const v = String(item.value ?? '');
-            const sep = v.indexOf('::');
-            const connId = sep >= 0 ? v.slice(0, sep) : v;
-            const db = sep >= 0 ? v.slice(sep + 2) : '';
-            const info = connInfoById?.[connId];
-            return (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                {info?.dbType && <DatabaseIcon type={info.dbType} size={13} />}
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {info?.name || t('common.selectConnection')}
-                </span>
-                {db ? (
-                  <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    · {db}
-                  </span>
-                ) : (
-                  <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                    {t('common.noDatabaseOption')}
-                  </span>
-                )}
-              </span>
-            );
-          }}
-          value={connDbValue ?? undefined}
-          onChange={(item: { value: string }) => {
-            const v = String(item.value ?? '');
-            const sep = v.indexOf('::');
-            if (sep < 0) return;
-            onConnDbChange?.(v.slice(0, sep), v.slice(sep + 2) || undefined);
+        {/* 连接 → 库 级联选择（搜索覆盖连接名/主机/类型/库名；选连接级=仅切连接） */}
+        <Cascader<ConnDbCascaderOption>
+          changeOnSelect
+          options={connDbCascaderOptions}
+          value={connDbCascaderValue ?? undefined}
+          onChange={(path) => {
+            if (!path || path.length === 0) return;
+            onConnDbChange?.(String(path[0]), path.length > 1 ? String(path[1]) : undefined);
           }}
           placeholder={t('common.selectConnection')}
-          showSearch
-          filterOption={(input, option: any) =>
-            String(option?.searchText ?? '')
-              .toLowerCase()
-              .includes(input.toLowerCase())
-          }
+          showSearch={{
+            filter: (inputValue, path) =>
+              path.some((opt) =>
+                String(opt.searchStr || opt.label || '')
+                  .toLowerCase()
+                  .includes(inputValue.toLowerCase())
+              ),
+          }}
+          displayRender={(labels) => (
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {labels.join(' · ')}
+            </span>
+          )}
           style={{ minWidth: 120, maxWidth: 260 }}
           size="small"
-          popupMatchSelectWidth={false}
-          options={connDbOptions}
+          expandTrigger="hover"
+          optionRender={(option) =>
+            option.dbType != null ? (
+              // 连接级：图标 + 名称 + 主机（未连接置灰）
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <DatabaseIcon type={option.dbType} size={13} grayscale={option.connected === false} />
+                <span>{option.label}</span>
+                {option.host && (
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{option.host}</span>
+                )}
+              </span>
+            ) : (
+              <span>{option.label}</span>
+            )
+          }
         />
+
 
         <Button
           icon={<FullscreenOutlined />}

@@ -14,7 +14,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useAppStore } from '../stores/appStore';
-import { DatabaseIcon } from './DatabaseIcon';
 import { format as formatSql } from 'sql-formatter';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
@@ -80,44 +79,29 @@ export function SQLEditor({
   }, [connections, connectionId]);
 
   const dbType = propDbType || dbTypeFromStore;
-  // 合并选择器数据：按连接分组（组头=图标+名称+主机），选项=各库 + "未选库"项；
-  // 值编码为 `${connId}::${db}`（connId 是 UUID 不含分隔符，库名可能含 ::，解析取第一个分隔符）
-  const { connDbOptions, connInfoById, connDbValue } = useMemo(() => {
-    const infoById: Record<string, { name: string; dbType?: DatabaseType }> = {};
-    const groups = connections.map((c) => {
-      infoById[c.id] = { name: c.name, dbType: c.db_type };
+  // 连接→库 级联选择数据：一级连接（label 纯字符串供路径显示与搜索），二级库。
+  // 连接的图标/主机/状态等渲染信息挂在自定义字段，由工具栏的 optionRender 消费
+  const { connDbCascaderOptions, connDbCascaderValue } = useMemo(() => {
+    const options = connections.map((c) => {
       const dbs = availableDatabasesByConnection?.[c.id] || [];
-      const connSearch = `${c.name} ${c.host || ''} ${c.db_type}`;
       return {
-        label: (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <DatabaseIcon type={c.db_type} size={13} grayscale={c.status !== 'connected'} />
-            <span>{c.name}</span>
-            {c.host && (
-              <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{c.host}</span>
-            )}
-          </span>
-        ),
-        options: [
-          {
-            value: `${c.id}::`,
-            label: <span style={{ color: 'var(--text-tertiary)' }}>{t('common.noDatabaseOption')}</span>,
-            searchText: connSearch,
-          },
-          ...dbs.map((db) => ({
-            value: `${c.id}::${db}`,
-            label: <span>{db}</span>,
-            searchText: `${connSearch} ${db}`,
-          })),
-        ],
+        value: c.id,
+        label: c.name,
+        host: c.host,
+        dbType: c.db_type,
+        connected: c.status === 'connected',
+        searchStr: `${c.name} ${c.host || ''} ${c.db_type}`,
+        children: dbs.length > 0 ? dbs.map((db) => ({ value: db, label: db })) : undefined,
       };
     });
     const value =
       connectionId != null && connectionId !== ''
-        ? { value: database ? `${connectionId}::${database}` : `${connectionId}::` }
+        ? database
+          ? [connectionId, database]
+          : [connectionId]
         : null;
-    return { connDbOptions: groups, connInfoById: infoById, connDbValue: value };
-  }, [connections, availableDatabasesByConnection, connectionId, database, t]);
+    return { connDbCascaderOptions: options, connDbCascaderValue: value };
+  }, [connections, availableDatabasesByConnection, connectionId, database]);
   const [sql, setSql] = useState(defaultQuery || '');
   const [snippetManagerOpen, setSnippetManagerOpen] = useState(false);
   const [historyPanelVisible, setHistoryPanelVisible] = useState(false);
@@ -653,9 +637,8 @@ export function SQLEditor({
         exportResult={exportResult}
         setHistoryPanelVisible={setHistoryPanelVisible}
         setSnippetManagerOpen={setSnippetManagerOpen}
-        connDbOptions={connDbOptions}
-        connDbValue={connDbValue}
-        connInfoById={connInfoById}
+        connDbCascaderOptions={connDbCascaderOptions}
+        connDbCascaderValue={connDbCascaderValue}
         onConnDbChange={onConnectionDatabaseChange}
         isFullscreen={isFullscreen}
         setIsFullscreen={setIsFullscreen}

@@ -1662,7 +1662,6 @@
     "connectionTreeSearchPlaceholder": "Search connections / databases / tables...",
     "connectionTreeNoMatch": "No results matching \"{{query}}\"",
     "connectionTreeFilteredEmpty": "No databases matching \"{{query}}\", clear the search to see all",
-    "noDatabaseOption": "(no database)",
     "copyType": "Copy Type",
     "createFirstConnection": "Create your first connection",
     "createNew": "Create New",
