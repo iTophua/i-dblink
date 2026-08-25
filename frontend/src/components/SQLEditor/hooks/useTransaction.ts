@@ -3,15 +3,19 @@ import { App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api';
 import { getErrorMessage } from '../../../utils/getErrorMessage';
+import { appModal } from '../../../utils/appModal';
+
+/** 事务模式：auto=自动提交（默认），manual=手动事务（执行后需提交/回滚，模式保持） */
+export type TransactionMode = 'auto' | 'manual';
 
 export function useTransaction(connectionId?: string | null) {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const [txMode, setTxMode] = useState<TransactionMode>('auto');
   const [transactionActive, setTransactionActive] = useState(false);
   const prevConnectionIdRef = useRef(connectionId);
 
-  // 事务绑定在连接上：切换连接时静默回滚旧连接的事务并重置状态，
-  // 避免 UI 的事务态与后端实际事务错位（提交/回滚打到没有事务的新连接上报错卡死）
+  // 事务绑定在连接上：切换连接时静默回滚旧连接的事务并重置模式与状态
   useEffect(() => {
     if (prevConnectionIdRef.current === connectionId) return;
     const prev = prevConnectionIdRef.current;
@@ -22,21 +26,56 @@ export function useTransaction(connectionId?: string | null) {
       });
     }
     setTransactionActive(false);
+    setTxMode('auto');
   }, [connectionId, transactionActive]);
 
-  const handleBeginTransaction = useCallback(async () => {
-    if (!connectionId) {
-      message.warning(t('common.pleaseSelectADatabaseConnection'));
-      return;
-    }
+  /**
+   * 执行前钩子：手动模式下确保事务已开启。
+   * 提交/回滚后事务关闭但模式保持手动，下次执行时自动重开新事务。
+   */
+  const ensureTransactionForExecution = useCallback(async () => {
+    if (txMode !== 'manual' || !connectionId || transactionActive) return;
     try {
       await api.beginTransaction(connectionId);
       setTransactionActive(true);
-      message.success(t('common.transactionStarted'));
     } catch (err: unknown) {
       message.error(`${t('common.failedToBeginTransaction')}: ${getErrorMessage(err)}`);
+      throw err; // 手动模式下开不了事务就不应执行
     }
-  }, [connectionId]);
+  }, [txMode, transactionActive, connectionId, message, t]);
+
+  /** 切换事务模式。切到自动时若有未提交事务，弹确认（提交并切换 / 取消留在手动）。 */
+  const handleTxModeChange = useCallback(
+    (mode: TransactionMode) => {
+      if (mode === txMode) return;
+      if (mode === 'auto') {
+        if (transactionActive && connectionId) {
+          appModal.confirm({
+            title: t('common.txModeSwitchTitle'),
+            content: t('common.txModeSwitchContent'),
+            okText: t('common.commitTransaction'),
+            cancelText: t('common.cancel'),
+            onOk: async () => {
+              try {
+                await api.commitTransaction(connectionId);
+                setTransactionActive(false);
+                setTxMode('auto');
+                message.success(t('common.transactionCommitted'));
+              } catch (err: unknown) {
+                message.error(`${t('common.failedToCommitTransaction')}: ${getErrorMessage(err)}`);
+              }
+            },
+          });
+          return;
+        }
+        setTxMode('auto');
+        return;
+      }
+      // 切到手动：不开事务——首次执行 SQL 时才开（此时才产生可提交/回滚的变更）
+      setTxMode('manual');
+    },
+    [txMode, transactionActive, connectionId, message, t]
+  );
 
   const handleCommitTransaction = useCallback(async () => {
     if (!connectionId) return;
@@ -46,8 +85,7 @@ export function useTransaction(connectionId?: string | null) {
     } catch (err: unknown) {
       message.error(`${t('common.failedToCommitTransaction')}: ${getErrorMessage(err)}`);
     } finally {
-      // 无论成败都退出事务模式：后端已幂等（无事务=已是自动提交模式），
-      // 剩余失败只有连接级故障，事务必已终结；不重置会导致 UI 永久卡在事务态
+      // 事务结束但模式保持手动；后端已幂等（无事务=已提交），失败只剩连接级故障
       setTransactionActive(false);
     }
   }, [connectionId]);
@@ -65,8 +103,10 @@ export function useTransaction(connectionId?: string | null) {
   }, [connectionId]);
 
   return {
+    txMode,
     transactionActive,
-    handleBeginTransaction,
+    handleTxModeChange,
+    ensureTransactionForExecution,
     handleCommitTransaction,
     handleRollbackTransaction,
   };

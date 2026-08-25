@@ -5,6 +5,7 @@ import {
   Tooltip,
   Dropdown,
   Select,
+  Segmented,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,7 +18,6 @@ import {
   LineChartOutlined,
   CopyOutlined,
   HistoryOutlined,
-  ThunderboltOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   FullscreenOutlined,
@@ -50,8 +50,9 @@ export interface SQLEditorToolbarProps {
   editorRef: React.MutableRefObject<any>;
 
   // Transaction
+  txMode: 'auto' | 'manual';
+  onTxModeChange: (mode: 'auto' | 'manual') => void;
   transactionActive: boolean;
-  handleBeginTransaction: () => void;
   handleCommitTransaction: () => void;
   handleRollbackTransaction: () => void;
 
@@ -84,8 +85,9 @@ export function SQLEditorToolbar({
   formatSQL,
   isFormatted,
   editorRef,
+  txMode,
+  onTxModeChange,
   transactionActive,
-  handleBeginTransaction,
   handleCommitTransaction,
   handleRollbackTransaction,
   saveSQL,
@@ -190,18 +192,19 @@ export function SQLEditorToolbar({
           }}
         />
 
-        {/* 事务：与执行/停止同组的常用操作 */}
-        {!transactionActive ? (
-          <Tooltip title={t('common.beginTransaction')}>
-            <Button
-              icon={<ThunderboltOutlined />}
-              onClick={handleBeginTransaction}
-              disabled={!connectionId}
-              type="text"
-              size="small"
-            />
-          </Tooltip>
-        ) : (
+        {/* 事务模式：默认自动提交；手动模式执行 SQL 后出现提交/回滚，提交/回滚不改变模式 */}
+        <Tooltip title={t('common.txModeTip')}>
+          <Segmented
+            value={txMode}
+            onChange={(v) => onTxModeChange(v as 'auto' | 'manual')}
+            size="small"
+            options={[
+              { value: 'auto', label: t('common.txModeAuto') },
+              { value: 'manual', label: t('common.txModeManual') },
+            ]}
+          />
+        </Tooltip>
+        {txMode === 'manual' && transactionActive && (
           <>
             <Tooltip title={t('common.commitTransaction')}>
               <Button

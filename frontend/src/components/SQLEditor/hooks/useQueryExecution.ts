@@ -36,6 +36,8 @@ export interface UseQueryExecutionParams {
   highlightError: (errorMsg: string) => void;
   clearErrorMarkers: () => void;
   onQueryStatusChange?: (isQuerying: boolean) => void;
+  // 执行前钩子（校验通过后、真正执行前调用）：手动事务模式借此确保事务已开启；抛错则中止执行
+  onBeforeExecute?: () => Promise<void> | void;
   // Editor ref for reading selection
   editorRef?: React.MutableRefObject<any>;
 }
@@ -48,6 +50,7 @@ export function useQueryExecution({
   highlightError,
   clearErrorMarkers,
   onQueryStatusChange,
+  onBeforeExecute,
   editorRef,
 }: UseQueryExecutionParams) {
   const { t } = useTranslation();
@@ -108,6 +111,13 @@ export function useQueryExecution({
 
     if (!database) {
       message.warning(t('common.pleaseSelectADatabase'));
+      return;
+    }
+
+    // 执行前钩子（手动事务模式借此确保事务开启）；失败已由钩子自行提示，静默中止
+    try {
+      await onBeforeExecute?.();
+    } catch {
       return;
     }
 

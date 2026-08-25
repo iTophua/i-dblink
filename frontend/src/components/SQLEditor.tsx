@@ -166,6 +166,16 @@ export function SQLEditor({
     editorWordWrap,
   });
 
+  // Transaction（须在 useQueryExecution 之前：执行前钩子要确保手动模式下事务已开启）
+  const {
+    txMode,
+    transactionActive,
+    handleTxModeChange,
+    ensureTransactionForExecution,
+    handleCommitTransaction,
+    handleRollbackTransaction,
+  } = useTransaction(connectionId);
+
   // Query execution
   const {
     loading,
@@ -198,15 +208,8 @@ export function SQLEditor({
     clearErrorMarkers,
     onQueryStatusChange,
     editorRef,
+    onBeforeExecute: ensureTransactionForExecution,
   });
-
-  // Transaction
-  const {
-    transactionActive,
-    handleBeginTransaction,
-    handleCommitTransaction,
-    handleRollbackTransaction,
-  } = useTransaction(connectionId);
 
   // SQL dialect detection
   const {
@@ -622,8 +625,9 @@ export function SQLEditor({
         formatSQL={formatSQL}
         isFormatted={isFormatted}
         editorRef={editorRef}
+        txMode={txMode}
+        onTxModeChange={handleTxModeChange}
         transactionActive={transactionActive}
-        handleBeginTransaction={handleBeginTransaction}
         handleCommitTransaction={handleCommitTransaction}
         handleRollbackTransaction={handleRollbackTransaction}
         saveSQL={saveSQL}
