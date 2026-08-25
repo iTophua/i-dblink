@@ -95,15 +95,22 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   useEffect(() => { connectionDatabasesRef.current = connectionDatabases; }, [connectionDatabases]);
   useEffect(() => { expandedKeysRef.current = expandedKeys; }, [expandedKeys]);
 
-  // 搜索清除后（防抖值变空、树已恢复完整数据），滚动到用户打开的连接
+  // 搜索清除后（防抖值变空、树已恢复完整数据），滚动到用户打开的连接。
+  // 清空搜索会触发全量树重建（所有连接×库×表），大树重排可能超过单次延时——
+  // 补滚一次保证 scrollTo 落在重建完成之后（幂等，重复滚动无害）
   useEffect(() => {
     if (!searchText && pendingScrollKeyRef.current) {
       const key = pendingScrollKeyRef.current;
       pendingScrollKeyRef.current = null;
-      const timer = setTimeout(() => {
+      const scrollToConn = () => {
         treeRef.current?.scrollTo({ key, align: 'top' });
-      }, 100);
-      return () => clearTimeout(timer);
+      };
+      const t1 = setTimeout(scrollToConn, 120);
+      const t2 = setTimeout(scrollToConn, 400);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
   }, [searchText]);
 

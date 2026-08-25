@@ -88,16 +88,17 @@ export function useTreeHandlers(
         const conn = connections.find((c) => c.id === parsed.connectionId);
         if (!conn) return;
 
-        // 双击连接 = 打开连接浏览内容，清除搜索避免关键字过滤其内部数据库
-        callbacks.onClearSearch?.(parsed.connectionId);
-
         if (conn.status !== 'connected') {
+          // 连接成功后才清除搜索：失败时保留搜索上下文，用户能立即重试
           await callbacks.onConnect(parsed.connectionId);
+          callbacks.onClearSearch?.(parsed.connectionId);
           callbacks.onExpandKeys([
             ...refs.expandedKeysRef.current.filter((k) => !k.startsWith(`${parsed.connectionId}::`)),
             parsed.connectionId,
           ]);
         } else {
+          // 已连接的连接直接展开 = 无需连接过程，视为成功
+          callbacks.onClearSearch?.(parsed.connectionId);
           const isExpanded = refs.expandedKeysRef.current.includes(parsed.connectionId);
           if (isExpanded) {
             callbacks.onExpandKeys(refs.expandedKeysRef.current.filter((k) => k !== parsed.connectionId));
@@ -125,12 +126,14 @@ export function useTreeHandlers(
         parsed.type === 'connection' &&
         parsed.connectionId
       ) {
-        // 展开连接 = 浏览连接内容，清除搜索避免关键字过滤其内部数据库
-        if (info.expanded) callbacks.onClearSearch?.(parsed.connectionId);
         const conn = connections.find((c) => c.id === parsed.connectionId);
         if (info.expanded && conn && conn.status !== 'connected') {
+          // 连接成功后才清除搜索：失败时保留搜索上下文，用户能立即重试
           await callbacks.onConnect(parsed.connectionId);
+          callbacks.onClearSearch?.(parsed.connectionId);
         } else if (info.expanded && conn && conn.status === 'connected') {
+          // 已连接的连接展开 = 无需连接过程，视为成功
+          callbacks.onClearSearch?.(parsed.connectionId);
           const dbList = refs.connectionDatabasesRef.current[parsed.connectionId] || [];
           if (dbList.length === 0 && callbacks.onLoadDatabases) {
             callbacks.onLoadDatabases(parsed.connectionId);
