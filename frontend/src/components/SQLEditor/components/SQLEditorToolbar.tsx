@@ -169,6 +169,39 @@ export function SQLEditorToolbar({
           />
         </Tooltip>
 
+        {/* 事务：与执行/停止同组的常用操作 */}
+        {!transactionActive ? (
+          <Tooltip title={t('common.beginTransaction')}>
+            <Button
+              icon={<ThunderboltOutlined />}
+              onClick={handleBeginTransaction}
+              disabled={!connectionId}
+              type="text"
+              size="small"
+            />
+          </Tooltip>
+        ) : (
+          <>
+            <Tooltip title={t('common.commitTransaction')}>
+              <Button
+                icon={<CheckCircleOutlined style={{ color: 'var(--color-success)' }} />}
+                onClick={handleCommitTransaction}
+                type="text"
+                size="small"
+              />
+            </Tooltip>
+            <Tooltip title={t('common.rollbackTransaction')}>
+              <Button
+                icon={<CloseCircleOutlined />}
+                onClick={handleRollbackTransaction}
+                type="text"
+                danger
+                size="small"
+              />
+            </Tooltip>
+          </>
+        )}
+
         {/* 执行状态条：loading 时实时显示已用时间；非 loading 显示上次查询耗时 */}
         {loading ? (
           <span style={{ fontSize: 11, color: tc.primary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
@@ -216,47 +249,6 @@ export function SQLEditorToolbar({
             size="small"
           />
         </Tooltip>
-
-        <div
-          style={{
-            width: 1,
-            height: 16,
-            background: 'var(--border)',
-            margin: '0 2px',
-          }}
-        />
-
-        {!transactionActive ? (
-          <Tooltip title={t('common.beginTransaction')}>
-            <Button
-              icon={<ThunderboltOutlined />}
-              onClick={handleBeginTransaction}
-              disabled={!connectionId}
-              type="text"
-              size="small"
-            />
-          </Tooltip>
-        ) : (
-          <>
-            <Tooltip title={t('common.commitTransaction')}>
-              <Button
-                icon={<CheckCircleOutlined style={{ color: 'var(--color-success)' }} />}
-                onClick={handleCommitTransaction}
-                type="text"
-                size="small"
-              />
-            </Tooltip>
-            <Tooltip title={t('common.rollbackTransaction')}>
-              <Button
-                icon={<CloseCircleOutlined />}
-                onClick={handleRollbackTransaction}
-                type="text"
-                danger
-                size="small"
-              />
-            </Tooltip>
-          </>
-        )}
 
         <Dropdown
           menu={{
