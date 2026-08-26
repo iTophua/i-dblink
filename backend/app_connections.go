@@ -74,12 +74,44 @@ func (a *App) TestConnection(input ConnectionInput) error {
 	return nil
 }
 
-// ConnectDatabase 连接到数据库（建立并保持连接）
+// ConnectDatabase 连接到数据库（建立并保持连接）。
+// 单飞（single-flight）：树展开/双击、查询 Tab 自动连接等可能并发触发同一连接，
+// 后续调用等待首次尝试的结果复用，避免撞上 Manager.Connect 的 already exists 报错
+// （此前表现为：第一次连接报错，重试立刻成功）。
 func (a *App) ConnectDatabase(connectionID string) error {
-	if a.isActiveConn(connectionID) {
+	// 已持写锁，直接读 map（isActiveConn 会再抢 RLock，形成自死锁）
+	a.connMu.Lock()
+	if a.activeConns[connectionID] {
+		a.connMu.Unlock()
 		return nil
 	}
+	if flight, ok := a.connectFlights[connectionID]; ok {
+		a.connMu.Unlock()
+		<-flight.done
+		// 首次尝试已把连接置为活跃则视为成功；否则返回首次的错误
+		if flight.err == nil && a.isActiveConn(connectionID) {
+			return nil
+		}
+		return flight.err
+	}
+	flight := &connectFlight{done: make(chan struct{})}
+	a.connectFlights[connectionID] = flight
+	a.connMu.Unlock()
 
+	err := a.doConnectDatabase(connectionID)
+	flight.err = err
+	close(flight.done)
+
+	a.connMu.Lock()
+	if a.connectFlights[connectionID] == flight {
+		delete(a.connectFlights, connectionID)
+	}
+	a.connMu.Unlock()
+	return err
+}
+
+// doConnectDatabase 执行真正的连接流程（调用方保证同一连接只有一条在途）
+func (a *App) doConnectDatabase(connectionID string) error {
 	conn, password, err := a.storage.GetConnectionWithPassword(connectionID)
 	if err != nil {
 		return fmt.Errorf("failed to get connection: %w", err)
@@ -151,6 +183,8 @@ func (a *App) ConnectDatabase(connectionID string) error {
 		if sshTunnelStarted {
 			_ = a.tunnel.StopTunnel(connectionID)
 		}
+		// 记录失败原因到操作日志（含错误信息），便于排查"首次连接失败"类问题
+		_ = a.storage.RecordHistory(connectionID, "connect", false, err.Error())
 		// 检测密码错误
 		errStr := err.Error()
 		if strings.Contains(strings.ToLower(errStr), "password") ||

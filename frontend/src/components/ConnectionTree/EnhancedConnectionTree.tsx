@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect, useState } from 'react';
+import React, { useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { Tree, Spin, Dropdown, Menu } from 'antd';
 // Dropdown 仅用于折叠态侧栏连接菜单（见 collapsed 分支）；空白菜单用手动浮动 div
 import { useTranslation } from 'react-i18next';
@@ -51,9 +51,33 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   const treeRef = useRef<React.ComponentRef<typeof Tree>>(null);
   // 搜索清除后需要滚动定位到的连接节点
   const pendingScrollKeyRef = useRef<string | null>(null);
+  // 树容器实测高度：传给 Tree 的 height 属性启用真正的虚拟滚动。
+  // 没有数值型 height 时 rc-virtual-list 走非虚拟渲染——无内部滚动容器，
+  // treeRef.scrollTo 是 no-op（滚动实际发生在 Sider 上），滚动定位永远失效
+  const [treeHeight, setTreeHeight] = useState(0);
   // 空白区域右键菜单（受控，不参与 contextmenu 事件竞争）
   const [emptyMenuOpen, setEmptyMenuOpen] = useState(false);
   const [emptyMenuPos, setEmptyMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // 容器挂载/尺寸变化时测量高度（树在空态与正常态间切换会重新挂载，ref callback 处理）
+  const attachTreeContainer = useCallback((el: HTMLDivElement | null) => {
+    treeContainerRef.current = el;
+    if (!el) {
+      setTreeHeight(0);
+      return;
+    }
+    // jsdom（测试环境）没有 ResizeObserver：跳过测量，保持非虚拟渲染
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const h = Math.floor(entries[0]?.contentRect.height ?? 0);
+      setTreeHeight((prev) => (prev !== h ? h : prev));
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      if (treeContainerRef.current === el) treeContainerRef.current = null;
+    };
+  }, []);
 
   // 原生捕获阶段监听 contextmenu：彻底解决"节点右键与空白右键双菜单重叠"。
   // 关键认知：外层 Dropdown 的 trigger 监听器挂在它的 trigger 子元素上，capture 事件流
@@ -63,9 +87,10 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   //     让节点内层 Dropdown 接管（不阻止事件，内层正常处理）
   //   - 命中空白 → 阻止默认菜单 + 阻止冒泡（防止内层误触发）+ 记录坐标 + 开空白菜单
   useEffect(() => {
-    const el = treeContainerRef.current;
-    if (!el) return;
+    // 每次事件时读取 ref.current（树在空态↔正常态切换会重新挂载容器，不能在闭包里固化元素）
     const handler = (e: MouseEvent) => {
+      const el = treeContainerRef.current;
+      if (!el) return;
       const target = e.target as HTMLElement;
       if (!el.contains(target)) return;
       const onNode = !!target.closest('.ant-tree-node-content-wrapper, .ant-tree-treenode');
@@ -394,7 +419,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
               </>
             )}
             <div
-              ref={treeContainerRef}
+              ref={attachTreeContainer}
               style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             >
               <Tree
@@ -405,6 +430,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
                 draggable={isDraggable} onDrop={handleDrop}
                 style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 14, userSelect: 'none', height: '100%' }}
                 className="connection-tree" blockNode virtual
+                height={treeHeight > 0 ? treeHeight : undefined}
               />
             </div>
           </>

@@ -188,6 +188,11 @@ const schemaCompletionCache = new SchemaCompletionCache();
 // 连接尝试代数（键为 connectionID）：取消时递增，作废迟到的结果——
 // 避免用户取消后又跳成"已连接"，或取消引发的后端错误弹提示
 const connectGenerations = new Map<string, number>();
+// 进行中的连接 Promise（键为 connectionID）：并发触发连接时复用同一次请求。
+// 展开节点 + 双击、查询 Tab 自动连接等场景可能与用户操作并发触发，
+// 两个并发连接会在后端撞上 "connection already exists" 报错（表现为
+// 首次连接报错、重试立刻成功）
+const connectInFlight = new Map<string, Promise<void>>();
 
 export const useConnections = () => {
   const { message } = App.useApp();
@@ -296,46 +301,59 @@ export const useConnections = () => {
 
   const connect = useCallback(
     async (connectionId: string) => {
-      const generation = (connectGenerations.get(connectionId) || 0) + 1;
-      connectGenerations.set(connectionId, generation);
-      // 只亮连接自身的指示灯（status='loading'，树上橙色脉冲），不再翻转全局
-      // loading 让整棵树面板转圈
-      setConnections((prev) =>
-        prev.map((c) => (c.id === connectionId ? { ...c, status: 'loading' as const } : c))
-      );
+      // 已有同 ID 连接进行中：直接复用该次结果（取消语义由其内部的 generation 承载）
+      const existing = connectInFlight.get(connectionId);
+      if (existing) return existing;
+
+      const attempt = (async () => {
+        const generation = (connectGenerations.get(connectionId) || 0) + 1;
+        connectGenerations.set(connectionId, generation);
+        // 只亮连接自身的指示灯（status='loading'，树上橙色脉冲），不再翻转全局
+        // loading 让整棵树面板转圈
+        setConnections((prev) =>
+          prev.map((c) => (c.id === connectionId ? { ...c, status: 'loading' as const } : c))
+        );
+        try {
+          await api.connectConnection(connectionId);
+          if (connectGenerations.get(connectionId) !== generation) {
+            throw new Error(i18n.t('common.connectionCancelled'));
+          }
+          setConnections((prev) =>
+            prev.map((c) => (c.id === connectionId ? { ...c, status: 'connected' as const } : c))
+          );
+          message.success(i18n.t('common.connectionSuccess'));
+        } catch (err) {
+          // 用户已取消：静默中止（状态已由 cancelConnect 重置），不弹错误
+          if (connectGenerations.get(connectionId) !== generation) {
+            throw new Error(i18n.t('common.connectionCancelled'), { cause: err });
+          }
+          setConnections((prev) =>
+            prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
+          );
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          // 检查是否是密码错误（后端返回 PASSWORD_REQUIRED）
+          if (
+            errorMsg === 'PASSWORD_REQUIRED' ||
+            (typeof err === 'object' &&
+              err !== null &&
+              'code' in err &&
+              (err as Record<string, unknown>).code === 'PASSWORD_REQUIRED')
+          ) {
+            const error = new Error('密码错误，请重新输入') as Error & { code: string };
+            error.code = 'PASSWORD_REQUIRED';
+            throw error;
+          }
+          setError(errorMsg);
+          message.error(errorMsg);
+          throw err;
+        }
+      })();
+
+      connectInFlight.set(connectionId, attempt);
       try {
-        await api.connectConnection(connectionId);
-        if (connectGenerations.get(connectionId) !== generation) {
-          throw new Error(i18n.t('common.connectionCancelled'));
-        }
-        setConnections((prev) =>
-          prev.map((c) => (c.id === connectionId ? { ...c, status: 'connected' as const } : c))
-        );
-        message.success(i18n.t('common.connectionSuccess'));
-      } catch (err) {
-        // 用户已取消：静默中止（状态已由 cancelConnect 重置），不弹错误
-        if (connectGenerations.get(connectionId) !== generation) {
-          throw new Error(i18n.t('common.connectionCancelled'), { cause: err });
-        }
-        setConnections((prev) =>
-          prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
-        );
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        // 检查是否是密码错误（后端返回 PASSWORD_REQUIRED）
-        if (
-          errorMsg === 'PASSWORD_REQUIRED' ||
-          (typeof err === 'object' &&
-            err !== null &&
-            'code' in err &&
-            (err as Record<string, unknown>).code === 'PASSWORD_REQUIRED')
-        ) {
-          const error = new Error('密码错误，请重新输入') as Error & { code: string };
-          error.code = 'PASSWORD_REQUIRED';
-          throw error;
-        }
-        setError(errorMsg);
-        message.error(errorMsg);
-        throw err;
+        return await attempt;
+      } finally {
+        connectInFlight.delete(connectionId);
       }
     },
     [setConnections, setError]

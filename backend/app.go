@@ -92,22 +92,31 @@ type ServerInfo struct {
 	Error          string `json:"error,omitempty"`
 }
 
+// connectFlight 一次进行中的连接尝试：并发调用者等待同一次结果
+type connectFlight struct {
+	done chan struct{}
+	err  error
+}
+
 // App Wails 应用结构
 type App struct {
-	ctx       context.Context
-	storage   *Storage
-	dbManager *db.Manager
-	tunnel    *api.TunnelManager
-	handler   *api.Handler
-	aiManager *ai.ProviderManager
+	ctx         context.Context
+	storage     *Storage
+	dbManager   *db.Manager
+	tunnel      *api.TunnelManager
+	handler     *api.Handler
+	aiManager   *ai.ProviderManager
 	activeConns map[string]bool
-	connMu    sync.RWMutex // 保护 activeConns 的并发访问
+	// 进行中的连接尝试（键为 connectionID），防止并发连接撞 already exists
+	connectFlights map[string]*connectFlight
+	connMu         sync.RWMutex // 保护 activeConns / connectFlights 的并发访问
 }
 
 // NewApp 创建新应用
 func NewApp() *App {
 	return &App{
-		activeConns: make(map[string]bool),
+		activeConns:    make(map[string]bool),
+		connectFlights: make(map[string]*connectFlight),
 	}
 }
 
