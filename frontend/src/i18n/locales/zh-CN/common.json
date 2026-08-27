@@ -2128,6 +2128,7 @@
       "releaseNotes": "更新日志",
       "download": "前往下载",
       "alreadyLatest": "当前已是最新版本"
-    }
+    },
+    "connectNetworkHint": "可能是 macOS 本地网络权限或 VPN 路由未就绪：请重试；若反复失败，请到 系统设置 → 隐私与安全性 → 本地网络 中允许 iDBLink"
   }
 }

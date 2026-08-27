@@ -3,7 +3,10 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -135,14 +138,33 @@ func (m *Manager) Connect(connectionID string, req ConnectArgs) error {
 		cancelPing()
 	}()
 
-	pingTimeoutCtx, cancel := context.WithTimeout(pingCtx, 15*time.Second)
-	defer cancel()
-	if err := db.PingContext(pingTimeoutCtx); err != nil {
+	// 瞬时网络未就绪（首次访问本地网络权限/路由刚建立）时内核立即返回
+	// EHOSTUNREACH 类错误——重试即恢复。带退避自动重试，避免"首次连接
+	// 报 no route to host、手动重试才成功"。只匹配即时失败类错误，
+	// 认证错误、超时、连接拒绝不会重试（重试也无济于事）
+	retryDelays := []time.Duration{500 * time.Millisecond, time.Second, 2 * time.Second}
+	var pingErr error
+	for attempt := 0; ; attempt++ {
+		pingTimeoutCtx, cancel := context.WithTimeout(pingCtx, 15*time.Second)
+		pingErr = db.PingContext(pingTimeoutCtx)
+		cancel()
+		if pingErr == nil || pingCtx.Err() != nil {
+			break
+		}
+		if attempt >= len(retryDelays) || !isTransientNetworkError(pingErr) {
+			break
+		}
+		select {
+		case <-time.After(retryDelays[attempt]):
+		case <-pingCtx.Done():
+		}
+	}
+	if pingErr != nil {
 		_ = db.Close()
 		if pingCtx.Err() != nil {
 			return fmt.Errorf("connection cancelled")
 		}
-		return fmt.Errorf("ping failed: %w", err)
+		return fmt.Errorf("ping failed: %w", pingErr)
 	}
 
 	m.mu.Lock()
@@ -490,6 +512,27 @@ func (m *Manager) GetExecutor(connectionID string, database string) (Executor, e
 		return m.GetWithDatabase(connectionID, database)
 	}
 	return m.Get(connectionID)
+}
+
+// isTransientNetworkError 判断是否为"瞬时网络未就绪"类拨号错误。
+// EHOSTUNREACH（no route to host）等错误由内核立即返回，常见于 macOS
+// 首次本地网络访问授权、VPN/路由刚建立的场景，稍后重试即恢复。
+// 用错误文本匹配（跨平台统一，Windows 的 WSAEHOSTUNREACH 文本不同）；
+// i/o timeout、connection refused、认证错误等不匹配，不会被重试。
+func isTransientNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var opErr *net.OpError
+	if !errors.As(err, &opErr) {
+		return false
+	}
+	msg := opErr.Err.Error()
+	return strings.Contains(msg, "no route to host") ||
+		strings.Contains(msg, "network is down") ||
+		strings.Contains(msg, "network is unreachable") ||
+		strings.Contains(msg, "host is down") ||
+		strings.Contains(msg, "unreachable host") // Windows WSAEHOSTUNREACH
 }
 
 func openDB(args ConnectArgs) (*sql.DB, error) {

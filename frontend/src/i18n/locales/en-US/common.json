@@ -2116,6 +2116,7 @@
       "releaseNotes": "Release Notes",
       "download": "Download",
       "alreadyLatest": "You are already on the latest version"
-    }
+    },
+    "connectNetworkHint": "Likely macOS Local Network permission or VPN route not ready: please retry; if it keeps failing, allow iDBLink in System Settings → Privacy & Security → Local Network"
   }
 }
