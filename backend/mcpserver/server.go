@@ -202,9 +202,9 @@ func (s *Server) registerQueryTools() {
 	s.mcp.AddTool(
 		mcp.NewTool("execute_query",
 			mcp.WithDescription("Execute a read-only SQL query (SELECT, WITH, EXPLAIN, SHOW, DESCRIBE). "+
-					"Returns column names and rows as JSON. Only read-only statements are allowed; "+
-					"use execute_update for INSERT/UPDATE/DELETE, execute_ddl for schema changes. "+
-					"Call list_connections first to get a valid connection_id."),
+				"Returns column names and rows as JSON. Only read-only statements are allowed; "+
+				"use execute_update for INSERT/UPDATE/DELETE, execute_ddl for schema changes. "+
+				"Call list_connections first to get a valid connection_id."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single read-only SQL statement (SELECT, WITH, SHOW, EXPLAIN, DESCRIBE)")),
@@ -223,19 +223,19 @@ func (s *Server) registerMutationTools() {
 	// execute_update — DML only
 	s.mcp.AddTool(
 		mcp.NewTool("execute_update",
-			mcp.WithDescription("Execute a data modification statement (INSERT, UPDATE, DELETE, MERGE). "+
-					"Returns the number of rows affected. "+
-					"For schema changes (CREATE/DROP/ALTER TABLE), use execute_ddl."),
+			mcp.WithDescription("Execute a data modification statement (INSERT, UPDATE, DELETE, REPLACE, MERGE). "+
+				"Returns the number of rows affected. "+
+				"For schema changes (CREATE/DROP/ALTER TABLE), use execute_ddl."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
-				mcp.Description("A single INSERT, UPDATE, or DELETE statement")),
+				mcp.Description("A single INSERT, UPDATE, DELETE, or REPLACE statement")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
 			mcp.WithDestructiveHintAnnotation(true),
 		),
-			s.handleExecuteUpdate,
-		)
+		s.handleExecuteUpdate,
+	)
 }
 
 // ==================== 元数据/DDL tools ====================
@@ -246,7 +246,7 @@ func (s *Server) registerMetadataTools() {
 		mcp.NewTool("execute_ddl",
 			mcp.WithDescription("Execute a DDL statement (CREATE, DROP, ALTER, TRUNCATE, RENAME) "+
 				"to create or modify database structure (tables, views, indexes, etc). "+
-				"DML (INSERT/UPDATE/DELETE) is rejected; use execute_update for data changes."),
+				"DML (INSERT/UPDATE/DELETE/REPLACE) is rejected; use execute_update for data changes."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single DDL statement (CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE VIEW, etc.)")),

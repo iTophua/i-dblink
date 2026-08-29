@@ -390,7 +390,7 @@ func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest
 	if !IsReadOnlyQuery(sqlText) {
 		return mcp.NewToolResultError(
 			"execute_query only allows read-only statements (SELECT, WITH, EXPLAIN, SHOW, DESCRIBE). " +
-				"For INSERT/UPDATE/DELETE, use execute_update."), nil
+				"For INSERT/UPDATE/DELETE/REPLACE, use execute_update."), nil
 	}
 
 	var database *string
@@ -415,7 +415,7 @@ func (s *Server) handleExecuteUpdate(ctx context.Context, req mcp.CallToolReques
 	// 安全检查：仅允许 DML
 	if !IsDMLStatement(sqlText) {
 		return mcp.NewToolResultError(
-			"execute_update only allows INSERT, UPDATE, or DELETE statements. " +
+			"execute_update only allows INSERT, UPDATE, DELETE, REPLACE, or MERGE statements. " +
 				"DDL (CREATE, DROP, ALTER, TRUNCATE) is not allowed."), nil
 	}
 
@@ -442,7 +442,7 @@ func (s *Server) handleExecuteDDL(ctx context.Context, req mcp.CallToolRequest) 
 	if !IsDDLStatement(sqlText) {
 		return mcp.NewToolResultError(
 			"execute_ddl only allows DDL statements (CREATE, DROP, ALTER, TRUNCATE, RENAME). " +
-				"For INSERT/UPDATE/DELETE, use execute_update."), nil
+				"For INSERT/UPDATE/DELETE/REPLACE, use execute_update."), nil
 	}
 
 	var database *string

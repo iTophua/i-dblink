@@ -37,6 +37,7 @@ func TestIsReadOnlyQuery(t *testing.T) {
 		{"insert", "INSERT INTO users VALUES (1)", false},
 		{"update", "UPDATE users SET name = 'a'", false},
 		{"delete", "DELETE FROM users WHERE id = 1", false},
+		{"replace into", "REPLACE INTO users (id) VALUES (1)", false},
 		{"drop", "DROP TABLE users", false},
 		{"create", "CREATE TABLE t (id INT)", false},
 		{"truncate", "TRUNCATE TABLE users", false},
@@ -72,7 +73,9 @@ func TestIsDMLStatement(t *testing.T) {
 		{"update", "UPDATE users SET name = 'a' WHERE id = 1", true},
 		{"delete", "DELETE FROM users WHERE id = 1", true},
 		{"merge", "MERGE INTO target USING source ON ...", true},
+		{"replace into", "REPLACE INTO users (id, name) VALUES (1, 'a')", true},
 		{"lowercase", "insert into users values (1)", true},
+		{"lowercase replace", "replace into t values (1)", true},
 
 		// 反例
 		{"select", "SELECT * FROM users", false},

@@ -111,7 +111,7 @@ func IsReadOnlyQuery(sql string) bool {
 	return false
 }
 
-// IsDMLStatement 检查 SQL 是否为 DML（INSERT/UPDATE/DELETE/MERGE）。
+// IsDMLStatement 检查 SQL 是否为 DML（INSERT/UPDATE/DELETE/MERGE/REPLACE）。
 // 拒绝所有 DDL（CREATE/DROP/ALTER/TRUNCATE/RENAME/GRANT/REVOKE）。
 // 拒绝多语句（防止 "INSERT ...; DROP TABLE ..." 注入）。
 func IsDMLStatement(sql string) bool {
@@ -144,9 +144,9 @@ func IsDMLStatement(sql string) bool {
 		second = fields[1]
 	}
 
-	// MERGE INTO / DELETE FROM / INSERT INTO / UPDATE table
+	// REPLACE INTO / MERGE INTO / DELETE FROM / INSERT INTO / UPDATE table
 	switch first {
-	case "INSERT", "UPDATE", "DELETE", "MERGE":
+	case "INSERT", "UPDATE", "DELETE", "MERGE", "REPLACE":
 		return true
 	case "WITH":
 		// CTE 后跟 INSERT/UPDATE/DELETE 是合法 DML
