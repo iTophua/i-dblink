@@ -927,7 +927,7 @@ export const DataTable = memo(function DataTable({
                             value={cond.value}
                             onChange={(e) => updateFilterCondition(cond.id, { value: e.target.value })}
                             size="small"
-                            style={{ flex: 1, fontSize: 11, height: 20, minWidth: 60 }}
+                            style={{ flex: 1, fontSize: 11, minWidth: 60 }}
                           />
                           <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>～</span>
                           <Input
@@ -935,7 +935,7 @@ export const DataTable = memo(function DataTable({
                             value={cond.value2 ?? ''}
                             onChange={(e) => updateFilterCondition(cond.id, { value2: e.target.value })}
                             size="small"
-                            style={{ flex: 1, fontSize: 11, height: 20, minWidth: 60 }}
+                            style={{ flex: 1, fontSize: 11, minWidth: 60 }}
                           />
                         </>
                       )}
@@ -945,7 +945,7 @@ export const DataTable = memo(function DataTable({
                           value={cond.value}
                           onChange={(e) => updateFilterCondition(cond.id, { value: e.target.value })}
                           size="small"
-                          style={{ flex: 1, fontSize: 11, height: 20, minWidth: 60 }}
+                          style={{ flex: 1, fontSize: 11, minWidth: 60 }}
                         />
                       )}
                       {NO_VALUE_OPERATORS.includes(cond.operator) && (
