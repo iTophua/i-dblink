@@ -185,18 +185,18 @@ export const DataTable = memo(function DataTable({
     }
     return parts.join(' ');
   }, []);
-  const loadDataRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  const loadDataRef = useRef<((opts?: { page?: number; where?: string; orderBy?: string }) => Promise<void>) | undefined>(undefined);
   const clearFilter = useCallback(() => {
     setFilterConditions([{ id: `filter-${Date.now()}`, field: '', operator: 'equals', value: '', logic: 'AND' }]);
     setWhereClause('');
     setCurrentPage(1);
-    loadDataRef.current?.();
+    loadDataRef.current?.({ where: '', page: 1 });
   }, []);
   const applyFilter = useCallback(() => {
     const sql = buildWhereClause(filterConditions, dbType);
     setWhereClause(sql);
     setCurrentPage(1);
-    loadDataRef.current?.();
+    loadDataRef.current?.({ where: sql, page: 1 });
   }, [filterConditions, dbType, buildWhereClause]);
   const updateFilterCondition = useCallback((id: string, updates: Partial<FilterCondition>) => {
     setFilterConditions((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
@@ -229,14 +229,16 @@ export const DataTable = memo(function DataTable({
   const reqIdRef = useRef(0);
 
   // ── Data Loading ──
-  const loadData = useCallback(async () => {
+  // opts 允许调用方（applyFilter 等）在同一事件内显式传入新值，
+  // 绕开 setState 后闭包仍捕获旧 whereClause/page 的时序问题
+  const loadData = useCallback(async (opts?: { page?: number; where?: string; orderBy?: string }) => {
     if (!connectionId || !tableName || loadingRef.current) return;
     const requestId = ++reqIdRef.current;
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
     try {
       loadingRef.current = true; setLoading(true);
-      const query = buildQuery(currentPage, pageSize, tableName, database, dbType, undefined, whereClause, orderByClause, undefined, undefined);
+      const query = buildQuery(opts?.page ?? currentPage, pageSize, tableName, database, dbType, undefined, opts?.where ?? whereClause, opts?.orderBy ?? orderByClause, undefined, undefined);
       setCurrentSql(query);
       const [colResult, dataResult] = await Promise.all([
         getColumns(connectionId, tableName, database),
@@ -790,7 +792,7 @@ export const DataTable = memo(function DataTable({
               </Tooltip>
             </>
           )}
-          <Tooltip title={t('common.refreshLabel')}><Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} size="small" className="data-toolbar-btn" /></Tooltip>
+          <Tooltip title={t('common.refreshLabel')}><Button icon={<ReloadOutlined />} onClick={() => loadData()} loading={loading} size="small" className="data-toolbar-btn" /></Tooltip>
           <Tooltip title={t('common.dataGrid.filter')}><Button icon={<FilterOutlined />} onClick={() => setShowFilterPanel(!showFilterPanel)} type={showFilterPanel || whereClause ? 'primary' : 'default'} size="small" className="data-toolbar-btn" /></Tooltip>
           <Popover content={
             <Space direction="vertical" size={2} style={{ maxHeight: 200, overflow: 'auto' }}>
@@ -833,7 +835,7 @@ export const DataTable = memo(function DataTable({
             dbType={dbType}
             onPressEnter={() => { setCurrentPage(1); loadData(); }} />
           <Button size="small" type="primary" onClick={() => { setCurrentPage(1); loadData(); }} style={{ fontSize: 12, height: 28 }}>{t('common.applyFilter')}</Button>
-          <Button size="small" onClick={() => { setWhereClause(''); setOrderByClause(''); setCurrentPage(1); loadData(); }} style={{ fontSize: 12, height: 28 }}>{t('common.clearFilter')}</Button>
+          <Button size="small" onClick={() => { setWhereClause(''); setOrderByClause(''); setCurrentPage(1); loadData({ where: '', orderBy: '', page: 1 }); }} style={{ fontSize: 12, height: 28 }}>{t('common.clearFilter')}</Button>
           <Divider type="vertical" style={{ height: 18, margin: '0 4px', background: 'var(--border-color)' }} />
           <Input size="small" placeholder={t('common.goToRow')} value={goToRowValue} onChange={(e) => setGoToRowValue(e.target.value)} onPressEnter={handleGoToRow} style={{ width: 72, fontSize: 12, textAlign: 'center', padding: '0 4px', height: 28 }} />
         </div>
@@ -1067,7 +1069,7 @@ export const DataTable = memo(function DataTable({
           hiddenColumns,
           isEditable: true,
           onCopyToClipboard: (text) => navigator.clipboard.writeText(text),
-          onSetWhereClause: (where) => { setWhereClause(where); setCurrentPage(1); loadData(); },
+          onSetWhereClause: (where) => { setWhereClause(where); setCurrentPage(1); loadData({ where, page: 1 }); },
           onHideColumn: (colName) => setHiddenColumns((prev) => new Set([...prev, colName])),
           onCellEdited: handleCellEdited,
           onPreviewCell: (value, colName, rowIndex, colIndex) => setCellPreview({ open: true, value, columnName: colName, rowIndex, colIndex }),
@@ -1126,7 +1128,7 @@ export const DataTable = memo(function DataTable({
       {/* ═══ Status Bar ═══ */}
       <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-card)', padding: '1px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, minHeight: 22 }}>
         <Space size={2}>
-          <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.refreshLabel')}</Button>
+          <Button icon={<ReloadOutlined />} onClick={() => loadData()} loading={loading} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.refreshLabel')}</Button>
           {hasChanges && (
             <Tooltip title={t('common.dataGrid.pendingSql')}>
               <Button icon={<CodeOutlined />} size="small" type={showSqlPanel ? 'primary' : 'default'} onClick={() => setShowSqlPanel(!showSqlPanel)} style={{ height: 20, padding: '0 4px', fontSize: 11 }} />
