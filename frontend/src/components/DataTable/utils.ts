@@ -55,6 +55,14 @@ export function buildSingleCondition(cond: FilterCondition, dbType?: string): st
       return `${field} = ${dialect.escapeValue(cond.value)}`;
     case 'notEquals':
       return `${field} != ${dialect.escapeValue(cond.value)}`;
+    case 'greaterThan':
+      return `${field} > ${dialect.escapeValue(cond.value)}`;
+    case 'lessThan':
+      return `${field} < ${dialect.escapeValue(cond.value)}`;
+    case 'greaterOrEqual':
+      return `${field} >= ${dialect.escapeValue(cond.value)}`;
+    case 'lessOrEqual':
+      return `${field} <= ${dialect.escapeValue(cond.value)}`;
     case 'contains': {
       const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}%`);
       return condition.replace('?', dialect.escapeValue(`%${cond.value}%`));

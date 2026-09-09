@@ -21,7 +21,15 @@ import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useAppStore } from '../stores/appStore';
 import type { ColumnInfo, DatabaseType } from '../types/api';
-import { type RowData, buildQuery, buildCountQuery, DEFAULT_MARKER, isSameEditValue } from './DataTable/utils';
+import {
+  type RowData,
+  type FilterCondition,
+  buildQuery,
+  buildCountQuery,
+  buildSingleCondition,
+  DEFAULT_MARKER,
+  isSameEditValue,
+} from './DataTable/utils';
 import { useEditHistory } from '../hooks/useEditHistory';
 import { getDialect } from '../utils/sqlDialects';
 import { exportToExcel } from '../utils/exportUtils';
@@ -145,21 +153,10 @@ export const DataTable = memo(function DataTable({
   const [showSqlPanel, setShowSqlPanel] = useState(false);
   // ── Range Edit ──
   // ── Filter Panel ──
-  interface FilterCondition {
-    id: string;
-    field: string;
-    operator: string;
-    value: string;
-    logic: 'AND' | 'OR';
-    level?: number;
-    isGroupStart?: boolean;
-    isGroupEnd?: boolean;
-  }
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([
     { id: 'filter-1', field: '', operator: 'contains', value: '', logic: 'AND' },
   ]);
   const buildWhereClause = useCallback((conditions: FilterCondition[], dbType?: DatabaseType): string => {
-    const dialect = getDialect(dbType);
     const parts: string[] = [];
     for (let i = 0; i < conditions.length; i++) {
       const cond = conditions[i];
@@ -173,61 +170,7 @@ export const DataTable = memo(function DataTable({
       }
       if (!cond.field) continue;
 
-      const col = dialect.escapeIdentifier(cond.field);
-      const val = cond.value;
-      const escVal = () => dialect.escapeValue(val);
-      const likeVal = (pattern: string, negate = false) => {
-        const { condition, value: escaped } = dialect.buildLikeCondition(cond.field, pattern, negate);
-        return condition.replace('?', dialect.escapeValue(escaped));
-      };
-      let clause = '';
-
-      switch (cond.operator) {
-        case 'contains':
-          clause = likeVal(`%${val}%`);
-          break;
-        case 'notContains':
-          clause = likeVal(`%${val}%`, true);
-          break;
-        case 'equals':
-          clause = `${col} = ${escVal()}`;
-          break;
-        case 'notEquals':
-          clause = `${col} != ${escVal()}`;
-          break;
-        case 'startsWith':
-          clause = likeVal(`${val}%`);
-          break;
-        case 'endsWith':
-          clause = likeVal(`%${val}`);
-          break;
-        case 'greaterThan':
-          clause = `${col} > ${escVal()}`;
-          break;
-        case 'lessThan':
-          clause = `${col} < ${escVal()}`;
-          break;
-        case 'greaterOrEqual':
-          clause = `${col} >= ${escVal()}`;
-          break;
-        case 'lessOrEqual':
-          clause = `${col} <= ${escVal()}`;
-          break;
-        case 'isNull':
-          clause = `${col} IS NULL`;
-          break;
-        case 'isNotNull':
-          clause = `${col} IS NOT NULL`;
-          break;
-        case 'in':
-          clause = `${col} IN (${val.split(',').map((v) => dialect.escapeValue(v.trim())).join(', ')})`;
-          break;
-        case 'notIn':
-          clause = `${col} NOT IN (${val.split(',').map((v) => dialect.escapeValue(v.trim())).join(', ')})`;
-          break;
-        default:
-          clause = `${col} = ${escVal()}`;
-      }
+      let clause = buildSingleCondition(cond, dbType);
 
       if (i > 0 && !cond.isGroupStart) {
         const prevCond = conditions[i - 1];
@@ -969,22 +912,22 @@ export const DataTable = memo(function DataTable({
                         value={cond.operator}
                         onChange={(val) => updateFilterCondition(cond.id, { operator: val })}
                         size="small"
-                        style={{ width: 88, fontSize: 11 }}
+                        style={{ width: 136, fontSize: 11 }}
                         options={[
-                          { label: t('common.contains'), value: 'contains' },
-                          { label: t('common.notContains'), value: 'notContains' },
-                          { label: t('common.equals'), value: 'equals' },
-                          { label: t('common.notEquals'), value: 'notEquals' },
-                          { label: t('common.startsWith'), value: 'startsWith' },
-                          { label: t('common.endsWith'), value: 'endsWith' },
-                          { label: t('common.greaterThan'), value: 'greaterThan' },
-                          { label: t('common.lessThan'), value: 'lessThan' },
-                          { label: t('common.greaterOrEqual'), value: 'greaterOrEqual' },
-                          { label: t('common.lessOrEqual'), value: 'lessOrEqual' },
-                          { label: t('common.isNull'), value: 'isNull' },
-                          { label: t('common.isNotNull'), value: 'isNotNull' },
-                          { label: t('common.in'), value: 'in' },
-                          { label: t('common.notIn'), value: 'notIn' },
+                          { label: 'LIKE %…%', value: 'contains' },
+                          { label: 'NOT LIKE %…%', value: 'notContains' },
+                          { label: '=', value: 'equals' },
+                          { label: '!=', value: 'notEquals' },
+                          { label: 'LIKE …%', value: 'startsWith' },
+                          { label: 'LIKE %…', value: 'endsWith' },
+                          { label: '>', value: 'greaterThan' },
+                          { label: '<', value: 'lessThan' },
+                          { label: '>=', value: 'greaterOrEqual' },
+                          { label: '<=', value: 'lessOrEqual' },
+                          { label: 'IS NULL', value: 'isNull' },
+                          { label: 'IS NOT NULL', value: 'isNotNull' },
+                          { label: 'IN (…)', value: 'in' },
+                          { label: 'NOT IN (…)', value: 'notIn' },
                         ]}
                       />
                       {!['isNull', 'isNotNull'].includes(cond.operator) && (

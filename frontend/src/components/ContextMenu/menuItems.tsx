@@ -149,9 +149,9 @@ export function createQuickFilterItems(
         disabled: colName == null || value == null,
         onClick: () => {
           if (!colName || !ctx.onSetWhereClause) return;
-          const { condition, value: escapedVal } = dialect.buildLikeCondition(colName, `%${String(value)}%`);
-          const where = condition.replace('?', dialect.escapeValue(escapedVal));
-          ctx.onSetWhereClause(where);
+          const pattern = `%${String(value)}%`;
+          const { condition } = dialect.buildLikeCondition(colName, pattern);
+          ctx.onSetWhereClause(condition.replace('?', dialect.escapeValue(pattern)));
           onClose();
         },
       },
