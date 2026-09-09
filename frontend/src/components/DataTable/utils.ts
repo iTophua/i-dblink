@@ -25,11 +25,43 @@ export interface FilterCondition {
   field: string;
   operator: string;
   value: string;
+  /** between / notBetween 的上限值 */
+  value2?: string;
   logic: 'AND' | 'OR';
   isGroupStart?: boolean;
   isGroupEnd?: boolean;
   level?: number;
 }
+
+/** 操作符下拉选项（Navicat 风格，不含"自定义"） */
+export const OPERATOR_OPTIONS: { label: string; value: string }[] = [
+  { label: '=', value: 'equals' },
+  { label: '!=', value: 'notEquals' },
+  { label: '<', value: 'lessThan' },
+  { label: '<=', value: 'lessOrEqual' },
+  { label: '>', value: 'greaterThan' },
+  { label: '>=', value: 'greaterOrEqual' },
+  { label: '包含', value: 'contains' },
+  { label: '不包含', value: 'notContains' },
+  { label: '开头是', value: 'startsWith' },
+  { label: '开头不是', value: 'notStartsWith' },
+  { label: '结尾是', value: 'endsWith' },
+  { label: '结尾不是', value: 'notEndsWith' },
+  { label: '是 null', value: 'isNull' },
+  { label: '不是 null', value: 'isNotNull' },
+  { label: '是空的', value: 'isEmpty' },
+  { label: '是非空的', value: 'isNotEmpty' },
+  { label: '介于', value: 'between' },
+  { label: '不介于', value: 'notBetween' },
+  { label: '在列表', value: 'in' },
+  { label: '不在列表', value: 'notIn' },
+];
+
+/** 不需要填写值的操作符 */
+export const NO_VALUE_OPERATORS = ['isNull', 'isNotNull', 'isEmpty', 'isNotEmpty'];
+
+/** 需要最小/最大两个值的操作符 */
+export const RANGE_OPERATORS = ['between', 'notBetween'];
 
 export interface RowData {
   [key: string]: any;
@@ -49,40 +81,60 @@ export interface DataTableProps {
 export function buildSingleCondition(cond: FilterCondition, dbType?: string): string {
   const dialect = getDialect(dbType);
   const field = dialect.escapeIdentifier(cond.field);
+  const value = dialect.escapeValue(cond.value);
+
+  // 原始 pattern 只做字符串字面量转义（引号/反斜杠），% 和 _ 保留通配符语义
+  const like = (pattern: string, negate = false) => {
+    const { condition } = dialect.buildLikeCondition(cond.field, pattern, negate);
+    return condition.replace('?', dialect.escapeValue(pattern));
+  };
 
   switch (cond.operator) {
     case 'equals':
-      return `${field} = ${dialect.escapeValue(cond.value)}`;
+      return `${field} = ${value}`;
     case 'notEquals':
-      return `${field} != ${dialect.escapeValue(cond.value)}`;
+      return `${field} != ${value}`;
     case 'greaterThan':
-      return `${field} > ${dialect.escapeValue(cond.value)}`;
+      return `${field} > ${value}`;
     case 'lessThan':
-      return `${field} < ${dialect.escapeValue(cond.value)}`;
+      return `${field} < ${value}`;
     case 'greaterOrEqual':
-      return `${field} >= ${dialect.escapeValue(cond.value)}`;
+      return `${field} >= ${value}`;
     case 'lessOrEqual':
-      return `${field} <= ${dialect.escapeValue(cond.value)}`;
-    case 'contains': {
-      const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}%`);
-      return condition.replace('?', dialect.escapeValue(`%${cond.value}%`));
-    }
-    case 'notContains': {
-      const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}%`, true);
-      return condition.replace('?', dialect.escapeValue(`%${cond.value}%`));
-    }
-    case 'startsWith': {
-      const { condition } = dialect.buildLikeCondition(cond.field, `${cond.value}%`);
-      return condition.replace('?', dialect.escapeValue(`${cond.value}%`));
-    }
-    case 'endsWith': {
-      const { condition } = dialect.buildLikeCondition(cond.field, `%${cond.value}`);
-      return condition.replace('?', dialect.escapeValue(`%${cond.value}`));
-    }
+      return `${field} <= ${value}`;
+    case 'contains':
+      return like(`%${cond.value}%`);
+    case 'notContains':
+      return like(`%${cond.value}%`, true);
+    case 'startsWith':
+      return like(`${cond.value}%`);
+    case 'notStartsWith':
+      return like(`${cond.value}%`, true);
+    case 'endsWith':
+      return like(`%${cond.value}`);
+    case 'notEndsWith':
+      return like(`%${cond.value}`, true);
     case 'isNull':
       return `${field} IS NULL`;
     case 'isNotNull':
       return `${field} IS NOT NULL`;
+    case 'isEmpty':
+      // Oracle 等方言空串即 NULL，此时与 IS NULL 同义
+      return dialect.emptyStringIsNull() ? `${field} IS NULL` : `${field} = ''`;
+    case 'isNotEmpty':
+      return dialect.emptyStringIsNull() ? `${field} IS NOT NULL` : `${field} != ''`;
+    case 'between':
+    case 'notBetween': {
+      const negate = cond.operator === 'notBetween';
+      const hasMin = cond.value !== '';
+      const hasMax = !!cond.value2;
+      if (hasMin && hasMax) {
+        return `${field} ${negate ? 'NOT ' : ''}BETWEEN ${value} AND ${dialect.escapeValue(cond.value2)}`;
+      }
+      // 单边退化：介于 min ~ ∞ 用 >=，不介于 min ~ ∞ 用 <
+      if (hasMin) return `${field} ${negate ? '<' : '>='} ${value}`;
+      return `${field} ${negate ? '>' : '<='} ${dialect.escapeValue(cond.value2 ?? '')}`;
+    }
     case 'in': {
       const values = cond.value.split(',').map((v) => dialect.escapeValue(v.trim()));
       return `${field} IN (${values.join(', ')})`;
@@ -92,7 +144,7 @@ export function buildSingleCondition(cond: FilterCondition, dbType?: string): st
       return `${field} NOT IN (${values.join(', ')})`;
     }
     default:
-      return `${field} = ${dialect.escapeValue(cond.value)}`;
+      return `${field} = ${value}`;
   }
 }
 

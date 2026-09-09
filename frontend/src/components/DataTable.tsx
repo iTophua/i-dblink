@@ -27,6 +27,9 @@ import {
   buildQuery,
   buildCountQuery,
   buildSingleCondition,
+  OPERATOR_OPTIONS,
+  NO_VALUE_OPERATORS,
+  RANGE_OPERATORS,
   DEFAULT_MARKER,
   isSameEditValue,
 } from './DataTable/utils';
@@ -154,7 +157,7 @@ export const DataTable = memo(function DataTable({
   // ── Range Edit ──
   // ── Filter Panel ──
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([
-    { id: 'filter-1', field: '', operator: 'contains', value: '', logic: 'AND' },
+    { id: 'filter-1', field: '', operator: 'equals', value: '', logic: 'AND' },
   ]);
   const buildWhereClause = useCallback((conditions: FilterCondition[], dbType?: DatabaseType): string => {
     const parts: string[] = [];
@@ -184,7 +187,7 @@ export const DataTable = memo(function DataTable({
   }, []);
   const loadDataRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const clearFilter = useCallback(() => {
-    setFilterConditions([{ id: `filter-${Date.now()}`, field: '', operator: 'contains', value: '', logic: 'AND' }]);
+    setFilterConditions([{ id: `filter-${Date.now()}`, field: '', operator: 'equals', value: '', logic: 'AND' }]);
     setWhereClause('');
     setCurrentPage(1);
     loadDataRef.current?.();
@@ -912,25 +915,29 @@ export const DataTable = memo(function DataTable({
                         value={cond.operator}
                         onChange={(val) => updateFilterCondition(cond.id, { operator: val })}
                         size="small"
-                        style={{ width: 136, fontSize: 11 }}
-                        options={[
-                          { label: 'LIKE %…%', value: 'contains' },
-                          { label: 'NOT LIKE %…%', value: 'notContains' },
-                          { label: '=', value: 'equals' },
-                          { label: '!=', value: 'notEquals' },
-                          { label: 'LIKE …%', value: 'startsWith' },
-                          { label: 'LIKE %…', value: 'endsWith' },
-                          { label: '>', value: 'greaterThan' },
-                          { label: '<', value: 'lessThan' },
-                          { label: '>=', value: 'greaterOrEqual' },
-                          { label: '<=', value: 'lessOrEqual' },
-                          { label: 'IS NULL', value: 'isNull' },
-                          { label: 'IS NOT NULL', value: 'isNotNull' },
-                          { label: 'IN (…)', value: 'in' },
-                          { label: 'NOT IN (…)', value: 'notIn' },
-                        ]}
+                        style={{ width: 110, fontSize: 11 }}
+                        options={OPERATOR_OPTIONS}
                       />
-                      {!['isNull', 'isNotNull'].includes(cond.operator) && (
+                      {RANGE_OPERATORS.includes(cond.operator) && (
+                        <>
+                          <Input
+                            placeholder="最小值"
+                            value={cond.value}
+                            onChange={(e) => updateFilterCondition(cond.id, { value: e.target.value })}
+                            size="small"
+                            style={{ flex: 1, fontSize: 11, height: 20, minWidth: 60 }}
+                          />
+                          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>～</span>
+                          <Input
+                            placeholder="最大值"
+                            value={cond.value2 ?? ''}
+                            onChange={(e) => updateFilterCondition(cond.id, { value2: e.target.value })}
+                            size="small"
+                            style={{ flex: 1, fontSize: 11, height: 20, minWidth: 60 }}
+                          />
+                        </>
+                      )}
+                      {!RANGE_OPERATORS.includes(cond.operator) && !NO_VALUE_OPERATORS.includes(cond.operator) && (
                         <Input
                           placeholder={t('common.valuePlaceholder')}
                           value={cond.value}
@@ -939,7 +946,7 @@ export const DataTable = memo(function DataTable({
                           style={{ flex: 1, fontSize: 11, height: 20, minWidth: 60 }}
                         />
                       )}
-                      {['isNull', 'isNotNull'].includes(cond.operator) && (
+                      {NO_VALUE_OPERATORS.includes(cond.operator) && (
                         <span style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
                       )}
                     </>
@@ -958,7 +965,7 @@ export const DataTable = memo(function DataTable({
                           newConditions.splice(insertIndex, 0, {
                             id: `filter-${Date.now()}`,
                             field: '',
-                            operator: 'contains',
+                            operator: 'equals',
                             value: '',
                             logic: 'AND',
                             level: cond.level ?? 0,
@@ -979,8 +986,8 @@ export const DataTable = memo(function DataTable({
                           const ts = Date.now();
                           newConditions.splice(insertIndex, 0,
                             { id: `filter-${ts}-start`, field: '', operator: '', value: '', logic: 'AND', isGroupStart: true, level: cond.level ?? 0 },
-                            { id: `filter-${ts}-a`, field: '', operator: 'contains', value: '', logic: 'AND', level: currentLevel },
-                            { id: `filter-${ts}-b`, field: '', operator: 'contains', value: '', logic: 'AND', level: currentLevel },
+                            { id: `filter-${ts}-a`, field: '', operator: 'equals', value: '', logic: 'AND', level: currentLevel },
+                            { id: `filter-${ts}-b`, field: '', operator: 'equals', value: '', logic: 'AND', level: currentLevel },
                             { id: `filter-${ts}-end`, field: '', operator: '', value: '', logic: 'AND', isGroupEnd: true, level: cond.level ?? 0 }
                           );
                           setFilterConditions(newConditions);
