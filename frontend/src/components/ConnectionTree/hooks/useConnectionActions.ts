@@ -14,29 +14,6 @@ export function useConnectionActions(
   const { t } = useTranslation();
   const { message } = App.useApp();
 
-  const handleCopyConnection = useCallback(
-    async (conn: Connection) => {
-      try {
-        const copyData = {
-          id: null,
-          name: `${conn.name} (${t('common.copySuffix')})`,
-          db_type: conn.db_type,
-          host: conn.host,
-          port: conn.port,
-          username: conn.username,
-          password: '',
-          database: conn.database,
-          group_id: conn.group_id,
-        };
-        await onSaveConnection(copyData);
-        message.success(t('common.connectionConfigCopied'));
-      } catch (error: unknown) {
-        message.error(t('common.copyConnectionFailed') + ': ' + getErrorMessage(error));
-      }
-    },
-    [onSaveConnection]
-  );
-
   const handleMoveConnection = useCallback(
     async (connectionId: string, targetGroupId: string) => {
       const conn = connections.find((c) => c.id === connectionId);
@@ -90,7 +67,6 @@ export function useConnectionActions(
   );
 
   return {
-    handleCopyConnection,
     handleMoveConnection,
     handleReorderConnection,
   };

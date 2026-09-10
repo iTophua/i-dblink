@@ -645,6 +645,37 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     }
   }, []);
 
+  // 复制连接：不直接落库，打开预填源连接数据的"新增连接"对话框，确认后才真正添加
+  const handleCopyConnection = useCallback(
+    async (connection: Connection) => {
+      setEditingConnection({
+        id: undefined,
+        name: `${connection.name} (${t('common.copySuffix')})`,
+        dbType: connection.db_type,
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+        password: '',
+        database: connection.database,
+        group_id: connection.group_id,
+      });
+      setConnectionDialogOpen(true);
+
+      // 异步回填源连接已存密码（副本默认带上凭据）；仅在用户尚未输入时覆盖
+      try {
+        const pwd = await api.getConnectionPassword(connection.id);
+        if (pwd) {
+          setEditingConnection((prev) =>
+            prev && !prev.id && prev.password === '' ? { ...prev, password: pwd } : prev
+          );
+        }
+      } catch (err) {
+        console.error('Failed to load connection password for copy:', err);
+      }
+    },
+    [t]
+  );
+
   const handleDeleteConnection = useCallback(
     (connectionId: string) => {
       deleteConnection(connectionId);
@@ -748,6 +779,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     handleTableExpand,
     handleDisconnect,
     handleEditConnection,
+    handleCopyConnection,
     handleDeleteConnection,
     handleNewQuery,
     handleEditTab,

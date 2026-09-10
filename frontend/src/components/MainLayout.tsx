@@ -241,6 +241,7 @@ function MainLayoutComponent() {
                  onCancelConnect={connMgr.cancelConnect}
                  onDisconnect={connMgr.handleDisconnect}
                  onEditConnection={connMgr.handleEditConnection}
+                 onCopyConnection={connMgr.handleCopyConnection}
                  onDeleteConnection={connMgr.handleDeleteConnection}
                  onNewQuery={connMgr.handleNewQuery}
                  onDatabaseExpand={connMgr.handleDatabaseExpand}

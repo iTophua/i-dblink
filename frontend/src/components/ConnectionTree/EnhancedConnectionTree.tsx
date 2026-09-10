@@ -34,7 +34,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
     onTableOpen, onViewOpen, onOpenDesigner, onOpenViewDefinition,
     onExpand, collapsed, searchText, expandedKeys, onExpandKeys, onClearSearch, onCancelConnect,
     connectionDatabases, isLoading,
-    onConnect, onDisconnect, onEditConnection, onDeleteConnection, onNewQuery,
+    onConnect, onDisconnect, onEditConnection, onCopyConnection, onDeleteConnection, onNewQuery,
     onOpenRoutine, onOpenTrigger,
     onDatabaseExpand, onDatabaseRefresh, onDatabaseClose, onDatabaseProperties,
     onLoadDatabases, onTableExpand,
@@ -215,7 +215,8 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       onConnect, onDisconnect, onExpand, onEditConnection, onDeleteConnection,
       onNewQuery, onExpandKeys, onDatabaseRefresh, onDatabaseClose, onDatabaseProperties,
       onTableOpen, onOpenDesigner, onOpenViewDefinition, onViewOpen, onDeleteGroup,
-      handleCopyConnection: connectionActions.handleCopyConnection,
+      // 复制 = 打开预填的新增连接对话框（由 MainLayout 提供；未传入则空操作）
+      handleCopyConnection: (conn) => onCopyConnection?.(conn) ?? Promise.resolve(),
       handleMoveConnection: connectionActions.handleMoveConnection,
       onRefreshConnections,
     }

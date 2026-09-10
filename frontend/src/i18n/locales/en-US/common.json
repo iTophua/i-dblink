@@ -1186,8 +1186,6 @@
     "confirmDeleteViewContent": "Are you sure you want to delete view \"{{name}}\"?",
     "viewDeleted": "View deleted",
     "deleteViewFailed": "Delete view failed",
-    "connectionConfigCopied": "Connection config copied, please re-enter password and save",
-    "copyConnectionFailed": "Copy connection failed",
     "movedToGroup": "Moved to \"{{name}}\" group",
     "moveFailed": "Move failed",
     "openTableBrowse": "Open Table (Browse Data)",

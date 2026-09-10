@@ -40,6 +40,8 @@ export type ConnectionTreeProps = {
   onConnect: (connectionId: string) => Promise<void> | void;
   onDisconnect: (connectionId: string) => void;
   onEditConnection: (connection: Connection) => void;
+  /** 复制连接：打开预填源数据的新增连接对话框，确认后才添加 */
+  onCopyConnection?: (connection: Connection) => Promise<void> | void;
   onDeleteConnection: (connectionId: string) => void;
   onNewQuery: (connectionId: string) => void;
   onOpenRoutine?: (

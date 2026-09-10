@@ -1202,8 +1202,6 @@
     "confirmDeleteViewContent": "确定要删除视图 \"{{name}}\" 吗？",
     "viewDeleted": "视图已删除",
     "deleteViewFailed": "删除视图失败",
-    "connectionConfigCopied": "连接配置已复制，请重新输入密码后保存",
-    "copyConnectionFailed": "复制连接失败",
     "movedToGroup": "已移动到\"{{name}}\"分组",
     "moveFailed": "移动失败",
     "openTableBrowse": "打开表（浏览数据）",
