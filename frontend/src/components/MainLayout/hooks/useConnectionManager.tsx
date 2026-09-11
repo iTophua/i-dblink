@@ -652,14 +652,24 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     });
     setConnectionDialogOpen(true);
 
-    // 异步拉取已存密码，回显到 editingConnection
+    // 异步拉取已存密码（DB 密码 + SSH 凭据），回显到 editingConnection。
+    // 加 id 守卫：用户已切去编辑别的连接时不覆盖
     try {
-      const pwd = await api.getConnectionPassword(connection.id);
-      if (pwd) {
-        setEditingConnection((prev) => (prev ? { ...prev, password: pwd } : prev));
-      }
+      const [pwd, sshCreds] = await Promise.all([
+        api.getConnectionPassword(connection.id),
+        api.getConnectionSSHCredentials(connection.id),
+      ]);
+      setEditingConnection((prev) => {
+        if (!prev || prev.id !== connection.id) return prev;
+        return {
+          ...prev,
+          password: pwd || prev.password,
+          sshPassword: sshCreds?.password || prev.sshPassword,
+          sshPassphrase: sshCreds?.passphrase || prev.sshPassphrase,
+        };
+      });
     } catch (err) {
-      console.error('Failed to load connection password:', err);
+      console.error('Failed to load connection credentials:', err);
     }
   }, []);
 
@@ -689,16 +699,23 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
       });
       setConnectionDialogOpen(true);
 
-      // 异步回填源连接已存密码（副本默认带上凭据）；仅在用户尚未输入时覆盖
+      // 异步回填源连接已存凭据（DB 密码 + SSH，副本默认带上）；仅在用户尚未输入时覆盖
       try {
-        const pwd = await api.getConnectionPassword(connection.id);
-        if (pwd) {
-          setEditingConnection((prev) =>
-            prev && !prev.id && prev.password === '' ? { ...prev, password: pwd } : prev
-          );
-        }
+        const [pwd, sshCreds] = await Promise.all([
+          api.getConnectionPassword(connection.id),
+          api.getConnectionSSHCredentials(connection.id),
+        ]);
+        setEditingConnection((prev) => {
+          if (!prev || prev.id) return prev;
+          return {
+            ...prev,
+            password: prev.password === '' ? pwd || prev.password : prev.password,
+            sshPassword: prev.sshPassword ? prev.sshPassword : sshCreds?.password,
+            sshPassphrase: prev.sshPassphrase ? prev.sshPassphrase : sshCreds?.passphrase,
+          };
+        });
       } catch (err) {
-        console.error('Failed to load connection password for copy:', err);
+        console.error('Failed to load connection credentials for copy:', err);
       }
     },
     [t]

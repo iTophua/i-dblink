@@ -57,12 +57,16 @@ export const mockCompareSchema = vi.fn().mockResolvedValue({});
 export const mockBatchImport = vi.fn().mockResolvedValue({ success_count: 0, failed_count: 0, total_count: 0 });
 export const mockQuitApp = vi.fn().mockResolvedValue(undefined);
 export const mockGreet = vi.fn().mockResolvedValue('');
+export const mockGetConnectionSSHCredentials = vi.fn().mockResolvedValue({ password: '', passphrase: '' });
+export const mockGetConnectionPassword = vi.fn().mockResolvedValue('');
 
 vi.mock('../../wailsjs/go/backend/App', () => ({
   TestConnection: mockTestConnection,
   ConnectDatabase: mockConnectDatabase,
   DisconnectDatabase: mockDisconnectDatabase,
   GetConnections: mockGetConnections,
+  GetConnectionPassword: mockGetConnectionPassword,
+  GetConnectionSSHCredentials: mockGetConnectionSSHCredentials,
   SaveConnection: mockSaveConnection,
   UpdateConnectionPassword: mockUpdateConnectionPassword,
   DeleteConnection: mockDeleteConnection,

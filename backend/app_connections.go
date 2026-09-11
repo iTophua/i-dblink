@@ -235,6 +235,22 @@ func (a *App) GetConnectionPassword(connectionID string) (string, error) {
 	return *password, nil
 }
 
+// SSHCredentialsOutput 连接的已存 SSH 凭据（供编辑时回显）
+type SSHCredentialsOutput struct {
+	Password   string `json:"password"`
+	Passphrase string `json:"passphrase"`
+}
+
+// GetConnectionSSHCredentials 获取连接的已存 SSH 密码与口令明文（供编辑时回显）。
+// 与 DB 密码同一安全级别：加密存储、仅用户主动编辑该连接时按需解密返回。
+func (a *App) GetConnectionSSHCredentials(connectionID string) (SSHCredentialsOutput, error) {
+	sshPassword, sshPassphrase, err := a.storage.GetSSHCredentials(connectionID)
+	if err != nil {
+		return SSHCredentialsOutput{}, fmt.Errorf("failed to get ssh credentials: %w", err)
+	}
+	return SSHCredentialsOutput{Password: sshPassword, Passphrase: sshPassphrase}, nil
+}
+
 // GetConnections 获取所有连接
 func (a *App) GetConnections() ([]ConnectionOutput, error) {
 	conns, err := a.storage.GetConnections()

@@ -24,6 +24,7 @@ import {
   GetConnectionHistory,
   GetConnections,
   GetConnectionPassword,
+  GetConnectionSSHCredentials,
   GetDatabaseDDL,
   GetDatabases,
   GetEvents,
@@ -239,6 +240,13 @@ export const api = {
   /** 获取连接的已存密码明文（仅编辑时回显用） */
   async getConnectionPassword(connectionId: string): Promise<string> {
     return await GetConnectionPassword(connectionId);
+  },
+
+  /** 获取连接的已存 SSH 密码/口令明文（仅编辑时回显用） */
+  async getConnectionSSHCredentials(
+    connectionId: string
+  ): Promise<{ password: string; passphrase: string }> {
+    return await GetConnectionSSHCredentials(connectionId);
   },
 
   async connectConnection(connectionId: string): Promise<void> {
