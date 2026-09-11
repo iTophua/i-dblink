@@ -232,7 +232,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
   const handleTestConnection = useCallback(async () => {
     try {
+      // 只校验基础必填字段；SSH/SSL/默认库等配置须从完整表单读取——
+      // validateFields(字段列表) 的返回值只含列表内字段，此前 use_ssh 恒为
+      // undefined，测试连接从不走 SSH 隧道（直连主机字段导致必然失败）
       const values = await form.validateFields(['db_type', 'host', 'port', 'username', 'password']);
+      const all = form.getFieldsValue();
       setTesting(true);
       testCancelledRef.current = false;
 
@@ -243,25 +247,25 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         isSqlite ? 0 : values.port,
         isSqlite ? '' : values.username,
         values.password || '',
-        isSqlite ? values.host : values.database,
-        values.use_ssh
+        isSqlite ? values.host : all.database,
+        all.use_ssh
           ? {
               ssh_enabled: true,
-              ssh_host: values.ssh_host,
-              ssh_port: values.ssh_port,
-              ssh_username: values.ssh_username,
-              ssh_auth_method: values.ssh_auth_method || 'password',
-              ssh_password: values.ssh_password,
-              ssh_private_key_path: values.ssh_key_path,
-              ssh_passphrase: values.ssh_passphrase,
+              ssh_host: all.ssh_host,
+              ssh_port: all.ssh_port,
+              ssh_username: all.ssh_username,
+              ssh_auth_method: all.ssh_auth_method || 'password',
+              ssh_password: all.ssh_password,
+              ssh_private_key_path: all.ssh_key_path,
+              ssh_passphrase: all.ssh_passphrase,
             }
           : undefined,
-        values.use_ssl
+        all.use_ssl
           ? {
               ssl_enabled: true,
-              ssl_ca_path: values.ssl_ca_cert,
-              ssl_cert_path: values.ssl_client_cert,
-              ssl_key_path: values.ssl_client_key,
+              ssl_ca_path: all.ssl_ca_cert,
+              ssl_cert_path: all.ssl_client_cert,
+              ssl_key_path: all.ssl_client_key,
               ssl_skip_verify: false,
             }
           : undefined,
