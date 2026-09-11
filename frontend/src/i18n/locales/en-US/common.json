@@ -56,6 +56,8 @@
     "browse": "Browse",
     "testConnection": "Test Connection",
     "testing": "Testing...",
+    "cancelTest": "Cancel Test",
+    "incompleteConnectionInfo": "Please complete the connection info (name, host)",
     "connectionTestSuccess": "Connection test successful",
     "connectionTestFailed": "Connection test failed",
     "operationFailed": "Operation failed",

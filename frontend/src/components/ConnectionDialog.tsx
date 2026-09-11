@@ -151,6 +151,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  // 新建连接的未保存草稿：误关对话框（取消/遮罩/ESC）不清空表单，重开时恢复
+  const hasDraftRef = useRef(false);
+  // 本次会话是否为编辑已有连接（编辑关闭时清空表单，避免数据泄漏到下次新建）
+  const sessionWasEditRef = useRef(false);
   const [activeTab, setActiveTab] = useState('general');
   const [dbType, setDbType] = useState<
     | 'mysql'
@@ -168,36 +172,50 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
   useEffect(() => {
     if (open) {
+      sessionWasEditRef.current = !!editingData;
       const currentDbType = editingData?.dbType || 'mysql';
       setDbType(currentDbType);
       setActiveTab('general');
-      form.setFieldsValue({
-        name: editingData?.name,
-        db_type: currentDbType,
-        host: editingData?.host || 'localhost',
-        port: editingData?.port || DB_TYPE_PORTS[currentDbType],
-        username: editingData?.username,
-        password: editingData?.password,
-        database: editingData?.database,
-        color: editingData?.color,
-        // SSH
-        use_ssh: editingData?.sshEnabled || false,
-        ssh_host: editingData?.sshHost,
-        ssh_port: editingData?.sshPort || 22,
-        ssh_username: editingData?.sshUsername,
-        ssh_auth_method: editingData?.sshAuthMethod || 'password',
-        ssh_password: editingData?.sshPassword,
-        ssh_key_path: editingData?.sshPrivateKeyPath,
-        ssh_passphrase: editingData?.sshPassphrase,
-        // SSL
-        use_ssl: editingData?.sslEnabled || false,
-        ssl_ca_cert: editingData?.sslCaPath,
-        ssl_client_cert: editingData?.sslCertPath,
-        ssl_client_key: editingData?.sslKeyPath,
-      });
-    } else {
-      form.resetFields();
+      if (editingData) {
+        form.setFieldsValue({
+          name: editingData?.name,
+          db_type: currentDbType,
+          host: editingData?.host || 'localhost',
+          port: editingData?.port || DB_TYPE_PORTS[currentDbType],
+          username: editingData?.username,
+          password: editingData?.password,
+          database: editingData?.database,
+          color: editingData?.color,
+          // SSH
+          use_ssh: editingData?.sshEnabled || false,
+          ssh_host: editingData?.sshHost,
+          ssh_port: editingData?.sshPort || 22,
+          ssh_username: editingData?.sshUsername,
+          ssh_auth_method: editingData?.sshAuthMethod || 'password',
+          ssh_password: editingData?.sshPassword,
+          ssh_key_path: editingData?.sshPrivateKeyPath,
+          ssh_passphrase: editingData?.sshPassphrase,
+          // SSL
+          use_ssl: editingData?.sslEnabled || false,
+          ssl_ca_cert: editingData?.sslCaPath,
+          ssl_client_cert: editingData?.sslCertPath,
+          ssl_client_key: editingData?.sslKeyPath,
+        });
+      } else if (hasDraftRef.current) {
+        // 上次新建未保存的草稿仍在表单里：保留，仅同步库类型
+        form.setFieldsValue({ db_type: currentDbType });
+      } else {
+        // 全新表单：默认值
+        form.setFieldsValue({
+          db_type: currentDbType,
+          host: 'localhost',
+          port: DB_TYPE_PORTS[currentDbType],
+          ssh_port: 22,
+          ssh_auth_method: 'password',
+        });
+      }
     }
+    // 注意：关闭时不 resetFields——误关对话框不该丢掉已填写的配置（草稿留在表单里）
   }, [open, editingData, form]);
 
   const handleDbTypeChange = useCallback(
@@ -269,10 +287,16 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   const handleOk = useCallback(async () => {
     try {
       const values = await form.validateFields();
-      setSaving(true);
 
       const dbTypeValue = values.db_type || dbType;
       const isSqlite = dbTypeValue === 'sqlite';
+      // 字段尚未挂载完成的时序竞态下 validateFields 可能返回空对象——兜底拦截空保存
+      if (!values.name?.trim() || (!isSqlite && !values.host?.trim())) {
+        message.warning(t('common.incompleteConnectionInfo'));
+        return;
+      }
+      setSaving(true);
+
       await onSave({
         id: editingData?.id,
         name: values.name,
@@ -298,6 +322,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         sslKeyPath: values.ssl_client_key,
         sslSkipVerify: false,
       });
+      // 保存成功：草稿已消费，清空表单
+      hasDraftRef.current = false;
+      form.resetFields();
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'errorFields' in error) return;
       message.error(`${t('common.operationFailed')}: ${getErrorMessage(error)}`);
@@ -307,7 +334,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   }, [form, editingData, onSave, dbType]);
 
   const handleCancel = useCallback(() => {
-    form.resetFields();
+    // 编辑会话关闭即清空；新建会话保留草稿（误关不丢已填内容，重开恢复）
+    if (sessionWasEditRef.current) {
+      form.resetFields();
+      hasDraftRef.current = false;
+    }
     onCancel();
   }, [form, onCancel]);
 
@@ -463,8 +494,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   <AntButton loading size="small">
                     {t('common.testing')}
                   </AntButton>
-                  <AntButton onClick={handleCancelTest} size="small">
-                    {t('common.cancel')}
+                  {/* 红色无边框文案，与右侧"取消（关闭对话框）"按钮明确区分，避免误触 */}
+                  <AntButton type="text" danger size="small" onClick={handleCancelTest}>
+                    {t('common.cancelTest')}
                   </AntButton>
                 </Space>
               ) : (
@@ -536,6 +568,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
               form={form}
               layout="vertical"
               size="small"
+              onValuesChange={() => {
+                // 新建会话中的任意输入都视为产生草稿（预填不算，setFieldsValue 不触发本回调）
+                if (!editingData) hasDraftRef.current = true;
+              }}
               initialValues={{
                 name: editingData?.name,
                 db_type: editingData?.dbType || 'mysql',

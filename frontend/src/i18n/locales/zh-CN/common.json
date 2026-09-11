@@ -88,6 +88,8 @@
     "browse": "浏览",
     "testConnection": "测试连接",
     "testing": "测试中...",
+    "cancelTest": "取消测试",
+    "incompleteConnectionInfo": "请完整填写连接信息（名称、主机地址）",
     "connectionTestSuccess": "连接测试成功",
     "connectionTestFailed": "连接测试失败",
     "operationFailed": "操作失败",
