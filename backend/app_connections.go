@@ -383,18 +383,30 @@ func (a *App) SaveConnection(input ConnectionInput) (ConnectionOutput, error) {
 	}
 
 	output = ConnectionOutput{
-		ID:         conn.ID,
-		Name:       conn.Name,
-		DbType:     conn.DbType,
-		Host:       conn.Host,
-		Port:       conn.Port,
-		Username:   conn.Username,
-		Database:   conn.Database,
-		GroupID:    conn.GroupID,
-		Color:      conn.Color,
-		Status:     "disconnected",
-		SSHEnabled: conn.SSHHost != nil,
-		SSLEnabled: conn.SSLEnabled != nil && *conn.SSLEnabled == "true",
+		ID:                conn.ID,
+		Name:              conn.Name,
+		DbType:            conn.DbType,
+		Host:              conn.Host,
+		Port:              conn.Port,
+		Username:          conn.Username,
+		Database:          conn.Database,
+		GroupID:           conn.GroupID,
+		Color:             conn.Color,
+		Status:            "disconnected",
+		SSHEnabled:        conn.SSHHost != nil,
+		SSHHost:           conn.SSHHost,
+		SSHUsername:       conn.SSHUsername,
+		SSHAuthMethod:     conn.SSHAuthMethod,
+		SSHPrivateKeyPath: conn.SSHPrivateKeyPath,
+		SSLEnabled:        conn.SSLEnabled != nil && *conn.SSLEnabled == "true",
+		SSLCaPath:         conn.SSLCAPath,
+		SSLCertPath:       conn.SSLCertPath,
+		SSLKeyPath:        conn.SSLKeyPath,
+	}
+	if conn.SSHPort != nil {
+		if p, err := strconv.Atoi(*conn.SSHPort); err == nil {
+			output.SSHPort = &p
+		}
 	}
 	return output, nil
 }

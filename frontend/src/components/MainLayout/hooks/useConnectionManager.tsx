@@ -103,17 +103,9 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
   // Handler wrappers for ConnectionTree
   const handleSaveConnection = useCallback(
     async (data: any) => {
-      await saveConnection({
-        id: data.id,
-        name: data.name,
-        db_type: data.db_type,
-        host: data.host,
-        port: data.port,
-        username: data.username,
-        password: data.password,
-        database: data.database,
-        group_id: data.group_id,
-      });
+      // 直接透传完整载荷：调用方（移动分组/批量管理）携带连接全量字段，
+      // 此前只挑基础字段会顺带清空 SSH/SSL 配置
+      await saveConnection(data);
     },
     [saveConnection]
   );
@@ -141,6 +133,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
   const handleDialogSave = useCallback(
     async (data: ConnectionFormData) => {
       try {
+        // 透传完整配置（含 SSH/SSL）——只传基础字段会把隧道/证书配置清空
         await saveConnection({
           id: data.id,
           name: data.name,
@@ -151,6 +144,20 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
           password: data.password,
           database: data.database,
           group_id: data.group_id,
+          color: data.color,
+          ssh_enabled: data.sshEnabled,
+          ssh_host: data.sshHost,
+          ssh_port: data.sshPort,
+          ssh_username: data.sshUsername,
+          ssh_auth_method: data.sshAuthMethod,
+          ssh_password: data.sshPassword,
+          ssh_private_key_path: data.sshPrivateKeyPath,
+          ssh_passphrase: data.sshPassphrase,
+          ssl_enabled: data.sslEnabled,
+          ssl_ca_path: data.sslCaPath,
+          ssl_cert_path: data.sslCertPath,
+          ssl_key_path: data.sslKeyPath,
+          ssl_skip_verify: data.sslSkipVerify,
         });
         setConnectionDialogOpen(false);
       } catch (error) {
