@@ -620,7 +620,8 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
   );
 
   const handleEditConnection = useCallback(async (connection: Connection) => {
-    // 先用基础数据打开弹窗（password 暂为空），再异步拉取已存密码回显
+    // 先用基础数据打开弹窗（password 暂为空），再异步拉取已存密码回显。
+    // SSH/SSL 非机密配置一并回显，否则编辑再保存会把这些配置清空
     setEditingConnection({
       id: connection.id,
       name: connection.name,
@@ -631,6 +632,16 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
       password: '',
       database: connection.database,
       group_id: connection.group_id,
+      sshEnabled: connection.ssh_enabled,
+      sshHost: connection.ssh_host,
+      sshPort: connection.ssh_port,
+      sshUsername: connection.ssh_username,
+      sshAuthMethod: (connection.ssh_auth_method as 'password' | 'key') || undefined,
+      sshPrivateKeyPath: connection.ssh_private_key_path,
+      sslEnabled: connection.ssl_enabled,
+      sslCaPath: connection.ssl_ca_path,
+      sslCertPath: connection.ssl_cert_path,
+      sslKeyPath: connection.ssl_key_path,
     });
     setConnectionDialogOpen(true);
 
@@ -658,6 +669,16 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
         password: '',
         database: connection.database,
         group_id: connection.group_id,
+        sshEnabled: connection.ssh_enabled,
+        sshHost: connection.ssh_host,
+        sshPort: connection.ssh_port,
+        sshUsername: connection.ssh_username,
+        sshAuthMethod: (connection.ssh_auth_method as 'password' | 'key') || undefined,
+        sshPrivateKeyPath: connection.ssh_private_key_path,
+        sslEnabled: connection.ssl_enabled,
+        sslCaPath: connection.ssl_ca_path,
+        sslCertPath: connection.ssl_cert_path,
+        sslKeyPath: connection.ssl_key_path,
       });
       setConnectionDialogOpen(true);
 

@@ -245,18 +245,30 @@ func (a *App) GetConnections() ([]ConnectionOutput, error) {
 	result := make([]ConnectionOutput, len(conns))
 	for i, conn := range conns {
 		result[i] = ConnectionOutput{
-			ID:         conn.ID,
-			Name:       conn.Name,
-			DbType:     conn.DbType,
-			Host:       conn.Host,
-			Port:       conn.Port,
-			Username:   conn.Username,
-			Database:   conn.Database,
-			GroupID:    conn.GroupID,
-			Color:      conn.Color,
-			Status:     "disconnected",
-			SSHEnabled: conn.SSHHost != nil,
-			SSLEnabled: conn.SSLEnabled != nil && *conn.SSLEnabled == "true",
+			ID:                conn.ID,
+			Name:              conn.Name,
+			DbType:            conn.DbType,
+			Host:              conn.Host,
+			Port:              conn.Port,
+			Username:          conn.Username,
+			Database:          conn.Database,
+			GroupID:           conn.GroupID,
+			Color:             conn.Color,
+			Status:            "disconnected",
+			SSHEnabled:        conn.SSHHost != nil,
+			SSHHost:           conn.SSHHost,
+			SSHUsername:       conn.SSHUsername,
+			SSHAuthMethod:     conn.SSHAuthMethod,
+			SSHPrivateKeyPath: conn.SSHPrivateKeyPath,
+			SSLEnabled:        conn.SSLEnabled != nil && *conn.SSLEnabled == "true",
+			SSLCaPath:         conn.SSLCAPath,
+			SSLCertPath:       conn.SSLCertPath,
+			SSLKeyPath:        conn.SSLKeyPath,
+		}
+		if conn.SSHPort != nil {
+			if p, err := strconv.Atoi(*conn.SSHPort); err == nil {
+				result[i].SSHPort = &p
+			}
 		}
 		if a.isActiveConn(conn.ID) {
 			result[i].Status = "connected"
@@ -352,7 +364,8 @@ func (a *App) SaveConnection(input ConnectionInput) (ConnectionOutput, error) {
 		}
 	}
 
-	// 持久化 SSH 凭据（与 DB 密码分开加密存储）
+	// 持久化 SSH 凭据（与 DB 密码分开加密存储）。
+	// 编辑时未重新输入（两个字段均空 = 对话框不回显机密）则保留已存凭据，避免误清空
 	if input.SSHEnabled {
 		sshPass := ""
 		sshPhrase := ""
@@ -362,8 +375,10 @@ func (a *App) SaveConnection(input ConnectionInput) (ConnectionOutput, error) {
 		if input.SSHPassphrase != nil {
 			sshPhrase = *input.SSHPassphrase
 		}
-		if err := a.storage.SaveSSHCredentials(conn.ID, sshPass, sshPhrase); err != nil {
-			return output, fmt.Errorf("failed to save ssh credentials: %w", err)
+		if input.ID == "" || sshPass != "" || sshPhrase != "" {
+			if err := a.storage.SaveSSHCredentials(conn.ID, sshPass, sshPhrase); err != nil {
+				return output, fmt.Errorf("failed to save ssh credentials: %w", err)
+			}
 		}
 	}
 

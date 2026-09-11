@@ -146,8 +146,31 @@ const DB_CATEGORIES = [
   },
 ];
 
-export function ConnectionDialog({ open, editingData, onCancel, onSave }: ConnectionDialogProps) {
-  const { t } = useTranslation();
+/** 表单全量值（含按需渲染 Tab 上未挂载的字段，经 getFieldsValue(true) 读取） */
+interface FullFormValues {
+  name?: string;
+  db_type?: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  database?: string;
+  color?: string;
+  use_ssh?: boolean;
+  ssh_host?: string;
+  ssh_port?: number;
+  ssh_username?: string;
+  ssh_auth_method?: 'password' | 'key';
+  ssh_password?: string;
+  ssh_key_path?: string;
+  ssh_passphrase?: string;
+  use_ssl?: boolean;
+  ssl_ca_cert?: string;
+  ssl_client_cert?: string;
+  ssl_client_key?: string;
+}
+
+export function ConnectionDialog({ open, editingData, onCancel, onSave }: ConnectionDialogProps) {  const { t } = useTranslation();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -234,9 +257,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
     try {
       // 只校验基础必填字段；SSH/SSL/默认库等配置须从完整表单读取——
       // validateFields(字段列表) 的返回值只含列表内字段，此前 use_ssh 恒为
-      // undefined，测试连接从不走 SSH 隧道（直连主机字段导致必然失败）
+      // undefined，测试连接从不走 SSH 隧道（直连主机字段导致必然失败）。
+      // getFieldsValue(true) 同时覆盖未挂载 Tab 的字段
       const values = await form.validateFields(['db_type', 'host', 'port', 'username', 'password']);
-      const all = form.getFieldsValue();
+      const all = form.getFieldsValue(true) as FullFormValues;
       setTesting(true);
       testCancelledRef.current = false;
 
@@ -290,12 +314,22 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
   const handleOk = useCallback(async () => {
     try {
+      // 各 Tab 字段按需渲染：validateFields() 只校验并返回"已挂载"的字段——
+      // 停在其他 Tab 点保存时 SSH/SSL（或常规页字段）会整组缺失。
+      // 用 getFieldsValue(true) 取全量存储值（含未挂载 Tab）合并，保证任意
+      // Tab 点保存都携带完整配置
       const values = await form.validateFields();
+      const merged = { ...form.getFieldsValue(true), ...values } as FullFormValues;
 
-      const dbTypeValue = values.db_type || dbType;
+      const dbTypeValue = (merged.db_type || dbType) as ConnectionFormData['dbType'];
       const isSqlite = dbTypeValue === 'sqlite';
-      // 字段尚未挂载完成的时序竞态下 validateFields 可能返回空对象——兜底拦截空保存
-      if (!values.name?.trim() || (!isSqlite && !values.host?.trim())) {
+      // 必填项为空：多半在未挂载的常规页上（未触发字段校验标记）——
+      // 切回常规页并补一次校验，让用户看到红色错误提示
+      if (!merged.name?.trim() || (!isSqlite && !merged.host?.trim())) {
+        setActiveTab('general');
+        setTimeout(() => {
+          form.validateFields(['name', 'host']).catch(() => {});
+        }, 60);
         message.warning(t('common.incompleteConnectionInfo'));
         return;
       }
@@ -303,27 +337,27 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
       await onSave({
         id: editingData?.id,
-        name: values.name,
+        name: merged.name || '',
         dbType: dbTypeValue,
-        host: isSqlite ? '' : values.host,
-        port: isSqlite ? 0 : values.port,
-        username: isSqlite ? '' : values.username,
-        password: values.password,
-        database: isSqlite ? values.host : values.database,
+        host: isSqlite ? '' : merged.host || '',
+        port: isSqlite ? 0 : merged.port || 0,
+        username: isSqlite ? '' : merged.username || '',
+        password: merged.password,
+        database: isSqlite ? merged.host : merged.database,
         group_id: editingData?.group_id,
-        color: values.color,
-        sshEnabled: values.use_ssh || false,
-        sshHost: values.ssh_host,
-        sshPort: values.ssh_port,
-        sshUsername: values.ssh_username,
-        sshAuthMethod: values.ssh_auth_method || 'password',
-        sshPassword: values.ssh_password,
-        sshPrivateKeyPath: values.ssh_key_path,
-        sshPassphrase: values.ssh_passphrase,
-        sslEnabled: values.use_ssl || false,
-        sslCaPath: values.ssl_ca_cert,
-        sslCertPath: values.ssl_client_cert,
-        sslKeyPath: values.ssl_client_key,
+        color: merged.color,
+        sshEnabled: !!merged.use_ssh,
+        sshHost: merged.ssh_host,
+        sshPort: merged.ssh_port,
+        sshUsername: merged.ssh_username,
+        sshAuthMethod: merged.ssh_auth_method || 'password',
+        sshPassword: merged.ssh_password,
+        sshPrivateKeyPath: merged.ssh_key_path,
+        sshPassphrase: merged.ssh_passphrase,
+        sslEnabled: !!merged.use_ssl,
+        sslCaPath: merged.ssl_ca_cert,
+        sslCertPath: merged.ssl_client_cert,
+        sslKeyPath: merged.ssl_client_key,
         sslSkipVerify: false,
       });
       // 保存成功：草稿已消费，清空表单

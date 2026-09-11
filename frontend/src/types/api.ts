@@ -51,6 +51,17 @@ export interface ConnectionOutput {
   group_id?: string;
   status: ConnectionStatus;
   color?: string;
+  /** SSH/SSL 非机密配置（编辑对话框回显用；机密凭据不随连接返回） */
+  ssh_enabled?: boolean;
+  ssh_host?: string;
+  ssh_port?: number;
+  ssh_username?: string;
+  ssh_auth_method?: string;
+  ssh_private_key_path?: string;
+  ssl_enabled?: boolean;
+  ssl_ca_path?: string;
+  ssl_cert_path?: string;
+  ssl_key_path?: string;
 }
 
 export interface GroupInput {

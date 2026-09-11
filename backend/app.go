@@ -47,20 +47,30 @@ type ConnectionInput struct {
 	SSLSkipVerify     bool    `json:"ssl_skip_verify"`
 }
 
-// ConnectionOutput 返回给前端的连接对象（不包含密码）
+// ConnectionOutput 返回给前端的连接对象（不包含密码）。
+// SSH/SSL 携带完整非机密配置：编辑对话框回显必需，否则编辑再保存会把配置清空。
+// SSH 密码/口令是机密，单独加密存储（connection_ssh_credentials），不在此返回。
 type ConnectionOutput struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
-	DbType     string  `json:"db_type"`
-	Host       string  `json:"host"`
-	Port       int     `json:"port"`
-	Username   string  `json:"username"`
-	Database   *string `json:"database,omitempty"`
-	GroupID    *string `json:"group_id,omitempty"`
-	Color      *string `json:"color,omitempty"`
-	Status     string  `json:"status"`
-	SSHEnabled bool    `json:"ssh_enabled"`
-	SSLEnabled bool    `json:"ssl_enabled"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	DbType            string  `json:"db_type"`
+	Host              string  `json:"host"`
+	Port              int     `json:"port"`
+	Username          string  `json:"username"`
+	Database          *string `json:"database,omitempty"`
+	GroupID           *string `json:"group_id,omitempty"`
+	Color             *string `json:"color,omitempty"`
+	Status            string  `json:"status"`
+	SSHEnabled        bool    `json:"ssh_enabled"`
+	SSHHost           *string `json:"ssh_host,omitempty"`
+	SSHPort           *int    `json:"ssh_port,omitempty"`
+	SSHUsername       *string `json:"ssh_username,omitempty"`
+	SSHAuthMethod     *string `json:"ssh_auth_method,omitempty"`
+	SSHPrivateKeyPath *string `json:"ssh_private_key_path,omitempty"`
+	SSLEnabled        bool    `json:"ssl_enabled"`
+	SSLCaPath         *string `json:"ssl_ca_path,omitempty"`
+	SSLCertPath       *string `json:"ssl_cert_path,omitempty"`
+	SSLKeyPath        *string `json:"ssl_key_path,omitempty"`
 }
 
 // GroupInput 分组输入
