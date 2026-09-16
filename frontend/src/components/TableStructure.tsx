@@ -96,6 +96,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       dataIndex: 'column_name',
       key: 'column_name',
       minWidth: 150,
+      ellipsis: true,
       render: (_text: string, record: ColumnInfo) => (
         <span>
           {record.column_key === 'PRI' && (
@@ -110,6 +111,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       dataIndex: 'data_type',
       key: 'data_type',
       width: 140,
+      ellipsis: true,
       render: (_text: string, record: ColumnInfo) => (
         <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{record.data_type}</Tag>
       ),
@@ -127,6 +129,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
       dataIndex: 'column_default',
       key: 'column_default',
       width: 120,
+      ellipsis: true,
       render: (_text: string, record: ColumnInfo) => record.column_default || '-',
     },
     {
@@ -260,6 +263,10 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
         }
         .table-compact .ant-table-thead th {
           padding: 4px 8px !important;
+        }
+        /* 结构详情单行显示：不换行，超长省略（title 提示全文） */
+        .table-compact .ant-table-cell {
+          white-space: nowrap;
         }
       `}</style>
       <Tabs

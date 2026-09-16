@@ -145,6 +145,7 @@
     "nullable": "Nullable",
     "defaultValue": "Default Value",
     "comment": "Comment",
+    "columnResizeHint": "Drag to resize, double-click to reset",
     "type": "Type",
     "size": "Size",
     "name": "Name",

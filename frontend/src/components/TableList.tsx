@@ -26,6 +26,7 @@ import { useAppStore } from '../stores/appStore';
 import { useDatabase } from '../hooks/useApi';
 
 const VIEW_MODE_STORAGE_KEY = 'tablelist-viewmode';
+const COLUMN_WIDTHS_STORAGE_KEY = 'tablelist-col-widths';
 const SHOW_DETAIL_STORAGE_KEY = 'tablelist-show-detail';
 const DETAIL_WIDTH_STORAGE_KEY = 'tablelist-detail-width';
 
@@ -357,12 +358,18 @@ function ListHeader({
   sort,
   onSort,
   columns,
+  onResize,
+  onResetWidth,
 }: {
   sort: SortState;
   onSort: (key: SortKey) => void;
   columns: ColumnDef[];
+  onResize: (key: string, widthPx: number) => void;
+  onResetWidth: (key: string) => void;
 }) {
   const { t } = useTranslation();
+  // 拖动状态：pointer capture 期间 move/up 事件持续派发到手柄元素
+  const dragRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
   const labelMap: Record<string, string> = {
     table_name: t('common.tableName'),
     comment: t('common.comment'),
@@ -372,6 +379,32 @@ function ListHeader({
     create_time: t('common.createTime'),
     update_time: t('common.updateTime'),
   };
+
+  // 列宽拖动：以拖动起始时单元格实际宽度为基准（fr 列的 px 化）
+  const onResizeStart = (e: React.PointerEvent, col: ColumnDef) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const cell = (e.currentTarget as HTMLElement).parentElement;
+    if (!cell) return;
+    dragRef.current = {
+      key: col.key,
+      startX: e.clientX,
+      startWidth: cell.getBoundingClientRect().width,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onResizeMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    e.preventDefault();
+    onResize(d.key, Math.max(48, Math.round(d.startWidth + e.clientX - d.startX)));
+  };
+  const onResizeEnd = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+
   return (
     <div
       style={{
@@ -406,6 +439,7 @@ function ListHeader({
                     ? 'center'
                     : 'flex-start',
               gap: 2,
+              position: 'relative',
             }}
             onClick={() => onSort(col.key as SortKey)}
           >
@@ -415,6 +449,20 @@ function ListHeader({
                 {sort.order === 'asc' ? '▲' : '▼'}
               </span>
             )}
+            {/* 列宽拖动手柄：拖动调宽，双击恢复默认 */}
+            <span
+              className="tablelist-col-resize-handle"
+              title={t('common.columnResizeHint')}
+              onPointerDown={(e) => onResizeStart(e, col)}
+              onPointerMove={onResizeMove}
+              onPointerUp={onResizeEnd}
+              onPointerCancel={onResizeEnd}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                onResetWidth(col.key);
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
           </span>
         );
       })}
@@ -476,6 +524,44 @@ function TableListComponent({
     }
     return cols;
   }, [dbType]);
+
+  // 用户拖动过的列宽覆盖（px），持久化到 localStorage；未覆盖的列用上面的弹性默认值
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  });
+
+  const effectiveColumns = useMemo<ColumnDef[]>(
+    () =>
+      columns.map((c) =>
+        colWidths[c.key] ? { ...c, width: `${colWidths[c.key]}px` } : c,
+      ),
+    [columns, colWidths],
+  );
+
+  const handleColumnResize = useCallback((key: string, widthPx: number) => {
+    setColWidths((prev) => ({ ...prev, [key]: widthPx }));
+  }, []);
+
+  const handleColumnResetWidth = useCallback((key: string) => {
+    setColWidths((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(colWidths));
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [colWidths]);
 
   const { message } = App.useApp();
 
@@ -803,10 +889,10 @@ function TableListComponent({
           table={table}
           selected={selectedRow === table.table_name}
           onClick={() => handleTableClickRef.current(table.table_name)}
-          columns={columns}
+          columns={effectiveColumns}
         />
       )),
-    [filteredTables, selectedRow, columns]
+    [filteredTables, selectedRow, effectiveColumns]
   );
 
   const tableGridItems = useMemo(
@@ -1119,7 +1205,13 @@ function TableListComponent({
             </div>
           ) : viewMode === 'list' ? (
             <div style={{ background: 'var(--background-card)' }}>
-              <ListHeader sort={sort} onSort={handleSort} columns={columns} />
+              <ListHeader
+                sort={sort}
+                onSort={handleSort}
+                columns={effectiveColumns}
+                onResize={handleColumnResize}
+                onResetWidth={handleColumnResetWidth}
+              />
               {tableRowItems}
             </div>
           ) : (

@@ -15,6 +15,7 @@ import {
   Tooltip,
   Spin,
   Menu,
+  AutoComplete,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -68,6 +69,24 @@ export interface DesignerForeignKey {
   referencedColumn: string;
   onUpdate: 'CASCADE' | 'SET NULL' | 'RESTRICT' | 'NO ACTION' | 'SET DEFAULT';
   onDelete: 'CASCADE' | 'SET NULL' | 'RESTRICT' | 'NO ACTION' | 'SET DEFAULT';
+}
+
+// 默认值候选项：按列类型给出当前时间类函数 + 通用值。
+// 值均为方言层 formatDefaultValue 识别的关键字（不加引号），如 CURRENT_TIMESTAMP
+function defaultValueOptionsFor(type: string): { value: string }[] {
+  const t = (type || '').toLowerCase();
+  const opts: { value: string }[] = [];
+  if (t.includes('timestamp') || t.includes('datetime')) {
+    opts.push({ value: 'CURRENT_TIMESTAMP' });
+  }
+  if (t.includes('date')) {
+    opts.push({ value: 'CURRENT_DATE' });
+  }
+  if (t.includes('time')) {
+    opts.push({ value: 'CURRENT_TIME' });
+  }
+  opts.push({ value: 'NULL' }, { value: '0' }, { value: "''" });
+  return opts;
 }
 
 export interface TableDesignerProps {
@@ -857,13 +876,18 @@ export function TableDesigner({
     {
       title: t('common.columnDefault'),
       dataIndex: 'defaultValue',
-      width: 140,
+      width: 150,
       render: (val: string | undefined, record: DesignerColumn) => (
-        <GlobalInput
+        <AutoComplete
           size="small"
           value={val || ''}
-              placeholder={t('common.tableStructure.nullDefault')}
-          onChange={(e) => updateColumn(record.key, 'defaultValue', e.target.value)}
+          options={defaultValueOptionsFor(record.type)}
+          // 允许自由输入自定义默认值；有输入时按前缀过滤候选项
+          filterOption={(input, option) =>
+            !input || String(option?.value ?? '').toUpperCase().includes(input.toUpperCase())
+          }
+          placeholder={t('common.tableStructure.nullDefault')}
+          onChange={(v) => updateColumn(record.key, 'defaultValue', v || undefined)}
         />
       ),
     },

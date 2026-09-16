@@ -183,6 +183,7 @@
     "nullable": "可空",
     "defaultValue": "默认值",
     "comment": "注释",
+    "columnResizeHint": "拖动调整列宽，双击恢复默认",
     "type": "类型",
     "size": "大小",
     "name": "名称",
