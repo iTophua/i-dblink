@@ -428,6 +428,48 @@ export function GlideDataTable({
   const findDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // ===== WKWebView canvas 修复 =====
+  // macOS WKWebView 隐藏/遮挡窗口时可能回收 canvas 后备存储，切回后画布内容
+  // 变花；快速滚动也可能留残影。通过容器尺寸 1px 微调触发网格内部
+  // ResizeObserver → canvas 重建 → 全量重绘
+  const [canvasNudge, setCanvasNudge] = useState(false);
+  const forceRepaint = useCallback(() => {
+    setCanvasNudge(true);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        setCanvasNudge(false);
+      })
+    );
+  }, []);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) forceRepaint();
+    };
+    window.addEventListener('focus', forceRepaint);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', forceRepaint);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [forceRepaint]);
+
+  // 滚动停止 150ms 后补一次全量重绘，清掉滚动过程中产生的残影
+  const scrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleWheelCapture = useCallback(() => {
+    if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
+    scrollIdleTimerRef.current = setTimeout(forceRepaint, 150);
+  }, [forceRepaint]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollIdleTimerRef.current) {
+        clearTimeout(scrollIdleTimerRef.current);
+        scrollIdleTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Ctrl+F / Cmd+F keyboard handler
   useEffect(() => {
     if (!enableFindReplace) return;
@@ -954,7 +996,17 @@ export function GlideDataTable({
             onSearchChange={handleSearchChange}
           />
         )}
-        <div style={{ flex: 1, minHeight: 0, position: 'relative' }} onMouseMove={onMouseMove}>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            position: 'relative',
+            /* canvas 修复：1px 微调触发网格 canvas 重建（见 forceRepaint） */
+            paddingBottom: canvasNudge ? 1 : 0,
+          }}
+          onMouseMove={onMouseMove}
+          onWheelCapture={handleWheelCapture}
+        >
         <DataEditor
           ref={gridRef}
           width="100%"
