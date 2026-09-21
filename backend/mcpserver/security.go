@@ -70,9 +70,45 @@ func isLineCommentStart(r []rune, i int) bool {
 	return i >= len(r) || r[i] == ' ' || r[i] == '\t' || r[i] == '\n' || r[i] == '\r'
 }
 
+// countUnquotedSemicolons 统计引号外的分号数量——字符串/标识符字面量内的分号
+// （如 VALUES ('a;b')）不是语句分隔符。三个分类器的多语句判定共用。
+func countUnquotedSemicolons(s string) int {
+	r := []rune(s)
+	n := len(r)
+	count := 0
+	for i := 0; i < n; {
+		c := r[i]
+		if c == '\'' || c == '"' || c == '`' {
+			quote := c
+			i++
+			for i < n {
+				if r[i] == quote {
+					i++
+					if i < n && r[i] == quote {
+						i++
+						continue
+					}
+					break
+				}
+				if quote != '`' && r[i] == '\\' && i+1 < n {
+					i += 2
+					continue
+				}
+				i++
+			}
+			continue
+		}
+		if c == ';' {
+			count++
+		}
+		i++
+	}
+	return count
+}
+
 // IsReadOnlyQuery 检查 SQL 是否为只读查询（SELECT/WITH/EXPLAIN/SHOW/DESCRIBE/DESC/USE/PRAGMA）。
 // 先剥离注释再判定，避免 "-- 注释\nSELECT ..." 被前缀检查误拒。
-// 拒绝：多语句（分号分隔）、SELECT...INTO（写操作）。
+// 拒绝：多语句（引号外分号分隔）、SELECT...INTO（写操作）。
 // 这是一道安全防线——即使 AI 误传写操作，也不会执行。
 func IsReadOnlyQuery(sql string) bool {
 	if sql == "" {
@@ -82,7 +118,7 @@ func IsReadOnlyQuery(sql string) bool {
 	upper := strings.ToUpper(s)
 
 	// 拒绝多语句（允许末尾单个分号）
-	semiCount := strings.Count(upper, ";")
+	semiCount := countUnquotedSemicolons(upper)
 	if semiCount > 1 {
 		return false
 	}
@@ -119,9 +155,9 @@ func IsDMLStatement(sql string) bool {
 		return false
 	}
 
-	// 安全检查：拒绝多语句（防止 SQL 注入）
+	// 安全检查：拒绝多语句（防止 SQL 注入；引号内分号不算分隔符）
 	upper := strings.ToUpper(strings.TrimSpace(stripSQLComments(sql)))
-	semiCount := strings.Count(upper, ";")
+	semiCount := countUnquotedSemicolons(upper)
 	if semiCount > 1 {
 		return false
 	}
@@ -166,7 +202,7 @@ func IsDDLStatement(sql string) bool {
 		return false
 	}
 	upper := strings.TrimSpace(stripSQLComments(strings.ToUpper(sql)))
-	semiCount := strings.Count(upper, ";")
+	semiCount := countUnquotedSemicolons(upper)
 	if semiCount > 1 {
 		return false
 	}

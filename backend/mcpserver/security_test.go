@@ -22,6 +22,7 @@ func TestIsReadOnlyQuery(t *testing.T) {
 		{"use database", "USE mydb", true},
 		{"table keyword", "TABLE users", true},
 		{"complex select", "SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(*) > 5", true},
+		{"semicolon inside string literal", "SELECT * FROM t WHERE note = 'a;b'", true},
 		// 注释前缀（剥离后再判定）
 		{"line comment then select", "-- 查用户\nSELECT * FROM users", true},
 		{"multiple line comments then select", "-- note\n-- note2\nSELECT 1", true},
@@ -74,6 +75,7 @@ func TestIsDMLStatement(t *testing.T) {
 		{"delete", "DELETE FROM users WHERE id = 1", true},
 		{"merge", "MERGE INTO target USING source ON ...", true},
 		{"replace into", "REPLACE INTO users (id, name) VALUES (1, 'a')", true},
+		{"semicolon inside string literal", "INSERT INTO t VALUES (1, 'a;b')", true},
 		{"lowercase", "insert into users values (1)", true},
 		{"lowercase replace", "replace into t values (1)", true},
 
@@ -116,6 +118,7 @@ func TestIsDDLStatement(t *testing.T) {
 		{"rename", "RENAME TABLE a TO b", true},
 		{"comment then create", "-- init\nCREATE TABLE t (id INT)", true},
 		{"create trailing semicolon ok", "CREATE TABLE t (id INT);", true},
+		{"create with string default containing semicolon", "CREATE TABLE t (note VARCHAR(10) DEFAULT 'a;b')", true},
 		{"create then drop rejected", "CREATE TABLE a (id INT); DROP TABLE users;", false},
 		{"create then drop with comment rejected", "CREATE TABLE a (id INT); DROP TABLE users; --", false},
 		{"semicolon in middle rejected", "CREATE TABLE a (id INT); CREATE INDEX i ON a(id)", false},

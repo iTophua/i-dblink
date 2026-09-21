@@ -237,6 +237,29 @@ func (s *Server) registerMutationTools() {
 		),
 		s.handleExecuteUpdate,
 	)
+
+	// execute_script — 批量执行多语句脚本
+	s.mcp.AddTool(
+		mcp.NewTool("execute_script",
+			mcp.WithDescription("Execute a multi-statement SQL script in batch (up to 100 statements). "+
+				"All statements must belong to the SAME category — all read-only (SELECT/SHOW/...), "+
+				"all DML (INSERT/UPDATE/DELETE/REPLACE/MERGE), or all DDL (CREATE/DROP/ALTER/TRUNCATE/RENAME); "+
+				"mixed or non-whitelisted scripts are rejected. "+
+				"DML scripts run in a single transaction and roll back on any error; "+
+				"DDL runs sequentially and stops on error by default (succeeded DDL is not rolled back). "+
+				"Useful for migrations, seed data, and schema scripts."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("sql", mcp.Required(),
+				mcp.Description("Multi-statement SQL script, statements separated by semicolons "+
+					"(semicolons inside string literals are respected)")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to execute against (optional, temporary — does NOT modify the saved connection)")),
+			mcp.WithBoolean("stop_on_error",
+				mcp.Description("Stop at the first failing statement instead of continuing (default true; applies to read-only and DDL scripts — DML always stops and rolls back)")),
+			mcp.WithDestructiveHintAnnotation(true),
+		),
+		s.handleExecuteScript,
+	)
 }
 
 // ==================== 元数据/DDL tools ====================
