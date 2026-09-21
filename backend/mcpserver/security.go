@@ -158,12 +158,24 @@ func IsDMLStatement(sql string) bool {
 }
 
 // IsDDLStatement 检查 SQL 是否为 DDL（CREATE/DROP/ALTER/TRUNCATE/RENAME）。
+// 拒绝多语句：PostgreSQL 等驱动的 Exec 会把分号分隔的多条语句全部执行，
+// "CREATE ...; DROP ..." 注入必须在此拦下（代价：PG 的 $$...$$ 函数体内
+// 含分号的 CREATE FUNCTION 会被误拒——宁严勿松）。
 func IsDDLStatement(sql string) bool {
 	if sql == "" {
 		return false
 	}
-	s := strings.TrimSpace(stripSQLComments(strings.ToUpper(sql)))
-	fields := strings.Fields(s)
+	upper := strings.TrimSpace(stripSQLComments(strings.ToUpper(sql)))
+	semiCount := strings.Count(upper, ";")
+	if semiCount > 1 {
+		return false
+	}
+	if semiCount == 1 && !strings.HasSuffix(upper, ";") {
+		// 分号不在末尾 = 多语句
+		return false
+	}
+	upper = strings.TrimSpace(strings.TrimSuffix(upper, ";"))
+	fields := strings.Fields(upper)
 	if len(fields) == 0 {
 		return false
 	}
