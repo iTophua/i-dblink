@@ -75,8 +75,8 @@ func (s *Server) registerConnectionTools() {
 				mcp.Enum("mysql", "postgresql", "oracle", "sqlserver", "sqlite", "dameng", "kingbase", "highgo", "vastbase")),
 			mcp.WithString("host", mcp.Required(),
 				mcp.Description("Database host address")),
-			mcp.WithNumber("port", mcp.Required(),
-				mcp.Description("Database port number")),
+			mcp.WithNumber("port",
+				mcp.Description("Database port. Optional: when omitted, inherits the port of an existing connection to the same server, else the default port for db_type")),
 			mcp.WithString("username", mcp.Required(),
 				mcp.Description("Database username")),
 			mcp.WithString("password",
@@ -92,7 +92,8 @@ func (s *Server) registerConnectionTools() {
 		mcp.NewTool("update_connection",
 			mcp.WithDescription("Update an existing database connection. "+
 				"Only provided fields are updated; omitted fields keep their current values. "+
-				"Pass password only when you want to change it; omit to keep the existing password."),
+				"Pass password only when you want to change it; omit to keep the existing password. "+
+				"A full-server connection (no default database) cannot be narrowed to a specific database."),
 			mcp.WithString("connection_id", mcp.Required(),
 				mcp.Description("The ID of the connection to update (from list_connections)")),
 			mcp.WithString("name", mcp.Description("New display name")),

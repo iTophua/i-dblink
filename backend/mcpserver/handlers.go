@@ -127,6 +127,17 @@ func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolReq
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("failed to check existing connections", err), nil
 	}
+
+	// port 未提供（0）时：优先继承同服务器+账号已有连接的端口，其次用库类型默认端口。
+	// 避免因省略端口而复用失败、建出连不上的废连接（AI 客户端经常不知道端口）
+	if port == 0 && dbType != "sqlite" {
+		if hit := findConnectionByServerAccount(existing, dbType, host, username); hit != nil {
+			port = hit.Port
+		} else {
+			port = defaultPortForDBType(dbType)
+		}
+	}
+
 	if hit := findReusableConnection(existing, dbType, host, port, username, database); hit != nil {
 		// 命中：传了新密码则更新（仅改密码，用专用方法避免覆盖现有 SSL/SSH/Name 等字段）
 		if password != "" {
@@ -166,6 +177,41 @@ func (s *Server) connectionResult(connID string, conn backend.ConnectionOutput) 
 		conn.Status = "connected"
 	}
 	return mcp.NewToolResultJSON(conn)
+}
+
+// findConnectionByServerAccount 按 db_type+host+username 查找已有连接（端口不限）。
+// 用于 port 未提供时继承同服务器已有连接的实际端口。
+func findConnectionByServerAccount(
+	conns []backend.ConnectionOutput,
+	dbType, host, username string,
+) *backend.ConnectionOutput {
+	for i := range conns {
+		c := &conns[i]
+		if c.DbType == dbType && c.Host == host && c.Username == username {
+			return c
+		}
+	}
+	return nil
+}
+
+// defaultPortForDBType 各数据库类型的默认端口（port 未提供且无同服务器连接可继承时）
+func defaultPortForDBType(dbType string) int {
+	switch dbType {
+	case "mysql", "mariadb":
+		return 3306
+	case "postgresql", "highgo", "vastbase":
+		return 5432
+	case "oracle":
+		return 1521
+	case "sqlserver":
+		return 1433
+	case "dameng":
+		return 5236
+	case "kingbase":
+		return 54321
+	default:
+		return 0
+	}
 }
 
 // findReusableConnection 查找可复用的已存在连接（同一服务器+账号）。
@@ -247,6 +293,14 @@ func (s *Server) handleUpdateConnection(ctx context.Context, req mcp.CallToolReq
 	for _, c := range existing {
 		if c.ID == connID {
 			found = true
+			// 全量连接（未指定默认库）不允许收窄为单库连接：全量连接本可访问
+			// 任意库（查询时带 database 参数即可），收窄只会降低能力且无法
+			// 通过 MCP 恢复（update 无清空 database 的语义）
+			if c.Database == nil && input.Database != nil {
+				return mcp.NewToolResultError(
+					"connection has no default database (full-server connection) and cannot be narrowed to a specific database. " +
+						"Reuse it and pass the database parameter in query tools, or create a separate fixed-database connection."), nil
+			}
 			// 用现有值补齐用户未传的字段（空值 = 不修改，回退到原值）
 			if input.Name == "" {
 				input.Name = c.Name
