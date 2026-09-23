@@ -401,10 +401,11 @@ func (m *Manager) BeginTransaction(connectionID string) error {
 		return fmt.Errorf("failed to reserve connection: %w", err)
 	}
 
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel2()
-
-	tx, err := conn.BeginTx(ctx2, nil)
+	// 传给 BeginTx 的 ctx 会绑定整个事务生命周期：ctx 一取消 database/sql
+	// 就自动回滚事务。因此这里绝不能用函数级 ctx + defer cancel——那样
+	// Begin 返回的瞬间事务即被回滚，事务内所有语句都会报 ErrTxDone。
+	// 事务生命周期由 Commit/Rollback 和 5 分钟看门狗管理，不走 ctx。
+	tx, err := conn.BeginTx(context.Background(), nil)
 	if err != nil {
 		_ = conn.Close()
 		return fmt.Errorf("failed to begin transaction: %w", err)

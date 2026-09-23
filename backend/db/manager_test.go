@@ -1,6 +1,9 @@
 package db
 
 import (
+	"context"
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -284,4 +287,62 @@ func TestSSHTunnelArgs(t *testing.T) {
 	assert.Equal(t, "sshuser", ssh.Username)
 	assert.Equal(t, "password", ssh.AuthMethod)
 	assert.Equal(t, "sshpass", ssh.Password)
+}
+
+// countRows 用池执行器（非事务）统计行数——事务效果必须从事务外可见才作数
+func countRows(t *testing.T, manager *Manager, connID, table string) int {
+	t.Helper()
+	exec, err := manager.GetExecutor(connID, "")
+	require.NoError(t, err)
+	var n int
+	require.NoError(t, exec.QueryRowContext(context.Background(),
+		fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&n))
+	return n
+}
+
+// TestTransactionLifecycle 回归：事务在 BeginTransaction 返回后必须仍然存活。
+// 此前 BeginTx 绑定了函数级 ctx（defer cancel），Begin 返回的瞬间事务即被
+// database/sql 异步回滚，事务内任何语句都报 sql.ErrTxDone、提交也落不了库
+// （GUI 手工事务与 MCP execute_script 的 DML 分支全部失效）。
+func TestTransactionLifecycle(t *testing.T) {
+	manager := NewManager()
+	connID := "tx-lifecycle"
+	dbPath := filepath.Join(t.TempDir(), "tx_test.db")
+	require.NoError(t, manager.Connect(connID, ConnectArgs{DbType: "sqlite", Database: dbPath}))
+	defer manager.Disconnect(connID)
+
+	pool, err := manager.GetExecutor(connID, "")
+	require.NoError(t, err)
+	_, err = pool.ExecContext(context.Background(),
+		"CREATE TABLE tx_reg (id INTEGER PRIMARY KEY, v TEXT)")
+	require.NoError(t, err)
+
+	t.Run("commit persists statements after Begin returns", func(t *testing.T) {
+		require.NoError(t, manager.BeginTransaction(connID))
+
+		// 事务执行器：Begin 已返回，语句必须能执行（不能是 ErrTxDone）
+		txExec, err := manager.GetExecutor(connID, "")
+		require.NoError(t, err)
+		_, err = txExec.ExecContext(context.Background(),
+			"INSERT INTO tx_reg (v) VALUES ('committed')")
+		require.NoError(t, err)
+
+		require.NoError(t, manager.CommitTransaction(connID))
+		assert.Equal(t, 1, countRows(t, manager, connID, "tx_reg"))
+		assert.False(t, manager.HasTransaction(connID))
+	})
+
+	t.Run("rollback discards statements", func(t *testing.T) {
+		require.NoError(t, manager.BeginTransaction(connID))
+
+		txExec, err := manager.GetExecutor(connID, "")
+		require.NoError(t, err)
+		_, err = txExec.ExecContext(context.Background(),
+			"INSERT INTO tx_reg (v) VALUES ('rolled-back')")
+		require.NoError(t, err)
+
+		require.NoError(t, manager.RollbackTransaction(connID))
+		assert.Equal(t, 1, countRows(t, manager, connID, "tx_reg"), "回滚后插入不应落库")
+		assert.False(t, manager.HasTransaction(connID))
+	})
 }
