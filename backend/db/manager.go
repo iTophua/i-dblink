@@ -525,15 +525,19 @@ func isTransientNetworkError(err error) bool {
 		return false
 	}
 	var opErr *net.OpError
-	if !errors.As(err, &opErr) {
-		return false
+	if errors.As(err, &opErr) {
+		msg := opErr.Err.Error()
+		return strings.Contains(msg, "no route to host") ||
+			strings.Contains(msg, "network is down") ||
+			strings.Contains(msg, "network is unreachable") ||
+			strings.Contains(msg, "host is down") ||
+			strings.Contains(msg, "unreachable host") // Windows WSAEHOSTUNREACH
 	}
-	msg := opErr.Err.Error()
-	return strings.Contains(msg, "no route to host") ||
-		strings.Contains(msg, "network is down") ||
-		strings.Contains(msg, "network is unreachable") ||
-		strings.Contains(msg, "host is down") ||
-		strings.Contains(msg, "unreachable host") // Windows WSAEHOSTUNREACH
+	// 达梦等国产驱动把拨号失败包装成自有错误类型（"Error 6001: 网络通信异常
+	// dial address: host:port"），errors.As 解不出 net.OpError，底层 errno 也被
+	// 丢弃——无法精确区分"网络未就绪"与"服务器不可达"。对这类拨号阶段错误
+	// 一律按瞬时处理重试：最坏多等 ~3.5s 才报错，换来首连自动恢复。
+	return strings.Contains(err.Error(), "dial address")
 }
 
 func openDB(args ConnectArgs) (*sql.DB, error) {

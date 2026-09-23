@@ -345,8 +345,12 @@ export const useConnections = () => {
           }
           setError(errorMsg);
           // 瞬时网络未就绪（no route to host 等）：附上可操作的提示
-          // （后端已自动重试 3 次，走到这里说明仍失败，多半是权限/VPN 问题）
-          if (/no route to host|network is (down|unreachable)|host is down/i.test(errorMsg)) {
+          // （后端已自动重试 3 次，走到这里说明仍失败，多半是权限/VPN 问题；
+          //   达梦驱动报中文 "Error 6001: 网络通信异常 dial address: ..."）
+          if (
+            /no route to host|network is (down|unreachable)|host is down/i.test(errorMsg) ||
+            /网络通信异常.*dial address/.test(errorMsg)
+          ) {
             message.error(
               `${errorMsg}\n${i18n.t('common.connectNetworkHint')}`,
               6
