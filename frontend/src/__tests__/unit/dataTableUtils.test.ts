@@ -1,4 +1,84 @@
 import { describe, it, expect } from 'vitest';
+import { buildWhereClause, type FilterCondition } from '../../components/DataTable/utils';
+
+const cond = (
+  partial: Partial<FilterCondition> & Pick<FilterCondition, 'id'>
+): FilterCondition => ({
+  field: '',
+  operator: '',
+  value: '',
+  logic: 'AND',
+  enabled: true,
+  ...partial,
+});
+
+describe('buildWhereClause（停用勾选与分组）', () => {
+  it('拼接多个启用条件（AND/OR 来自各行 logic）', () => {
+    const sql = buildWhereClause([
+      cond({ id: '1', field: 'a', operator: 'equals', value: '1' }),
+      cond({ id: '2', field: 'b', operator: 'greaterThan', value: '2', logic: 'OR' }),
+    ]);
+    expect(sql).toBe("`a` = '1' OR `b` > '2'");
+  });
+
+  it('停用条件不参与拼接且不留悬空连接词', () => {
+    const sql = buildWhereClause([
+      cond({ id: '1', field: 'a', operator: 'equals', value: '1', enabled: false }),
+      cond({ id: '2', field: 'b', operator: 'equals', value: '2' }),
+    ]);
+    expect(sql).toBe("`b` = '2'");
+  });
+
+  it('全部停用/未填写时返回空串', () => {
+    expect(
+      buildWhereClause([
+        cond({ id: '1', field: 'a', operator: 'equals', value: '1', enabled: false }),
+      ])
+    ).toBe('');
+    expect(buildWhereClause([cond({ id: '1' })])).toBe('');
+  });
+
+  it('组内部分停用：保留组括号', () => {
+    const sql = buildWhereClause([
+      cond({ id: 's', isGroupStart: true }),
+      cond({ id: '1', field: 'a', operator: 'equals', value: '1', enabled: false }),
+      cond({ id: '2', field: 'b', operator: 'equals', value: '2', logic: 'OR' }),
+      cond({ id: 'e', isGroupEnd: true }),
+      cond({ id: '3', field: 'c', operator: 'isNotNull' }),
+    ]);
+    expect(sql).toBe("( `b` = '2' ) AND `c` IS NOT NULL");
+  });
+
+  it('组内全部停用：丢弃空括号与悬空连接词', () => {
+    const sql = buildWhereClause([
+      cond({ id: '0', field: 'x', operator: 'equals', value: '0' }),
+      cond({ id: 's', isGroupStart: true }),
+      cond({ id: '1', field: 'a', operator: 'equals', value: '1', enabled: false }),
+      cond({ id: 'e', isGroupEnd: true }),
+    ]);
+    expect(sql).toBe("`x` = '0'");
+  });
+
+  it('并列分组之间用组内首个有效条件的 logic 连接', () => {
+    const sql = buildWhereClause([
+      cond({ id: 's1', isGroupStart: true }),
+      cond({ id: '1', field: 'a', operator: 'equals', value: '1' }),
+      cond({ id: 'e1', isGroupEnd: true }),
+      cond({ id: 's2', isGroupStart: true }),
+      cond({ id: '2', field: 'b', operator: 'equals', value: '2', logic: 'OR' }),
+      cond({ id: 'e2', isGroupEnd: true }),
+    ]);
+    expect(sql).toBe("( `a` = '1' ) OR ( `b` = '2' )");
+  });
+
+  it('未填 field/operator 的半成品条件被跳过', () => {
+    const sql = buildWhereClause([
+      cond({ id: '1', field: 'a', operator: 'equals', value: '1' }),
+      cond({ id: '2', operator: 'equals', value: '' }),
+    ]);
+    expect(sql).toBe("`a` = '1'");
+  });
+});
 
 const escapeIdentifier = (name: string, dbType?: string): string => {
   const { open, close } = (() => {

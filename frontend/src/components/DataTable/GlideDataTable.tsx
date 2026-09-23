@@ -775,6 +775,29 @@ export function GlideDataTable({
         clearTimeout(emptyClickTimerRef.current);
         emptyClickTimerRef.current = null;
       }
+      // ── 整列选择 → 全列矩形选区 ──
+      // glide 对纯列选区（current === undefined）不响应键入：其 keydown 里
+      // "gridSelection.current === undefined 则 return"，导致"选中整列后
+      // 直接打字"完全没有效果。把列选区改写为覆盖全部行的矩形选区：
+      // 列高亮视觉保留（columns 不动），打字/删除走既有范围编辑路径填充整列。
+      // 注：ctrl 多选不连续列时取边界矩形（本表格 rangeSelect 为单矩形，不支持多区域）。
+      const colIdxs = newSelection.columns.toArray();
+      if (newSelection.current === undefined && colIdxs.length > 0 && rows.length > 0) {
+        let x = colIdxs[0];
+        let x2 = colIdxs[0];
+        for (const c of colIdxs) {
+          if (c < x) x = c;
+          if (c > x2) x2 = c;
+        }
+        newSelection = {
+          ...newSelection,
+          current: {
+            cell: [x, 0],
+            range: { x, y: 0, width: x2 - x + 1, height: rows.length },
+            rangeStack: [],
+          },
+        };
+      }
       setGridSelection(newSelection);
       const range = newSelection.current?.range;
       if (range && range.width * range.height > 1) {
@@ -936,6 +959,11 @@ export function GlideDataTable({
   );
 
   // ===== 自定义内联编辑器 =====
+  // 超大范围（如整列，pageSize 默认 1000）不做逐键实时填充：
+  // 每次键入都对全范围 applyBatchEdit + 编辑历史入栈，代价高且撤销粒度
+  // 变成"每键一次"。超过阈值只保留提交时一次性填充（走 handleCellsEdited
+  // 的范围提交路径），撤销即整列一步。
+  const LIVE_FILL_CELL_LIMIT = 500;
   const provideEditor: ProvideEditorCallback<GridCell> = useCallback((cell) => {
     if (cell.kind !== GridCellKind.Text && cell.kind !== GridCellKind.Number) return;
     const rs = rangeEditRef.current;
@@ -943,22 +971,24 @@ export function GlideDataTable({
       const savedRange = lastRangeRef.current;
       if (savedRange && onCellsEditedRef.current) {
         rs.editingRange = { x: savedRange.x, y: savedRange.y, width: savedRange.width, height: savedRange.height };
-        rs.wasLiveRangeEdit = true;
-        rs.liveRangeEditFn = (value: string) => {
-          const range = rs.editingRange;
-          if (!range) return;
-          const cols = gridColumnsRef.current;
-          const edits: Array<{ col: number; row: number; value: string }> = [];
-          for (let x = 0; x < range.width; x++) {
-            for (let y = 0; y < range.height; y++) {
-              const c = range.x + x;
-              const r = range.y + y;
-              if (cols[c]?.id === FILLER_COL_ID) continue;
-              edits.push({ col: c, row: r, value });
+        if (savedRange.width * savedRange.height <= LIVE_FILL_CELL_LIMIT) {
+          rs.wasLiveRangeEdit = true;
+          rs.liveRangeEditFn = (value: string) => {
+            const range = rs.editingRange;
+            if (!range) return;
+            const cols = gridColumnsRef.current;
+            const edits: Array<{ col: number; row: number; value: string }> = [];
+            for (let x = 0; x < range.width; x++) {
+              for (let y = 0; y < range.height; y++) {
+                const c = range.x + x;
+                const r = range.y + y;
+                if (cols[c]?.id === FILLER_COL_ID) continue;
+                edits.push({ col: c, row: r, value });
+              }
             }
-          }
-          if (edits.length > 0) onCellsEditedRef.current?.(edits);
-        };
+            if (edits.length > 0) onCellsEditedRef.current?.(edits);
+          };
+        }
       }
     }
     return {

@@ -28,6 +28,8 @@ export interface FilterCondition {
   /** between / notBetween 的上限值 */
   value2?: string;
   logic: 'AND' | 'OR';
+  /** false 时该条件停用：保留配置但不参与 WHERE 拼接（面板勾选框控制） */
+  enabled?: boolean;
   isGroupStart?: boolean;
   isGroupEnd?: boolean;
   level?: number;
@@ -149,63 +151,51 @@ export function buildSingleCondition(cond: FilterCondition, dbType?: string): st
 }
 
 export function buildWhereClause(conditions: FilterCondition[], dbType?: string): string {
-  const validConditions = conditions.filter((c) => c.field && c.operator);
+  // 停用（enabled === false）或未填写完整的条件保留在面板里，但不参与拼接
+  const isActive = (c: FilterCondition) => !!c.field && !!c.operator && c.enabled !== false;
 
-  if (validConditions.length === 0) return '';
-
-  let result = '';
+  const parts: string[] = [];
+  let emitted = 0; // 已输出条件数，决定后续条件是否需要 AND/OR 连接词
 
   for (let i = 0; i < conditions.length; i++) {
     const cond = conditions[i];
 
     if (cond.isGroupStart) {
-      result += '(';
+      // 并列的第二个分组：连接词取组内第一个有效条件自身的 logic
+      if (emitted > 0 && parts.length > 0 && parts[parts.length - 1] !== '(') {
+        const inner = conditions
+          .slice(i + 1)
+          .find((c) => !c.isGroupStart && !c.isGroupEnd && isActive(c));
+        if (inner) parts.push(inner.logic);
+      }
+      parts.push('(');
       continue;
     }
 
     if (cond.isGroupEnd) {
-      const slice = conditions
-        .slice(lastValidIndex(i, conditions), i)
-        .filter((c) => c.field && c.operator);
-      if (slice.length > 0) {
-        const subClauses = slice
-          .map((c, idx) => {
-            const clause = buildSingleCondition(c, dbType);
-            if (idx === 0) return clause;
-            return `${c.logic} ${clause}`;
-          })
-          .join(' ');
-        result += ` ${subClauses})`;
+      // 组内条件全部停用/无效时丢弃空括号，以及为其压入的悬空连接词
+      if (parts.length > 0 && parts[parts.length - 1] === '(') {
+        parts.pop();
+        const prev = parts[parts.length - 1];
+        if (prev === 'AND' || prev === 'OR') parts.pop();
+      } else {
+        parts.push(')');
       }
       continue;
     }
 
-    if (!cond.field || !cond.operator) continue;
+    if (!isActive(cond)) continue;
 
-    const prevCond = i > 0 ? conditions[i - 1] : null;
-    const needLogic =
-      prevCond &&
-      !prevCond.isGroupStart &&
-      !prevCond.isGroupEnd &&
-      prevCond.field &&
-      prevCond.operator;
-
-    if (needLogic) {
-      result += ` ${cond.logic} ${buildSingleCondition(cond, dbType)}`;
-    } else {
-      result += buildSingleCondition(cond, dbType);
+    const clause = buildSingleCondition(cond, dbType);
+    const last = parts[parts.length - 1];
+    if (emitted > 0 && last !== undefined && last !== '(') {
+      parts.push(cond.logic);
     }
+    parts.push(clause);
+    emitted++;
   }
 
-  return result.trim().replace(/\s+/g, ' ');
-
-  function lastValidIndex(endIdx: number, conds: FilterCondition[]): number {
-    for (let j = endIdx - 1; j >= 0; j--) {
-      if (conds[j].field && conds[j].operator) return j + 1;
-      if (conds[j].isGroupStart) return j + 1;
-    }
-    return 0;
-  }
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 export function buildQuery(

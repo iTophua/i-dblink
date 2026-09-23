@@ -20,13 +20,13 @@ import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../hooks/useApi';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useAppStore } from '../stores/appStore';
-import type { ColumnInfo, DatabaseType } from '../types/api';
+import type { ColumnInfo } from '../types/api';
 import {
   type RowData,
   type FilterCondition,
   buildQuery,
   buildCountQuery,
-  buildSingleCondition,
+  buildWhereClause,
   OPERATOR_OPTIONS,
   NO_VALUE_OPERATORS,
   RANGE_OPERATORS,
@@ -156,38 +156,13 @@ export const DataTable = memo(function DataTable({
   const [showSqlPanel, setShowSqlPanel] = useState(false);
   // ── Range Edit ──
   // ── Filter Panel ──
+  // enabled !== false 的条件才参与 WHERE 拼接（面板勾选框控制，取消勾选保留配置）
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([
-    { id: 'filter-1', field: '', operator: 'equals', value: '', logic: 'AND' },
+    { id: 'filter-1', field: '', operator: 'equals', value: '', logic: 'AND', enabled: true },
   ]);
-  const buildWhereClause = useCallback((conditions: FilterCondition[], dbType?: DatabaseType): string => {
-    const parts: string[] = [];
-    for (let i = 0; i < conditions.length; i++) {
-      const cond = conditions[i];
-      if (cond.isGroupStart) {
-        parts.push('(');
-        continue;
-      }
-      if (cond.isGroupEnd) {
-        parts.push(')');
-        continue;
-      }
-      if (!cond.field) continue;
-
-      let clause = buildSingleCondition(cond, dbType);
-
-      if (i > 0 && !cond.isGroupStart) {
-        const prevCond = conditions[i - 1];
-        if (!prevCond.isGroupStart) {
-          clause = `${cond.logic} ${clause}`;
-        }
-      }
-      parts.push(clause);
-    }
-    return parts.join(' ');
-  }, []);
   const loadDataRef = useRef<((opts?: { page?: number; where?: string; orderBy?: string }) => Promise<void>) | undefined>(undefined);
   const clearFilter = useCallback(() => {
-    setFilterConditions([{ id: `filter-${Date.now()}`, field: '', operator: 'equals', value: '', logic: 'AND' }]);
+    setFilterConditions([{ id: `filter-${Date.now()}`, field: '', operator: 'equals', value: '', logic: 'AND', enabled: true }]);
     setWhereClause('');
     setCurrentPage(1);
     loadDataRef.current?.({ where: '', page: 1 });
@@ -197,7 +172,7 @@ export const DataTable = memo(function DataTable({
     setWhereClause(sql);
     setCurrentPage(1);
     loadDataRef.current?.({ where: sql, page: 1 });
-  }, [filterConditions, dbType, buildWhereClause]);
+  }, [filterConditions, dbType]);
   const updateFilterCondition = useCallback((id: string, updates: Partial<FilterCondition>) => {
     setFilterConditions((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
   }, []);
@@ -292,13 +267,19 @@ export const DataTable = memo(function DataTable({
   useEffect(() => { setPageInput(String(currentPage)); }, [currentPage]);
 
   // ── Quick Filter ──
+  // 支持多条件：空格分隔多个关键字，每个关键字都要命中（任一列包含即可），AND 语义。
+  // 例如 "张三 销售" 匹配同时包含"张三"和"销售"的行
   const filteredRows = useMemo(() => {
-    if (!quickFilter) return rowData;
-    const q = quickFilter.toLowerCase();
-    return rowData.filter((r) => {
-      for (const col of columns) { if (String(r[col.column_name] ?? '').toLowerCase().includes(q)) return true; }
-      return false;
-    });
+    const keywords = quickFilter.toLowerCase().split(/\s+/).filter(Boolean);
+    if (keywords.length === 0) return rowData;
+    return rowData.filter((r) =>
+      keywords.every((q) => {
+        for (const col of columns) {
+          if (String(r[col.column_name] ?? '').toLowerCase().includes(q)) return true;
+        }
+        return false;
+      })
+    );
   }, [rowData, quickFilter, columns]);
 
   // ── 获取可见列名列表（与 GlideDataTable 同步，过滤隐藏列）──
@@ -813,7 +794,7 @@ export const DataTable = memo(function DataTable({
           </Dropdown>
         </Space>
         <Space size={4}>
-          <Input prefix={<SearchOutlined style={{ fontSize: 12, color: 'var(--text-tertiary)' }} />} value={quickFilter} onChange={(e) => setQuickFilter(e.target.value)} placeholder={t('common.search')} size="small" className="data-toolbar-input" style={{ width: 160 }} />
+          <Input prefix={<SearchOutlined style={{ fontSize: 12, color: 'var(--text-tertiary)' }} />} value={quickFilter} onChange={(e) => setQuickFilter(e.target.value)} placeholder={t('common.searchMultiPlaceholder')} size="small" className="data-toolbar-input" style={{ width: 160 }} />
           <Tag className="data-toolbar-tag" style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{tableName}</Tag>
           <Tag color="blue" className="data-toolbar-tag">{totalCount.toLocaleString()} {t('common.rows')}</Tag>
           {selectedRows.length > 0 && <Tag color="orange" className="data-toolbar-tag">{selectedRows.length} {t('common.rows')}</Tag>}
@@ -898,59 +879,89 @@ export const DataTable = memo(function DataTable({
                   {!showLogic && !cond.isGroupStart && !cond.isGroupEnd && <span style={{ width: 64 }} />}
                   {!cond.isGroupStart && !cond.isGroupEnd && (
                     <>
-                      <Select
-                        placeholder={t('common.fieldPlaceholder')}
-                        value={cond.field || undefined}
-                        onChange={(val) => updateFilterCondition(cond.id, { field: val })}
-                        size="small"
-                        style={{ minWidth: 140, fontSize: 11 }}
-                        showSearch
-                        filterOption={(input, option) =>
-                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      {/* 勾选框：停用条件而不删除，配置保留以便再次启用 */}
+                      <Checkbox
+                        checked={cond.enabled !== false}
+                        onChange={(e) =>
+                          updateFilterCondition(cond.id, { enabled: e.target.checked })
                         }
-                        options={columns.map((col) => ({
-                          label: col.column_name,
-                          value: col.column_name,
-                        }))}
+                        title={t('common.filterConditionEnable')}
+                        style={{ flexShrink: 0 }}
                       />
-                      <Select
-                        value={cond.operator}
-                        onChange={(val) => updateFilterCondition(cond.id, { operator: val })}
-                        size="small"
-                        style={{ width: 110, fontSize: 11 }}
-                        options={OPERATOR_OPTIONS}
-                      />
-                      {RANGE_OPERATORS.includes(cond.operator) && (
-                        <>
-                          <Input
-                            placeholder="最小值"
-                            value={cond.value}
-                            onChange={(e) => updateFilterCondition(cond.id, { value: e.target.value })}
-                            size="small"
-                            style={{ flex: 1, fontSize: 11, minWidth: 60 }}
-                          />
-                          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>～</span>
-                          <Input
-                            placeholder="最大值"
-                            value={cond.value2 ?? ''}
-                            onChange={(e) => updateFilterCondition(cond.id, { value2: e.target.value })}
-                            size="small"
-                            style={{ flex: 1, fontSize: 11, minWidth: 60 }}
-                          />
-                        </>
-                      )}
-                      {!RANGE_OPERATORS.includes(cond.operator) && !NO_VALUE_OPERATORS.includes(cond.operator) && (
-                        <Input
-                          placeholder={t('common.valuePlaceholder')}
-                          value={cond.value}
-                          onChange={(e) => updateFilterCondition(cond.id, { value: e.target.value })}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          flex: 1,
+                          minWidth: 0,
+                          opacity: cond.enabled === false ? 0.45 : 1,
+                          transition: 'opacity 0.2s',
+                        }}
+                      >
+                        <Select
+                          placeholder={t('common.fieldPlaceholder')}
+                          value={cond.field || undefined}
+                          onChange={(val) => updateFilterCondition(cond.id, { field: val })}
                           size="small"
-                          style={{ flex: 1, fontSize: 11, minWidth: 60 }}
+                          style={{ minWidth: 140, fontSize: 11 }}
+                          showSearch
+                          filterOption={(input, option) =>
+                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                          }
+                          options={columns.map((col) => ({
+                            label: col.column_name,
+                            value: col.column_name,
+                          }))}
                         />
-                      )}
-                      {NO_VALUE_OPERATORS.includes(cond.operator) && (
-                        <span style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)' }}>—</span>
-                      )}
+                        <Select
+                          value={cond.operator}
+                          onChange={(val) => updateFilterCondition(cond.id, { operator: val })}
+                          size="small"
+                          style={{ width: 110, fontSize: 11 }}
+                          options={OPERATOR_OPTIONS}
+                        />
+                        {RANGE_OPERATORS.includes(cond.operator) && (
+                          <>
+                            <Input
+                              placeholder="最小值"
+                              value={cond.value}
+                              onChange={(e) =>
+                                updateFilterCondition(cond.id, { value: e.target.value })
+                              }
+                              size="small"
+                              style={{ flex: 1, fontSize: 11, minWidth: 60 }}
+                            />
+                            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>～</span>
+                            <Input
+                              placeholder="最大值"
+                              value={cond.value2 ?? ''}
+                              onChange={(e) =>
+                                updateFilterCondition(cond.id, { value2: e.target.value })
+                              }
+                              size="small"
+                              style={{ flex: 1, fontSize: 11, minWidth: 60 }}
+                            />
+                          </>
+                        )}
+                        {!RANGE_OPERATORS.includes(cond.operator) &&
+                          !NO_VALUE_OPERATORS.includes(cond.operator) && (
+                            <Input
+                              placeholder={t('common.valuePlaceholder')}
+                              value={cond.value}
+                              onChange={(e) =>
+                                updateFilterCondition(cond.id, { value: e.target.value })
+                              }
+                              size="small"
+                              style={{ flex: 1, fontSize: 11, minWidth: 60 }}
+                            />
+                          )}
+                        {NO_VALUE_OPERATORS.includes(cond.operator) && (
+                          <span style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                            —
+                          </span>
+                        )}
+                      </div>
                     </>
                   )}
                   {cond.isGroupEnd && (
@@ -970,6 +981,7 @@ export const DataTable = memo(function DataTable({
                             operator: 'equals',
                             value: '',
                             logic: 'AND',
+                            enabled: true,
                             level: cond.level ?? 0,
                           });
                           setFilterConditions(newConditions);
@@ -987,10 +999,10 @@ export const DataTable = memo(function DataTable({
                           const currentLevel = (cond.level ?? 0) + 1;
                           const ts = Date.now();
                           newConditions.splice(insertIndex, 0,
-                            { id: `filter-${ts}-start`, field: '', operator: '', value: '', logic: 'AND', isGroupStart: true, level: cond.level ?? 0 },
-                            { id: `filter-${ts}-a`, field: '', operator: 'equals', value: '', logic: 'AND', level: currentLevel },
-                            { id: `filter-${ts}-b`, field: '', operator: 'equals', value: '', logic: 'AND', level: currentLevel },
-                            { id: `filter-${ts}-end`, field: '', operator: '', value: '', logic: 'AND', isGroupEnd: true, level: cond.level ?? 0 }
+                            { id: `filter-${ts}-start`, field: '', operator: '', value: '', logic: 'AND', enabled: true, isGroupStart: true, level: cond.level ?? 0 },
+                            { id: `filter-${ts}-a`, field: '', operator: 'equals', value: '', logic: 'AND', enabled: true, level: currentLevel },
+                            { id: `filter-${ts}-b`, field: '', operator: 'equals', value: '', logic: 'AND', enabled: true, level: currentLevel },
+                            { id: `filter-${ts}-end`, field: '', operator: '', value: '', logic: 'AND', enabled: true, isGroupEnd: true, level: cond.level ?? 0 }
                           );
                           setFilterConditions(newConditions);
                         }}

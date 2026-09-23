@@ -2130,6 +2130,8 @@
       "download": "前往下载",
       "alreadyLatest": "当前已是最新版本"
     },
-    "connectNetworkHint": "可能是 macOS 本地网络权限或 VPN 路由未就绪：请重试；若反复失败，请到 系统设置 → 隐私与安全性 → 本地网络 中允许 iDBLink"
+    "connectNetworkHint": "可能是 macOS 本地网络权限或 VPN 路由未就绪：请重试；若反复失败，请到 系统设置 → 隐私与安全性 → 本地网络 中允许 iDBLink",
+    "searchMultiPlaceholder": "搜索（空格分隔多条件）",
+    "filterConditionEnable": "启用/停用该条件（停用后保留配置，可再次勾选启用）"
   }
 }
