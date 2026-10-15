@@ -499,13 +499,18 @@ export const DataTable = memo(function DataTable({
         if (!isSame) setters[c] = cur;
       }
       if (Object.keys(setters).length === 0) continue;
-      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(row[pkCol.column_name])}`;
+      // WHERE 必须用修改前的主键值：主键列本身被改时，用当前（新）值会一行都匹配不到，
+      // UPDATE 静默变成 0 行生效
+      const origPk = row.__original_data__?.[pkCol.column_name] ?? row[pkCol.column_name];
+      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(origPk)}`;
       items.push({ id: `upd-${row.__row_id__}`, sql: dialect.buildUpdate(tableRef, setters, where) + ';', type: 'update', source: row.__row_id__ || '' });
     }
 
     for (const row of deletedRows) {
       if (!pkCol) continue;
-      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(row[pkCol.column_name])}`;
+      // 同 UPDATE：行上可能带着未提交的主键修改，删除必须按原始主键定位
+      const origPk = row.__original_data__?.[pkCol.column_name] ?? row[pkCol.column_name];
+      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(origPk)}`;
       items.push({ id: `del-${row.__row_id__}`, sql: dialect.buildDelete(tableRef, where) + ';', type: 'delete', source: row.__row_id__ || '' });
     }
 
