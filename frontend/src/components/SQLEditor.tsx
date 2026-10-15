@@ -171,6 +171,7 @@ export function SQLEditor({
     txMode,
     transactionActive,
     handleTxModeChange,
+    handleBeginTransaction,
     ensureTransactionForExecution,
     handleCommitTransaction,
     handleRollbackTransaction,
@@ -209,6 +210,9 @@ export function SQLEditor({
     onQueryStatusChange,
     editorRef,
     onBeforeExecute: ensureTransactionForExecution,
+    // 自动提交模式显式绕过活跃事务（防被别处手动事务捕获）；
+    // 手动模式进事务（执行前钩子已确保事务开启）
+    getUseTransaction: () => (txMode === 'manual' ? true : false),
   });
 
   // SQL dialect detection
@@ -628,6 +632,7 @@ export function SQLEditor({
         txMode={txMode}
         onTxModeChange={handleTxModeChange}
         transactionActive={transactionActive}
+        handleBeginTransaction={handleBeginTransaction}
         handleCommitTransaction={handleCommitTransaction}
         handleRollbackTransaction={handleRollbackTransaction}
         saveSQL={saveSQL}

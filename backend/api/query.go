@@ -48,6 +48,15 @@ func debugLog(format string, args ...interface{}) {
 	}
 }
 
+// getQueryExecutor 按 use_transaction 路由执行器：
+// 显式 false = 绕过活跃事务（自动提交路径），nil/true = 默认行为（有活跃事务则进事务）
+func (h *Handler) getQueryExecutor(req *models.QueryRequest) (db.Executor, error) {
+	if req.UseTransaction != nil && !*req.UseTransaction {
+		return h.mgr.GetExecutorNoTx(req.ConnectionID, req.Database)
+	}
+	return h.mgr.GetExecutor(req.ConnectionID, req.Database)
+}
+
 // Query 执行 SQL 查询
 func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 	var req models.QueryRequest
@@ -63,7 +72,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	exec, err := h.mgr.GetExecutor(req.ConnectionID, req.Database)
+	exec, err := h.getQueryExecutor(&req)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return

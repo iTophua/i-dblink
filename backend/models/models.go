@@ -127,6 +127,9 @@ type QueryRequest struct {
 	Database       string `json:"database,omitempty"`
 	SQL            string `json:"sql"`
 	StreamResults  bool   `json:"stream_results,omitempty"`
+	// UseTransaction 显式 false = 绕过活跃事务走自动提交（nil/true = 默认：
+	// 该连接有活跃事务则进事务）。防止自动提交模式的语句被别处的手动事务捕获。
+	UseTransaction *bool `json:"use_transaction,omitempty"`
 }
 
 // MetadataRequest 元数据请求

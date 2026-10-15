@@ -37,13 +37,14 @@ func (h *Handler) CommitTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.mgr.CommitTransaction(req.ConnectionID)
+	active, err := h.mgr.CommitTransaction(req.ConnectionID)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		json.NewEncoder(w).Encode(models.GenericResponse{Error: err.Error()})
 		return
 	}
-	json.NewEncoder(w).Encode(models.GenericResponse{})
+	// active = 是否确有事务被提交（false 表示没有等待中的事务，可能已被超时回滚）
+	json.NewEncoder(w).Encode(map[string]interface{}{"active": active})
 }
 
 // RollbackTransaction 回滚事务
@@ -54,13 +55,13 @@ func (h *Handler) RollbackTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.mgr.RollbackTransaction(req.ConnectionID)
+	active, err := h.mgr.RollbackTransaction(req.ConnectionID)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		json.NewEncoder(w).Encode(models.GenericResponse{Error: err.Error()})
 		return
 	}
-	json.NewEncoder(w).Encode(models.GenericResponse{})
+	json.NewEncoder(w).Encode(map[string]interface{}{"active": active})
 }
 
 // GetTransactionStatus 获取事务状态

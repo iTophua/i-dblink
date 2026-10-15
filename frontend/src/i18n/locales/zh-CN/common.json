@@ -2132,6 +2132,8 @@
     },
     "connectNetworkHint": "可能是 macOS 本地网络权限或 VPN 路由未就绪：请重试；若反复失败，请到 系统设置 → 隐私与安全性 → 本地网络 中允许 iDBLink",
     "searchMultiPlaceholder": "搜索（空格分隔多条件）",
-    "filterConditionEnable": "启用/停用该条件（停用后保留配置，可再次勾选启用）"
+    "filterConditionEnable": "启用/停用该条件（停用后保留配置，可再次勾选启用）",
+    "txBeginTip": "立即开启事务（也可直接执行 SQL，执行时会自动开启）",
+    "txAlreadyEnded": "事务已结束（可能已被超时自动回滚），本次未提交/回滚任何数据"
   }
 }

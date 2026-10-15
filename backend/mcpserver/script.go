@@ -208,9 +208,9 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 		}
 		result.TransactionUsed = true
 		for i, stmt := range stmts {
-			res, err := s.app.ExecuteQuery(connID, stmt, database)
+			res, err := s.app.ExecuteQuery(connID, stmt, database, nil)
 			if err != nil {
-				_ = s.app.RollbackTransaction(connID)
+				_, _ = s.app.RollbackTransaction(connID)
 				result.Transaction = "rolled_back"
 				result.Results = append(result.Results, scriptStmtResult{
 					Index: i, SQL: stmt, Error: err.Error(),
@@ -228,7 +228,7 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 				Index: i, SQL: stmt, RowsAffected: affected,
 			})
 		}
-		if err := s.app.CommitTransaction(connID); err != nil {
+		if _, err := s.app.CommitTransaction(connID); err != nil {
 			return mcp.NewToolResultErrorFromErr("failed to commit transaction", err), nil
 		}
 		result.Transaction = "committed"
@@ -253,7 +253,7 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 
 	case scriptReadOnly:
 		for i, stmt := range stmts {
-			res, err := s.app.ExecuteQuery(connID, stmt, database)
+			res, err := s.app.ExecuteQuery(connID, stmt, database, nil)
 			if err != nil {
 				if stopOnError {
 					return mcp.NewToolResultError(fmt.Sprintf(

@@ -232,9 +232,9 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.mgr.CommitTransaction(req.ConnectionID); err != nil {
+	if _, err := h.mgr.CommitTransaction(req.ConnectionID); err != nil {
 		// 提交失败，尝试回滚
-		_ = h.mgr.RollbackTransaction(req.ConnectionID)
+		_, _ = h.mgr.RollbackTransaction(req.ConnectionID)
 		writeJSONError(w, fmt.Sprintf("commit failed: %v", err))
 		return
 	}

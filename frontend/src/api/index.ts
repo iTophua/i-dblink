@@ -473,11 +473,18 @@ export const api = {
     connectionId: string,
     sql: string,
     database?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    opts?: { useTransaction?: boolean }
   ): Promise<QueryResult> {
     // Wails binding 调用本身无法被 abort；用 Promise.race 让 UI 在 abort 时立即响应，
     // 后端查询仍会继续到完成（结果被丢弃）。真正的后端取消需要扩展 binding 接口。
-    const binding = ExecuteQuery(connectionId, sql, database ?? null);
+    // useTransaction: false = 绕过活跃事务走自动提交（默认 null = 有事务则进事务）
+    const binding = ExecuteQuery(
+      connectionId,
+      sql,
+      database ?? null,
+      opts?.useTransaction === undefined ? null : opts.useTransaction
+    );
     if (!signal) {
       const result = await binding;
       return result as unknown as QueryResult;
@@ -556,12 +563,13 @@ export const api = {
     await BeginTransaction(connectionId);
   },
 
-  async commitTransaction(connectionId: string): Promise<void> {
-    await CommitTransaction(connectionId);
+  /** 返回是否确有事务被提交/回滚（false = 没有等待中的事务，可能已被超时回滚） */
+  async commitTransaction(connectionId: string): Promise<boolean> {
+    return await CommitTransaction(connectionId);
   },
 
-  async rollbackTransaction(connectionId: string): Promise<void> {
-    await RollbackTransaction(connectionId);
+  async rollbackTransaction(connectionId: string): Promise<boolean> {
+    return await RollbackTransaction(connectionId);
   },
 
   async getTransactionStatus(connectionId: string): Promise<boolean> {

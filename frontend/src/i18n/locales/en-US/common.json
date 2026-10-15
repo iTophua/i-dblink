@@ -2120,6 +2120,8 @@
     },
     "connectNetworkHint": "Likely macOS Local Network permission or VPN route not ready: please retry; if it keeps failing, allow iDBLink in System Settings → Privacy & Security → Local Network",
     "searchMultiPlaceholder": "Search (space-separated keywords)",
-    "filterConditionEnable": "Enable/disable this condition (kept for later reuse)"
+    "filterConditionEnable": "Enable/disable this condition (kept for later reuse)",
+    "txBeginTip": "Begin the transaction now (executing SQL also begins it automatically)",
+    "txAlreadyEnded": "Transaction already ended (possibly auto-rolled back on timeout); nothing was committed or rolled back"
   }
 }

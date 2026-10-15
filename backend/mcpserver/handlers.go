@@ -452,7 +452,7 @@ func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest
 		database = &d
 	}
 
-	result, err := s.app.ExecuteQuery(connID, sqlText, database)
+	result, err := s.app.ExecuteQuery(connID, sqlText, database, nil)
 	return jsonResult(result, err, "query failed")
 }
 
@@ -478,7 +478,7 @@ func (s *Server) handleExecuteUpdate(ctx context.Context, req mcp.CallToolReques
 		database = &d
 	}
 
-	result, err := s.app.ExecuteQuery(connID, sqlText, database)
+	result, err := s.app.ExecuteQuery(connID, sqlText, database, nil)
 	return jsonResult(result, err, "update failed")
 }
 

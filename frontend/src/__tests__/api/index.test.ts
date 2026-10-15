@@ -123,7 +123,7 @@ describe('API Layer', () => {
 
       const result = await api.executeQuery('conn-1', 'SELECT * FROM users');
 
-      expect(mockExecuteQuery).toHaveBeenCalledWith('conn-1', 'SELECT * FROM users', null);
+      expect(mockExecuteQuery).toHaveBeenCalledWith('conn-1', 'SELECT * FROM users', null, null);
       expect(result.columns).toEqual(['id', 'name']);
       expect(result.rows).toHaveLength(2);
     });
@@ -133,7 +133,7 @@ describe('API Layer', () => {
 
       await api.executeQuery('conn-1', 'SELECT 1', 'testdb');
 
-      expect(mockExecuteQuery).toHaveBeenCalledWith('conn-1', 'SELECT 1', 'testdb');
+      expect(mockExecuteQuery).toHaveBeenCalledWith('conn-1', 'SELECT 1', 'testdb', null);
     });
 
     it('should return error in result', async () => {

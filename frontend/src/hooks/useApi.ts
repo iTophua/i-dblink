@@ -774,10 +774,16 @@ export const useDatabase = () => {
   );
 
   const executeQuery = useCallback(
-    async (connectionId: string, sql: string, database?: string, signal?: AbortSignal) => {
+    async (
+      connectionId: string,
+      sql: string,
+      database?: string,
+      signal?: AbortSignal,
+      opts?: { useTransaction?: boolean }
+    ) => {
       try {
         setLoading(true);
-        const result = await api.executeQuery(connectionId, sql, database, signal);
+        const result = await api.executeQuery(connectionId, sql, database, signal, opts);
         if (result.error) {
           message.error(result.error);
         }

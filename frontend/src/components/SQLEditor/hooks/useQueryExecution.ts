@@ -38,6 +38,9 @@ export interface UseQueryExecutionParams {
   onQueryStatusChange?: (isQuerying: boolean) => void;
   // 执行前钩子（校验通过后、真正执行前调用）：手动事务模式借此确保事务已开启；抛错则中止执行
   onBeforeExecute?: () => Promise<void> | void;
+  // 执行时读取事务路由意图：true = 进活跃事务（手动模式），false = 强制自动提交。
+  // 不传则由 api 层默认（后端有活跃事务则进事务）。
+  getUseTransaction?: () => boolean | undefined;
   // Editor ref for reading selection
   editorRef?: React.MutableRefObject<any>;
 }
@@ -51,6 +54,7 @@ export function useQueryExecution({
   clearErrorMarkers,
   onQueryStatusChange,
   onBeforeExecute,
+  getUseTransaction,
   editorRef,
 }: UseQueryExecutionParams) {
   const { t } = useTranslation();
@@ -58,6 +62,10 @@ export function useQueryExecution({
   const { executeQuery: executeQueryApi } = useDatabase();
 
   // 用 ref 包装外部传入的函数，避免 useCallback 闭包过期
+  const getUseTransactionRef = useRef(getUseTransaction);
+  useEffect(() => {
+    getUseTransactionRef.current = getUseTransaction;
+  }, [getUseTransaction]);
   const highlightErrorRef = useRef(highlightError);
   const clearErrorMarkersRef = useRef(clearErrorMarkers);
   useEffect(() => { highlightErrorRef.current = highlightError; }, [highlightError]);
@@ -171,7 +179,14 @@ export function useQueryExecution({
             if (abortControllerRef.current?.signal.aborted) return null;
             
             try {
-              const queryResult = await executeQueryApi(connectionId, stmt, database, abortControllerRef.current?.signal);
+              const useTx = getUseTransactionRef.current?.();
+              const queryResult = await executeQueryApi(
+                connectionId,
+                stmt,
+                database,
+                abortControllerRef.current?.signal,
+                useTx === undefined ? undefined : { useTransaction: useTx }
+              );
               const executionTime = queryResult.execution_time_ms ?? 0;
 
               // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
@@ -280,12 +295,26 @@ export function useQueryExecution({
             lower.includes('reset by peer') || lower.includes('bad connection');
         };
 
-        let queryResult = await executeQueryApi(connectionId, sqlToExecute, database, abortControllerRef.current?.signal);
+        const useTx = getUseTransactionRef.current?.();
+        const txOpts = useTx === undefined ? undefined : { useTransaction: useTx };
+        let queryResult = await executeQueryApi(
+          connectionId,
+          sqlToExecute,
+          database,
+          abortControllerRef.current?.signal,
+          txOpts
+        );
         // 如果查询因连接问题失败，等待 1 秒后重试一次
         if (queryResult.error && isConnectionError(queryResult.error)) {
           message.info(t('common.connectionLostReconnecting', { defaultValue: 'Connection lost, attempting to reconnect...' }));
           await new Promise(resolve => setTimeout(resolve, 1000));
-          queryResult = await executeQueryApi(connectionId, sqlToExecute, database, abortControllerRef.current?.signal);
+          queryResult = await executeQueryApi(
+            connectionId,
+            sqlToExecute,
+            database,
+            abortControllerRef.current?.signal,
+            txOpts
+          );
         }
 
         const executionTime = queryResult.execution_time_ms ?? 0;

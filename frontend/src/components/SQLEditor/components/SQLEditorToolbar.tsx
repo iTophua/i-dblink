@@ -53,6 +53,7 @@ export interface SQLEditorToolbarProps {
   txMode: 'auto' | 'manual';
   onTxModeChange: (mode: 'auto' | 'manual') => void;
   transactionActive: boolean;
+  handleBeginTransaction: () => void;
   handleCommitTransaction: () => void;
   handleRollbackTransaction: () => void;
 
@@ -88,6 +89,7 @@ export function SQLEditorToolbar({
   txMode,
   onTxModeChange,
   transactionActive,
+  handleBeginTransaction,
   handleCommitTransaction,
   handleRollbackTransaction,
   saveSQL,
@@ -204,6 +206,19 @@ export function SQLEditorToolbar({
             ]}
           />
         </Tooltip>
+        {txMode === 'manual' && !transactionActive && (
+          <Tooltip title={t('common.txBeginTip')}>
+            <Button
+              icon={<PlayCircleOutlined />}
+              onClick={handleBeginTransaction}
+              disabled={!connectionId}
+              type="text"
+              size="small"
+            >
+              {t('common.beginTransaction')}
+            </Button>
+          </Tooltip>
+        )}
         {txMode === 'manual' && transactionActive && (
           <>
             <Tooltip title={t('common.commitTransaction')}>

@@ -215,9 +215,11 @@ export const DataTable = memo(function DataTable({
       loadingRef.current = true; setLoading(true);
       const query = buildQuery(opts?.page ?? currentPage, pageSize, tableName, database, dbType, undefined, opts?.where ?? whereClause, opts?.orderBy ?? orderByClause, undefined, undefined);
       setCurrentSql(query);
+      // useTransaction:false —— 表数据浏览读的是已提交数据，绝不能被
+      // 别处（如查询 Tab 的手动事务）的活跃事务捕获后随其回滚
       const [colResult, dataResult] = await Promise.all([
         getColumns(connectionId, tableName, database),
-        executeQuery(connectionId, query, database || ''),
+        executeQuery(connectionId, query, database || '', undefined, { useTransaction: false }),
       ]);
       if (abortRef.current.signal.aborted || requestId !== reqIdRef.current) return;
       if (dataResult.error) {
@@ -258,7 +260,9 @@ export const DataTable = memo(function DataTable({
   const loadCount = useCallback(async () => {
     if (!connectionId || !tableName) return;
     const q = buildCountQuery(tableName, database, dbType, '');
-    const r = await executeQuery(connectionId, q, database || '');
+    const r = await executeQuery(connectionId, q, database || '', undefined, {
+      useTransaction: false,
+    });
     if (!r.error && r.rows.length > 0) setTotalCount(Number(r.rows[0][0]));
   }, [connectionId, tableName, database, dbType, executeQuery]);
 
@@ -579,7 +583,10 @@ export const DataTable = memo(function DataTable({
     try {
       for (const item of pendingSqls) {
         setCurrentSql(item.sql);
-        const res = await executeQuery(connectionId, item.sql, database || '');
+        // useTransaction:false —— 表数据编辑提交走自动提交，不加入任何活跃事务
+        const res = await executeQuery(connectionId, item.sql, database || '', undefined, {
+          useTransaction: false,
+        });
         if (res.error) {
           errMsg = `${item.sql}\n→ ${res.error}`;
           break;

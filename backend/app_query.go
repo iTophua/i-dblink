@@ -8,16 +8,18 @@ import (
 
 // ==================== 查询与 DDL ====================
 
-// ExecuteQuery 执行 SQL 查询
-func (a *App) ExecuteQuery(connectionID string, sql string, database *string) (models.QueryResult, error) {
+// ExecuteQuery 执行 SQL 查询。useTransaction 显式传 false 时绕过活跃事务
+// 走自动提交（nil/true 保持默认：该连接有活跃事务则进事务）。
+func (a *App) ExecuteQuery(connectionID string, sql string, database *string, useTransaction *bool) (models.QueryResult, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return models.QueryResult{}, err
 	}
 
 	req := models.QueryRequest{
-		ConnectionID: connectionID,
-		SQL:          sql,
-		Database:     "",
+		ConnectionID:   connectionID,
+		SQL:            sql,
+		Database:       "",
+		UseTransaction: useTransaction,
 	}
 	if database != nil {
 		req.Database = *database

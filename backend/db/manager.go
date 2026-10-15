@@ -444,8 +444,10 @@ func (m *Manager) BeginTransaction(connectionID string) error {
 	return nil
 }
 
-// CommitTransaction 提交事务
-func (m *Manager) CommitTransaction(connectionID string) error {
+// CommitTransaction 提交事务。返回值表示是否确有活跃事务被提交：
+// false = 没有事务在等待（可能已被看门狗超时回滚），前端据此提示
+// 真实结果，避免"实际已回滚却提示已提交"。
+func (m *Manager) CommitTransaction(connectionID string) (bool, error) {
 	m.mu.Lock()
 	txInfo, exists := m.txs[connectionID]
 	delete(m.txs, connectionID)
@@ -455,7 +457,7 @@ func (m *Manager) CommitTransaction(connectionID string) error {
 		// 幂等：没有活跃事务 = 已处于自动提交模式，直接成功。
 		// 事务可能已被 5 分钟看门狗超时回滚，此前这里报错会导致前端
 		// 事务状态永久卡死、无法退出事务模式
-		return nil
+		return false, nil
 	}
 
 	// 通知看门狗停止
@@ -464,13 +466,13 @@ func (m *Manager) CommitTransaction(connectionID string) error {
 	err := txInfo.tx.Commit()
 	_ = txInfo.conn.Close()
 	if err != nil {
-		return fmt.Errorf("commit failed: %w", err)
+		return true, fmt.Errorf("commit failed: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
-// RollbackTransaction 回滚事务
-func (m *Manager) RollbackTransaction(connectionID string) error {
+// RollbackTransaction 回滚事务。返回值语义同 CommitTransaction。
+func (m *Manager) RollbackTransaction(connectionID string) (bool, error) {
 	m.mu.Lock()
 	txInfo, exists := m.txs[connectionID]
 	delete(m.txs, connectionID)
@@ -478,7 +480,7 @@ func (m *Manager) RollbackTransaction(connectionID string) error {
 
 	if !exists {
 		// 幂等：同 CommitTransaction——没有活跃事务即已是自动提交模式
-		return nil
+		return false, nil
 	}
 
 	// 通知看门狗停止
@@ -487,9 +489,9 @@ func (m *Manager) RollbackTransaction(connectionID string) error {
 	err := txInfo.tx.Rollback()
 	_ = txInfo.conn.Close()
 	if err != nil {
-		return fmt.Errorf("rollback failed: %w", err)
+		return true, fmt.Errorf("rollback failed: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 // HasTransaction 检查是否有活跃事务
@@ -509,6 +511,24 @@ func (m *Manager) GetExecutor(connectionID string, database string) (Executor, e
 	}
 	m.mu.RUnlock()
 
+	if database != "" {
+		return m.GetWithDatabase(connectionID, database)
+	}
+	return m.Get(connectionID)
+}
+
+// GetExecutorNoTx 获取绕过活跃事务的执行器（自动提交路径）。
+// 事务按连接全局唯一，GetExecutor 会把该连接上所有语句路由进活跃事务——
+// 自动提交模式的查询和表数据编辑必须显式绕过，否则会被别处（如另一查询
+// Tab 的手动事务）开启的事务捕获，随其回滚而静默丢失。
+func (m *Manager) GetExecutorNoTx(connectionID string, database string) (Executor, error) {
+	if m.HasTransaction(connectionID) {
+		// SQLite 连接池是单连接（写入串行化），事务独占该连接时其他语句
+		// 只会在池里排队直到 60s 超时；直接报明确错误胜过挂起
+		if pool, err := m.GetPool(connectionID); err == nil && isSQLite(pool.DbType) {
+			return nil, fmt.Errorf("connection has an active transaction holding the only SQLite connection; commit or roll back it first")
+		}
+	}
 	if database != "" {
 		return m.GetWithDatabase(connectionID, database)
 	}

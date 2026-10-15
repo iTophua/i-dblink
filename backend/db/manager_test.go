@@ -327,7 +327,8 @@ func TestTransactionLifecycle(t *testing.T) {
 			"INSERT INTO tx_reg (v) VALUES ('committed')")
 		require.NoError(t, err)
 
-		require.NoError(t, manager.CommitTransaction(connID))
+		_, err = manager.CommitTransaction(connID)
+		require.NoError(t, err)
 		assert.Equal(t, 1, countRows(t, manager, connID, "tx_reg"))
 		assert.False(t, manager.HasTransaction(connID))
 	})
@@ -341,8 +342,73 @@ func TestTransactionLifecycle(t *testing.T) {
 			"INSERT INTO tx_reg (v) VALUES ('rolled-back')")
 		require.NoError(t, err)
 
-		require.NoError(t, manager.RollbackTransaction(connID))
+		_, err = manager.RollbackTransaction(connID)
+		require.NoError(t, err)
 		assert.Equal(t, 1, countRows(t, manager, connID, "tx_reg"), "回滚后插入不应落库")
 		assert.False(t, manager.HasTransaction(connID))
 	})
+}
+
+// TestCommitRollbackReportActive 验证 Commit/Rollback 返回"是否确有事务被处理"：
+// false 表示没有等待中的事务（可能已被看门狗超时回滚），前端据此提示真实结果。
+func TestCommitRollbackReportActive(t *testing.T) {
+	manager := NewManager()
+	connID := "tx-report-active"
+	require.NoError(t, manager.Connect(connID, ConnectArgs{
+		DbType: "sqlite", Database: filepath.Join(t.TempDir(), "tx_report.db"),
+	}))
+	defer manager.Disconnect(connID)
+
+	active, err := manager.CommitTransaction(connID)
+	require.NoError(t, err)
+	assert.False(t, active, "commit with no tx should report active=false")
+
+	active, err = manager.RollbackTransaction(connID)
+	require.NoError(t, err)
+	assert.False(t, active)
+
+	require.NoError(t, manager.BeginTransaction(connID))
+	active, err = manager.CommitTransaction(connID)
+	require.NoError(t, err)
+	assert.True(t, active, "commit of a real tx should report active=true")
+
+	require.NoError(t, manager.BeginTransaction(connID))
+	active, err = manager.RollbackTransaction(connID)
+	require.NoError(t, err)
+	assert.True(t, active)
+}
+
+// TestGetExecutorNoTx 自动提交路径必须绕过活跃事务：
+// SQLite 池是单连接且被事务独占，应立即报明确错误而不是在池里挂到超时。
+func TestGetExecutorNoTx(t *testing.T) {
+	manager := NewManager()
+	connID := "tx-no-tx"
+	require.NoError(t, manager.Connect(connID, ConnectArgs{
+		DbType: "sqlite", Database: filepath.Join(t.TempDir(), "tx_notx.db"),
+	}))
+	defer manager.Disconnect(connID)
+
+	// 无事务：NoTx 执行器即池执行器，语句自动提交
+	exec, err := manager.GetExecutorNoTx(connID, "")
+	require.NoError(t, err)
+	_, err = exec.ExecContext(context.Background(),
+		"CREATE TABLE notx_reg (id INTEGER PRIMARY KEY, v TEXT)")
+	require.NoError(t, err)
+
+	// 有活跃事务（SQLite 单连接被独占）：NoTx 必须立即报错而非挂起
+	require.NoError(t, manager.BeginTransaction(connID))
+	_, err = manager.GetExecutorNoTx(connID, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "active transaction")
+
+	_, err = manager.CommitTransaction(connID)
+	require.NoError(t, err)
+
+	// 事务结束后恢复可用
+	exec, err = manager.GetExecutorNoTx(connID, "")
+	require.NoError(t, err)
+	_, err = exec.ExecContext(context.Background(),
+		"INSERT INTO notx_reg (v) VALUES ('auto-committed')")
+	require.NoError(t, err)
+	assert.Equal(t, 1, countRows(t, manager, connID, "notx_reg"))
 }
