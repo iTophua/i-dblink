@@ -6,6 +6,8 @@ BUILD_DIR="build/bin"
 DMG_NAME="${APP_NAME}.dmg"
 VOLNAME="${APP_NAME}"
 WAILS="${WAILS:-$HOME/go/bin/wails}"
+# 本机 Go 1.27 的导出数据 wails v2.12 内置 x/tools 解析不了，必须固定工具链
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.25.7}"
 
 # --- 前置检查 ---
 if ! command -v create-dmg &>/dev/null; then
