@@ -481,6 +481,21 @@ export const DataTable = memo(function DataTable({
     const tableRef = dialect.buildTableRef(tableName, database);
     const visibleCols = queryColumns;
 
+    // BIGINT 等大整数以字符串形式到达（后端 convertValue 对超出 JS 安全整数
+    // 范围的整数按字符串传，否则 JSON 数字被前端取整、雪花 ID 主键的 WHERE
+    // 静默失配）。整数列的 WHERE 必须写裸数字：字符串字面量与数值列比较在
+    // 部分数据库走浮点转换，19 位雪花 ID 会再次取整失配。
+    const numericPkLiteral = (col: { data_type?: string }, value: unknown): string => {
+      if (
+        typeof value === 'string' &&
+        /^-?\d+$/.test(value) &&
+        /int|decimal|numeric|number|serial|identity/i.test(col.data_type || '')
+      ) {
+        return value;
+      }
+      return dialect.escapeValue(value);
+    };
+
     for (const row of newRows) {
       const cols = visibleCols.filter((c) => row[c] !== null && row[c] !== undefined);
       if (cols.length === 0) continue;
@@ -502,7 +517,7 @@ export const DataTable = memo(function DataTable({
       // WHERE 必须用修改前的主键值：主键列本身被改时，用当前（新）值会一行都匹配不到，
       // UPDATE 静默变成 0 行生效
       const origPk = row.__original_data__?.[pkCol.column_name] ?? row[pkCol.column_name];
-      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(origPk)}`;
+      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${numericPkLiteral(pkCol, origPk)}`;
       items.push({ id: `upd-${row.__row_id__}`, sql: dialect.buildUpdate(tableRef, setters, where) + ';', type: 'update', source: row.__row_id__ || '' });
     }
 
@@ -510,7 +525,7 @@ export const DataTable = memo(function DataTable({
       if (!pkCol) continue;
       // 同 UPDATE：行上可能带着未提交的主键修改，删除必须按原始主键定位
       const origPk = row.__original_data__?.[pkCol.column_name] ?? row[pkCol.column_name];
-      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(origPk)}`;
+      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${numericPkLiteral(pkCol, origPk)}`;
       items.push({ id: `del-${row.__row_id__}`, sql: dialect.buildDelete(tableRef, where) + ';', type: 'delete', source: row.__row_id__ || '' });
     }
 

@@ -183,3 +183,29 @@ func TestConvertValue(t *testing.T) {
 		})
 	}
 }
+
+// TestConvertValueBigintAsString 回归：超出 JS Number 安全整数范围（±2^53-1）的
+// int64 必须以十进制字符串返回。雪花 ID 等 BIGINT 主键此前作为 JSON 数字传给
+// 前端被双精度取整（2110301005498429441 → 2110301005498429400），表数据编辑
+// 生成的 WHERE 用错值静默匹配 0 行。
+func TestConvertValueBigintAsString(t *testing.T) {
+	safe := int64(9007199254740991) // 2^53-1
+	big := int64(2110301005498429441)
+	bigNeg := int64(-2110301005498429441)
+
+	if got := convertValue(safe); got != int64(9007199254740991) {
+		t.Errorf("safe int should stay numeric, got %v (%T)", got, got)
+	}
+	if got := convertValue(safe + 1); got != "9007199254740992" {
+		t.Errorf("just above safe range should be string, got %v", got)
+	}
+	if got := convertValue(big); got != "2110301005498429441" {
+		t.Errorf("snowflake id should be exact string, got %v", got)
+	}
+	if got := convertValue(bigNeg); got != "-2110301005498429441" {
+		t.Errorf("negative snowflake id should be exact string, got %v", got)
+	}
+	if got := convertValue(int(42)); got != int64(42) {
+		t.Errorf("small int should stay numeric, got %v (%T)", got, got)
+	}
+}

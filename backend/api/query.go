@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -282,16 +283,28 @@ func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.Q
 	return result, nil
 }
 
-// convertValue 将数据库原始值转换为 JSON 友好的类型
+// jsSafeIntMax JS Number（双精度）能精确表示的最大整数（2^53-1）。
+// 超过它的整数经 JSON 传给前端/客户端会被取整：雪花 ID 等 BIGINT 主键
+// 末几位变错，表数据编辑生成的 WHERE 匹配不到行、静默 0 行生效。
+const jsSafeIntMax = int64(1)<<53 - 1
+
+// convertValue 将数据库原始值转换为 JSON 友好的类型。
+// 超出 JS 安全整数范围的整数以十进制字符串传递，保证数字无损。
 func convertValue(v interface{}) interface{} {
 	switch val := v.(type) {
 	case nil:
 		return nil
 	case int64:
+		if val > jsSafeIntMax || val < -jsSafeIntMax {
+			return strconv.FormatInt(val, 10)
+		}
 		return val
 	case int32:
 		return int64(val)
 	case int:
+		if int64(val) > jsSafeIntMax || int64(val) < -jsSafeIntMax {
+			return strconv.FormatInt(int64(val), 10)
+		}
 		return int64(val)
 	case float64:
 		return val
