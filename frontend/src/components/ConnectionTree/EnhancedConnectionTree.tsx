@@ -419,9 +419,13 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
                 </div>
               </>
             )}
+            {/* padding 必须挂在这个被测量的容器上：antd v6 会把 Tree 的 style 传给内部
+                .ant-tree-list（虚拟列表外层），padding 挂那里会叠加在 maxHeight 之上，
+                让整棵树比容器高出 8px，外层 overflow:auto 出现常驻滚动条（双滚动条）。
+                挂在这里时 ResizeObserver 的 contentRect 已扣除 padding，高度天然对齐。 */}
             <div
               ref={attachTreeContainer}
-              style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+              style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 4px 8px' }}
             >
               <Tree
                 ref={treeRef}
@@ -429,7 +433,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
                 onExpand={(keys, info) => treeHandlers.handleExpand(keys, info)}
                 onSelect={treeHandlers.handleSelect} treeData={treeData}
                 draggable={isDraggable} onDrop={handleDrop}
-                style={{ background: 'transparent', padding: '0 4px 8px', fontSize: 14, userSelect: 'none', height: '100%' }}
+                style={{ background: 'transparent', fontSize: 14, userSelect: 'none' }}
                 className="connection-tree" blockNode virtual
                 height={treeHeight > 0 ? treeHeight : undefined}
               />
