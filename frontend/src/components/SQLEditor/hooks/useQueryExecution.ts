@@ -171,98 +171,85 @@ export function useQueryExecution({
         const maxRows = useSettingsStore.getState().settings.maxResultRows;
         let hasTruncated = false;
 
-        // 使用批处理优化多语句执行
-        const batchSize = 5;
-        for (let i = 0; i < statements.length; i += batchSize) {
-          const batch = statements.slice(i, i + batchSize);
-          const batchPromises = batch.map(async (stmt, index) => {
-            if (abortControllerRef.current?.signal.aborted) return null;
-            
-            try {
-              const useTx = getUseTransactionRef.current?.();
-              const queryResult = await executeQueryApi(
-                connectionId,
-                stmt,
-                database,
-                abortControllerRef.current?.signal,
-                useTx === undefined ? undefined : { useTransaction: useTx }
-              );
-              const executionTime = queryResult.execution_time_ms ?? 0;
+        // 顺序执行：脚本语句间可能有依赖（临时过程 create→call→drop、先建表后插入等），
+        // 并发批次会打乱依赖顺序；逐条 await 保证与 mysql 客户端一致的执行语义
+        for (let i = 0; i < statements.length; i++) {
+          if (abortControllerRef.current?.signal.aborted) break;
 
-              // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
-              const rows = queryResult.rows ?? [];
+          const stmt = statements[i];
+          try {
+            const useTx = getUseTransactionRef.current?.();
+            const queryResult = await executeQueryApi(
+              connectionId,
+              stmt,
+              database,
+              abortControllerRef.current?.signal,
+              useTx === undefined ? undefined : { useTransaction: useTx }
+            );
+            const executionTime = queryResult.execution_time_ms ?? 0;
 
-              const truncated = rows.length > maxRows;
-              if (truncated) {
-                hasTruncated = true;
-                queryResult.rows = rows.slice(0, maxRows);
-              } else {
-                queryResult.rows = rows;
-              }
+            // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
+            const rows = queryResult.rows ?? [];
 
-              if (queryResult.error) {
-                msgs.push(t('common.statementFailed', { index: i + index + 1, error: queryResult.error }));
-                totalErrors++;
-                highlightErrorRef.current(queryResult.error);
-                window.__sqlHistoryApi?.addHistory({
-                  sql: stmt,
-                  success: false,
-                  duration: executionTime,
-                });
-              } else {
-                const rowCount = queryResult.rows.length;
-                const affectedRows = queryResult.rows_affected || 0;
-                if (rowCount > 0) {
-                  let msg = t('common.statementSuccess', {
-                    index: i + index + 1,
-                    count: rowCount,
-                    time: executionTime,
-                  });
-                  if (truncated) msg += t('common.truncatedTo', { count: maxRows });
-                  msgs.push(msg);
-                } else if (affectedRows > 0) {
-                  msgs.push(
-                    t('common.statementAffected', {
-                      index: i + index + 1,
-                      count: affectedRows,
-                      time: executionTime,
-                    })
-                  );
-                } else {
-                  msgs.push(t('common.statementExecuted', { index: i + index + 1, time: executionTime }));
-                }
-                totalSuccess++;
-                window.__sqlHistoryApi?.addHistory({
-                  sql: stmt,
-                  success: true,
-                  duration: executionTime,
-                  rowCount: rowCount > 0 ? rowCount : affectedRows,
-                });
-              }
-              return { ...queryResult, executionTime };
-            } catch (error: unknown) {
-              // 用户主动停止查询时静默跳过（不计为错误）
-              if (error instanceof DOMException && error.name === 'AbortError') {
-                return null;
-              }
-              msgs.push(t('common.statementFailed', { index: i + index + 1, error: getErrorMessage(error) }));
+            const truncated = rows.length > maxRows;
+            if (truncated) {
+              hasTruncated = true;
+              queryResult.rows = rows.slice(0, maxRows);
+            } else {
+              queryResult.rows = rows;
+            }
+
+            if (queryResult.error) {
+              msgs.push(t('common.statementFailed', { index: i + 1, error: queryResult.error }));
               totalErrors++;
+              highlightErrorRef.current(queryResult.error);
               window.__sqlHistoryApi?.addHistory({
                 sql: stmt,
                 success: false,
+                duration: executionTime,
               });
-              return null;
+            } else {
+              const rowCount = queryResult.rows.length;
+              const affectedRows = queryResult.rows_affected || 0;
+              if (rowCount > 0) {
+                let msg = t('common.statementSuccess', {
+                  index: i + 1,
+                  count: rowCount,
+                  time: executionTime,
+                });
+                if (truncated) msg += t('common.truncatedTo', { count: maxRows });
+                msgs.push(msg);
+              } else if (affectedRows > 0) {
+                msgs.push(
+                  t('common.statementAffected', {
+                    index: i + 1,
+                    count: affectedRows,
+                    time: executionTime,
+                  })
+                );
+              } else {
+                msgs.push(t('common.statementExecuted', { index: i + 1, time: executionTime }));
+              }
+              totalSuccess++;
+              window.__sqlHistoryApi?.addHistory({
+                sql: stmt,
+                success: true,
+                duration: executionTime,
+                rowCount: rowCount > 0 ? rowCount : affectedRows,
+              });
             }
-          });
-
-          const batchResults = await Promise.all(batchPromises);
-          batchResults.forEach(result => {
-            if (result) multiResults.push(result);
-          });
-
-          // 批次间让UI有机会更新
-          if (i + batchSize < statements.length) {
-            await new Promise(resolve => setTimeout(resolve, 0));
+            multiResults.push({ ...queryResult, executionTime });
+          } catch (error: unknown) {
+            // 用户主动停止查询时静默跳过（不计为错误）
+            if (error instanceof DOMException && error.name === 'AbortError') {
+              continue;
+            }
+            msgs.push(t('common.statementFailed', { index: i + 1, error: getErrorMessage(error) }));
+            totalErrors++;
+            window.__sqlHistoryApi?.addHistory({
+              sql: stmt,
+              success: false,
+            });
           }
         }
 

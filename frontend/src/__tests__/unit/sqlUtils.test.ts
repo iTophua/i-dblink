@@ -156,3 +156,83 @@ WHERE id = 1;`;
     expect(result[0]).toContain('a;b');
   });
 });
+
+describe('splitSqlStatements - DELIMITER 指令', () => {
+  it('delimiter // 下存储过程体作为单条语句，体内分号不切分', () => {
+    const script = [
+      'drop procedure if exists upg;',
+      'delimiter //',
+      'create procedure upg()',
+      'BEGIN',
+      '    if NOT exists(select 1) then',
+      "        alter table t add column c int comment '含;分号';",
+      '    end if;',
+      'end;//',
+      'delimiter ;',
+      'call upg();',
+      'drop procedure if exists upg;',
+    ].join('\n');
+    const result = splitSqlStatements(script);
+    expect(result).toHaveLength(4);
+    expect(result[0]).toBe('drop procedure if exists upg');
+    expect(result[1].startsWith('create procedure upg()')).toBe(true);
+    expect(result[1].endsWith('end;')); // 结束符前的分号按 mysql CLI 语义保留
+    expect(result[1]).toContain('end if;');
+    expect(result[2]).toBe('call upg()');
+    expect(result[3]).toBe('drop procedure if exists upg');
+  });
+
+  it('结束符可紧贴语句结尾（END$$，无空白分隔）', () => {
+    const script = 'DELIMITER $$\ncreate trigger trg before insert on t for each row begin set new.a = 1; end$$\nDELIMITER ;\nselect 1;';
+    const result = splitSqlStatements(script);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe('create trigger trg before insert on t for each row begin set new.a = 1; end');
+    expect(result[1]).toBe('select 1');
+  });
+
+  it('指令大小写不敏感，$$ 与 // 均支持', () => {
+    const script = 'DELIMITER $$\ncreate function f() returns int begin return 1; end$$\ndelimiter ;\nselect f();';
+    const result = splitSqlStatements(script);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toContain('return 1;');
+    expect(result[1]).toBe('select f()');
+  });
+
+  it('指令行不产生语句，可连续出现', () => {
+    const script = 'delimiter //\ndelimiter $$\nselect 1$$\ndelimiter ;\nselect 2;';
+    const result = splitSqlStatements(script);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe('select 1');
+    expect(result[1]).toBe('select 2');
+  });
+
+  it('语句中间出现 delimiter 单词不触发指令（仅语句边界识别）', () => {
+    const sql = "select 'delimiter //' as v from t where col = 'x';\ninsert into t values (1);";
+    const result = splitSqlStatements(sql);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toContain("'delimiter //'");
+  });
+
+  it('语句边界后的注释与空白之后仍能识别指令', () => {
+    const script = 'select 1;\n-- 切换结束符\ndelimiter //\ncreate procedure p() begin select 2; end//\ndelimiter ;';
+    const result = splitSqlStatements(script);
+    expect(result).toHaveLength(2);
+    // 边界注释随下一条语句携带（与默认模式下注释保留在语句内的行为一致，执行无害）
+    expect(result[1]).toContain('create procedure p()');
+    expect(result[1]).toContain('-- 切换结束符');
+  });
+
+  it('自定义结束符不匹配字符串与注释内的同名文本', () => {
+    const script = 'delimiter //\ncreate procedure p() begin -- 注释里有 // 网址\n select "a//b" as v; end//\ndelimiter ;';
+    const result = splitSqlStatements(script);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain('"a//b"');
+  });
+
+  it('最后一个未以结束符收尾的语句仍被保留', () => {
+    const script = 'delimiter //\ncreate procedure p() begin select 1; end//\nselect 2';
+    const result = splitSqlStatements(script);
+    expect(result).toHaveLength(2);
+    expect(result[1]).toBe('select 2');
+  });
+});

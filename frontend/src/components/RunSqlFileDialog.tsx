@@ -3,6 +3,7 @@ import { Modal, Button, Progress, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { getErrorMessage } from '../utils/getErrorMessage';
+import { splitSqlStatements } from '../utils/sqlUtils';
 
 interface RunSqlFileDialogProps {
   open: boolean;
@@ -10,79 +11,6 @@ interface RunSqlFileDialogProps {
   database?: string;
   onCancel: () => void;
   onSuccess: () => void;
-}
-
-function splitSqlStatements(content: string): string[] {
-  const statements: string[] = [];
-  let current = '';
-  let inString = false;
-  let stringChar = '';
-  let inComment = false;
-  let commentType = ''; // 'line' or 'block'
-
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i];
-    const nextChar = content[i + 1];
-
-    // 处理注释
-    if (!inString && !inComment) {
-      if (char === '-' && nextChar === '-') {
-        inComment = true;
-        commentType = 'line';
-        i++;
-        continue;
-      }
-      if (char === '/' && nextChar === '*') {
-        inComment = true;
-        commentType = 'block';
-        i++;
-        continue;
-      }
-    } else if (inComment) {
-      if (commentType === 'line' && char === '\n') {
-        inComment = false;
-      } else if (commentType === 'block' && char === '*' && nextChar === '/') {
-        inComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    // 处理字符串
-    if (!inComment) {
-      if (!inString && (char === "'" || char === '"' || char === '`')) {
-        inString = true;
-        stringChar = char;
-        current += char;
-        continue;
-      } else if (inString && char === stringChar) {
-        // 检查是否是转义
-        if (content[i - 1] !== '\\') {
-          inString = false;
-          stringChar = '';
-        }
-        current += char;
-        continue;
-      }
-    }
-
-    current += char;
-
-    if (!inString && char === ';') {
-      const trimmed = current.trim();
-      if (trimmed) {
-        statements.push(trimmed);
-      }
-      current = '';
-    }
-  }
-
-  const trimmed = current.trim();
-  if (trimmed) {
-    statements.push(trimmed);
-  }
-
-  return statements;
 }
 
 export function RunSqlFileDialog({
