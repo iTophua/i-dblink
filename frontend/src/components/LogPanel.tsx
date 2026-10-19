@@ -132,7 +132,8 @@ export function LogPanel({ onCollapse }: LogPanelProps) {
           padding: '2px 8px',
           overflow: 'auto',
           fontSize: 11,
-          fontFamily: tc.isDark ? "'JetBrains Mono', 'Fira Code', monospace" : undefined,
+          fontFamily: 'var(--font-family-code, monospace)',
+          fontVariantNumeric: 'tabular-nums',
         }}
       >
         {filteredLogs.length === 0 ? (

@@ -462,8 +462,8 @@ export function ResultGrid({
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Toolbar */}
       <div style={{ padding: '4px 12px', borderBottom: '1px solid var(--border)', background: 'var(--background-toolbar)', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-        <span style={{ fontSize: 12 }}><strong>{queryResult.rows.length.toLocaleString()}</strong> {t('common.rows')}</span>
-        <span style={{ fontSize: 12 }}><strong>{queryResult.columns.length}</strong> {t('common.tableStructure.columns')}</span>
+        <span style={{ fontSize: 12.5 }}><strong>{queryResult.rows.length.toLocaleString()}</strong> {t('common.rows')}</span>
+        <span style={{ fontSize: 12.5 }}><strong>{queryResult.columns.length}</strong> {t('common.tableStructure.columns')}</span>
         {executionTime != null && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('common.executionTime')} {executionTime}ms</span>}
         {queryResult.totalTime != null && queryResult.totalTime > 0 && queryResult.totalTime !== executionTime && (
           <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{t('common.totalDuration')} {queryResult.totalTime}ms</span>
@@ -488,22 +488,22 @@ export function ResultGrid({
           { key: 'xml', label: t('common.exportedXml'), onClick: () => handleExport('xml') },
           { key: 'md', label: t('common.exportedMarkdown'), onClick: () => handleExport('md') },
         ]}}>
-          <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 11, height: 22 }}>{t('common.export')}</Button>
+          <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 12, height: 26 }}>{t('common.export')}</Button>
         </Dropdown>
         <Button
           size="small"
           icon={<BgColorsOutlined />}
           onClick={() => setFormatPanelVisible((v) => !v)}
-          style={{ fontSize: 11, height: 22 }}
+          style={{ fontSize: 12, height: 26 }}
           type={formatRules.length > 0 ? 'primary' : 'default'}
         >
           {t('common.dataGrid.conditionalFormatting')}
         </Button>
         {isEditable && hasChanges && (
           <Space size={4}>
-            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 11, height: 22 }}>{t('common.submit')}</Button>
-            <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 11, height: 22 }}>{t('common.undo')}</Button>
-            <Button size="small" icon={<CodeOutlined />} onClick={() => appModal.info({ title: t('common.operationSqlPreview'), width: 800, content: <pre style={{ maxHeight: 400, overflow: 'auto', background: 'var(--background-toolbar)', padding: 12, borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }}>{operationSql}</pre>, transitionName: '', maskTransitionName: '' })} style={{ fontSize: 11, height: 22 }}>{t('common.sqlQuery')}</Button>
+            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 12, height: 26 }}>{t('common.submit')}</Button>
+            <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 12, height: 26 }}>{t('common.undo')}</Button>
+            <Button size="small" icon={<CodeOutlined />} onClick={() => appModal.info({ title: t('common.operationSqlPreview'), width: 800, content: <pre style={{ maxHeight: 400, overflow: 'auto', background: 'var(--background-toolbar)', padding: 12, borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }}>{operationSql}</pre>, transitionName: '', maskTransitionName: '' })} style={{ fontSize: 12, height: 26 }}>{t('common.sqlQuery')}</Button>
           </Space>
         )}
         {isEditable && (
@@ -518,12 +518,12 @@ export function ResultGrid({
                 return next;
               });
             }}
-            style={{ fontSize: 11, height: 22 }}
+            style={{ fontSize: 12, height: 26 }}
           >
             {t('common.addNewRow')}
           </Button>
         )}
-        {isEditable && <Button size="small" danger icon={<DeleteOutlined />} onClick={handleDeleteSelected} disabled={selectedIndices.size === 0} style={{ fontSize: 11, height: 22 }}>{t('common.dataGrid.deleteRow')}</Button>}
+        {isEditable && <Button size="small" danger icon={<DeleteOutlined />} onClick={handleDeleteSelected} disabled={selectedIndices.size === 0} style={{ fontSize: 12, height: 26 }}>{t('common.dataGrid.deleteRow')}</Button>}
       </div>
 
       {/* Grid */}
@@ -608,8 +608,8 @@ export function ResultGrid({
             {operationSql}
           </span>
           <Space size={4} style={{ flexShrink: 0 }}>
-            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 11, height: 22 }}>{t('common.submit')}</Button>
-            <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 11, height: 22 }}>{t('common.undo')}</Button>
+            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 12, height: 26 }}>{t('common.submit')}</Button>
+            <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 12, height: 26 }}>{t('common.undo')}</Button>
           </Space>
         </div>
       )}

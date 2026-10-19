@@ -167,7 +167,7 @@ export function Welcome() {
                   description={
                     <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                       <div>{conn.db_type.toUpperCase()}</div>
-                      <div>
+                      <div style={{ fontFamily: 'var(--font-family-code)', fontSize: 11.5 }}>
                         {conn.host}:{conn.port}
                       </div>
                       <div>{conn.username}</div>

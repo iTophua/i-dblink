@@ -2,10 +2,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 import { Button, Tooltip } from 'antd';
 import { CopyOutlined, CheckCircleOutlined, CodeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface MarkdownRendererProps {
   content: string;
@@ -119,6 +121,7 @@ function CodeBlock({
   t: (k: string) => string;
 }) {
   const [copied, setCopied] = useState(false);
+  const tc = useThemeColors();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -130,14 +133,18 @@ function CodeBlock({
     <div style={{ position: 'relative', margin: '6px 0' }}>
       <SyntaxHighlighter
         language={language}
-        style={oneDark}
+        // 语法主题跟随明暗（浅色模式不再白气泡里嵌深色代码岛），
+        // 背景与边框覆盖为主题变量，与编辑器底色一致
+        style={tc.isDark ? oneDark : oneLight}
         customStyle={{
           margin: 0,
-          borderRadius: 6,
+          borderRadius: 8,
           fontSize: 12,
           padding: '10px 12px',
+          background: 'var(--background)',
+          border: '1px solid var(--border)',
         }}
-        codeTagProps={{ style: { fontFamily: 'var(--font-mono, monospace)' } }}
+        codeTagProps={{ style: { fontFamily: 'var(--font-family-code, monospace)' } }}
       >
         {code}
       </SyntaxHighlighter>
@@ -158,8 +165,8 @@ function CodeBlock({
             icon={copied ? <CheckCircleOutlined style={{ color: 'var(--color-success)' }} /> : <CopyOutlined />}
             onClick={handleCopy}
             style={{
-              color: 'rgba(255,255,255,0.7)',
-              background: 'rgba(0,0,0,0.3)',
+              color: 'var(--text-secondary)',
+              background: 'var(--background-hover)',
               minWidth: 24,
               height: 24,
             }}
@@ -173,8 +180,8 @@ function CodeBlock({
               icon={<CodeOutlined />}
               onClick={() => onApplySQL(code)}
               style={{
-                color: 'rgba(255,255,255,0.7)',
-                background: 'rgba(0,0,0,0.3)',
+                color: 'var(--text-secondary)',
+                background: 'var(--background-hover)',
                 minWidth: 24,
                 height: 24,
               }}

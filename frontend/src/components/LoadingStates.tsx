@@ -60,16 +60,16 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
           width: 80,
           height: 80,
           borderRadius: '50%',
-          background:
-            'linear-gradient(135deg, var(--color-info-alpha-15, rgba(59,130,246,0.08)) 0%, var(--background-card) 100%)',
+          // 纯淡主色环（去渐变）：安静的一圈染色，随主题变化
+          background: 'var(--color-primary-alpha-15)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 20,
-          border: `2px solid var(--color-info-alpha-15, rgba(59,130,246,0.12))`,
+          border: '1px solid var(--color-primary-alpha-30)',
         }}
       >
-        {icon || <DatabaseOutlined style={{ fontSize: 36, color: 'var(--color-info)' }} />}
+        {icon || <DatabaseOutlined style={{ fontSize: 34, color: 'var(--color-primary)' }} />}
       </div>
 
       <Title level={4} style={{ marginBottom: 8, textAlign: 'center' }}>
@@ -100,8 +100,8 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
             size="large"
             block
             style={{
-              height: 44,
-              fontSize: 15,
+              height: 38,
+              fontSize: 14,
               borderRadius: 8,
             }}
           >
@@ -117,8 +117,8 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
             block
             disabled={secondaryAction.disabled}
             style={{
-              height: 44,
-              fontSize: 15,
+              height: 38,
+              fontSize: 14,
               borderRadius: 8,
             }}
           >

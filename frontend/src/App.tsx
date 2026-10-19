@@ -292,7 +292,7 @@ function App() {
       Form: {
         labelColor: themeConfig.neutralColors.textPrimary,
         labelRequiredMarkColor: themeConfig.colors.error,
-        itemMarginBottom: 24,
+        itemMarginBottom: 16,
       },
       Dropdown: {
         colorBgElevated: themeConfig.neutralColors.backgroundCard,

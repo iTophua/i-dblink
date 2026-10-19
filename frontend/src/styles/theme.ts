@@ -844,10 +844,10 @@ const MODERN_GLASS_DARK: GlassEffect = {
 };
 
 const MODERN_FOCUS_LIGHT: FocusStyle = {
-  focusRingColor: 'rgba(8, 145, 132, 0.4)',
+  focusRingColor: 'rgba(7, 126, 111, 0.4)',
   focusRingWidth: 2,
   focusRingOffset: 2,
-  focusRingShadow: '0 0 0 2px rgba(8,145,132,0.12)',
+  focusRingShadow: '0 0 0 2px rgba(7,126,111,0.12)',
 };
 
 const MODERN_FOCUS_DARK: FocusStyle = {
@@ -877,11 +877,11 @@ const MODERN_SHADOWS = {
 // ---------- Modern 配色常量 ----------
 
 const MODERN_LIGHT: ThemeColorScheme = {
-  // 主色：温润青碧 — 加大渐变色差，让按钮和重点元素更有层次
-  primary: '#089184',
+  // 主色：温润青碧 — 加深一档保证浅色底上文本对比度 ≥4.5（AA）
+  primary: '#077E6F',
   primaryHover: '#0CA599',
-  primaryActive: '#067A6E',
-  primaryGradient: 'linear-gradient(135deg, #078075 0%, #0CA599 100%)',
+  primaryActive: '#056B5E',
+  primaryGradient: 'linear-gradient(135deg, #066E62 0%, #0CA599 100%)',
   // success 用 green 而非 emerald — 与 teal 主色拉开色相距离，避免「成功≈主色」
   success: '#16A34A',
   successHover: '#22C55E',
@@ -958,7 +958,7 @@ const MODERN_LIGHT_NEUTRAL: NeutralColors = {
   level4: '#FBFAF7',
   borderSubtle: '#EFEDE8',
   borderEmphasis: '#D6D4CE',
-  borderActive: '#089184',
+  borderActive: '#077E6F',
 };
 
 const MODERN_DARK_NEUTRAL: NeutralColors = {

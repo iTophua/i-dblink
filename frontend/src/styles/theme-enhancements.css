@@ -1064,6 +1064,34 @@
   }
 }
 
+/* ==================== 分页器统一 chip 语言 ==================== */
+.ant-pagination .ant-pagination-item {
+  border-radius: 6px;
+  min-width: 28px;
+  height: 26px;
+  line-height: 24px;
+}
+
+.ant-pagination .ant-pagination-item a {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.ant-pagination .ant-pagination-item-active {
+  border-color: var(--color-primary);
+}
+
+.ant-pagination .ant-pagination-item-active a {
+  color: var(--color-primary);
+}
+
+.ant-pagination .ant-pagination-prev,
+.ant-pagination .ant-pagination-next {
+  min-width: 28px;
+  height: 26px;
+  line-height: 26px;
+}
+
 /* ==================== 标签页 chip 化（demo 同款形态） ==================== */
 /* editable-card 类型：未选中透明、hover 浅底、选中浮起小卡片（边框+微阴影） */
 .ant-tabs.ant-tabs-card.ant-tabs-editable-card > .ant-tabs-nav .ant-tabs-tab {
