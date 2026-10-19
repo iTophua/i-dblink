@@ -93,7 +93,8 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
         right: 0,
         bottom: 0,
         zIndex: 1000,
-        background: 'rgba(0, 0, 0, 0.5)',
+        // 遮罩明暗各取适度（demo omnibox 同款），不再固定半黑
+        background: 'light-dark(rgba(28, 36, 54, 0.32), rgba(3, 6, 12, 0.55))',
         display: 'flex',
         justifyContent: 'center',
         paddingTop: 100,
@@ -104,9 +105,12 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
         style={{
           width: 560,
           maxHeight: 400,
-          background: 'var(--background-primary)',
+          // 原引用的 --background-primary 是未定义变量（面板底色失效），
+          // 改为卡片底 + 发丝边（demo omnibox 形态）
+          background: 'var(--background-card)',
+          border: '1px solid var(--border)',
           borderRadius: 12,
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+          boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.2))',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',

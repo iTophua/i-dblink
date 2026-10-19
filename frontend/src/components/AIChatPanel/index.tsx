@@ -381,18 +381,21 @@ function MessageBubble({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: isUser ? 'var(--color-primary)' : 'var(--background-secondary)',
+            background: isUser ? 'var(--color-primary)' : 'var(--background-hover)',
             color: isUser ? '#fff' : 'var(--text-secondary)',
             fontSize: 11,
           }}
         >
           {isUser ? <UserOutlined /> : <RobotOutlined />}
         </div>
-        {/* 内容 */}
+        {/* 内容：demo 气泡语言 — 用户=淡主色染+主色细边，AI=卡片底+发丝边 */}
         <div
           style={{
-            background: isUser ? 'var(--color-primary)' : 'var(--background-secondary)',
-            color: isUser ? '#fff' : 'var(--text-primary)',
+            background: isUser
+              ? 'var(--color-primary-alpha-15)'
+              : 'var(--background-card)',
+            border: `1px solid ${isUser ? 'var(--color-primary-alpha-30)' : 'var(--border)'}`,
+            color: 'var(--text-primary)',
             padding: '6px 10px',
             borderRadius: isUser ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
             fontSize: 13,

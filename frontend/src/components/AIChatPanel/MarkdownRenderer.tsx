@@ -40,7 +40,7 @@ export function MarkdownRenderer({ content, onApplySQL }: MarkdownRendererProps)
               <code
                 {...rest}
                 style={{
-                  background: 'var(--background-secondary)',
+                  background: 'var(--background-hover)',
                   padding: '1px 4px',
                   borderRadius: 3,
                   fontSize: 12,
@@ -90,7 +90,7 @@ export function MarkdownRenderer({ content, onApplySQL }: MarkdownRendererProps)
               border: '1px solid var(--border)',
               padding: '4px 8px',
               textAlign: 'left',
-              background: 'var(--background-secondary)',
+              background: 'var(--background-hover)',
             }}
           >
             {children}
