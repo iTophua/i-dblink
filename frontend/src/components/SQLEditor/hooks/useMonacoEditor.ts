@@ -470,7 +470,7 @@ export function useMonacoEditor({
           options: {
             glyphMarginClassName: 'sql-run-stmt-glyph',
             glyphMarginHoverMessage: { value: t('common.sqlEditor.runThisStatement') },
-            stickiness: 1,
+            stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
           },
         };
       });

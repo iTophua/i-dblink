@@ -583,6 +583,7 @@ export function ResultGrid({
           editable={isEditable}
           enableFindReplace
           headerHeight={44}
+          rowHeight={28}
           formatRules={formatRules}
         />
         <ConditionalFormattingPanel

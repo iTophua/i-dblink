@@ -136,8 +136,8 @@ function MainLayoutComponent() {
   useEffect(() => {
     if (!paletteOpen) return;
     let alive = true;
-    import('../api')
-      .then(({ api }) => api.getSnippets())
+    api
+      .getSnippets()
       .then((list) => {
         if (alive) setPaletteSnippets(Array.isArray(list) ? list.slice(0, 30) : []);
       })

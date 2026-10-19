@@ -125,7 +125,7 @@ export function SQLEditorToolbar({
       }}
       className="sql-editor-toolbar"
     >
-      <style>{`.sql-editor-toolbar .ant-btn { height: 22px; font-size: 12px; }`}</style>
+      <style>{`.sql-editor-toolbar .ant-btn { height: 26px; font-size: 12px; }`}</style>
       <Space size={6}>
         <Tooltip
           title={`${t('common.sqlEditor.execute')} (${formatShortcutForDisplay(getEffectiveShortcut('execute-query', useSettingsStore.getState().settings.shortcuts || {}))})`}
