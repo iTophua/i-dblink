@@ -2123,6 +2123,11 @@
     "searchMultiPlaceholder": "Search (space-separated keywords)",
     "filterConditionEnable": "Enable/disable this condition (kept for later reuse)",
     "txBeginTip": "Begin the transaction now (executing SQL also begins it automatically)",
-    "txAlreadyEnded": "Transaction already ended (possibly auto-rolled back on timeout); nothing was committed or rolled back"
+    "txAlreadyEnded": "Transaction already ended (possibly auto-rolled back on timeout); nothing was committed or rolled back",
+    "commands": "Commands",
+    "history": "History",
+    "tablesLabel": "Tables",
+    "viewsLabel": "Views",
+    "connections": "Connections"
   }
 }

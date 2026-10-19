@@ -10,6 +10,8 @@ export interface Command {
   description?: string;
   shortcut?: string;
   category?: string;
+  /** 可选图标：默认显示命令图标 */
+  icon?: React.ReactNode;
   action: () => void | Promise<void>;
 }
 
@@ -164,7 +166,9 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
                 >
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <MacCommandOutlined style={{ color: 'var(--text-tertiary)', fontSize: 12 }} />
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'inline-flex' }}>
+                        {command.icon || <MacCommandOutlined />}
+                      </span>
                       <span style={{ fontWeight: 500 }}>{command.label}</span>
                       {command.shortcut && (
                         <span

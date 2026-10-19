@@ -476,7 +476,9 @@ export const DataTable = memo(function DataTable({
   // ── Generate pending SQL from rowData state ──
   const pendingSqls = useMemo(() => {
     const items: PendingSqlItem[] = [];
-    const pkCol = columns.find((c) => c.column_key === 'PRI');
+    // 全部主键列：行定位 WHERE 必须全列 AND——只取第一列时复合主键
+    // 值组合重复的行会命中多行（UPDATE/DELETE 扩散，数据风险）
+    const pkCols = columns.filter((c) => c.column_key === 'PRI');
     const dialect = getDialect(dbType);
     const tableRef = dialect.buildTableRef(tableName, database);
     const visibleCols = queryColumns;
@@ -496,6 +498,17 @@ export const DataTable = memo(function DataTable({
       return dialect.escapeValue(value);
     };
 
+    // 行定位 WHERE：复合主键全列 AND；必须用修改前的主键值——主键列本身被改时，
+    // 用当前（新）值会一行都匹配不到，UPDATE/DELETE 静默变成 0 行生效
+    const rowWhere = (row: RowData): string | null => {
+      const conds: string[] = [];
+      for (const pk of pkCols) {
+        const origPk = row.__original_data__?.[pk.column_name] ?? row[pk.column_name];
+        conds.push(`${dialect.escapeIdentifier(pk.column_name)} = ${numericPkLiteral(pk, origPk)}`);
+      }
+      return conds.length ? conds.join(' AND ') : null;
+    };
+
     for (const row of newRows) {
       const cols = visibleCols.filter((c) => row[c] !== null && row[c] !== undefined);
       if (cols.length === 0) continue;
@@ -505,7 +518,7 @@ export const DataTable = memo(function DataTable({
     }
 
     for (const row of modifiedRows) {
-      if (!pkCol) continue;
+      if (pkCols.length === 0) continue;
       const setters: Record<string, unknown> = {};
       for (const c of visibleCols) {
         const orig = row.__original_data__?.[c];
@@ -514,18 +527,16 @@ export const DataTable = memo(function DataTable({
         if (!isSame) setters[c] = cur;
       }
       if (Object.keys(setters).length === 0) continue;
-      // WHERE 必须用修改前的主键值：主键列本身被改时，用当前（新）值会一行都匹配不到，
-      // UPDATE 静默变成 0 行生效
-      const origPk = row.__original_data__?.[pkCol.column_name] ?? row[pkCol.column_name];
-      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${numericPkLiteral(pkCol, origPk)}`;
+      const where = rowWhere(row);
+      if (!where) continue;
       items.push({ id: `upd-${row.__row_id__}`, sql: dialect.buildUpdate(tableRef, setters, where) + ';', type: 'update', source: row.__row_id__ || '' });
     }
 
     for (const row of deletedRows) {
-      if (!pkCol) continue;
+      if (pkCols.length === 0) continue;
       // 同 UPDATE：行上可能带着未提交的主键修改，删除必须按原始主键定位
-      const origPk = row.__original_data__?.[pkCol.column_name] ?? row[pkCol.column_name];
-      const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${numericPkLiteral(pkCol, origPk)}`;
+      const where = rowWhere(row);
+      if (!where) continue;
       items.push({ id: `del-${row.__row_id__}`, sql: dialect.buildDelete(tableRef, where) + ';', type: 'delete', source: row.__row_id__ || '' });
     }
 

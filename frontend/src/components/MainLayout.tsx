@@ -1,11 +1,24 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WindowSetTitle } from '../../wailsjs/runtime/runtime';
 import { Layout, Form, Input, Modal, Tooltip } from 'antd';
-import { ReloadOutlined, AppstoreOutlined } from '@ant-design/icons';
+import {
+  ReloadOutlined,
+  AppstoreOutlined,
+  ThunderboltOutlined,
+  PlusOutlined,
+  SettingOutlined,
+  SearchOutlined,
+  DatabaseOutlined,
+  TableOutlined,
+  EyeOutlined,
+  BookOutlined,
+  HistoryOutlined,
+} from '@ant-design/icons';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
 import { Favorites } from './Favorites';
+import { CommandPalette, type Command } from './CommandPalette';
 import { useInitApp } from '../hooks/useApi';
 import { Toolbar } from './Toolbar';
 
@@ -86,18 +99,181 @@ function MainLayoutComponent() {
   }, [connMgr.selectedConnectionId, connMgr.connections, tabMgr.activeTabInfo]);
 
   // AI 面板"应用到编辑器"：注入 SQL 到当前 SQL tab，无 SQL tab 则自动新建
-  const handleInjectSQL = (sql: string, mode: 'append' | 'replace') => {
-    const info = tabPanelRef.current?.getActiveTabInfo();
-    if (info?.type === 'sql') {
-      window.dispatchEvent(new CustomEvent('ai-sql-inject', { detail: { mode, sql } }));
-    } else {
-      tabPanelRef.current?.openSqlTab({
-        connectionId: info?.connectionId || connMgr.selectedConnectionId || undefined,
-        database: info?.database || connMgr.selectedDatabase,
-        defaultQuery: sql,
+  const handleInjectSQL = useCallback(
+    (sql: string, mode: 'append' | 'replace') => {
+      const info = tabPanelRef.current?.getActiveTabInfo();
+      if (info?.type === 'sql') {
+        window.dispatchEvent(new CustomEvent('ai-sql-inject', { detail: { mode, sql } }));
+      } else {
+        tabPanelRef.current?.openSqlTab({
+          connectionId: info?.connectionId || connMgr.selectedConnectionId || undefined,
+          database: info?.database || connMgr.selectedDatabase,
+          defaultQuery: sql,
+        });
+      }
+    },
+    [connMgr.selectedConnectionId, connMgr.selectedDatabase]
+  );
+
+  // ── ⌘K 全域命令面板（动作/连接/表/片段/历史 五类索引）──
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteSnippets, setPaletteSnippets] = useState<
+    Array<{ id: string; name: string; sql_text: string }>
+  >([]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // 打开时拉一次片段（后端 localdb，量小）
+  useEffect(() => {
+    if (!paletteOpen) return;
+    let alive = true;
+    import('../api')
+      .then(({ api }) => api.getSnippets())
+      .then((list) => {
+        if (alive) setPaletteSnippets(Array.isArray(list) ? list.slice(0, 30) : []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [paletteOpen]);
+
+  // 汇总各连接的执行历史（localStorage，取最近 10 条）
+  const paletteHistory = useMemo(() => {
+    const items: Array<{ sql: string; timestamp: number }> = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('sql-history')) continue;
+      try {
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(arr)) items.push(...arr.slice(0, 20));
+      } catch {
+        // 忽略损坏的存储项
+      }
+    }
+    items.sort((a, b) => b.timestamp - a.timestamp);
+    return items.slice(0, 10);
+    // paletteOpen 变化时重扫即可，避免每次渲染遍历 localStorage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paletteOpen]);
+
+  // palette 的片段/历史动作经事件转发执行（避免在渲染期构建的 commands 里
+  // 捕获含 ref 的函数，react-compiler 会拒绝）
+  useEffect(() => {
+    const onInject = (e: Event) => {
+      const sql = (e as CustomEvent<{ sql: string }>).detail?.sql || '';
+      handleInjectSQL(sql, 'replace');
+    };
+    window.addEventListener('palette-inject-sql', onInject);
+    return () => window.removeEventListener('palette-inject-sql', onInject);
+  }, [handleInjectSQL]);
+
+  const paletteCommands = useMemo((): Command[] => {
+    const dispatch = (action: string) =>
+      window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
+    const cmds: Command[] = [
+      {
+        id: 'act-new-sql',
+        label: t('common.newQueryBtn'),
+        category: t('common.commands'),
+        icon: <ThunderboltOutlined />,
+        action: () => dispatch('new-query'),
+      },
+      {
+        id: 'act-new-conn',
+        label: t('common.newConnectionBtn'),
+        category: t('common.commands'),
+        icon: <PlusOutlined />,
+        action: () => dispatch('new-connection'),
+      },
+      {
+        id: 'act-search',
+        label: t('common.mainLayout.globalSearch'),
+        category: t('common.commands'),
+        icon: <SearchOutlined />,
+        action: () => layout.setGlobalSearchOpen(true),
+      },
+      {
+        id: 'act-settings',
+        label: t('common.options'),
+        category: t('common.commands'),
+        icon: <SettingOutlined />,
+        action: () => dispatch('options'),
+      },
+    ];
+
+    for (const c of connMgr.connections) {
+      cmds.push({
+        id: `conn-${c.id}`,
+        label: c.name,
+        description: `${(c.db_type || '').toUpperCase()} · ${c.host}:${c.port}`,
+        category: t('common.connections'),
+        icon: <DatabaseOutlined />,
+        action: () => {
+          connMgr.handleConnect(c.id).catch(() => {});
+        },
       });
     }
-  };
+
+    for (const [connId, dbs] of Object.entries(connMgr.connectionDatabases || {})) {
+      const connName = connMgr.connections.find((c) => c.id === connId)?.name;
+      for (const db of dbs) {
+        for (const tb of db.tables || []) {
+          const isView = (tb.table_type || '').toUpperCase() === 'VIEW';
+          cmds.push({
+            id: `tb-${connId}-${db.database}-${tb.table_name}`,
+            label: tb.table_name,
+            description: `${db.database}${connName ? ` · ${connName}` : ''}`,
+            category: isView ? t('common.viewsLabel') : t('common.tablesLabel'),
+            icon: isView ? <EyeOutlined /> : <TableOutlined />,
+            action: () => {
+              connMgr.setSelectedConnectionId(connId);
+              connMgr.setSelectedDatabase(db.database);
+              tabMgr.setTableToOpen({ name: tb.table_name, database: db.database });
+            },
+          });
+        }
+      }
+    }
+
+    for (const s of paletteSnippets) {
+      cmds.push({
+        id: `snip-${s.id}`,
+        label: s.name,
+        description: (s.sql_text || '').replace(/\s+/g, ' ').slice(0, 60),
+        category: t('common.snippets'),
+        icon: <BookOutlined />,
+        action: () => {
+          window.dispatchEvent(new CustomEvent('palette-inject-sql', { detail: { sql: s.sql_text || '' } }));
+        },
+      });
+    }
+
+    for (const [i, h] of paletteHistory.entries()) {
+      cmds.push({
+        id: `hist-${i}`,
+        label: (h.sql || '').replace(/\s+/g, ' ').slice(0, 70),
+        description: new Date(h.timestamp).toLocaleString(),
+        category: t('common.history'),
+        icon: <HistoryOutlined />,
+        action: () => {
+          window.dispatchEvent(new CustomEvent('palette-inject-sql', { detail: { sql: h.sql } }));
+        },
+      });
+    }
+
+    return cmds;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connMgr.connections, connMgr.connectionDatabases, paletteSnippets, paletteHistory]);
 
   return (
     <Layout style={layout.styles.root}>
@@ -385,6 +561,13 @@ function MainLayoutComponent() {
           tabMgr.setTableToOpen({ name: tableName, database });
         }}
         connectionDatabases={connMgr.connectionDatabases}
+      />
+
+      {/* ⌘K 全域命令面板：动作/连接/表/片段/历史 */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={paletteCommands}
       />
 
       <Favorites

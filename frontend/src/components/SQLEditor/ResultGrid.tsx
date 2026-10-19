@@ -89,11 +89,20 @@ export function ResultGrid({
   const sqlForExtract = queryResult.executedSql || originalSql || '';
   const tableName = useMemo(() => (sqlForExtract ? extractTable(sqlForExtract) : null), [sqlForExtract]);
   const [tableColumns, setTableColumns] = useState<ColumnInfo[]>([]);
-  const primaryKeyCol = useMemo(() => {
-    const pk = tableColumns.find((c) => c.column_key === 'PRI') || null;
-    return pk;
-  }, [tableColumns]);
-  const isEditable = !!(tableName && primaryKeyCol && connectionId);
+  // 全部主键列：行定位 WHERE 必须全列 AND——只取第一列时复合主键值组合重复
+  // 的行会命中多行（UPDATE/DELETE 扩散，数据风险）
+  const primaryKeyCols = useMemo(
+    () => tableColumns.filter((c) => c.column_key === 'PRI'),
+    [tableColumns]
+  );
+  // 可编辑条件收紧：所有主键列都必须出现在查询结果列中（缺一列行就不可定位）
+  const isEditable = !!(
+    tableName &&
+    primaryKeyCols.length > 0 &&
+    connectionId &&
+    primaryKeyCols.every((c) => queryResult.columns.includes(c.column_name))
+  );
+  // isEditable 定义在 primaryKeyCols 之后（上方）——此处删除旧的单列主键版本
 
   useEffect(() => {
     if (!connectionId || !tableName) { setTableColumns([]); return; }
@@ -289,11 +298,32 @@ export function ResultGrid({
     }
   }, [handleCellEdited]);
 
+  // 行定位 WHERE（全主键列 AND）。BIGINT 等大整数以后端字符串形式到达时写裸
+  // 数字字面量——字符串与数值列比较在部分库走浮点转换，19 位 ID 会取整失配
+  const buildRowWhere = useCallback(
+    (rowId: number): string | null => {
+      const dialect = getDialect(dbType);
+      const conds: string[] = [];
+      for (const pk of primaryKeyCols) {
+        const idx = queryResult.columns.indexOf(pk.column_name);
+        if (idx < 0) return null;
+        const value = queryResult.rows[rowId]?.[idx];
+        const numeric =
+          typeof value === 'string' &&
+          /^-?\d+$/.test(value) &&
+          /int|decimal|numeric|number|serial|identity/i.test(pk.data_type || '');
+        conds.push(
+          `${dialect.escapeIdentifier(pk.column_name)} = ${numeric ? value : dialect.escapeValue(value)}`
+        );
+      }
+      return conds.length ? conds.join(' AND ') : null;
+    },
+    [primaryKeyCols, queryResult, dbType]
+  );
+
   // 生成操作SQL
   useEffect(() => {
-    if (!tableName || !primaryKeyCol) { setOperationSql(''); return; }
-    const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
-    if (pkIdx < 0) { setOperationSql(''); return; }
+    if (!tableName || primaryKeyCols.length === 0) { setOperationSql(''); return; }
     const dialect = getDialect(dbType);
     const tableRef = dialect.buildTableRef(tableName, database);
     const lines: string[] = [];
@@ -314,21 +344,21 @@ export function ResultGrid({
         setters[c] = cur;
       });
       if (Object.keys(setters).length === 0) continue;
-      const where = `${dialect.escapeIdentifier(primaryKeyCol.column_name)} = ${dialect.escapeValue(queryResult.rows[rowId][pkIdx])}`;
+      const where = buildRowWhere(rowId);
+      if (!where) continue;
       lines.push(dialect.buildUpdate(tableRef, setters, where) + ';');
     }
     for (const rowId of deletedIndices) {
-      const where = `${dialect.escapeIdentifier(primaryKeyCol.column_name)} = ${dialect.escapeValue(queryResult.rows[rowId][pkIdx])}`;
+      const where = buildRowWhere(rowId);
+      if (!where) continue;
       lines.push(dialect.buildDelete(tableRef, where) + ';');
     }
     setOperationSql(lines.join('\n'));
-  }, [modifiedRows, deletedIndices, newRows, tableName, primaryKeyCol, queryResult, dbType, database]);
+  }, [modifiedRows, deletedIndices, newRows, tableName, primaryKeyCols, queryResult, dbType, database, buildRowWhere]);
 
   // 提交
   const handleCommit = useCallback(async () => {
-    if (!connectionId || !tableName || !primaryKeyCol) return;
-    const pkIdx = queryResult.columns.indexOf(primaryKeyCol.column_name);
-    if (pkIdx < 0) return;
+    if (!connectionId || !tableName || primaryKeyCols.length === 0) return;
     const dialect = getDialect(dbType);
     const tableRef = dialect.buildTableRef(tableName, database);
     try {
@@ -353,7 +383,8 @@ export function ResultGrid({
             setters[c] = cur;
           });
           if (Object.keys(setters).length === 0) continue;
-          const where = `${dialect.escapeIdentifier(primaryKeyCol.column_name)} = ${dialect.escapeValue(queryResult.rows[rowId][pkIdx])}`;
+          const where = buildRowWhere(rowId);
+          if (!where) continue;
           const sql = dialect.buildUpdate(tableRef, setters, where);
           const res = await executeQuery(connectionId, sql, database);
           if (res.error) { errMsg = res.error; break; } success++;
@@ -361,7 +392,8 @@ export function ResultGrid({
       }
       if (!errMsg) {
         for (const rowId of deletedIndices) {
-          const where = `${dialect.escapeIdentifier(primaryKeyCol.column_name)} = ${dialect.escapeValue(queryResult.rows[rowId][pkIdx])}`;
+          const where = buildRowWhere(rowId);
+          if (!where) continue;
           const sql = dialect.buildDelete(tableRef, where);
           const res = await executeQuery(connectionId, sql, database);
           if (res.error) { errMsg = res.error; break; } success++;
@@ -370,7 +402,7 @@ export function ResultGrid({
       if (errMsg) message.error(`${t('common.submitFailed')}: ${errMsg}`);
       else { message.success(`${t('common.submittedSuccessfully')} ${success}`); setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); clearEditHistory(); }
     } catch (err: unknown) { message.error(`${t('common.submitFailed')}: ${getErrorMessage(err)}`); }
-  }, [connectionId, tableName, primaryKeyCol, modifiedRows, deletedIndices, newRows, queryResult, dbType, database, executeQuery, message, t]);
+  }, [connectionId, tableName, primaryKeyCols, modifiedRows, deletedIndices, newRows, queryResult, dbType, database, executeQuery, message, t, buildRowWhere]);
 
   // 撤销
   const handleUndo = useCallback(() => {
