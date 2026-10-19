@@ -15,7 +15,7 @@ export function buildGlideTheme(tc: GlideThemeInput): Partial<Theme> {
 
   if (tc.isDark) {
     return {
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif",
       baseFontStyle: '13px',
       headerFontStyle: '600 13px',
       editorFontSize: '13px',
@@ -50,7 +50,7 @@ export function buildGlideTheme(tc: GlideThemeInput): Partial<Theme> {
   }
 
   return {
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif",
     baseFontStyle: '13px',
     headerFontStyle: '600 13px',
     editorFontSize: '13px',

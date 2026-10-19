@@ -28,8 +28,26 @@ export function escapeSqlValue(value: unknown, dbType?: string): string {
  * @returns SQL 语句数组
  */
 export function splitSqlStatements(sql: string): string[] {
-  const statements: string[] = [];
-  let current = '';
+  return getSqlStatementRanges(sql).map((r) => r.text);
+}
+
+export interface SqlStatementRange {
+  /** 语句文本（已 trim，不含结束符与 DELIMITER 指令行） */
+  text: string;
+  /** 语句（trim 后首字符）在原文中的起始偏移 */
+  startOffset: number;
+  /** 语句 trim 后末字符的下一个偏移 */
+  endOffset: number;
+}
+
+/**
+ * 带原文偏移的语句切分，扫描规则与 splitSqlStatements 完全一致
+ * （字符串/注释内的分号不切分、支持 DELIMITER 指令）。
+ * 偏移指向 trim 后的语句体本身，供编辑器 gutter 定位语句起始行使用。
+ */
+export function getSqlStatementRanges(sql: string): SqlStatementRange[] {
+  const statements: SqlStatementRange[] = [];
+  let start = -1; // 当前语句首字符偏移（-1 表示尚未出现代码）
   let inString = false;
   let stringChar = '';
   let inLineComment = false;
@@ -39,12 +57,14 @@ export function splitSqlStatements(sql: string): string[] {
   // 穿过空白与注释仍视为边界，直到出现真正的语句代码
   let atBoundary = true;
 
-  const flush = () => {
-    const trimmed = current.trim();
-    if (trimmed) {
-      statements.push(trimmed);
+  const flush = (endExclusive: number) => {
+    if (start >= 0 && endExclusive > start) {
+      const text = sql.slice(start, endExclusive).trim();
+      if (text) {
+        statements.push({ text, startOffset: start, endOffset: endExclusive });
+      }
     }
-    current = '';
+    start = -1;
     atBoundary = true;
   };
 
@@ -56,33 +76,25 @@ export function splitSqlStatements(sql: string): string[] {
       if (char === '\n') {
         inLineComment = false;
       }
-      current += char;
       continue;
     }
 
     if (inBlockComment) {
       if (char === '*' && nextChar === '/') {
         inBlockComment = false;
-        current += char;
-        current += nextChar;
         i++;
-        continue;
       }
-      current += char;
       continue;
     }
 
     if (inString) {
       if (char === '\\' && nextChar) {
-        current += char;
-        current += nextChar;
         i++;
         continue;
       }
       if (char === stringChar) {
         inString = false;
       }
-      current += char;
       continue;
     }
 
@@ -97,15 +109,14 @@ export function splitSqlStatements(sql: string): string[] {
     }
 
     if (char === '-' && nextChar === '-') {
+      if (start < 0) start = i;
       inLineComment = true;
-      current += char;
       continue;
     }
 
     if (char === '/' && nextChar === '*') {
+      if (start < 0) start = i;
       inBlockComment = true;
-      current += char;
-      current += nextChar;
       i++;
       continue;
     }
@@ -113,7 +124,7 @@ export function splitSqlStatements(sql: string): string[] {
     if (char === "'" || char === '"' || char === '`') {
       inString = true;
       stringChar = char;
-      current += char;
+      if (start < 0) start = i;
       atBoundary = false;
       continue;
     }
@@ -121,20 +132,23 @@ export function splitSqlStatements(sql: string): string[] {
     // 默认 ';' 结束符；自定义结束符（如 //、$$）在引号/注释外任意位置命中即切分，
     // 允许紧贴语句结尾书写（END//、END$$）
     if (delimiter === ';' ? char === ';' : sql.startsWith(delimiter, i)) {
-      flush();
+      flush(i);
       if (delimiter !== ';') {
         i += delimiter.length - 1;
       }
       continue;
     }
 
-    current += char;
+    // 注释随语句保留（与 splitSqlStatements 原语义一致：注释视作语句段内容）
+    if (start < 0 && !/\s/.test(char)) {
+      start = i;
+    }
     if (!/\s/.test(char)) {
       atBoundary = false;
     }
   }
 
-  flush();
+  flush(sql.length);
 
   return statements;
 }

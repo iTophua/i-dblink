@@ -11,6 +11,8 @@ export interface ThemeColors {
   primaryActive: string;
   success: string;
   warning: string;
+  /** 深一档的警示色（浅色模式下数字/文本着色用它保证对比度） */
+  warningActive: string;
   error: string;
   info: string;
   // 文本色
@@ -77,6 +79,7 @@ export function useThemeColors(): ThemeColors {
       primaryActive: c.primaryActive,
       success: c.success,
       warning: c.warning,
+      warningActive: c.warningActive,
       error: c.error,
       info: c.info,
       textPrimary: n.textPrimary,

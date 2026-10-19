@@ -136,7 +136,17 @@ export function StatusBar({
           </Text>
         )}
         {transactionActive && (
-          <Tag color="orange" style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }} data-testid="status-transaction">
+          <Tag
+            color="orange"
+            style={{
+              margin: 0,
+              fontSize: 11,
+              height: 20,
+              lineHeight: '20px',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+            data-testid="status-transaction"
+          >
             {t('common.inTransaction')} {txDuration > 0 ? `${txDuration}s` : ''}
           </Tag>
         )}
@@ -153,10 +163,12 @@ export function StatusBar({
         )}
       </Space>
       <Space separator={<Divider orientation="vertical" style={{ margin: '0 8px' }} />}>
-        {isConnected && serverInfo?.character_set && <Text>{serverInfo.character_set}</Text>}
-        {!isConnected && <Text>UTF-8</Text>}
-        <Text>v1.0.0</Text>
-        <QuestionCircleOutlined style={{ fontSize: 11, cursor: 'help' }} />
+        {isConnected && serverInfo?.character_set && (
+          <Text style={{ fontSize: 11, fontFamily: 'var(--font-family-code)' }}>{serverInfo.character_set}</Text>
+        )}
+        {!isConnected && <Text style={{ fontSize: 11 }}>UTF-8</Text>}
+        <Text style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>v1.0.0</Text>
+        <QuestionCircleOutlined style={{ fontSize: 11, cursor: 'help', color: 'var(--text-tertiary)' }} />
       </Space>
     </Footer>
   );

@@ -675,7 +675,7 @@ export function SQLEditor({
         <Editor
           height="100%"
           language="sql"
-          theme={tc.isDark ? 'vs-dark' : 'vs-light'}
+          theme={tc.isDark ? 'custom-dark' : 'custom-light'}
           value={sql}
           onChange={(value) => {
             // formatSQL 触发的变更不清除 isFormatted；手动编辑则清除（快照失效）

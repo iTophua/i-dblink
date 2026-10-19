@@ -1085,6 +1085,74 @@
   }
 }
 
+/* ==================== 标签页 chip 化（demo 同款形态） ==================== */
+/* editable-card 类型：未选中透明、hover 浅底、选中浮起小卡片（边框+微阴影） */
+.ant-tabs.ant-tabs-card.ant-tabs-editable-card > .ant-tabs-nav .ant-tabs-tab {
+  border-radius: 8px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  margin-top: 5px !important;
+  margin-bottom: 5px !important;
+  padding: 3px 10px !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.ant-tabs.ant-tabs-card.ant-tabs-editable-card > .ant-tabs-nav .ant-tabs-tab:hover {
+  background: var(--background-hover) !important;
+}
+
+.ant-tabs.ant-tabs-card.ant-tabs-editable-card > .ant-tabs-nav .ant-tabs-tab-active {
+  background: var(--background-card) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: 0 1px 3px light-dark(rgba(20, 28, 45, 0.08), rgba(0, 0, 0, 0.35));
+}
+
+.ant-tabs.ant-tabs-card.ant-tabs-editable-card > .ant-tabs-nav .ant-tabs-tab .ant-tabs-tab-btn {
+  color: var(--text-secondary) !important;
+  font-size: 12.5px !important;
+}
+
+.ant-tabs.ant-tabs-card.ant-tabs-editable-card
+  > .ant-tabs-nav
+  .ant-tabs-tab-active
+  .ant-tabs-tab-btn {
+  color: var(--text-primary) !important;
+}
+
+.ant-tabs.ant-tabs-card.ant-tabs-editable-card > .ant-tabs-nav .ant-tabs-tab-remove {
+  margin-inline-start: 2px !important;
+  margin-inline-end: -4px !important;
+  color: var(--text-tertiary) !important;
+}
+
+.ant-tabs.ant-tabs-card.ant-tabs-editable-card
+  > .ant-tabs-nav
+  .ant-tabs-tab-remove:hover {
+  color: var(--text-primary) !important;
+}
+
+/* ==================== SQL 编辑器：语句级执行按钮（gutter ▶） ==================== */
+/* 颜色来自 mask + background-color，随主题变量自动适配 */
+.sql-run-stmt-glyph {
+  cursor: pointer;
+  background-color: var(--text-tertiary);
+  -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 3.2v9.6l8.2-4.8z'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: 12px 12px;
+  mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 3.2v9.6l8.2-4.8z'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: 12px 12px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.sql-run-stmt-glyph:hover {
+  opacity: 1;
+  background-color: var(--color-primary);
+}
+
 /* ==================== 平滑滚动条 — 精致版 ==================== */
 ::-webkit-scrollbar {
   width: 6px;

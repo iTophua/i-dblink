@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react';
 import type { OnMount } from '@monaco-editor/react';
+import type { editor as MonacoEditor } from 'monaco-editor';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../../hooks/useApi';
 import { useThemeColors } from '../../../hooks/useThemeColors';
@@ -16,6 +17,7 @@ import {
   shouldSuggestTables,
   getDbSpecificDataTypes,
 } from '../utils/sqlCompletion';
+import { getSqlStatementRanges, type SqlStatementRange } from '../../../utils/sqlUtils';
 
 export interface UseMonacoEditorParams {
   connectionId?: string | null;
@@ -82,6 +84,10 @@ export function useMonacoEditor({
   const savedEditorStateRef = useRef<{ value: string; selections: any; position: any; modelUri: string } | null>(null);
   const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorMarkersRef = useRef<any[]>([]);
+  // 语句级 gutter 执行按钮：语句范围缓存 + 装饰集合
+  const stmtRangesRef = useRef<SqlStatementRange[]>([]);
+  const stmtGlyphsRef = useRef<MonacoEditor.IEditorDecorationsCollection | null>(null);
+  const stmtGlyphTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 同步 dbType 到 ref
   useEffect(() => {
@@ -93,26 +99,40 @@ export function useMonacoEditor({
     editorRef.current?.updateOptions({ wordWrap: editorWordWrap ? 'on' : 'off' });
   }, [editorWordWrap]);
 
-  // 响应式切换 Monaco Editor 主题
-  useEffect(() => {
-    const monaco = monacoRef.current;
-    if (!monaco) return;
+  // 应用/切换 Monaco 主题（defineTheme + setTheme）。
+  // 必须在 monaco 实例就绪后调用：Editor mount 回调里调一次（首次），
+  // tc 变化时再调（主题切换）——单独放在 useEffect 里会在首次渲染时
+  // 因 monacoRef 为空而跳过，之后 tc 不变就永远不执行，主题落到 VS 默认色
+  const applyEditorTheme = useCallback(
+    (monaco: typeof import('monaco-editor')) => {
+      // token 色从主题色派生：关键字=主色（靛蓝/青碧/墨随主题）、字符串=success、
+      // 数字=warning（浅色用深一档的 warningActive 保证白底对比度）、注释=三级文本
+      const hx = (c: string) => c.replace('#', '').toUpperCase();
+      const rules = [
+        { token: 'keyword', foreground: hx(tc.primary) },
+        { token: 'type', foreground: '267F99' },
+        { token: 'string', foreground: hx(tc.success) },
+        { token: 'comment', foreground: hx(tc.textTertiary) },
+        { token: 'number', foreground: hx(tc.isDark ? tc.warning : tc.warningActive) },
+        { token: 'operator', foreground: hx(tc.textSecondary) },
+        { token: 'delimiter', foreground: hx(tc.textSecondary) },
+        { token: 'variable', foreground: hx(tc.textPrimary) },
+        { token: 'function', foreground: '795E26' },
+        { token: 'predefined', foreground: '267F99' },
+      ];
 
     monaco.editor.defineTheme('custom-dark', {
       base: 'vs-dark',
       inherit: true,
-      rules: [
-        { token: 'keyword', foreground: '569CD6' },
-        { token: 'type', foreground: '4EC9B0' },
-        { token: 'string', foreground: 'CE9178' },
-        { token: 'comment', foreground: '6A9955' },
-        { token: 'number', foreground: 'B5CEA8' },
-        { token: 'operator', foreground: 'D4D4D4' },
-        { token: 'delimiter', foreground: 'D4D4D4' },
-        { token: 'variable', foreground: '9CDCFE' },
-        { token: 'function', foreground: 'DCDCAA' },
-        { token: 'predefined', foreground: '4EC9B0' },
-      ],
+      rules: rules.map((r) =>
+        r.token === 'type' || r.token === 'predefined'
+          ? { ...r, foreground: '4EC9B0' }
+          : r.token === 'function'
+            ? { ...r, foreground: 'DCDCAA' }
+            : r.token === 'operator' || r.token === 'delimiter'
+              ? { ...r, foreground: 'D4D4D4' }
+              : r
+      ),
       colors: {
         'editor.background': tc.background,
         'editor.foreground': tc.textPrimary,
@@ -154,18 +174,7 @@ export function useMonacoEditor({
     monaco.editor.defineTheme('custom-light', {
       base: 'vs',
       inherit: true,
-      rules: [
-        { token: 'keyword', foreground: '0000FF' },
-        { token: 'type', foreground: '267F99' },
-        { token: 'string', foreground: 'A31515' },
-        { token: 'comment', foreground: '008000' },
-        { token: 'number', foreground: '098658' },
-        { token: 'operator', foreground: '000000' },
-        { token: 'delimiter', foreground: '000000' },
-        { token: 'variable', foreground: '001080' },
-        { token: 'function', foreground: '795E26' },
-        { token: 'predefined', foreground: '267F99' },
-      ],
+      rules,
       colors: {
         'editor.background': tc.background,
         'editor.foreground': tc.textPrimary,
@@ -204,8 +213,15 @@ export function useMonacoEditor({
       },
     });
 
-    monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
-  }, [tc]);
+      monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
+    },
+    [tc]
+  );
+
+  // 主题变化时重新应用（首次应用在 Editor mount 回调里）
+  useEffect(() => {
+    if (monacoRef.current) applyEditorTheme(monacoRef.current);
+  }, [tc, applyEditorTheme]);
 
   // 获取 schema 数据用于补全，并预生成缓存的 suggestions - 优化版本
   const fetchSchema = useCallback(async () => {
@@ -388,6 +404,8 @@ export function useMonacoEditor({
       formatOnPaste: false,
       formatOnType: false,
       suggestOnTriggerCharacters: true,
+      // 回车永远换行：不被补全建议截获（用户回车是想换行，接受建议用 Tab）
+      acceptSuggestionOnEnter: 'off',
       quickSuggestions: {
         other: true,
         comments: false,
@@ -409,9 +427,8 @@ export function useMonacoEditor({
       accessibilitySupport: 'auto',
       lineDecorationsWidth: 10,
       lineNumbersMinChars: 3,
-      glyphMargin: false,
+      glyphMargin: true,
       contextmenu: false,
-      acceptSuggestionOnEnter: 'on',
       // 性能优化配置
       suggestSelection: 'first',
       stickyScroll: { enabled: false },
@@ -438,8 +455,59 @@ export function useMonacoEditor({
       setContextMenuVisible(true);
     });
 
-    // 应用主题（defineTheme 已移至 useEffect，监听 tc 变化）
-    monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
+    // ── 语句级执行按钮：每条语句起始行 gutter 显示 ▶，点击只执行该语句 ──
+    const refreshStmtGlyphs = () => {
+      const model = editor.getModel();
+      if (!model || editorRef.current !== editor) return;
+      const ranges = getSqlStatementRanges(model.getValue());
+      stmtRangesRef.current = ranges;
+      const decorations = ranges.map((r) => {
+        const start = model.getPositionAt(r.startOffset);
+        return {
+          // ▶ 只挂在语句首行（range 覆盖整段会让每一行都出现图标）；
+          // 点击查找按语句范围匹配，与 decoration 行数无关
+          range: new monaco.Range(start.lineNumber, 1, start.lineNumber, 1),
+          options: {
+            glyphMarginClassName: 'sql-run-stmt-glyph',
+            glyphMarginHoverMessage: { value: t('common.sqlEditor.runThisStatement') },
+            stickiness: 1,
+          },
+        };
+      });
+      if (!stmtGlyphsRef.current) {
+        stmtGlyphsRef.current = editor.createDecorationsCollection(decorations);
+      } else {
+        stmtGlyphsRef.current.set(decorations);
+      }
+    };
+
+    const glyphContentDisposable = editor.onDidChangeModelContent(() => {
+      if (stmtGlyphTimerRef.current) clearTimeout(stmtGlyphTimerRef.current);
+      stmtGlyphTimerRef.current = setTimeout(() => {
+        stmtGlyphTimerRef.current = null;
+        refreshStmtGlyphs();
+      }, 150);
+    });
+    refreshStmtGlyphs();
+
+    const glyphClickDisposable = editor.onMouseDown((e: MonacoEditor.IEditorMouseEvent) => {
+      if (e.target?.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
+      const line = e.target.position?.lineNumber;
+      const model = editor.getModel();
+      if (!line || !model) return;
+      const hit = stmtRangesRef.current.find((r) => {
+        const s = model.getPositionAt(r.startOffset);
+        const en = model.getPositionAt(r.endOffset);
+        return line >= s.lineNumber && line <= en.lineNumber;
+      });
+      if (hit) {
+        e.event.preventDefault();
+        handleExecuteQueryRef.current(hit.text);
+      }
+    });
+
+    // 应用主题（defineTheme + setTheme；tc 变化时由 useEffect 重新应用）
+    applyEditorTheme(monaco);
 
     // 注销旧的补全提供者（如果存在）
     if (completionProviderRef.current) {
@@ -448,8 +516,9 @@ export function useMonacoEditor({
     }
 
     // 初始化补全提供者（智能上下文版本）
+    // 注意：'\n' 不能作为触发字符——回车应无条件换行，不该弹出建议/模板
     completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
-      triggerCharacters: ['.', ' ', '(', '[', '{', ',', '\n'],
+      triggerCharacters: ['.', ' ', '(', '[', '{', ','],
       provideCompletionItems: (model: any, position: any) => {
         // 获取光标前当前行的文本
         const textBeforeCursor = model.getValueInRange({
@@ -793,7 +862,13 @@ export function useMonacoEditor({
     // （含工具栏 ~30px），导致编辑器视口偏大、底部被 overflow:hidden 裁剪。
 
     // 保存清理函数
-    cleanupDisposablesRef.current = [disposable, cursorDisposable, selectionDisposable];
+    cleanupDisposablesRef.current = [
+      disposable,
+      cursorDisposable,
+      selectionDisposable,
+      glyphContentDisposable,
+      glyphClickDisposable,
+    ];
   }, [tc, setSql, setContextMenuVisible, setContextMenuPos]);
 
   // Cleanup on unmount
@@ -856,6 +931,14 @@ export function useMonacoEditor({
         clearTimeout(completionTimerRef.current);
         completionTimerRef.current = null;
       }
+
+      // 清理语句 gutter 相关
+      if (stmtGlyphTimerRef.current) {
+        clearTimeout(stmtGlyphTimerRef.current);
+        stmtGlyphTimerRef.current = null;
+      }
+      stmtGlyphsRef.current = null;
+      stmtRangesRef.current = [];
     };
   }, []);
 

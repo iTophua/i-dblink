@@ -448,6 +448,7 @@
     },
     "sqlEditor": {
       "newQuery": "新建查询",
+      "runThisStatement": "执行此语句",
       "execute": "执行",
       "executeLabel": "执行查询",
       "explainPlan": "执行计划",

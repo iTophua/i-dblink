@@ -432,6 +432,7 @@
     },
     "sqlEditor": {
       "newQuery": "New Query",
+      "runThisStatement": "Run this statement",
       "execute": "Execute",
       "executeLabel": "Execute Query",
       "explainPlan": "Explain Plan",

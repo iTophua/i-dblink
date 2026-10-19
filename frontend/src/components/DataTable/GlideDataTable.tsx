@@ -456,6 +456,11 @@ export function GlideDataTable({
 
   // 滚动停止 150ms 后补一次全量重绘，清掉滚动过程中产生的残影
   const scrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ===== 滚动位置记忆 =====
+  // tab 切走时面板 display:none → 容器尺寸归零 → glide 内部重排会把滚动状态清零；
+  // 记录最后可见区域，容器尺寸恢复（tab 切回）后还原滚动位置
+  const lastRegionRef = useRef({ x: 0, y: 0 });
+  const wasHiddenRef = useRef(false);
   const handleWheelCapture = useCallback(() => {
     if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
     scrollIdleTimerRef.current = setTimeout(forceRepaint, 150);
@@ -468,6 +473,31 @@ export function GlideDataTable({
         scrollIdleTimerRef.current = null;
       }
     };
+  }, []);
+
+  // ===== 滚动位置记忆：容器尺寸 0 → 恢复时还原滚动 =====
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      if (w <= 0) {
+        wasHiddenRef.current = true;
+      } else if (wasHiddenRef.current) {
+        wasHiddenRef.current = false;
+        const { x, y } = lastRegionRef.current;
+        if (x > 0 || y > 0) {
+          // 等两帧让 glide 完成恢复重排后再还原滚动，避免被重排覆盖
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              gridRef.current?.scrollTo(x, y, 'both');
+            })
+          );
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // Ctrl+F / Cmd+F keyboard handler
@@ -1055,6 +1085,12 @@ export function GlideDataTable({
           onCellContextMenu={handleContextMenu}
           onHeaderClicked={onHeaderClicked}
           onItemHovered={onItemHovered}
+          onVisibleRegionChanged={(region: { x?: number; y?: number; width?: number; height?: number }) => {
+            // 隐藏（尺寸归零）期间 glide 会发出 (0,0) 区域事件，只在有效区域时记录
+            if ((region.width ?? 0) > 0 && (region.height ?? 0) > 0) {
+              lastRegionRef.current = { x: region.x ?? 0, y: region.y ?? 0 };
+            }
+          }}
           onHeaderContextMenu={(colIndex, event) => {
             if (!onHeaderContextMenu) return;
             // 优先用鼠标坐标，回退到 header cell bounds 左上角

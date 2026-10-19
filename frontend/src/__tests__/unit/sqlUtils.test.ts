@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { escapeSqlValue, escapeSqlIdentifier, splitSqlStatements } from '../../utils/sqlUtils';
+import { escapeSqlValue, escapeSqlIdentifier, splitSqlStatements, getSqlStatementRanges } from '../../utils/sqlUtils';
 
 describe('escapeSqlValue', () => {
   it('escapes backslashes', () => {
@@ -234,5 +234,41 @@ describe('splitSqlStatements - DELIMITER 指令', () => {
     const result = splitSqlStatements(script);
     expect(result).toHaveLength(2);
     expect(result[1]).toBe('select 2');
+  });
+});
+
+describe('getSqlStatementRanges - 带偏移的语句切分', () => {
+  it('偏移指向原文中 trim 后的语句体', () => {
+    const sql = '  select 1;  \n\n  select 2;  ';
+    const ranges = getSqlStatementRanges(sql);
+    expect(ranges).toHaveLength(2);
+    expect(sql.slice(ranges[0].startOffset, ranges[0].endOffset)).toBe('select 1');
+    expect(sql.slice(ranges[1].startOffset, ranges[1].endOffset)).toBe('select 2');
+  });
+
+  it('字符串内的分号不产生切分偏移', () => {
+    const sql = "insert into t values ('a;b');\nselect 2";
+    const ranges = getSqlStatementRanges(sql);
+    expect(ranges).toHaveLength(2);
+    expect(ranges[0].text).toContain("'a;b'");
+    expect(ranges[1].text).toBe('select 2');
+  });
+
+  it('与 splitSqlStatements 结果保持一致（同一扫描器）', () => {
+    const script = "-- header\nselect 1;\ndelimiter //\ncreate procedure p() begin select 1; end//\ndelimiter ;\ncall p()//".replace(
+      /\/\/$/m,
+      ';//'
+    );
+    const a = splitSqlStatements(script);
+    const b = getSqlStatementRanges(script).map((r) => r.text);
+    expect(b).toEqual(a);
+  });
+
+  it('DELIMITER 过程脚本：gutter 偏移落在 create 和 call 的起始处', () => {
+    const script = 'drop procedure if exists p;\ndelimiter //\ncreate procedure p() begin\n  select 1;\nend//\ndelimiter ;\ncall p();';
+    const ranges = getSqlStatementRanges(script);
+    expect(ranges).toHaveLength(3);
+    expect(script.startsWith('create procedure', ranges[1].startOffset)).toBe(true);
+    expect(script.startsWith('call', ranges[2].startOffset)).toBe(true);
   });
 });
