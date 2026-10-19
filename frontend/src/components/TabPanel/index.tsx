@@ -1620,7 +1620,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           flexDirection: 'column',
           minHeight: 0,
         }}
-        tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
+        tabBarStyle={{ margin: 0, padding: '0 10px', background: 'transparent', flexShrink: 0 }}
         tabBarGutter={4}
         items={primaryTabItems}
         onEdit={handleTabEdit}
@@ -1649,7 +1649,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             flexDirection: 'column',
             minHeight: 0,
           }}
-          tabBarStyle={{ margin: 0, padding: '0 4px', background: 'transparent', flexShrink: 0 }}
+          tabBarStyle={{ margin: 0, padding: '0 10px', background: 'transparent', flexShrink: 0 }}
           tabBarGutter={4}
           items={secondaryTabItems}
           onEdit={handleSecondaryPaneEdit}

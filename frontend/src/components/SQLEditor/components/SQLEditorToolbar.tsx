@@ -111,7 +111,7 @@ export function SQLEditorToolbar({
   return (
     <div
       style={{
-        padding: '4px 8px',
+        padding: '4px 12px',
         // 全屏时编辑器 fixed 铺满整窗，macOS 红绿灯悬浮在左上角——
         // 与顶部工具栏一致留 92px，避免执行按钮被遮挡（非 macOS 正常留白）
         ...(isFullscreen && isMacOS() ? { paddingLeft: 92 } : {}),
@@ -119,7 +119,9 @@ export function SQLEditorToolbar({
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: 'var(--background-toolbar)',
+        // 工作区条用白（card）：顶部工具栏/状态栏灰作骨架、tab/编辑器/结果
+        // 全白，形成「灰-白-灰」的干净层次（demo 同款），避免灰白条纹感
+        background: 'var(--background-card)',
       }}
       className="sql-editor-toolbar"
     >

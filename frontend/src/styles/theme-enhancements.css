@@ -878,12 +878,12 @@
 /* ==================== 状态栏增强效果 ==================== */
 /* 渐变背景 + 顶部 inset 高光（与顶部工具栏呼应，形成上下光源统一） */
 .status-bar-enhanced {
-  background: var(--background-card) !important;
+  background: var(--background-toolbar) !important;
   border-top: 1px solid var(--border-color-light) !important;
 }
 
 [data-theme='dark'] .status-bar-enhanced {
-  background: var(--background-card) !important;
+  background: var(--background-toolbar) !important;
   border-top: 1px solid var(--border-color) !important;
 }
 
