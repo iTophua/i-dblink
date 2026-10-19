@@ -863,28 +863,7 @@
 }
 
 /* 主按钮（新建连接）：纯色扁平，干净利落 */
-.toolbar-btn-primary.ant-btn-primary {
-  border-radius: 6px !important;
-  font-size: 13px !important;
-  box-shadow: none !important;
-}
-
-.toolbar-btn-primary.ant-btn-primary:hover {
-  background: var(--color-primary-hover) !important;
-  transform: none;
-  box-shadow: none !important;
-}
-
-.toolbar-btn-primary.ant-btn-primary:active {
-  background: var(--color-primary-active) !important;
-  transform: none !important;
-  box-shadow: none !important;
-}
-
-[data-theme='dark'] .toolbar-btn-primary.ant-btn-primary:hover {
-  background: var(--color-primary-hover) !important;
-  box-shadow: none !important;
-}
+/* 主按钮（新建连接）已改为幽灵文本按钮，随 .toolbar-btn 样式 */
 
 /* ==================== SQL 编辑器工具栏增强 ==================== */
 /* 底部内嵌分隔线，让工具栏与编辑区有清晰层次 */

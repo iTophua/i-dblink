@@ -138,24 +138,22 @@ export function SQLEditorToolbar({
               padding: '0 14px',
               height: 26,
               borderRadius: 7,
-              background: 'var(--color-primary-gradient, var(--color-primary))',
+              // 纯净实心主色（demo 形态）：无渐变/无光晕/无上浮，hover 只做亮度反馈
+              background: 'var(--color-primary)',
               color: tc.isDark ? '#000000' : '#FFFFFF',
               fontSize: 12.5,
-              fontWeight: 600,
+              fontWeight: 500,
               cursor: !connectionId || loading ? 'not-allowed' : 'pointer',
               opacity: !connectionId ? 0.5 : 1,
-              transition: 'all 0.2s ease',
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 8px ${tc.primary}33`,
+              transition: 'filter 0.15s ease, opacity 0.15s ease',
               whiteSpace: 'nowrap',
             }}
             onMouseEnter={(e) => {
               if (!connectionId || loading) return;
-              e.currentTarget.style.transform = 'translateY(-1px)';
-              e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.22), 0 4px 12px ${tc.primary}4D`;
+              e.currentTarget.style.filter = 'brightness(1.08)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 8px ${tc.primary}33`;
+              e.currentTarget.style.filter = 'none';
             }}
           >
             {loading ? <LoadingOutlined /> : <PlayCircleOutlined />}

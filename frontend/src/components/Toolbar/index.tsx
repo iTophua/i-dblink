@@ -216,15 +216,16 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
         </Tooltip>
       )}
       <Button
-        type="primary"
+        type="text"
         size="small"
-        icon={<DatabaseOutlined />}
+        icon={<DatabaseOutlined style={{ color: 'var(--color-primary)' }} />}
         onClick={() => handleMenuAction('new-connection')}
         data-testid="toolbar-new-connection"
-        className="toolbar-btn-primary"
+        className="toolbar-btn"
         style={{
-          borderRadius: 6,
+          borderRadius: 7,
           fontWeight: 500,
+          fontSize: 12.5,
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
@@ -233,14 +234,16 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
         {t('common.newConnectionBtn')}
       </Button>
       <Button
+        type="text"
         size="small"
         icon={<ConsoleSqlOutlined />}
         onClick={() => handleMenuAction('new-query')}
         data-testid="toolbar-new-query"
         className="toolbar-btn"
         style={{
-          borderRadius: 6,
+          borderRadius: 7,
           fontWeight: 500,
+          fontSize: 12.5,
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
