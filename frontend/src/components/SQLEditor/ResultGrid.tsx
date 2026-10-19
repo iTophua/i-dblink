@@ -19,7 +19,7 @@ import { getDialect } from '../../utils/sqlDialects';
 import DataEditor from '@glideapps/glide-data-grid';
 import { GlideDataTable, type GlideRow } from '../DataTable/GlideDataTable';
 import { EnhancedEmptyState } from '../LoadingStates';
-import { namesToGlideColumns, createResultCellModified } from '../DataTable/adapters/resultAdapter';
+import { createResultCellModified } from '../DataTable/adapters/resultAdapter';
 import { useContextMenu } from '../ContextMenu';
 import { ResultGridContextMenu } from './ResultGridContextMenu';
 import { useEditHistory } from '../../hooks/useEditHistory';
@@ -157,7 +157,21 @@ export function ResultGrid({
 
   const isCellModified = useMemo(() => createResultCellModified(modifiedRows, queryResult.columns, queryResult.rows), [modifiedRows, queryResult.columns, queryResult.rows]);
 
-  const glideColumns = useMemo(() => namesToGlideColumns(queryResult.columns), [queryResult.columns]);
+  // 列头编码 name|type|isPK|comment（与表数据浏览一致）：
+  // 类型/注释来自 SQL 中识别到的表结构（单表查询可完整匹配；
+  // join/别名列匹配不到则退化为仅列名），GlideDataTable 的
+  // drawHeader 渲染类型与 PK 标记、hover tooltip 显示注释
+  const glideColumns = useMemo(() => {
+    const typeMap = new Map(tableColumns.map((c) => [c.column_name, c.data_type]));
+    const commentMap = new Map(tableColumns.map((c) => [c.column_name, c.comment || '']));
+    const pkSet = new Set(
+      tableColumns.filter((c) => c.column_key === 'PRI').map((c) => c.column_name)
+    );
+    return queryResult.columns.map((name) => ({
+      id: name,
+      title: `${name}|${typeMap.get(name) || ''}|${pkSet.has(name) ? '1' : '0'}|${commentMap.get(name) || ''}`,
+    }));
+  }, [queryResult.columns, tableColumns]);
   const glideRows = useMemo(() => allRows as GlideRow[], [allRows]);
 
   // 选中（存储 allRows 中的索引；已有行 __id=数字=原始索引，新增行 = qLen + k）
@@ -536,6 +550,7 @@ export function ResultGrid({
           }}
           editable={isEditable}
           enableFindReplace
+          headerHeight={44}
           formatRules={formatRules}
         />
         <ConditionalFormattingPanel

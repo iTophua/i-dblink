@@ -458,8 +458,8 @@ export function GlideDataTable({
   const scrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // ===== 滚动位置记忆 =====
   // tab 切走时面板 display:none → 容器尺寸归零 → glide 内部重排会把滚动状态清零；
-  // 记录最后可见区域，容器尺寸恢复（tab 切回）后还原滚动位置
-  const lastRegionRef = useRef({ x: 0, y: 0 });
+  // 记录最后可见区域（含 tx/ty 像素偏移），容器尺寸恢复（tab 切回）后还原滚动
+  const lastRegionRef = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const wasHiddenRef = useRef(false);
   const handleWheelCapture = useCallback(() => {
     if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
@@ -485,12 +485,21 @@ export function GlideDataTable({
         wasHiddenRef.current = true;
       } else if (wasHiddenRef.current) {
         wasHiddenRef.current = false;
-        const { x, y } = lastRegionRef.current;
-        if (x > 0 || y > 0) {
-          // 等两帧让 glide 完成恢复重排后再还原滚动，避免被重排覆盖
+        const { x, y, tx, ty } = lastRegionRef.current;
+        if (x > 0 || y > 0 || tx > 0 || ty > 0) {
+          // 等两帧让 glide 完成恢复重排后再还原滚动，避免被重排覆盖。
+          // tx/ty 即 glide 滚动容器（div.dvn-scroller）的 scrollLeft/scrollTop，
+          // 直接设置容器滚动属性可像素级精确还原（含半行/半列位置）；
+          // glide 监听容器 scroll 事件自行重绘。容器找不到时退回 cell 对齐
           requestAnimationFrame(() =>
             requestAnimationFrame(() => {
-              gridRef.current?.scrollTo(x, y, 'both');
+              const scroller = wrapperRef.current?.querySelector('.dvn-scroller') as HTMLElement | null;
+              if (scroller && (tx > 0 || ty > 0)) {
+                if (tx > 0) scroller.scrollLeft = tx;
+                if (ty > 0) scroller.scrollTop = ty;
+              } else {
+                gridRef.current?.scrollTo(x, y, 'both');
+              }
             })
           );
         }
@@ -1085,10 +1094,19 @@ export function GlideDataTable({
           onCellContextMenu={handleContextMenu}
           onHeaderClicked={onHeaderClicked}
           onItemHovered={onItemHovered}
-          onVisibleRegionChanged={(region: { x?: number; y?: number; width?: number; height?: number }) => {
+          onVisibleRegionChanged={(
+            region: { x?: number; y?: number; width?: number; height?: number },
+            tx?: number,
+            ty?: number
+          ) => {
             // 隐藏（尺寸归零）期间 glide 会发出 (0,0) 区域事件，只在有效区域时记录
             if ((region.width ?? 0) > 0 && (region.height ?? 0) > 0) {
-              lastRegionRef.current = { x: region.x ?? 0, y: region.y ?? 0 };
+              lastRegionRef.current = {
+                x: region.x ?? 0,
+                y: region.y ?? 0,
+                tx: tx ?? 0,
+                ty: ty ?? 0,
+              };
             }
           }}
           onHeaderContextMenu={(colIndex, event) => {
