@@ -45,7 +45,10 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
   const isDarkMode = tc.isDark;
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const { t } = useTranslation();
-  const shortcuts = useSettingsStore((s) => s.settings.shortcuts || {});
+  // selector 必须返回稳定引用：`s.settings.shortcuts || {}` 会在字段缺失时
+  // 每次快照都新建对象，触发 useSyncExternalStore 无限重渲染（React 崩溃），
+  // 兜底 || {} 放到组件体内做
+  const shortcuts = useSettingsStore((s) => s.settings.shortcuts) || {};
   const isMac = isMacOS();
   const aiReady = useAIStore((s) => s.ready);
   const setChatPanelVisible = useAIChatStore((s) => s.setPanelVisible);
@@ -61,9 +64,10 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
   }, []);
 
   const toolbarStyle: ToolbarStyle = {
-    height: 38,
-    lineHeight: '38px',
-    background: 'var(--background-card)',
+    height: 44,
+    lineHeight: '44px',
+    // 工具栏用比卡片深半档的 toolbar 底色，和内容区拉开「窗口骨架」层次
+    background: 'var(--background-toolbar)',
     borderBottom: '1px solid var(--border-color)',
     // macOS 隐藏标题栏后，左侧留出红绿灯空间（红绿灯 ~52px + 较大安全边距，避免按钮紧贴）
     // 非 macOS 不需要留红绿灯空间，正常 padding
@@ -71,6 +75,7 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexShrink: 0,
   };
 
   const dividerStyle: React.CSSProperties = {
@@ -239,8 +244,6 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
-          color: 'var(--color-primary)',
-          borderColor: 'var(--color-primary-alpha-30)',
         }}
       >
         {t('common.newQueryBtn')}

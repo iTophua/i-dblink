@@ -176,7 +176,7 @@ export const SPACING = {
 
 export const SIZES = {
   headerHeight: 32,
-  toolbarHeight: 40,
+  toolbarHeight: 44,
   sidebarWidth: 280,
   middlePanelWidth: 320,
   logPanelHeight: 180,

@@ -825,12 +825,12 @@
 
 /* ==================== 工具栏增强效果 ==================== */
 .toolbar-enhanced {
-  background: var(--background-card) !important;
+  background: var(--background-toolbar) !important;
   border-bottom: 1px solid var(--border-color) !important;
 }
 
 [data-theme='dark'] .toolbar-enhanced {
-  background: var(--background-card) !important;
+  background: var(--background-toolbar) !important;
   border-bottom: 1px solid var(--border-color) !important;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
