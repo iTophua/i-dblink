@@ -7,9 +7,9 @@
 /* ==================== CSS 变量定义 ==================== */
 :root {
   /* Fallback values - will be overridden by dynamic theme variables from App.tsx */
-  --color-primary: #475569;
-  --color-primary-hover: #566B7F;
-  --color-primary-active: #364152;
+  --color-primary: #4A5DD6;
+  --color-primary-hover: #5D6EE0;
+  --color-primary-active: #3E4FBF;
   --color-success: #059669;
   --color-warning: #F59E0B;
   --color-error: #EF4444;
@@ -17,6 +17,12 @@
 
   --color-primary-alpha-15: color-mix(in srgb, var(--color-primary) 15%, transparent);
   --color-primary-alpha-30: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --color-success-alpha-15: color-mix(in srgb, var(--color-success) 15%, transparent);
+  --color-success-alpha-30: color-mix(in srgb, var(--color-success) 30%, transparent);
+  --color-warning-alpha-15: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  --color-warning-alpha-30: color-mix(in srgb, var(--color-warning) 30%, transparent);
+  --color-error-alpha-15: color-mix(in srgb, var(--color-error) 15%, transparent);
+  --color-error-alpha-30: color-mix(in srgb, var(--color-error) 30%, transparent);
   --color-info-alpha-15: color-mix(in srgb, var(--color-info) 15%, transparent);
   --color-info-alpha-30: color-mix(in srgb, var(--color-info) 30%, transparent);
 
@@ -46,11 +52,11 @@
   --background: #F2F1ED;
   --background-card: #F8F7F4;
   --background-toolbar: #EFEEEA;
-  --background-hover: #F1F5F9;
-  --background-active: #EFF6FF;
+  --background-hover: #EBEDF6;
+  --background-active: #E5E9F7;
 
-  --row-hover-bg: #F1F5F9;
-  --row-selected-bg: #DBEAFE;
+  --row-hover-bg: #EBEDF6;
+  --row-selected-bg: #E0E5F8;
   --row-stripe-bg: transparent;
   --header-bg: #F8FAFC;
   --surface-elevated: #FFFFFF;
@@ -58,11 +64,11 @@
   --scrollbar-track: rgba(0, 0, 0, 0.03);
 
   --font-family:
-    'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-family-code: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans SC', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-code: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Consolas, 'Courier New', monospace;
   --font-family-numeric:
-    'Inter', 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    'Inter', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
   --font-feature-settings: 'cv01', 'cv05', 'ss01', 'ss03', 'kern';
   --font-feature-settings-numeric: 'tnum', 'cv01', 'cv05', 'ss01';
   --font-feature-settings-code: 'calt', 'liga', 'cv01', 'cv05', 'ss01', 'ss03', 'zero';

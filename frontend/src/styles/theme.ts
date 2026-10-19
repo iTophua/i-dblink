@@ -106,14 +106,15 @@ export interface ThemeConfig {
 // ==================== 字体排印 ====================
 
 export const TYPOGRAPHY = {
-  // 主字体 — 优先载入 Inter，并补充 macOS / Windows 中文回退
+  // 主字体 — 系统字体优先（SF Pro / PingFang 原生渲染），Inter 装了则用
   fontFamily:
-    "'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-  // 等宽字体
-  fontFamilyCode: "'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace",
+    "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  // 等宽字体 — 系统等宽优先（macOS SF Mono / Win Cascadia），避免回退到 Courier New
+  fontFamilyCode:
+    "ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Consolas, 'Courier New', monospace",
   // 数字字体 — 用于表格、统计等数字密集型场景，搭配比例数字和表格数字特性
   fontFamilyNumeric:
-    "'Inter', 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace",
+    "'Inter', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace",
   // OpenType 特性 — 开启比例数字、表格数字、替代样式、连字等
   fontFeatureSettings: {
     default: "'cv01', 'cv05', 'ss01', 'ss03', 'kern'",
@@ -444,7 +445,8 @@ export const COMPONENT_STYLES = {
     borderRadius: 6,
   },
   editor: {
-    fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+    fontFamily:
+      "ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Consolas, monospace",
     fontSize: 13,
     lineHeight: 1.5,
     tabSize: 2,
@@ -651,11 +653,11 @@ function createThemeConfig(
 }
 
 const DEFAULT_LIGHT: ThemeColorScheme = {
-  // 主色 — 蓝灰 slate：沉稳克制，降低视觉疲劳
-  primary: '#475569',
-  primaryHover: '#566B7F',
-  primaryActive: '#364152',
-  primaryGradient: 'linear-gradient(135deg, #475569 0%, #566B7F 100%)',
+  // 主色 — 靛蓝 indigo：安静但有存在感，与 slate 灰蓝拉开辨识度
+  primary: '#4A5DD6',
+  primaryHover: '#5D6EE0',
+  primaryActive: '#3E4FBF',
+  primaryGradient: 'linear-gradient(135deg, #4A5DD6 0%, #5D6EE0 100%)',
   // 语义色 — 提升辨识度（success 更稳、warning 改 amber、info 去紫味）
   success: '#059669',
   successHover: '#10B981',
@@ -676,11 +678,11 @@ const DEFAULT_LIGHT: ThemeColorScheme = {
 };
 
 const DEFAULT_DARK: ThemeColorScheme = {
-  // 主色 — 蓝灰 slate（dark 镜像）：在深底上保持辨识度但不再偏冷蓝
-  primary: '#8E9EB3',
-  primaryHover: '#A6B5C8',
-  primaryActive: '#6F7F94',
-  primaryGradient: 'linear-gradient(135deg, #8E9EB3 0%, #A6B5C8 100%)',
+  // 主色 — 靛蓝 indigo（dark）：深底上保持饱和度，不再灰蒙蒙
+  primary: '#7186F5',
+  primaryHover: '#8B9CF8',
+  primaryActive: '#5E70E8',
+  primaryGradient: 'linear-gradient(135deg, #5E70E8 0%, #8B9CF8 100%)',
   // 语义色 — dark 模式亮一档，让色彩在深底上鲜明
   success: '#34D399',
   successHover: '#6EE7B7',
@@ -712,12 +714,13 @@ const DEFAULT_LIGHT_NEUTRAL: NeutralColors = {
   background: '#F2F1ED',
   backgroundCard: '#F8F7F4',
   backgroundToolbar: '#EFEEEA',
-  backgroundHover: '#ECEAE5',
-  backgroundActive: '#E8E7E2',
+  backgroundHover: '#EBEDF6',
+  backgroundActive: '#E5E9F7',
   mask: 'rgba(0, 0, 0, 0.3)',
   windowBackground: '#F2F1ED',
-  rowHoverBg: '#ECEAE5',
-  rowSelectedBg: '#E2E0DA',
+  // hover/选中态染上极淡靛蓝，让「当前选中」一眼可辨（米色基底保留）
+  rowHoverBg: '#EBEDF6',
+  rowSelectedBg: '#E0E5F8',
   rowStripeBg: 'rgba(0, 0, 0, 0.015)',
   headerBg: '#F1F0EC',
   surfaceElevated: '#FBFAF7',
@@ -729,7 +732,7 @@ const DEFAULT_LIGHT_NEUTRAL: NeutralColors = {
   level4: '#FBFAF7',
   borderSubtle: '#EFEDE8',
   borderEmphasis: '#D0CEC7',
-  borderActive: '#475569',
+  borderActive: '#4A5DD6',
 };
 
 const DEFAULT_DARK_NEUTRAL: NeutralColors = {
@@ -745,12 +748,13 @@ const DEFAULT_DARK_NEUTRAL: NeutralColors = {
   background: '#1A1D23',
   backgroundCard: '#23262E',
   backgroundToolbar: '#1F2228',
-  backgroundHover: '#2C2F37',
-  backgroundActive: '#3A4049',
+  backgroundHover: '#2B3044',
+  backgroundActive: '#333B58',
   mask: 'rgba(0, 0, 0, 0.6)',
   windowBackground: '#1A1D23',
-  rowHoverBg: '#2C2F37',
-  rowSelectedBg: '#3D4452',
+  // hover/选中态染上靛蓝，与主色呼应
+  rowHoverBg: '#2B3044',
+  rowSelectedBg: '#2E3757',
   rowStripeBg: 'rgba(255, 255, 255, 0.015)',
   headerBg: '#1F2228',
   surfaceElevated: '#2A2D35',
@@ -762,7 +766,7 @@ const DEFAULT_DARK_NEUTRAL: NeutralColors = {
   level4: '#343740',
   borderSubtle: '#22262E',
   borderEmphasis: '#454B55',
-  borderActive: '#8E9EB3',
+  borderActive: '#7186F5',
 };
 
 // ---------- Default 专属增强效果 ----------
@@ -786,17 +790,17 @@ const DEFAULT_GLASS_DARK: GlassEffect = {
 };
 
 const DEFAULT_FOCUS_LIGHT: FocusStyle = {
-  focusRingColor: 'rgba(29, 78, 216, 0.4)',
+  focusRingColor: 'rgba(74, 93, 214, 0.4)',
   focusRingWidth: 2,
   focusRingOffset: 2,
-  focusRingShadow: '0 0 0 2px rgba(29,78,216,0.12)',
+  focusRingShadow: '0 0 0 2px rgba(74,93,214,0.12)',
 };
 
 const DEFAULT_FOCUS_DARK: FocusStyle = {
-  focusRingColor: 'rgba(59, 130, 246, 0.5)',
+  focusRingColor: 'rgba(113, 134, 245, 0.5)',
   focusRingWidth: 2,
   focusRingOffset: 2,
-  focusRingShadow: '0 0 0 2px rgba(59,130,246,0.15), 0 0 12px rgba(59,130,246,0.06)',
+  focusRingShadow: '0 0 0 2px rgba(113,134,245,0.15), 0 0 12px rgba(113,134,245,0.06)',
 };
 
 const DEFAULT_SHADOWS = {
@@ -811,10 +815,10 @@ const DEFAULT_SHADOWS = {
   // dark 阴影：只保留外阴影（卡片浮起物理感），移除 inset 高光（避免 WebView 文字发虚）
   cardShadowDark: '0 1px 2px rgba(0,0,0,0.3), 0 6px 16px rgba(0,0,0,0.4)',
   headerShadowDark: '0 1px 2px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.45)',
-  // glow 跟随 slate 主色 #8B95A7 (light) / #8E9EB3 (dark) → RGB(139,149,167)
-  glowPrimary: '0 0 24px rgba(139,149,167,0.14)',
-  glowPrimarySoft: '0 0 36px rgba(139,149,167,0.10), 0 0 72px rgba(139,149,167,0.04)',
-  glowPrimaryStrong: '0 0 48px rgba(139,149,167,0.22), 0 0 96px rgba(139,149,167,0.08)',
+  // glow 跟随靛蓝主色 #4A5DD6 (light) / #7186F5 (dark) → RGB(94,113,230) 取中间值
+  glowPrimary: '0 0 24px rgba(94,113,230,0.14)',
+  glowPrimarySoft: '0 0 36px rgba(94,113,230,0.10), 0 0 72px rgba(94,113,230,0.04)',
+  glowPrimaryStrong: '0 0 48px rgba(94,113,230,0.22), 0 0 96px rgba(94,113,230,0.08)',
 };
 
 // ==================== Modern 主题配色（Sequel Ace / TablePlus 风格）====================
@@ -878,10 +882,11 @@ const MODERN_LIGHT: ThemeColorScheme = {
   primaryHover: '#0CA599',
   primaryActive: '#067A6E',
   primaryGradient: 'linear-gradient(135deg, #078075 0%, #0CA599 100%)',
-  success: '#059669',
-  successHover: '#10B981',
-  successActive: '#047857',
-  successGradient: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+  // success 用 green 而非 emerald — 与 teal 主色拉开色相距离，避免「成功≈主色」
+  success: '#16A34A',
+  successHover: '#22C55E',
+  successActive: '#15803D',
+  successGradient: 'linear-gradient(135deg, #16A34A 0%, #22C55E 100%)',
   warning: '#D97706',
   warningHover: '#F59E0B',
   warningActive: '#B45309',
@@ -902,10 +907,11 @@ const MODERN_DARK: ThemeColorScheme = {
   primaryHover: '#5EEAD4',
   primaryActive: '#14B8A6',
   primaryGradient: 'linear-gradient(135deg, #14B8A6 0%, #3DDBC9 100%)',
-  success: '#10B981',
-  successHover: '#34D399',
-  successActive: '#059669',
-  successGradient: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+  // success 用亮 green — 与 teal 主色在深底上也分得清
+  success: '#4ADE80',
+  successHover: '#86EFAC',
+  successActive: '#34D399',
+  successGradient: 'linear-gradient(135deg, #4ADE80 0%, #86EFAC 100%)',
   warning: '#F59E0B',
   warningHover: '#FBBF24',
   warningActive: '#D97706',
@@ -999,6 +1005,7 @@ const INK_LIGHT: ThemeColorScheme = {
   primaryHover: '#333333',
   primaryActive: '#000000',
   primaryGradient: 'linear-gradient(135deg, #000000 0%, #333333 100%)',
+  // 浓墨淡彩：唯一彩色让给朱砂红（error/危险操作），success/warning/info 保持墨阶
   success: '#333333',
   successHover: '#555555',
   successActive: '#000000',
@@ -1007,10 +1014,10 @@ const INK_LIGHT: ThemeColorScheme = {
   warningHover: '#888888',
   warningActive: '#555555',
   warningGradient: 'linear-gradient(135deg, #666666 0%, #888888 100%)',
-  error: '#333333',
-  errorHover: '#555555',
-  errorActive: '#000000',
-  errorGradient: 'linear-gradient(135deg, #333333 0%, #555555 100%)',
+  error: '#C0392B',
+  errorHover: '#D65A4E',
+  errorActive: '#A93226',
+  errorGradient: 'linear-gradient(135deg, #C0392B 0%, #D65A4E 100%)',
   info: '#666666',
   infoHover: '#888888',
   infoActive: '#555555',
@@ -1030,10 +1037,10 @@ const INK_DARK: ThemeColorScheme = {
   warningHover: '#BBBBBB',
   warningActive: '#888888',
   warningGradient: 'linear-gradient(135deg, #999999 0%, #BBBBBB 100%)',
-  error: '#CCCCCC',
-  errorHover: '#EEEEEE',
-  errorActive: '#FFFFFF',
-  errorGradient: 'linear-gradient(135deg, #CCCCCC 0%, #EEEEEE 100%)',
+  error: '#E05A4E',
+  errorHover: '#E87870',
+  errorActive: '#C74A3F',
+  errorGradient: 'linear-gradient(135deg, #E05A4E 0%, #E87870 100%)',
   info: '#999999',
   infoHover: '#BBBBBB',
   infoActive: '#888888',

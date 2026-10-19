@@ -50,6 +50,7 @@ export const ViewNode = React.memo<ViewNodeProps>(
         <span
           style={{
             ...TABLE_NODE_STYLE,
+            width: '100%',
             background: backgroundColor,
             border: isSelected ? '1px solid var(--row-selected-bg)' : '1px solid transparent',
           }}
@@ -70,12 +71,30 @@ export const ViewNode = React.memo<ViewNodeProps>(
           data-testid={`view-node-${view.table_name}`}
         >
           <EyeOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-          <span style={{ fontSize: 13 }}>
+          <span
+            style={{
+              fontSize: 12.5,
+              fontFamily: 'var(--font-family-code)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             <HighlightText text={view.table_name} query={searchQuery} />
           </span>
           {view.row_count != null && (
-            <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>
-              ({formatRowCount(view.row_count)})
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--text-tertiary)',
+                marginLeft: 'auto',
+                paddingLeft: 8,
+                fontFamily: 'var(--font-family-numeric)',
+                fontVariantNumeric: 'tabular-nums',
+                flexShrink: 0,
+              }}
+            >
+              {formatRowCount(view.row_count)}
             </span>
           )}
           {hovered && (

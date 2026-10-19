@@ -224,9 +224,9 @@ function App() {
       fontSizeHeading2: 16,
       fontSizeHeading3: 14,
       fontFamily:
-        "'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+        "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
       fontFamilyCode:
-        "'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace",
+        "ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Consolas, 'Courier New', monospace",
     },
     components: {
       Layout: {

@@ -108,12 +108,12 @@ export function StatusBar({
         </Text>
         {selectedDatabase && (
           <Text>
-            {t('common.database')}: {selectedDatabase}
+            {t('common.database')}: {<span style={{ fontFamily: 'var(--font-family-code)' }}>{selectedDatabase}</span>}
           </Text>
         )}
         {selectedTable && (
           <Text>
-            {t('common.table')}: {selectedTable}
+            {t('common.table')}: {<span style={{ fontFamily: 'var(--font-family-code)' }}>{selectedTable}</span>}
           </Text>
         )}
         {isQuerying && (
@@ -141,12 +141,12 @@ export function StatusBar({
           </Tag>
         )}
         {resultRows !== undefined && resultRows > 0 && (
-          <Text style={{ fontSize: 11 }}>
+          <Text style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
             {t('common.rows')}: {resultRows.toLocaleString()}
           </Text>
         )}
         {executionTime !== undefined && executionTime > 0 && (
-          <Text style={{ fontSize: 11 }}>
+          <Text style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
             {t('common.executionTime')}:
             {executionTime < 1000 ? `${executionTime}ms` : `${(executionTime / 1000).toFixed(2)}s`}
           </Text>

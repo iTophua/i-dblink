@@ -252,7 +252,7 @@ export function useTreeData({
                           onClick={() => handlers.onOpenRoutine?.(connId, db.database, proc, 'procedure')}
                         >
                           <CodeOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
-                          <span style={{ fontSize: 14 }}>
+                          <span style={{ fontSize: 12.5, fontFamily: 'var(--font-family-code)' }}>
                             <HighlightText text={proc} query={searchText} />
                           </span>
                         </span>
@@ -321,7 +321,7 @@ export function useTreeData({
                           onClick={() => handlers.onOpenRoutine?.(connId, db.database, func, 'function')}
                         >
                           <FunctionOutlined style={{ color: 'var(--color-info)', fontSize: 14 }} />
-                          <span style={{ fontSize: 14 }}>
+                          <span style={{ fontSize: 12.5, fontFamily: 'var(--font-family-code)' }}>
                             <HighlightText text={func} query={searchText} />
                           </span>
                         </span>
@@ -390,7 +390,7 @@ export function useTreeData({
                           onClick={() => handlers.onOpenTrigger?.(connId, db.database, trigger.name)}
                         >
                           <ThunderboltOutlined style={{ color: 'var(--color-error)', fontSize: 12 }} />
-                          <span style={{ fontSize: 14 }}>
+                          <span style={{ fontSize: 12.5, fontFamily: 'var(--font-family-code)' }}>
                             <HighlightText text={trigger.name} query={searchText} />
                           </span>
                         </span>
@@ -455,7 +455,7 @@ export function useTreeData({
                     title: (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <SortAscendingOutlined style={{ color: 'var(--color-warning)', fontSize: 12 }} />
-                        <span style={{ fontSize: 14 }}>
+                        <span style={{ fontSize: 12.5, fontFamily: 'var(--font-family-code)' }}>
                           <HighlightText text={seq.sequence_name} query={searchText} />
                         </span>
                       </span>
@@ -511,6 +511,8 @@ export function useTreeData({
                             ? 'var(--color-success)'
                             : undefined,
                         fontWeight: db.loaded ? 600 : undefined,
+                        fontSize: 12.5,
+                        fontFamily: 'var(--font-family-code)',
                         userSelect: 'none',
                       }}
                     >
@@ -912,7 +914,8 @@ export function useTreeData({
                            background: 'var(--color-success)',
                            display: 'inline-block',
                            marginLeft: 6,
-                           boxShadow: `0 0 4px var(--color-success-alpha-30, rgba(5,150,105,0.3))`,
+                           boxShadow: '0 0 0 3px var(--color-success-alpha-15, rgba(5,150,105,0.15))',
+                           flexShrink: 0,
                         }}
                       />
                     </Tooltip>

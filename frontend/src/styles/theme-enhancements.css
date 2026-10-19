@@ -22,7 +22,7 @@
 
 /* ==================== 渐变背景效果 ==================== */
 .gradient-primary {
-  background: var(--color-primary-gradient, linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%));
+  background: var(--color-primary-gradient, linear-gradient(135deg, #4A5DD6 0%, #5D6EE0 100%));
   color: #ffffff;
 }
 
@@ -1108,7 +1108,7 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--scrollbar-thumb, rgba(0, 0, 0, 0.1));
   border-radius: 8px;
   border: 1.5px solid transparent;
   background-clip: padding-box;
@@ -1116,7 +1116,7 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--border-emphasis, rgba(0, 0, 0, 0.18));
   background-clip: padding-box;
 }
 

@@ -374,7 +374,8 @@ export function useMonacoEditor({
     // 优化配置：减少内存使用，提升性能
     editor.updateOptions({
       fontSize: 14,
-      fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+      fontFamily:
+        'ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, "Courier New", monospace',
       minimap: { enabled: false }, // 禁用小地图减少内存
       scrollBeyondLastLine: false,
       automaticLayout: true,
