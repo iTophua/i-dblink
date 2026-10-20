@@ -24,7 +24,7 @@ import {
 import { useAIStore } from '../stores/aiStore';
 import { api } from '../api';
 import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
-import { THEME_PRESETS_LIST } from '../styles/theme';
+import { THEME_PRESETS_LIST, THEMES } from '../styles/theme';
 import {
   MENU_SHORTCUTS,
   isMacOS,
@@ -215,17 +215,37 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
             {activeTab === 'appearance' && (
               <div>
                 <Form.Item label={t('common.themePreset')} name="themePreset">
-                  <Select>
-                    {THEME_PRESETS_LIST.map((preset) => (
-                      <Select.Option key={preset.value} value={preset.value}>
-                        <div>
-                          <div>{preset.label}</div>
-                          <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                            {preset.description}
+                  <Select optionLabelProp="label">
+                    {THEME_PRESETS_LIST.map((preset) => {
+                      const c = THEMES[preset.value].light.colors;
+                      const dots = [c.primary, c.success, c.warning, c.error];
+                      return (
+                        <Select.Option key={preset.value} value={preset.value} label={preset.label}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
+                                {dots.map((d) => (
+                                  <span
+                                    key={d}
+                                    style={{
+                                      width: 10,
+                                      height: 10,
+                                      borderRadius: '50%',
+                                      background: d,
+                                      display: 'inline-block',
+                                    }}
+                                  />
+                                ))}
+                              </span>
+                              <span>{preset.label}</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                              {preset.description}
+                            </div>
                           </div>
-                        </div>
-                      </Select.Option>
-                    ))}
+                        </Select.Option>
+                      );
+                    })}
                   </Select>
                 </Form.Item>
                 <Form.Item label={t('common.themeMode')} name="themeMode">

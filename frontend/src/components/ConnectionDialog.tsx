@@ -24,6 +24,8 @@ import {
   KeyOutlined,
   SettingOutlined,
   FolderOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
 } from '@ant-design/icons';
 import { GlobalInput, GlobalInputPassword } from './GlobalInput';
 import { DatabaseIcon } from './DatabaseIcon';
@@ -174,6 +176,12 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  // 测试连接内联结果（toast 一闪而过，内联常驻直到表单再次修改）
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    latencyMs?: number;
+    errorText?: string;
+  } | null>(null);
   // 新建连接的未保存草稿：误关对话框（取消/遮罩/ESC）不清空表单，重开时恢复
   const hasDraftRef = useRef(false);
   // 本次会话是否为编辑已有连接（编辑关闭时清空表单，避免数据泄漏到下次新建）
@@ -265,6 +273,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       testCancelledRef.current = false;
 
       const isSqlite = values.db_type === 'sqlite';
+      const startedAt = performance.now();
       await api.testConnection(
         values.db_type,
         isSqlite ? '' : values.host,
@@ -297,11 +306,11 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
       if (testCancelledRef.current) return;
 
-      message.success(t('common.connectionTestSuccess'));
+      setTestResult({ ok: true, latencyMs: Math.round(performance.now() - startedAt) });
     } catch (error: unknown) {
       if (testCancelledRef.current) return;
       if (error && typeof error === 'object' && 'errorFields' in error) return;
-      message.error(`${t('common.connectionTestFailed')}: ${getErrorMessage(error)}`);
+      setTestResult({ ok: false, errorText: getErrorMessage(error) });
     } finally {
       setTesting(false);
     }
@@ -310,6 +319,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   const handleCancelTest = useCallback(() => {
     testCancelledRef.current = true;
     setTesting(false);
+    setTestResult(null);
   }, []);
 
   const handleOk = useCallback(async () => {
@@ -360,8 +370,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         sslKeyPath: merged.ssl_client_key,
         sslSkipVerify: false,
       });
-      // 保存成功：草稿已消费，清空表单
+      // 保存成功：草稿已消费，清空表单；测试结果随会话结束失效
       hasDraftRef.current = false;
+      setTestResult(null);
       form.resetFields();
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'errorFields' in error) return;
@@ -373,6 +384,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
 
   const handleCancel = useCallback(() => {
     // 编辑会话关闭即清空；新建会话保留草稿（误关不丢已填内容，重开恢复）
+    setTestResult(null);
     if (sessionWasEditRef.current) {
       form.resetFields();
       hasDraftRef.current = false;
@@ -415,7 +427,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         <div
           style={{
             width: 220,
-            backgroundColor: 'var(--bg-secondary)',
+            backgroundColor: 'var(--background-toolbar)',
             borderRight: '1px solid var(--border)',
             display: 'flex',
             flexDirection: 'column',
@@ -556,13 +568,43 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
             </div>
           </div>
 
+          {/* 测试连接内联结果条 */}
+          {testResult && (
+            <div
+              data-testid="conn-test-result"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 20px',
+                fontSize: 13,
+                background: testResult.ok
+                  ? 'var(--color-success-alpha-15)'
+                  : 'var(--color-error-alpha-15)',
+                borderBottom: `1px solid ${
+                  testResult.ok
+                    ? 'var(--color-success-alpha-30)'
+                    : 'var(--color-error-alpha-30)'
+                }`,
+                color: testResult.ok ? 'var(--color-success)' : 'var(--color-error)',
+              }}
+            >
+              {testResult.ok ? <CheckCircleFilled /> : <CloseCircleFilled />}
+              <span>
+                {testResult.ok
+                  ? `${t('common.connectionTestSuccess')} · ${testResult.latencyMs}ms`
+                  : `${t('common.connectionTestFailed')}: ${testResult.errorText}`}
+              </span>
+            </div>
+          )}
+
           {/* Tab 导航 */}
           <div
             style={{
               display: 'flex',
               borderBottom: '1px solid var(--border)',
               padding: '0 20px',
-              backgroundColor: 'var(--bg-secondary)',
+              backgroundColor: 'var(--background-toolbar)',
             }}
           >
             {tabs.map((tab) => (
@@ -609,6 +651,8 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
               onValuesChange={() => {
                 // 新建会话中的任意输入都视为产生草稿（预填不算，setFieldsValue 不触发本回调）
                 if (!editingData) hasDraftRef.current = true;
+                // 表单已改，上次的测试结果不再可信
+                setTestResult(null);
               }}
               initialValues={{
                 name: editingData?.name,

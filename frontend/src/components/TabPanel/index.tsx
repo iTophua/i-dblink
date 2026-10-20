@@ -1232,9 +1232,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   <PushpinFilled style={{ marginRight: 2, flexShrink: 0, fontSize: 10, color: 'var(--color-primary)' }} />
                 )}
                 {table.isView ? (
-                  <EyeOutlined style={{ marginRight: 4, flexShrink: 0 }} />
+                  <EyeOutlined
+                    style={{ marginRight: 4, flexShrink: 0, color: 'var(--color-warning)' }}
+                  />
                 ) : (
-                  <TableOutlined style={{ marginRight: 4, flexShrink: 0 }} />
+                  <TableOutlined
+                    style={{ marginRight: 4, flexShrink: 0, color: 'var(--color-info)' }}
+                  />
                 )}
                 <span
                   style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
