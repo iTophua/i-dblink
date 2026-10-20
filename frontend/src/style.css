@@ -743,6 +743,11 @@ tbody tr:hover {
   margin: 0;
 }
 
+/* ===== antd 6.6 Tabs 高度链 =====
+   v5 时代的 .ant-tabs-content-holder 已改名 .ant-tabs-body-holder，且 6.6 在
+   content 外新增 .ant-tabs-body 包裹层；非活动面板的隐藏改为
+   .ant-tabs-content-hidden 的 display:none（不可被 !important 打穿，否则
+   多面板纵向堆叠、内容超高被裁剪且无法滚动）。 */
 .ant-tabs {
   height: 100% !important;
   display: flex !important;
@@ -751,41 +756,40 @@ tbody tr:hover {
   overflow: hidden !important;
 }
 
-.ant-tabs-content-holder {
+.ant-tabs .ant-tabs-body-holder {
   flex: 1 !important;
   min-height: 0 !important;
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
-  height: 100% !important;
   width: 100% !important;
 }
 
-.ant-tabs-content {
-  height: 100% !important;
-  width: 100% !important;
-  flex: 1 !important;
+.ant-tabs .ant-tabs-body {
+  flex: 1 1 0% !important;
   min-height: 0 !important;
   display: flex !important;
   flex-direction: column !important;
 }
 
-.ant-tabs-tabpane {
+.ant-tabs .ant-tabs-content {
   height: 100% !important;
   width: 100% !important;
-  flex: 1 !important;
-  min-height: 0 !important;
-  flex-direction: column !important;
-}
-
-.ant-tabs-tabpane-active {
-  height: 100% !important;
-  width: 100% !important;
-  flex: 1 !important;
+  flex: 1 1 0% !important;
   min-height: 0 !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
+}
+
+/* 6.6 的面板节点无类名，直接子节点撑满 */
+.ant-tabs .ant-tabs-content > * {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+}
+
+/* 必须声明在 .ant-tabs-content 之后：恢复 antd 对非活动面板的隐藏 */
+.ant-tabs .ant-tabs-content.ant-tabs-content-hidden {
+  display: none !important;
 }
 
 .ant-tabs-nav-wrap {
