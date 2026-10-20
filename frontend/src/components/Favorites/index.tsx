@@ -93,7 +93,7 @@ export function Favorites({ open, onClose, onSelectTable, onSelectQuery }: Favor
         </Space>
       }
       placement="right"
-      width={380}
+      size={380}
       onClose={onClose}
       open={open}
       styles={{ body: { padding: 0 } }}
