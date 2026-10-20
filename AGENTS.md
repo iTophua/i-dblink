@@ -56,7 +56,11 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 - **`ConnectionInput` 命名空间**：Wails TS 绑定中在 `backend` 命名空间下：`new backend.ConnectionInput(source)`
 - **Wails 绑定**（`frontend/wailsjs/`）已 gitignore，`wails dev` 时自动生成，CI 中也会重新生成
 - **浮动窗口功能无效**：Wails v2 不支持前端多窗口 API
-- **i18n 部分完成**：基础设施已搭建（`frontend/src/i18n/`，zh-CN 和 en-US locale），但大部分 UI 文本仍为硬编码中文
+- **i18n 大部分已接入**（2026-10 实测）：2035 个 key、双语言全对齐（此前 12 个
+  en 缺失已补）。剩余硬编码中文约 387 行/52 文件，大头在数据类内容
+  （`constants/sqlFunctions.ts` 函数文档 61 行、`convertRules.ts` 26 行等）；
+  若要继续接入优先级：`menuShortcuts.ts`(37) → `theme.ts` 主题描述(20) →
+  `useApi.ts` 消息(21) → `uxEnhancements.tsx`(32)
 - **无 LICENSE 文件**：README 声明 MIT 但仓库中无 LICENSE 文件
 - **CI 不跑测试**：`.github/workflows/` 仅 `release.yml`（打包发布），无 `test.yml`，以本地验证为准
 

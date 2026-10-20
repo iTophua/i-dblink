@@ -2127,6 +2127,18 @@
     "history": "History",
     "tablesLabel": "Tables",
     "viewsLabel": "Views",
-    "connections": "Connections"
+    "connections": "Connections",
+    "about": "About",
+    "actualSize": "Actual Size",
+    "checkUpdate": "Check for Updates",
+    "dialectConverted": "SQL converted from {{source}} to {{target}} dialect",
+    "documentation": "Documentation",
+    "exit": "Exit",
+    "findReplace": "Find/Replace",
+    "fullscreen": "Toggle Fullscreen",
+    "pageSize": "Rows Per Page",
+    "uiLanguage": "UI Language",
+    "zoomIn": "Zoom In",
+    "zoomOut": "Zoom Out"
   }
 }
