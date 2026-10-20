@@ -118,7 +118,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
     <Drawer
       title={t('common.sqlEditor.snippets')}
       placement="right"
-      width={520}
+      size={520}
       open={open}
       onClose={onClose}
       extra={
@@ -134,7 +134,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
         </Button>
       }
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
+      <Space orientation="vertical" style={{ width: '100%' }} size="large">
         {/* 编辑表单 */}
         {(editingId || !snippets.some((s) => s.name === form.getFieldValue('name'))) && (
           <Form form={form} layout="vertical" onFinish={handleSubmit}>
@@ -230,7 +230,7 @@ export function SnippetManager({ open, onClose, onInsert, dbType }: SnippetManag
                   </Space>
                 }
                 description={
-                  <Space direction="vertical" size={2}>
+                  <Space orientation="vertical" size={2}>
                     <Text style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                       {snippet.sql_text.substring(0, 80)}
                       {snippet.sql_text.length > 80 ? '...' : ''}

@@ -171,7 +171,7 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
       onCancel={onClose}
       footer={null}
       width={560}
-      destroyOnClose
+      destroyOnHidden
     >
       <Segmented
         value={mode}

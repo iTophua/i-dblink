@@ -410,7 +410,7 @@ export function TableExportWizard({
   ]);
 
   const renderTablesStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
       <div style={{ fontWeight: 500, marginBottom: 4 }}>{t('common.importExport.selectTables')}</div>
       <Select
         mode="multiple"
@@ -467,7 +467,7 @@ export function TableExportWizard({
     const currentTable = activeFieldTable || selectedTables[0];
     const currentFields = tableFields[currentTable];
     return (
-      <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+      <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {selectedTables.map((tbl) => (
             <Button
@@ -527,7 +527,7 @@ export function TableExportWizard({
           value={dataRange.mode}
           onChange={(e) => setDataRange((prev) => ({ ...prev, mode: e.target.value }))}
         >
-          <Space direction="vertical">
+          <Space orientation="vertical">
             <Radio value="all">{t('common.importExport.allData')}</Radio>
             <Radio value="limit">
               {t('common.importExport.firstNRows')}
@@ -559,7 +559,7 @@ export function TableExportWizard({
   };
 
   const renderOptionsStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
       {format === 'sql' && (
         <>
           <div style={{ fontWeight: 500 }}>{t('common.importExport.sqlOptions')}</div>
@@ -590,7 +590,7 @@ export function TableExportWizard({
                 value={sqlOptions.insertSyntax}
                 onChange={(e) => setSqlOptions((o) => ({ ...o, insertSyntax: e.target.value }))}
               >
-                <Space direction="vertical">
+                <Space orientation="vertical">
                   <Radio value="insert">INSERT INTO</Radio>
                   <Radio value="insertIgnore">INSERT IGNORE INTO</Radio>
                   <Radio value="replace">REPLACE INTO</Radio>
@@ -668,7 +668,7 @@ export function TableExportWizard({
   );
 
   const renderExportStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
       {!exportDone && (
         <Progress percent={exporting ? progress : 0} status={exporting ? 'active' : undefined} />
       )}

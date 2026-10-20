@@ -91,7 +91,7 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
         </Text>
       )}
 
-      <Space direction="vertical" size={12} style={{ width: '100%', maxWidth: 300 }}>
+      <Space orientation="vertical" size={12} style={{ width: '100%', maxWidth: 300 }}>
         {action && (
           <Button
             type={action.type || 'primary'}

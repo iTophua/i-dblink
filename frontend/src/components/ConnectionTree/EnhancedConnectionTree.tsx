@@ -360,7 +360,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
         .connection-tree-spin-wrapper, .connection-tree-spin-wrapper > .ant-spin-container { height: 100% !important; display: flex !important; flex-direction: column !important; }
         .connection-tree-spin-wrapper > .ant-spin-container > .ant-tree { flex: 1; min-height: 0; }
       `}</style>
-      <Spin spinning={isLoading} size="small" wrapperClassName="connection-tree-spin-wrapper">
+      <Spin spinning={isLoading} size="small" classNames={{ root: 'connection-tree-spin-wrapper' }}>
         {connections.length === 0 && !isLoading ? emptyState : searchText.trim() && treeData.length === 0 ? (
           <div
             style={{

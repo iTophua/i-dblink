@@ -186,7 +186,7 @@ export function BackupRestoreDialog({
             {mode === 'backup' && (
               <>
                 <Form.Item label={t('common.backupContent')}>
-                  <Space direction="vertical">
+                  <Space orientation="vertical">
                     <Form.Item name="includeStructure" valuePropName="checked" noStyle>
                       <Checkbox>{t('common.includeStructure')}</Checkbox>
                     </Form.Item>

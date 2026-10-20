@@ -561,7 +561,7 @@ export function TableImportWizard({
     if (!parsedData) return [];
     return parsedData.headers.map((h) => ({
       title: (
-        <Space direction="vertical" size={0} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={0} style={{ width: '100%' }}>
           <span style={{ fontSize: 12 }}>{h}</span>
           <Select
             size="small"
@@ -598,7 +598,7 @@ export function TableImportWizard({
   }, [parsedData, fieldMapping]);
 
   const renderFileSelectStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
       <div>
         <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('common.importExport.fileType')}</div>
         <Radio.Group value={fileType} onChange={(e) => setFileType(e.target.value)}>
@@ -642,7 +642,7 @@ export function TableImportWizard({
   );
 
   const renderFormatStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
       {fileType === 'csv' && (
         <>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
@@ -756,7 +756,7 @@ export function TableImportWizard({
   );
 
   const renderTargetTableStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
       <div style={{ fontWeight: 500, marginBottom: 4 }}>
         {t('common.importExport.targetTableName')}
       </div>
@@ -816,7 +816,7 @@ export function TableImportWizard({
   );
 
   const renderMappingStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
       <Alert
         message={t('common.autoMappedFields', {
           count: mappedCount,
@@ -860,7 +860,7 @@ export function TableImportWizard({
   );
 
   const renderModeStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
         <Tag style={{ fontSize: 13, padding: '2px 10px', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
           {t('common.importExport.totalRows')}: {parsedData?.rows.length || 0}
@@ -890,7 +890,7 @@ export function TableImportWizard({
       <div>
         <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('common.importExport.importMode')}</div>
         <Radio.Group value={importMode} onChange={(e) => setImportMode(e.target.value)}>
-          <Space direction="vertical">
+          <Space orientation="vertical">
             <Radio value="append">
               {t('common.appendMode')}
               <Tag style={{ marginLeft: 8, fontSize: 11 }}>INSERT</Tag>
@@ -944,7 +944,7 @@ export function TableImportWizard({
     const prog = progress;
     const percent = prog.total > 0 ? Math.round(((prog.success + prog.failed) / prog.total) * 100) : 0;
     return (
-      <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+      <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
         {!prog.done && (
           <Progress percent={importing ? percent : 0} status={importing ? 'active' : undefined} />
         )}
@@ -995,7 +995,7 @@ export function TableImportWizard({
   };
 
   const renderSqlPreviewStep = () => (
-    <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
       {selectedFile && (
         <Alert
           message={`${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`}
@@ -1026,7 +1026,7 @@ export function TableImportWizard({
       <div>
         <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('common.importExport.execMode')}</div>
         <Radio.Group value={sqlExecMode} onChange={(e) => setSqlExecMode(e.target.value)}>
-          <Space direction="vertical">
+          <Space orientation="vertical">
             <Radio value="stop">{t('common.importExport.execStopOnError')}</Radio>
             <Radio value="continue">{t('common.importExport.execContinueOnError')}</Radio>
             <Radio value="transaction">{t('common.importExport.execAsTransaction')}</Radio>

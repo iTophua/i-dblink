@@ -99,7 +99,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
       open={open}
       onCancel={handleClose}
       width={900}
-      destroyOnClose
+      destroyOnHidden
       transitionName=""
       maskTransitionName=""
       footer={

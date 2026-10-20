@@ -246,7 +246,7 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
       onCancel={onCancel}
       width={900}
       footer={null}
-      destroyOnClose
+      destroyOnHidden
       transitionName=""
       maskTransitionName=""
     >

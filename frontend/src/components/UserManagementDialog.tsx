@@ -338,7 +338,7 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         transitionName=""
         maskTransitionName=""
       >
-        <Space direction="vertical" style={{ width: '100%' }} size="large">
+        <Space orientation="vertical" style={{ width: '100%' }} size="large">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text strong>{t('common.userList')}</Text>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateUserOpen(true)}>

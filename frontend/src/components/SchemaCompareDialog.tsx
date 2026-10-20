@@ -246,7 +246,7 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       transitionName=""
       maskTransitionName=""
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
+      <Space orientation="vertical" style={{ width: '100%' }} size="large">
         <Form form={form} layout="vertical">
           <Form.Item
             name="sourceConnectionId"

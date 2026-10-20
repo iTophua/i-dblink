@@ -790,7 +790,7 @@ export function SQLEditor({
       <Drawer
         title={t('common.queryHistoryTitle')}
         placement="right"
-        width={400}
+        size={400}
         onClose={() => setHistoryPanelVisible(false)}
         open={historyPanelVisible}
         styles={{ body: { padding: 0 } }}

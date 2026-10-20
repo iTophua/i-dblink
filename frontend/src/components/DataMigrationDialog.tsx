@@ -208,7 +208,7 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
       open={open}
       onCancel={handleClose}
       width={800}
-      destroyOnClose
+      destroyOnHidden
       transitionName=""
       maskTransitionName=""
       footer={
@@ -244,7 +244,7 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
 
       {/* Step 0: 选择源 */}
       {currentStep === 0 && (
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <div style={{ marginBottom: 8, fontWeight: 500 }}>{t('common.migration.sourceConnection')}</div>
             <Select
@@ -277,7 +277,7 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
 
       {/* Step 1: 选择目标 */}
       {currentStep === 1 && (
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
           <Alert
             type="info"
             showIcon
@@ -352,7 +352,7 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
       {currentStep === 3 && (
         <div>
           {migrationResult.length === 0 ? (
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Space orientation="vertical" style={{ width: '100%' }} size="middle">
               <div
                 style={{
                   display: 'grid',

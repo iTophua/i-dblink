@@ -122,7 +122,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
       confirmLoading={loading}
       okText={t('common.copy')}
       cancelText={t('common.cancel')}
-      destroyOnClose
+      destroyOnHidden
       transitionName=""
       maskTransitionName=""
     >

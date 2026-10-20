@@ -814,7 +814,7 @@ export const DataTable = memo(function DataTable({
           <Tooltip title={t('common.refreshLabel')}><Button icon={<ReloadOutlined />} onClick={() => loadData()} loading={loading} size="small" className="data-toolbar-btn" /></Tooltip>
           <Tooltip title={t('common.dataGrid.filter')}><Button icon={<FilterOutlined />} onClick={() => setShowFilterPanel(!showFilterPanel)} type={showFilterPanel || whereClause ? 'primary' : 'default'} size="small" className="data-toolbar-btn" /></Tooltip>
           <Popover content={
-            <Space direction="vertical" size={2} style={{ maxHeight: 200, overflow: 'auto' }}>
+            <Space orientation="vertical" size={2} style={{ maxHeight: 200, overflow: 'auto' }}>
               {columns.map((col) => (
                 <label key={col.column_name} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                   <input type="checkbox" checked={!hiddenColumns.has(col.column_name)} onChange={() => setHiddenColumns((prev) => { const n = new Set(prev); if (n.has(col.column_name)) n.delete(col.column_name); else n.add(col.column_name); return new Set(n); })} />{col.column_name}

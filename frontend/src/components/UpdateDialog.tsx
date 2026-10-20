@@ -59,7 +59,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
       open={open}
       onCancel={onClose}
       width={520}
-      destroyOnClose
+      destroyOnHidden
       transitionName=""
       maskTransitionName=""
       footer={

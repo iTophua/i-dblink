@@ -264,7 +264,7 @@ export function AIChatPanel({
                         onChange={(checked) => setSelectedDatabases(checked as string[])}
                         style={{ width: '100%' }}
                       >
-                        <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                        <Space orientation="vertical" size={2} style={{ width: '100%' }}>
                           {availableDatabases.map((db) => (
                             <Checkbox key={db} value={db} style={{ fontSize: 12 }}>
                               {db}

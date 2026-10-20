@@ -133,7 +133,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     if (!parsedFile) return [];
     return parsedFile.headers.map((h) => ({
       title: (
-        <Space direction="vertical" size={0} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={0} style={{ width: '100%' }}>
           <span>{h}</span>
           <Select
             size="small"
@@ -212,7 +212,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     {
       title: t('common.selectFile'),
       content: (
-        <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+        <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
           {parseError && (
             <Alert
               message={parseError}
@@ -240,7 +240,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     {
       title: t('common.fieldMapping'),
       content: (
-        <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+        <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
           <Alert
             message={t('common.autoMappedFields', {
               count: mappedCount,
@@ -271,7 +271,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
               {t('common.importExport.importMode')}
             </div>
             <Radio.Group value={importMode} onChange={(e) => setImportMode(e.target.value)}>
-              <Space direction="vertical">
+              <Space orientation="vertical">
                 <Radio value="append">
                   {t('common.appendMode')}
                   <Tag style={{ marginLeft: 8, fontSize: 11 }}>INSERT</Tag>
@@ -306,7 +306,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     {
       title: t('common.importExport.previewData'),
       content: (
-        <Space direction="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
+        <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <Tag style={{ fontSize: 13, padding: '2px 10px', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
               {t('common.importExport.totalRows')}: {parsedFile?.rows.length || 0}
@@ -366,7 +366,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     {
       title: t('common.confirmImport'),
       content: (
-        <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+        <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
           <Alert
             message={t('common.preparingToImportRows', {
               count: selectedRows.size,

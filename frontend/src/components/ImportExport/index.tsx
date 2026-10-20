@@ -346,7 +346,7 @@ export function ImportExportModal({
       onCancel={onClose}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
       transitionName=""
       maskTransitionName=""
     >

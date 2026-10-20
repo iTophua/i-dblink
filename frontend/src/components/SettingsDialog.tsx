@@ -192,7 +192,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                     max={10000}
                     step={100}
                     style={{ width: '100%' }}
-                    addonAfter={t('common.rows')}
+                    suffix={t('common.rows')}
                   />
                 </Form.Item>
                 <Form.Item
@@ -206,7 +206,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                     max={100000}
                     step={1000}
                     style={{ width: '100%' }}
-                    addonAfter={t('common.rows')}
+                    suffix={t('common.rows')}
                   />
                 </Form.Item>
               </div>

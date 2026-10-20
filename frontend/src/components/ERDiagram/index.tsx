@@ -459,7 +459,7 @@ export function ERDiagram({ connectionId, database }: ERDiagramProps) {
           }}
         >
           <Card>
-            <Space direction="vertical" align="center">
+            <Space orientation="vertical" align="center">
               <div style={{ color: 'var(--text-secondary)' }}>{t('common.noTableData')}</div>
               <Button icon={<ReloadOutlined />} onClick={fetchSchema}>
                 {t('common.refresh')}

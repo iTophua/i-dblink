@@ -597,7 +597,7 @@ function MainLayoutComponent() {
         }}
         okText={t('common.mainLayout.connect')}
         cancelText={t('common.cancel')}
-        destroyOnClose
+        destroyOnHidden
         transitionName=""
         maskTransitionName=""
       >
