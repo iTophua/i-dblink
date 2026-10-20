@@ -239,7 +239,9 @@ func TestDropTable(t *testing.T) {
 		assert.Empty(t, resp.Error)
 	})
 
-	t.Run("drop non-existent table", func(t *testing.T) {
+	t.Run("drop non-existent table is idempotent", func(t *testing.T) {
+		// DROP TABLE IF EXISTS 语义：表不存在时静默成功（幂等），
+		// 旧断言期待报错是过时的
 		body := models.TableOperationRequest{
 			ConnectionID: connID,
 			TableName:    "non_existent",
@@ -254,7 +256,7 @@ func TestDropTable(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 		var resp models.GenericResponse
 		require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
-		assert.NotEmpty(t, resp.Error)
+		assert.Empty(t, resp.Error)
 	})
 }
 

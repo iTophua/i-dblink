@@ -55,7 +55,6 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 - **`ConnectionInput` 命名空间**：Wails TS 绑定中在 `backend` 命名空间下：`new backend.ConnectionInput(source)`
 - **Wails 绑定**（`frontend/wailsjs/`）已 gitignore，`wails dev` 时自动生成，CI 中也会重新生成
-- **已知 Go 测试失败**（非你的改动引起）：`TestConvertValue/int`（类型断言）、`TestDropTable/drop_non-existent_table`
 - **浮动窗口功能无效**：Wails v2 不支持前端多窗口 API
 - **i18n 部分完成**：基础设施已搭建（`frontend/src/i18n/`，zh-CN 和 en-US locale），但大部分 UI 文本仍为硬编码中文
 - **无 LICENSE 文件**：README 声明 MIT 但仓库中无 LICENSE 文件

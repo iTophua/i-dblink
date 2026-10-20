@@ -169,7 +169,9 @@ func TestConvertValue(t *testing.T) {
 		expected interface{}
 	}{
 		{"nil", nil, nil},
-		{"int", int64(42), float64(42)},
+		// 安全范围内的 int64 保持原样返回（JSON 数字可精确表达），
+		// 仅超 ±2^53 时转字符串——见 TestConvertValueBigintAsString 回归说明
+		{"int", int64(42), int64(42)},
 		{"float", float64(3.14), float64(3.14)},
 		{"string", "hello", "hello"},
 		{"bool", true, true},

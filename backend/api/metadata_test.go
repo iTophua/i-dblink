@@ -267,6 +267,14 @@ func TestGetIndexes(t *testing.T) {
 	handler := setupMetadataTest(t)
 
 	t.Run("get indexes for users table", func(t *testing.T) {
+		// INTEGER PRIMARY KEY 是 rowid 别名，不产生任何自动索引；
+		// 显式建一个索引让 index_list 有内容可查
+		idxReq := models.QueryRequest{ConnectionID: "test-meta-conn", SQL: "CREATE INDEX idx_users_username ON users(username)"}
+		idxBytes, _ := json.Marshal(idxReq)
+		req0 := httptest.NewRequest("POST", "/query", bytes.NewReader(idxBytes))
+		req0.Header.Set("Content-Type", "application/json")
+		handler.Query(httptest.NewRecorder(), req0)
+
 		dbName := "main"
 		tableName := "users"
 		body := MetadataRequest{
@@ -284,7 +292,6 @@ func TestGetIndexes(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 		var indexes []models.IndexInfo
 		require.NoError(t, json.NewDecoder(rr.Body).Decode(&indexes))
-		// SQLite auto-index for primary key
 		assert.GreaterOrEqual(t, len(indexes), 1)
 	})
 }

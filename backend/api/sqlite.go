@@ -40,35 +40,26 @@ func sqliteGetTables(ctx context.Context, dbConn db.Executor, _database *string)
 }
 
 func sqliteGetTablesCategorized(ctx context.Context, dbConn db.Executor, _database *string, search *string) (models.TablesResult, error) {
+	// 此前只查 type='table'，Views 恒为空——SQLite 连接的视图从未在目录树中出现
 	result := models.TablesResult{
 		Tables: []models.TableInfo{},
 		Views:  []models.TableInfo{},
 	}
-	var query string
+	query := `
+		SELECT name AS table_name,
+			CASE WHEN type = 'view' THEN 'VIEW' ELSE 'BASE TABLE' END AS table_type,
+			NULL AS row_count, NULL AS comment, NULL AS engine,
+			NULL AS data_size, NULL AS index_size,
+			NULL AS create_time, NULL AS update_time, NULL AS collation
+		FROM sqlite_master
+		WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'
+	`
 	var args []interface{}
-
 	if search != nil && *search != "" {
-		query = `
-			SELECT name AS table_name, 'BASE TABLE' AS table_type,
-				NULL AS row_count, NULL AS comment, NULL AS engine,
-				NULL AS data_size, NULL AS index_size,
-				NULL AS create_time, NULL AS update_time, NULL AS collation
-			FROM sqlite_master
-			WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name LIKE ?
-			ORDER BY name
-		`
+		query += ` AND name LIKE ?`
 		args = append(args, "%"+*search+"%")
-	} else {
-		query = `
-			SELECT name AS table_name, 'BASE TABLE' AS table_type,
-				NULL AS row_count, NULL AS comment, NULL AS engine,
-				NULL AS data_size, NULL AS index_size,
-				NULL AS create_time, NULL AS update_time, NULL AS collation
-			FROM sqlite_master
-			WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-			ORDER BY name
-		`
 	}
+	query += ` ORDER BY type, name`
 
 	rows, err := dbConn.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -82,7 +73,11 @@ func sqliteGetTablesCategorized(ctx context.Context, dbConn db.Executor, _databa
 		if err := rows.Scan(&t.TableName, &t.TableType, &tmp1, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7, &tmp8); err != nil {
 			continue
 		}
-		result.Tables = append(result.Tables, t)
+		if t.TableType == "VIEW" {
+			result.Views = append(result.Views, t)
+		} else {
+			result.Tables = append(result.Tables, t)
+		}
 	}
 	return result, rows.Err()
 }
@@ -191,10 +186,13 @@ func sqliteGetIndexes(ctx context.Context, dbConn db.Executor, tableName string,
 	}
 	var entries []indexEntry
 	for listRows.Next() {
+		// PRAGMA index_list 列序：seq, name, unique, origin, partial。
+		// 此前按 (name, unique, origin, partial, tmp) 扫描，seq(int) 落进 name(string)
+		// 必然 scan 失败被 continue——SQLite 的索引列表从未被返回过
+		var seq int
 		var name, origin, partial string
 		var isUnique bool
-		var tmp interface{}
-		if err := listRows.Scan(&name, &isUnique, &origin, &partial, &tmp); err != nil {
+		if err := listRows.Scan(&seq, &name, &isUnique, &origin, &partial); err != nil {
 			continue
 		}
 		entries = append(entries, indexEntry{name: name, isUnique: isUnique})
@@ -238,10 +236,11 @@ func sqliteGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName str
 
 	var result []models.ForeignKeyInfo
 	for rows.Next() {
+		// PRAGMA foreign_key_list 恰好 8 列：id, seq, table, from, to, on_update,
+		// on_delete, match。此前多扫一个 tmp（9 目标）必然失败——外键从未被返回过
 		var id, seq int64
 		var refTable, from, to, onUpdate, onDelete, match string
-		var tmp interface{}
-		if err := rows.Scan(&id, &seq, &refTable, &from, &to, &onUpdate, &onDelete, &match, &tmp); err != nil {
+		if err := rows.Scan(&id, &seq, &refTable, &from, &to, &onUpdate, &onDelete, &match); err != nil {
 			continue
 		}
 		result = append(result, models.ForeignKeyInfo{
