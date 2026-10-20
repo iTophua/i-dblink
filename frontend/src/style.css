@@ -29,17 +29,6 @@
   /* 全屏加载遮罩：跟随主题底色，避免暗色模式下出现白色蒙层 */
   --overlay-scrim: color-mix(in srgb, var(--background) 80%, transparent);
 
-  --db-color-mysql: #1890ff;
-  --db-color-postgresql: #336791;
-  --db-color-sqlite: #003b57;
-  --db-color-sqlserver: #cc2927;
-  --db-color-oracle: #f80000;
-  --db-color-mariadb: #c0765a;
-  --db-color-dameng: #b30000;
-  --db-color-kingbase: #0066cc;
-  --db-color-highgo: #1e90ff;
-  --db-color-vastbase: #008000;
-
   --text-primary: #111111;
   --text-secondary: #3F3F46;
   --text-tertiary: #6B7280;

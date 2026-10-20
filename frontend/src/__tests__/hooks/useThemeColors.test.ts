@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { DB_TYPE_COLORS } from '../../styles/theme';
 
 describe('useThemeColors', () => {
   it('returns a ThemeColors interface', () => {
@@ -30,16 +31,6 @@ describe('useThemeColors', () => {
       headerBg: '#161b22',
       scrollbarThumb: '#30363d',
       scrollbarTrack: '#0d1117',
-      dbMysql: '#4479a1',
-      dbPostgresql: '#336791',
-      dbSqlite: '#003b57',
-      dbSqlserver: '#D32029',
-      dbOracle: '#f80000',
-      dbMariadb: '#007582',
-      dbDameng: '#84a35c',
-      dbKingbase: '#6d98a0',
-      dbHighgo: '#5b838f',
-      dbVastbase: '#4a7c8f',
       logError: '#ff4d4f',
       logWarn: '#faad14',
       logOk: '#52c41a',
@@ -48,8 +39,6 @@ describe('useThemeColors', () => {
 
     expect(mockThemeColors.isDark).toBe(true);
     expect(mockThemeColors.primary).toBe('#1890ff');
-    expect(mockThemeColors.dbMysql).toBe('#4479a1');
-    expect(mockThemeColors.dbPostgresql).toBe('#336791');
     expect(mockThemeColors.logError).toBe('#ff4d4f');
   });
 
@@ -67,20 +56,10 @@ describe('useThemeColors', () => {
   });
 
   it('database type colors are distinct', () => {
-    const dbColors = {
-      mysql: '#4479a1',
-      postgresql: '#336791',
-      sqlite: '#003b57',
-      sqlserver: '#D32029',
-      oracle: '#f80000',
-      mariadb: '#007582',
-      dameng: '#84a35c',
-      kingbase: '#6d98a0',
-      highgo: '#5b838f',
-      vastbase: '#4a7c8f',
-    };
+    // 直接引用 theme.ts 的单一来源，避免测试里再养一份会过时的副本
+    const dbColors = Object.entries(DB_TYPE_COLORS).filter(([k]) => k !== 'default');
 
-    const uniqueColors = new Set(Object.values(dbColors));
-    expect(uniqueColors.size).toBe(10);
+    expect(dbColors.length).toBe(10);
+    expect(new Set(dbColors.map(([, v]) => v)).size).toBe(10);
   });
 });

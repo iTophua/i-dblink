@@ -38,17 +38,6 @@ export interface ThemeColors {
   // 滚动条
   scrollbarThumb: string;
   scrollbarTrack: string;
-  // 数据库类型色
-  dbMysql: string;
-  dbPostgresql: string;
-  dbSqlite: string;
-  dbSqlserver: string;
-  dbOracle: string;
-  dbMariadb: string;
-  dbDameng: string;
-  dbKingbase: string;
-  dbHighgo: string;
-  dbVastbase: string;
   // 日志级别色
   logError: string;
   logWarn: string;
@@ -100,16 +89,6 @@ export function useThemeColors(): ThemeColors {
       headerBg: n.headerBg,
       scrollbarThumb: n.scrollbarThumb,
       scrollbarTrack: n.scrollbarTrack,
-      dbMysql: config.dbTypeColors.mysql,
-      dbPostgresql: config.dbTypeColors.postgresql,
-      dbSqlite: config.dbTypeColors.sqlite,
-      dbSqlserver: config.dbTypeColors.sqlserver,
-      dbOracle: config.dbTypeColors.oracle,
-      dbMariadb: config.dbTypeColors.mariadb,
-      dbDameng: config.dbTypeColors.dameng,
-      dbKingbase: config.dbTypeColors.kingbase,
-      dbHighgo: config.dbTypeColors.highgo,
-      dbVastbase: config.dbTypeColors.vastbase,
       logError: c.error,
       logWarn: c.warning,
       logOk: c.success,

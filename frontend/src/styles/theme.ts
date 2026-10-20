@@ -90,7 +90,6 @@ export interface ThemeConfig {
   glassLayers: typeof GLASS_LAYERS;
   focusStyle: FocusStyle;
   lighting: typeof LIGHTING_EFFECTS;
-  dbTypeColors: Record<string, string>;
   typography: typeof TYPOGRAPHY;
   spacing: typeof SPACING;
   sizes: typeof SIZES;
@@ -472,18 +471,21 @@ export const COMPONENT_STYLES = {
 
 // ==================== 数据库类型配色 ====================
 
-export const DB_TYPE_COLORS = {
-  mysql: '#1890ff',
+// 数据库官方品牌色 —— 全库唯一色值来源（DatabaseIcon 的图标着色与
+// ConnectionDialog 的激活态取色均引用此表；此前与 style.css/DatabaseIcon
+// 三处各维护一份且值不一致）
+export const DB_TYPE_COLORS: Record<string, string> = {
+  mysql: '#4479A1',
   postgresql: '#336791',
-  sqlite: '#003b57',
-  sqlserver: '#cc2927',
-  oracle: '#f80000',
-  mariadb: '#c0765a',
-  dameng: '#b30000',
-  kingbase: '#0066cc',
-  highgo: '#1e90ff',
-  vastbase: '#008000',
-  default: '#1890ff',
+  sqlite: '#0F80CC',
+  sqlserver: '#0078D4',
+  oracle: '#EA1B22',
+  mariadb: '#003545',
+  dameng: '#5E3884',
+  kingbase: '#003FA0',
+  highgo: '#008080',
+  vastbase: '#FE9500',
+  default: '#4479A1',
 };
 
 // ==================== 玻璃拟态效果（Glassmorphism）====================
@@ -638,7 +640,6 @@ function createThemeConfig(
     glassLayers: overrides?.glassLayers ?? GLASS_LAYERS,
     focusStyle: overrides?.focusStyle ?? FOCUS_STYLES[effectiveMode],
     lighting: overrides?.lighting ?? LIGHTING_EFFECTS,
-    dbTypeColors: DB_TYPE_COLORS,
     typography: TYPOGRAPHY,
     spacing: SPACING,
     sizes: SIZES,

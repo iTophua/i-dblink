@@ -128,10 +128,6 @@ function App() {
         root.style.setProperty(`--${cssKey}`, value);
       });
 
-      Object.entries(themeConfig.dbTypeColors).forEach(([key, value]) => {
-        root.style.setProperty(`--db-color-${key}`, value);
-      });
-
       Object.entries(themeConfig.glassEffect).forEach(([key, value]) => {
         // key 形如 glassBackground：需去掉族前缀再转 kebab，产出 --glass-background。
         // 此前未去前缀产出 --glass-glass-background，theme-enhancements.css 的消费端从未命中，
