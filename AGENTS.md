@@ -82,6 +82,12 @@ pnpm lint → pnpm exec -- tsc --noEmit → pnpm test → go test ./...
 
 修改前后端代码后按此顺序验证，任一步骤失败应立即修复。
 
+**提交前 review（强制，用户要求）**：每次 `git commit` 前必须完成两步——
+1. `git diff` 逐行自查：逻辑边界、回归风险、遗漏的关联改动（i18n 双语 key、类型定义、清理无用 import 等）
+2. 跑完上面的验证顺序（改动范围内 applicable 的步骤）
+
+发现问题先修复再审，全部通过才允许提交。
+
 ## Code style
 
 | 配置 | 值 |
