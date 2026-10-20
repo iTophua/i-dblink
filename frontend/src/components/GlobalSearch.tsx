@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { Modal, Input, List, Tag, Empty } from 'antd';
 import { SearchOutlined, TableOutlined, EyeOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useThemeColors } from '../hooks/useThemeColors';
 import type { TableInfo } from '../types/api';
 
 interface GlobalSearchProps {
@@ -19,7 +18,6 @@ export function GlobalSearch({
   connectionDatabases = {},
 }: GlobalSearchProps) {
   const { t } = useTranslation();
-  const tc = useThemeColors();
   const [query, setQuery] = useState('');
 
   const results = useMemo(() => {
@@ -97,9 +95,9 @@ export function GlobalSearch({
               <List.Item.Meta
                 avatar={
                   item.type === 'view' ? (
-                    <EyeOutlined style={{ color: tc.primary }} />
+                    <EyeOutlined style={{ color: 'var(--color-warning)' }} />
                   ) : (
-                    <TableOutlined style={{ color: tc.primary }} />
+                    <TableOutlined style={{ color: 'var(--color-info)' }} />
                   )
                 }
                 title={item.name}
@@ -108,7 +106,7 @@ export function GlobalSearch({
                     <Tag style={{ fontSize: 11, padding: '0 4px' }}>{item.database}</Tag>{' '}
                     <Tag
                       style={{ fontSize: 11, padding: '0 4px' }}
-                      color={item.type === 'view' ? 'blue' : 'green'}
+                      color={item.type === 'view' ? 'orange' : 'blue'}
                     >
                       {item.type === 'view' ? t('common.view') : t('common.table')}
                     </Tag>

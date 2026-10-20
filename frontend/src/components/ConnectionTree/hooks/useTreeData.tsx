@@ -212,7 +212,7 @@ export function useTreeData({
           key: folderKey,
           title: db.routinesLoaded ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-              <CodeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
+              <CodeOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
               <span>{t('common.procedures', { count: db.procedures?.length || 0 })}</span>
             </span>
           ) : isDbExpanded ? (
@@ -222,7 +222,7 @@ export function useTreeData({
             </span>
           ) : (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-              <CodeOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
+              <CodeOutlined style={{ color: 'var(--color-success)', fontSize: 12 }} />
               <span>{t('common.databaseProperties.procedures')}</span>
             </span>
           ),
@@ -916,6 +916,20 @@ export function useTreeData({
                            marginLeft: 6,
                            boxShadow: '0 0 0 3px var(--color-success-alpha-15, rgba(5,150,105,0.15))',
                            flexShrink: 0,
+                        }}
+                      />
+                    </Tooltip>
+                  ) : conn.status !== 'loading' ? (
+                    <Tooltip title={t('common.mainLayout.disconnected')}>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: 'var(--text-disabled)',
+                          display: 'inline-block',
+                          marginLeft: 6,
+                          flexShrink: 0,
                         }}
                       />
                     </Tooltip>

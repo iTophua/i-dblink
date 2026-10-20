@@ -60,16 +60,16 @@ export const EnhancedEmptyState: React.FC<EnhancedEmptyStateProps> = ({
           width: 80,
           height: 80,
           borderRadius: '50%',
-          // 纯淡主色环（去渐变）：安静的一圈染色，随主题变化
-          background: 'var(--color-primary-alpha-15)',
+          // 淡 info 色环（去渐变）：空数据用信息蓝，与树/搜索中的数据载体色一致
+          background: 'var(--color-info-alpha-15)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 20,
-          border: '1px solid var(--color-primary-alpha-30)',
+          border: '1px solid var(--color-info-alpha-30)',
         }}
       >
-        {icon || <DatabaseOutlined style={{ fontSize: 34, color: 'var(--color-primary)' }} />}
+        {icon || <DatabaseOutlined style={{ fontSize: 34, color: 'var(--color-info)' }} />}
       </div>
 
       <Title level={4} style={{ marginBottom: 8, textAlign: 'center' }}>
