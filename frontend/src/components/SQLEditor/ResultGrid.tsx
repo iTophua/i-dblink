@@ -762,7 +762,7 @@ export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean
               const indent = getPGIndent(text);
               const cleanText = text.replace(/^\s*(?:->\s*)*/, '');
               const isPlanLine = /^\s*->/.test(text);
-              const bg = isPlanLine ? (i % 2 === 0 ? 'var(--background-elevated)' : 'transparent') : 'transparent';
+              const bg = isPlanLine ? (i % 2 === 0 ? 'var(--row-stripe-bg)' : 'transparent') : 'transparent';
               return (
                 <tr key={i} style={{ background: bg }}>
                   <td style={{
@@ -818,7 +818,7 @@ export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean
             const indent = isMySQL ? getMySQLIndent(row as Record<string, unknown>) : 0;
             const bg = color
               ? adjustColor(color.bg, isDark)
-              : (rowIdx % 2 === 0 ? 'transparent' : 'var(--background-elevated)');
+              : (rowIdx % 2 === 0 ? 'transparent' : 'var(--row-stripe-bg)');
 
             return (
               <tr key={rowIdx} style={{ background: bg }}>

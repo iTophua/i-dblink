@@ -125,7 +125,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
 
       {currentStep === 0 && (
         <div>
-          <p style={{ marginBottom: 16, color: 'var(--ant-color-text-secondary)' }}>
+          <p style={{ marginBottom: 16, color: 'var(--text-secondary)' }}>
             {t('common.docGenerator.selectContentDesc', { database })}
           </p>
           <div
@@ -134,7 +134,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '8px 16px',
               padding: '16px',
-              background: 'var(--ant-color-fill-tertiary)',
+              background: 'var(--background)',
               borderRadius: '8px',
             }}
           >
@@ -163,7 +163,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
                 maxHeight: '500px',
                 overflow: 'auto',
                 padding: '16px',
-                background: 'var(--ant-color-fill-tertiary)',
+                background: 'var(--background)',
                 borderRadius: '8px',
                 fontSize: '12px',
                 lineHeight: '1.6',

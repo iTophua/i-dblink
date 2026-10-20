@@ -352,8 +352,8 @@ export const QuickStartGuide: React.FC<{
             width: 56,
             height: 56,
             borderRadius: 12,
-            background:
-              'linear-gradient(135deg, var(--color-primary) 0%, var(--primary-active) 100%)',
+              background:
+                'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-active) 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

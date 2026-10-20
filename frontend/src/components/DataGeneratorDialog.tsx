@@ -399,7 +399,7 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
                           border: '1px solid var(--border)',
                           borderRadius: 4,
                           background: 'var(--background)',
-                          color: 'var(--text)',
+                          color: 'var(--text-primary)',
                           fontSize: 12,
                         }}
                         value={cfg?.fixedValue ?? ''}

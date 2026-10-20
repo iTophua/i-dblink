@@ -133,12 +133,24 @@ function App() {
       });
 
       Object.entries(themeConfig.glassEffect).forEach(([key, value]) => {
-        const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+        // key 形如 glassBackground：需去掉族前缀再转 kebab，产出 --glass-background。
+        // 此前未去前缀产出 --glass-glass-background，theme-enhancements.css 的消费端从未命中，
+        // 玻璃效果一直走的是 CSS 里的静态 fallback 值
+        const cssKey = key
+          .replace(/^glass/, '')
+          .replace(/([A-Z])/g, '-$1')
+          .toLowerCase()
+          .replace(/^-/, '');
         root.style.setProperty(`--glass-${cssKey}`, value);
       });
 
       Object.entries(themeConfig.focusStyle).forEach(([key, value]) => {
-        const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+        // 同上：focusRingColor → --focus-ring-color（非 --focus-focus-ring-color）
+        const cssKey = key
+          .replace(/^focus/, '')
+          .replace(/([A-Z])/g, '-$1')
+          .toLowerCase()
+          .replace(/^-/, '');
         if (typeof value === 'number') {
           root.style.setProperty(`--focus-${cssKey}`, `${value}px`);
         } else {

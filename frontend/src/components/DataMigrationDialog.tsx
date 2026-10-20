@@ -359,7 +359,7 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
                   gridTemplateColumns: 'repeat(2, 1fr)',
                   gap: '12px 24px',
                   padding: '16px',
-                  background: 'var(--ant-color-fill-tertiary)',
+                  background: 'var(--background)',
                   borderRadius: '8px',
                 }}
               >

@@ -134,7 +134,7 @@ export function SqlDialectBanner({
                 type="text"
                 icon={<CloseOutlined />}
                 onClick={onDismiss}
-                style={{ fontSize: 12, height: 24, color: 'var(--color-text-tertiary)' }}
+                style={{ fontSize: 12, height: 24, color: 'var(--text-tertiary)' }}
               />
             </Tooltip>
           </Space>

@@ -1012,7 +1012,7 @@ function TableListComponent({
                               border: '1px solid var(--border)',
                               borderRadius: 4,
                               background: 'var(--background)',
-                              color: 'var(--text)',
+                              color: 'var(--text-primary)',
                             }}
                           />
                         </div>

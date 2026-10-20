@@ -92,7 +92,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
               <Text strong>{t('common.updateDialog.currentVersion')}:</Text>{' '}
               <Tag>{updateInfo.current_version}</Tag>
             </div>
-            <div style={{ fontSize: 18, color: 'var(--ant-color-text-tertiary)' }}>→</div>
+            <div style={{ fontSize: 18, color: 'var(--text-tertiary)' }}>→</div>
             <div>
               <Text strong>{t('common.updateDialog.latestVersion')}:</Text>{' '}
               <Tag color={updateInfo.has_update ? 'green' : 'default'}>
@@ -106,7 +106,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
               <div
                 style={{
                   padding: '8px 12px',
-                  background: 'var(--ant-color-success-bg)',
+                  background: 'var(--color-success-alpha-15)',
                   borderRadius: '6px',
                   marginBottom: 16,
                   display: 'flex',
@@ -114,7 +114,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
                   gap: 8,
                 }}
               >
-                <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
+                <CheckCircleOutlined style={{ color: 'var(--color-success)' }} />
                 <Text>{t('common.updateDialog.newVersionAvailable')}</Text>
               </div>
 
@@ -139,7 +139,7 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
                       maxHeight: 200,
                       overflow: 'auto',
                       padding: '12px',
-                      background: 'var(--ant-color-fill-tertiary)',
+                      background: 'var(--background)',
                       borderRadius: '6px',
                       fontSize: 12,
                       whiteSpace: 'pre-wrap',
@@ -155,12 +155,12 @@ export function UpdateDialog({ open, onClose }: UpdateDialogProps) {
               style={{
                 textAlign: 'center',
                 padding: '20px',
-                background: 'var(--ant-color-fill-tertiary)',
+                background: 'var(--background)',
                 borderRadius: '8px',
               }}
             >
               <CheckCircleOutlined
-                style={{ fontSize: 32, color: 'var(--ant-color-success)', marginBottom: 8 }}
+                style={{ fontSize: 32, color: 'var(--color-success)', marginBottom: 8 }}
               />
               <div>
                 <Text>{t('common.updateDialog.alreadyLatest')}</Text>

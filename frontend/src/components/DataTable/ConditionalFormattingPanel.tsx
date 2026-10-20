@@ -294,7 +294,7 @@ function RuleRow({
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
-        background: 'var(--background-elevated, var(--background-card))',
+        background: 'var(--surface-elevated, var(--background-card))',
       }}
     >
       {/* Row 1: column + condition + delete */}
