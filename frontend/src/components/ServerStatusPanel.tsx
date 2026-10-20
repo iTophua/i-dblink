@@ -118,7 +118,11 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
       : 0;
 
   const connectionStatusColor =
-    connectionPercent > 80 ? '#ff4d4f' : connectionPercent > 50 ? '#faad14' : '#52c41a';
+    connectionPercent > 80
+      ? 'var(--color-error)'
+      : connectionPercent > 50
+        ? 'var(--color-warning)'
+        : 'var(--color-success)';
 
   return (
     <Drawer

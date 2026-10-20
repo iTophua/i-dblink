@@ -26,6 +26,9 @@
   --color-info-alpha-15: color-mix(in srgb, var(--color-info) 15%, transparent);
   --color-info-alpha-30: color-mix(in srgb, var(--color-info) 30%, transparent);
 
+  /* 全屏加载遮罩：跟随主题底色，避免暗色模式下出现白色蒙层 */
+  --overlay-scrim: color-mix(in srgb, var(--background) 80%, transparent);
+
   --db-color-mysql: #1890ff;
   --db-color-postgresql: #336791;
   --db-color-sqlite: #003b57;

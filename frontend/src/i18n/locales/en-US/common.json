@@ -1297,6 +1297,7 @@
     "cyan": "Cyan",
     "pink": "Pink",
     "gray": "Gray",
+    "currentColor": "Current Color",
     "editGroupTitle": "Edit Group",
     "newGroupTitle": "New Group",
     "saveGroup": "Save",

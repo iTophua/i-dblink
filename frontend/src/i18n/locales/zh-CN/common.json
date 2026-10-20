@@ -1313,6 +1313,7 @@
     "cyan": "青色",
     "pink": "粉色",
     "gray": "灰色",
+    "currentColor": "当前颜色",
     "editGroupTitle": "编辑分组",
     "newGroupTitle": "新建分组",
     "saveGroup": "保存",

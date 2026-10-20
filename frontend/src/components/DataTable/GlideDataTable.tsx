@@ -693,7 +693,7 @@ export function GlideDataTable({
       const secondY = rect.y + 36;
       let secondX = rect.x + 8;
       if (isPk) {
-        ctx.fillStyle = '#faad14';
+        ctx.fillStyle = tc.warning;
         ctx.font = 'bold 10px sans-serif';
         ctx.fillText('PK', secondX, secondY);
         secondX += 22;

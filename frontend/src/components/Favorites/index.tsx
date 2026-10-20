@@ -88,7 +88,7 @@ export function Favorites({ open, onClose, onSelectTable, onSelectQuery }: Favor
     <Drawer
       title={
         <Space>
-          <StarFilled style={{ color: '#faad14' }} />
+          <StarFilled style={{ color: 'var(--color-warning)' }} />
           {t('common.favorites')}
         </Space>
       }
@@ -167,11 +167,11 @@ export function Favorites({ open, onClose, onSelectTable, onSelectQuery }: Favor
                 avatar={
                   item.type === 'table' ? (
                     <TableOutlined
-                      style={{ fontSize: 16, color: 'var(--color-primary, #1677ff)' }}
+                      style={{ fontSize: 16, color: 'var(--color-primary, #4A5DD6)' }}
                     />
                   ) : (
                     <CodeOutlined
-                      style={{ fontSize: 16, color: 'var(--color-success, #52c41a)' }}
+                      style={{ fontSize: 16, color: 'var(--color-success, #059669)' }}
                     />
                   )
                 }

@@ -436,7 +436,7 @@ function ShortcutsSettings() {
                           ...(conflictKey
                             ? {
                                 borderColor: 'var(--color-error)',
-                                boxShadow: '0 0 0 2px rgba(255,77,79,0.2)',
+                                boxShadow: '0 0 0 2px var(--color-error-alpha-15)',
                               }
                             : {}),
                         }}

@@ -83,7 +83,7 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(255,255,255,0.8)',
+            background: 'var(--overlay-scrim)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

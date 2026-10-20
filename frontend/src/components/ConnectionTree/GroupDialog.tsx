@@ -49,19 +49,27 @@ export function GroupDialog({
     { label: t('common.favorite'), value: '⭐', icon: <StarOutlined /> },
   ];
 
+  // 与主题语义色体系协调的分组色板（旧分组存的 antd 色值仍可显示，见 colorOptions）
   const GROUP_COLORS = [
-    { label: t('common.blue'), value: '#1890ff' },
-    { label: t('common.green'), value: '#52c41a' },
-    { label: t('common.orange'), value: '#faad14' },
-    { label: t('common.red'), value: '#ff4d4f' },
-    { label: t('common.purple'), value: '#722ed1' },
-    { label: t('common.cyan'), value: '#13c2c2' },
-    { label: t('common.pink'), value: '#eb2f96' },
-    { label: t('common.gray'), value: '#8c8c8c' },
+    { label: t('common.blue'), value: '#3B82F6' },
+    { label: t('common.green'), value: '#059669' },
+    { label: t('common.orange'), value: '#F59E0B' },
+    { label: t('common.red'), value: '#EF4444' },
+    { label: t('common.purple'), value: '#8B5CF6' },
+    { label: t('common.cyan'), value: '#06B6D4' },
+    { label: t('common.pink'), value: '#EC4899' },
+    { label: t('common.gray'), value: '#6B7280' },
   ];
 
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+
+  // 正在编辑的旧分组可能存有色板外的颜色（如旧 antd 色），追加为选项避免显示原始 hex
+  const watchedColor = Form.useWatch('color', form);
+  const colorOptions =
+    watchedColor && !GROUP_COLORS.some((c) => c.value === watchedColor)
+      ? [{ label: t('common.currentColor'), value: watchedColor }, ...GROUP_COLORS]
+      : GROUP_COLORS;
 
   useEffect(() => {
     if (open) {
@@ -75,7 +83,7 @@ export function GroupDialog({
         form.setFieldsValue({
           name: '',
           icon: '📁',
-          color: '#1890ff',
+          color: '#3B82F6',
         });
       }
     } else {
@@ -147,7 +155,7 @@ export function GroupDialog({
           rules={[{ required: true, message: t('common.selectGroupColor') }]}
         >
           <Select>
-            {GROUP_COLORS.map((item) => (
+            {colorOptions.map((item) => (
               <Select.Option key={item.value} value={item.value}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span

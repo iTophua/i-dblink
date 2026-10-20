@@ -169,7 +169,9 @@ export const OperationLog: React.FC<OperationLogProps> = ({ open, onClose }) => 
                       width: 28,
                       height: 28,
                       borderRadius: 6,
-                      background: item.success ? 'rgba(82,196,26,0.1)' : 'rgba(255,77,79,0.1)',
+                      background: item.success
+                        ? 'var(--color-success-alpha-15)'
+                        : 'var(--color-error-alpha-15)',
                       fontSize: 14,
                     }}
                   >
