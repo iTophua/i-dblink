@@ -6,10 +6,9 @@
 # --- 依赖 & 构建 ---
 pnpm install                          # 安装依赖
 ~/go/bin/wails dev                    # 开发模式（Vite:5100 + Wails 窗口）
-GOTOOLCHAIN=go1.25.7 ~/go/bin/wails build   # 生产构建 → build/bin/iDBLink.app/
-                                      # 必须固定工具链：本机 Go 1.27 的导出数据
-                                      # wails v2.12 内置的旧 x/tools 解析不了
-                                      # （报 internal error: package ... without types）
+~/go/bin/wails build                  # 生产构建 → build/bin/iDBLink.app/
+                                      # wails ≥v2.17 内置 x/tools v0.47，
+                                      # 直接用系统 Go（1.27+）即可，无需 GOTOOLCHAIN 锁定
 pnpm package                          # 构建 + 创建 DMG（需要 create-dmg）
 
 # --- 前端测试（根目录执行，内部 cd frontend） ---
@@ -32,7 +31,7 @@ pnpm format:check                     # Prettier 检查
 pnpm exec -- tsc --noEmit             # TypeScript 类型检查
 ```
 
-**`wails` CLI 路径：** `~/go/bin/wails` v2.12.0 — 不在 PATH 中，使用完整路径。
+**`wails` CLI 路径：** `~/go/bin/wails` v2.17.0 — 不在 PATH 中，使用完整路径。
 
 ## Architecture
 
