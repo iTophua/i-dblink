@@ -20,7 +20,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // 用完整 chromium 的新 headless 模式（本机已有 chromium-1217），
+        // 避免依赖单独的 headless_shell 下载
+        channel: 'chromium',
+      },
     },
   ],
 

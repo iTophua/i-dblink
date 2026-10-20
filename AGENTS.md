@@ -70,7 +70,14 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   ```
 - Vitest 配置：`frontend/vitest.config.ts`，jsdom 环境，globals 启用
 - ESLint：flat config 位于 `frontend/eslint.config.mjs`，忽略 `dist` 和 `wailsjs`
-- E2E 测试：Playwright 配置位于根目录 `playwright.config.ts`，测试在 `e2e/`
+- E2E 测试：Playwright 配置位于根目录 `playwright.config.ts`，测试在 `e2e/`。
+  **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
+  `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
+  桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
+  `pnpm test`（417）+ `go test ./...` + `wails dev` 人工冒烟为准；修复需按当前
+  UI 重写整套用例。另外 e2e 脚本须从仓库根用
+  `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
+  运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）
 
 ## Verification order
 
