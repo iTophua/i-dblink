@@ -439,8 +439,6 @@
       "presetHighlightNumbers": "高亮数字",
       "presetHighlightDuplicates": "高亮重复值",
       "presets": "预设",
-      "chart": "图表",
-      "chartType": "图表类型",
       "barChart": "柱状图",
       "horizontalBarChart": "条形图",
       "noNumericColumns": "未找到可用于图表的数值列",

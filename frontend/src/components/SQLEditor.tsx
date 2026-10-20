@@ -18,7 +18,6 @@ import { DatabaseIcon } from './DatabaseIcon';
 import { format as formatSql } from 'sql-formatter';
 import { HistoryPanel } from './SQLEditor/HistoryPanel';
 import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
-import { ChartView } from './SQLEditor/ChartView';
 import { SnippetManager } from './SnippetManager';
 import { ParamDialog } from './ParamDialog';
 import { replaceParams } from '../utils/sqlParams';
@@ -517,20 +516,6 @@ export function SQLEditor({
         </div>
       ),
     });
-
-    // Chart tab — show when there's a result with data
-    const chartResult = allResults.length === 1 ? allResults[0] : null;
-    if (chartResult && chartResult.rows.length > 0 && chartResult.columns.length > 0) {
-      items.push({
-        key: 'chart',
-        label: t('common.dataGrid.chart'),
-        children: (
-          <div style={{ height: '100%', overflow: 'hidden' }}>
-            <ChartView columns={chartResult.columns} rows={chartResult.rows} />
-          </div>
-        ),
-      });
-    }
 
     items.push({
       key: 'messages',

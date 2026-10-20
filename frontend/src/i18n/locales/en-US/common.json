@@ -423,8 +423,6 @@
       "presetHighlightNumbers": "Highlight Numbers",
       "presetHighlightDuplicates": "Highlight Duplicates",
       "presets": "Presets",
-      "chart": "Chart",
-      "chartType": "Chart Type",
       "barChart": "Bar",
       "horizontalBarChart": "Horizontal Bar",
       "noNumericColumns": "No numeric columns found for chart",
