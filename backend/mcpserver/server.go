@@ -10,7 +10,10 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -42,11 +45,99 @@ func New(app *backend.App) *Server {
 		"0.1.0",
 		server.WithToolCapabilities(true),
 		server.WithInstructions(serverInstructions),
+		server.WithToolHandlerMiddleware(binaryWatchMiddleware()),
 		server.WithToolHandlerMiddleware(connectionRefMiddleware(app)),
 	)
 	srv := &Server{mcp: s, app: app}
 	srv.registerTools()
 	return srv
+}
+
+// ==================== 二进制更新自回收 ====================
+//
+// MCP sidecar 由 agent 客户端按会话拉起并长驻。应用重装/升级替换二进制后，
+// 已在跑的 sidecar 仍用旧文件映像（macOS 替换文件后旧进程继续用旧 inode），
+// 新代码不生效——用户此前需要手动杀进程。
+//
+// 这里让 sidecar 自检：启动时快照自身可执行文件的 mtime/size，之后每次
+// 工具调用（外加 30s 空闲巡检）对比一次；发现文件已更换 → 服务完当前调用
+// 后延迟退出。客户端下次拉起 sidecar 即为新二进制，实现「重装即生效」。
+
+type exeSnapshot struct {
+	modTimeUnix int64
+	size        int64
+}
+
+func statExe() (exeSnapshot, bool) {
+	p, err := os.Executable()
+	if err != nil {
+		return exeSnapshot{}, false
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return exeSnapshot{}, false
+	}
+	return exeSnapshot{modTimeUnix: fi.ModTime().Unix(), size: fi.Size()}, true
+}
+
+func exeChanged(initial, current exeSnapshot) bool {
+	return current.size != initial.size || current.modTimeUnix > initial.modTimeUnix
+}
+
+// binaryWatcher 单例：发现更新后只触发一次退出。
+type binaryWatcher struct {
+	initial exeSnapshot
+	valid   bool
+	exitOnce sync.Once
+}
+
+func newBinaryWatcher() *binaryWatcher {
+	snap, ok := statExe()
+	return &binaryWatcher{initial: snap, valid: ok}
+}
+
+// check 检查二进制是否已被替换。changed=true 表示应当在响应完当前调用后退出。
+func (w *binaryWatcher) check() bool {
+	if !w.valid {
+		return false
+	}
+	cur, ok := statExe()
+	if !ok {
+		return false // 安装中途文件暂不可见，下轮再看
+	}
+	return exeChanged(w.initial, cur)
+}
+
+// recycleAfter 延迟退出：给 mcp-go 留出把当前响应写回 stdout 的时间。
+func (w *binaryWatcher) recycleAfter() {
+	w.exitOnce.Do(func() {
+		fmt.Fprintln(os.Stderr, "[mcp] executable updated on disk, recycling to pick up the new binary")
+		time.AfterFunc(500*time.Millisecond, func() { os.Exit(0) })
+	})
+}
+
+func binaryWatchMiddleware() server.ToolHandlerMiddleware {
+	w := newBinaryWatcher()
+	// 空闲时也巡检：长驻但不接调用的 sidecar 同样需要回收
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if w.check() {
+				w.recycleAfter()
+				return
+			}
+		}
+	}()
+	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			result, err := next(ctx, req)
+			if w.check() {
+				w.recycleAfter()
+			}
+			return result, err
+		}
+	}
 }
 
 // connectionRefMiddleware 在工具分派前把 connection_id 参数里的
