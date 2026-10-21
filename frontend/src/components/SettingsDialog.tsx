@@ -996,7 +996,6 @@ function MCPSettings() {
   const { t } = useTranslation();
   const [config, setConfig] = useState<import('../api').MCPConfigInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [copiedInstruction, setCopiedInstruction] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -1012,14 +1011,6 @@ function MCPSettings() {
         setLoading(false);
       });
   }, []);
-
-  const handleCopyConfig = () => {
-    if (!config) return;
-    navigator.clipboard.writeText(config.configJSON);
-    setCopied(true);
-    messageApi.success(t('common.mcpSettings.copied'));
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   // 一句话安装说明：agent 最清楚自己的配置格式与位置，把含真实路径的
   // 指令复制给它即可自行安装/更新，免去逐客户端适配配置文件
@@ -1132,63 +1123,8 @@ function MCPSettings() {
         </pre>
       </div>
 
-      {/* Claude Desktop 配置 JSON */}
-      <div style={{ marginBottom: 16 }}>
-        <div
-          style={{
-            marginBottom: 4,
-            fontSize: 13,
-            fontWeight: 500,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span>{t('common.mcpSettings.configJSON')}</span>
-          <Button
-            size="small"
-            type="link"
-            onClick={handleCopyConfig}
-            icon={copied ? <CheckOutlined /> : <CopyOutlined />}
-          >
-            {t('common.mcpSettings.copyConfig')}
-          </Button>
-        </div>
-        <pre
-          style={{
-            background: 'var(--background-active)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            padding: 12,
-            fontSize: 12,
-            fontFamily: 'monospace',
-            overflow: 'auto',
-            margin: 0,
-            maxHeight: 200,
-            color: 'var(--text-primary)',
-          }}
-        >
-          {config.configJSON}
-        </pre>
-      </div>
-
-      {/* 配置文件路径 */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-          {t('common.mcpSettings.configFilePath')}
-        </div>
-        <Input
-          value={config.configPath}
-          readOnly
-          style={{ fontFamily: 'monospace', fontSize: 12 }}
-        />
-        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-          {t('common.mcpSettings.configFileTip')}
-        </div>
-      </div>
-
       {/* 可用工具列表 */}
-      <div style={{ marginBottom: 16 }}>
+      <div>
         <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
           {t('common.mcpSettings.availableTools')}
         </div>
@@ -1199,27 +1135,6 @@ function MCPSettings() {
             </Tag>
           ))}
         </div>
-      </div>
-
-      {/* 使用步骤 */}
-      <div>
-        <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500 }}>
-          {t('common.mcpSettings.steps')}
-        </div>
-        <ol
-          style={{
-            margin: 0,
-            paddingLeft: 20,
-            fontSize: 12,
-            color: 'var(--text-secondary)',
-            lineHeight: 1.8,
-          }}
-        >
-          <li>{t('common.mcpSettings.step1')}</li>
-          <li>{t('common.mcpSettings.step2')}</li>
-          <li>{t('common.mcpSettings.step3')}</li>
-          <li>{t('common.mcpSettings.step4')}</li>
-        </ol>
       </div>
     </div>
   );
