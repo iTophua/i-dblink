@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { Tag, Spin, Empty, Button, Space, Tooltip, App, Dropdown } from 'antd';
 import { appModal } from '../utils/appModal';
 import { GlobalInput } from './GlobalInput';
@@ -123,16 +123,12 @@ const TableGridCard = React.memo(
           padding: '6px 10px',
           borderRadius: 6,
           userSelect: 'none',
-          border: selected
-            ? '1px solid var(--color-primary)'
-            : '1px solid var(--border-color)',
+          border: selected ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
           background: selected ? 'var(--row-selected-bg)' : 'var(--background-card)',
         }}
       >
         {table.table_type === 'VIEW' ? (
-          <EyeOutlined
-             style={{ fontSize: 16, color: 'var(--color-info)', flexShrink: 0 }}
-          />
+          <EyeOutlined style={{ fontSize: 16, color: 'var(--color-info)', flexShrink: 0 }} />
         ) : (
           <TableOutlined style={{ fontSize: 16, color: 'var(--color-primary)', flexShrink: 0 }} />
         )}
@@ -315,9 +311,7 @@ const TableRow = React.memo(
       >
         {columns.map((col) => {
           const renderer = cellRenderers[col.key];
-          return renderer ? (
-            <React.Fragment key={col.key}>{renderer(table)}</React.Fragment>
-          ) : null;
+          return renderer ? <React.Fragment key={col.key}>{renderer(table)}</React.Fragment> : null;
         })}
       </div>
     );
@@ -411,14 +405,13 @@ function ListHeader({
         display: 'grid',
         gridTemplateColumns: columns.map((c) => c.width).join(' '),
         padding: '6px 12px',
+        paddingRight: 'calc(12px + var(--rows-scrollbar-w, 0px))',
         background: 'var(--header-bg)',
         borderBottom: '1px solid var(--border)',
         fontWeight: 500,
         fontSize: 13,
         color: 'var(--text-tertiary)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 1,
+        flexShrink: 0,
       }}
     >
       {columns.map((col) => {
@@ -496,7 +489,7 @@ function TableListComponent({
   const [showDetail, setShowDetail] = useState(getInitialShowDetail);
   const [detailWidth, setDetailWidth] = useState(getInitialDetailWidth);
   const dbType = useAppStore(
-    (state) => state.connections.find((c) => c.id === connectionId)?.db_type,
+    (state) => state.connections.find((c) => c.id === connectionId)?.db_type
   );
 
   const columns = useMemo<ColumnDef[]>(() => {
@@ -505,7 +498,7 @@ function TableListComponent({
       !dbType ||
       isMySQL ||
       ['postgresql', 'kingbase', 'highgo', 'vastbase', 'sqlserver', 'oracle'].includes(
-        dbType || '',
+        dbType || ''
       );
     const showDetail = !dbType || isMySQL;
 
@@ -519,7 +512,7 @@ function TableListComponent({
         { key: 'data_size', width: '80px', align: 'right' },
         { key: 'engine', width: '72px', align: 'center' },
         { key: 'create_time', width: '120px' },
-        { key: 'update_time', width: '120px' },
+        { key: 'update_time', width: '120px' }
       );
     }
     return cols;
@@ -535,11 +528,8 @@ function TableListComponent({
   });
 
   const effectiveColumns = useMemo<ColumnDef[]>(
-    () =>
-      columns.map((c) =>
-        colWidths[c.key] ? { ...c, width: `${colWidths[c.key]}px` } : c,
-      ),
-    [columns, colWidths],
+    () => columns.map((c) => (colWidths[c.key] ? { ...c, width: `${colWidths[c.key]}px` } : c)),
+    [columns, colWidths]
   );
 
   const handleColumnResize = useCallback((key: string, widthPx: number) => {
@@ -695,7 +685,7 @@ function TableListComponent({
       setContextTarget(tableName);
       setContextOpen(true);
     },
-    [selectedRow],
+    [selectedRow]
   );
 
   const contextMenu = useMemo(() => {
@@ -833,7 +823,7 @@ function TableListComponent({
       try {
         setLocalLoading(true);
         await getTables(connectionId, database, true, value || undefined);
-    } catch (error: unknown) {
+      } catch (error: unknown) {
         if (isMountedRef.current) {
           console.error('Search failed:', error);
         }
@@ -847,7 +837,7 @@ function TableListComponent({
 
   const selectedTable = useMemo(
     () => tables.find((t) => t.table_name === selectedRow),
-    [tables, selectedRow],
+    [tables, selectedRow]
   );
 
   const { filteredTables, tableCount, viewCount } = useMemo(() => {
@@ -907,6 +897,23 @@ function TableListComponent({
       )),
     [filteredTables, selectedRow]
   );
+
+  // 表头在滚动容器外，须让出与行滚动条等宽的右侧空间保持列对齐（antd Table 同款实测方案）
+  const rowsScrollerRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = rowsScrollerRef.current;
+    if (!el) return;
+    const apply = () => {
+      el.parentElement?.style.setProperty(
+        '--rows-scrollbar-w',
+        `${el.offsetWidth - el.clientWidth}px`
+      );
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading, viewMode, filteredTables.length]);
 
   return (
     <div
@@ -1109,19 +1116,59 @@ function TableListComponent({
         <Space size="small">
           {objectType === 'all' ? (
             <>
-              <Tag style={{ margin: 0, padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
+              <Tag
+                style={{
+                  margin: 0,
+                  padding: '0 7px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'var(--color-primary-alpha-15)',
+                  color: 'var(--color-primary)',
+                  border: '1px solid var(--color-primary-alpha-30)',
+                }}
+              >
                 {t('common.dumpDialog.tables')} {tableCount}
               </Tag>
-              <Tag style={{ margin: 0, padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-info-alpha-15)', color: 'var(--color-info)', border: '1px solid var(--color-info-alpha-30)' }}>
+              <Tag
+                style={{
+                  margin: 0,
+                  padding: '0 7px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'var(--color-info-alpha-15)',
+                  color: 'var(--color-info)',
+                  border: '1px solid var(--color-info-alpha-30)',
+                }}
+              >
                 {t('common.databaseProperties.views')} {viewCount}
               </Tag>
             </>
           ) : objectType === 'table' ? (
-            <Tag style={{ margin: 0, padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
+            <Tag
+              style={{
+                margin: 0,
+                padding: '0 7px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: 'var(--color-primary-alpha-15)',
+                color: 'var(--color-primary)',
+                border: '1px solid var(--color-primary-alpha-30)',
+              }}
+            >
               {t('common.dumpDialog.tables')} {tableCount}
             </Tag>
           ) : (
-            <Tag style={{ margin: 0, padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-info-alpha-15)', color: 'var(--color-info)', border: '1px solid var(--color-info-alpha-30)' }}>
+            <Tag
+              style={{
+                margin: 0,
+                padding: '0 7px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: 'var(--color-info-alpha-15)',
+                color: 'var(--color-info)',
+                border: '1px solid var(--color-info-alpha-30)',
+              }}
+            >
               {t('common.databaseProperties.views')} {viewCount}
             </Tag>
           )}
@@ -1164,47 +1211,15 @@ function TableListComponent({
             onContextMenu={handleContextMenu}
             style={{
               flex: 1,
+              minWidth: 0,
               minHeight: 0,
-              overflowY: 'auto',
-              contentVisibility: 'auto',
-              contain: 'layout style paint',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-          {loading ? (
-            <div
-              style={{
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Spin size="large" />
-              <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
-                {t('common.erDiagram.loading')}
-              </div>
-            </div>
-          ) : filteredTables.length === 0 ? (
-            <div
-              style={{
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {searchText ? (
-                <Empty
-                  description={searchText ? t('common.noMatchingTables') : t('common.noTables')}
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                />
-              ) : (
-                <Empty description={t('common.noTables')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-              )}
-            </div>
-          ) : viewMode === 'list' ? (
-            <div style={{ background: 'var(--background-card)' }}>
+            {/* 表头须在滚动容器外：sticky 表头 + contain/contentVisibility 滚动容器
+              在 WKWebView 中渲染错位，滚动行会从表头上方漏出 */}
+            {viewMode === 'list' && !loading && filteredTables.length > 0 && (
               <ListHeader
                 sort={sort}
                 onSort={handleSort}
@@ -1212,21 +1227,69 @@ function TableListComponent({
                 onResize={handleColumnResize}
                 onResetWidth={handleColumnResetWidth}
               />
-              {tableRowItems}
+            )}
+            <div
+              ref={rowsScrollerRef}
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                contentVisibility: 'auto',
+                contain: 'layout style paint',
+              }}
+            >
+              {loading ? (
+                <div
+                  style={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Spin size="large" />
+                  <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
+                    {t('common.erDiagram.loading')}
+                  </div>
+                </div>
+              ) : filteredTables.length === 0 ? (
+                <div
+                  style={{
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {searchText ? (
+                    <Empty
+                      description={searchText ? t('common.noMatchingTables') : t('common.noTables')}
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    />
+                  ) : (
+                    <Empty
+                      description={t('common.noTables')}
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    />
+                  )}
+                </div>
+              ) : viewMode === 'list' ? (
+                <div style={{ background: 'var(--background-card)' }}>{tableRowItems}</div>
+              ) : (
+                <div style={{ padding: 8 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                      gap: 8,
+                    }}
+                  >
+                    {tableGridItems}
+                  </div>
+                </div>
+              )}
             </div>
-          ) : (
-            <div style={{ padding: 8 }}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                  gap: 8,
-                }}
-              >
-                {tableGridItems}
-              </div>
-            </div>
-          )}
           </div>
         </Dropdown>
         {showDetail && (

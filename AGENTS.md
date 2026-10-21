@@ -53,6 +53,11 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 ## Critical gotchas
 
+- **WKWebView 渲染坑**（macOS 实际引擎）：`position: sticky` 元素放在带
+  `contain`/`content-visibility` 的滚动容器内会渲染错位——滚动内容从 sticky
+  元素上方漏出（Chromium 完全正常，只在 WKWebView 出现）。表头类常驻元素要放
+  滚动容器**外**（`TableList.tsx` 已改为 sibling + CSS 变量补偿滚动条宽度保持
+  列对齐，勿改回 sticky）；`ResultGrid.tsx` 的 sticky 行在普通 overflow 容器内，不受影响
 - **`ConnectionInput` 命名空间**：Wails TS 绑定中在 `backend` 命名空间下：`new backend.ConnectionInput(source)`
 - **Wails 绑定**（`frontend/wailsjs/`）已 gitignore，`wails dev` 时自动生成，CI 中也会重新生成
 - **浮动窗口功能无效**：Wails v2 不支持前端多窗口 API
