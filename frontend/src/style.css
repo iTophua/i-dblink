@@ -181,6 +181,14 @@ button {
   outline: none;
 }
 
+/* 键盘焦点必须可见：上方 reset 移除了 outline，这里仅在键盘导航时恢复（鼠标点击不触发） */
+button:focus-visible,
+[role='button']:focus-visible,
+.ant-tree-node-content-wrapper:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 input,
 textarea,
 select {
@@ -601,7 +609,7 @@ tbody tr:hover {
 }
 
 .connection-tree.ant-tree .ant-tree-indent-unit {
-  width: 16px !important;
+  width: 20px !important;
 }
 
 .connection-tree.ant-tree .ant-tree-treenode {
@@ -619,101 +627,11 @@ tbody tr:hover {
   animation: none !important;
 }
 
-/* ==================== AG Grid NULL 单元格样式 ==================== */
-.null-cell {
+/* 工具栏禁用按钮：antd 默认 --text-disabled(1.57:1) 叠加全局 0.6 透明度后
+   近乎不可见，改用 --text-tertiary 并去掉透明度，保持可辨识 */
+.tablelist-toolbar .ant-btn:disabled {
   color: var(--text-tertiary) !important;
-  font-style: italic !important;
-}
-
-.ag-theme-alpine-dark .null-cell,
-.ag-theme-alpine .null-cell {
-  color: var(--text-tertiary) !important;
-  font-style: italic !important;
-}
-
-/* ==================== AG Grid 紧凑模式样式 ==================== */
-.ag-theme-compact.ag-theme-alpine,
-.ag-theme-compact.ag-theme-alpine-dark {
-  --ag-font-size: 12px;
-  --ag-row-height: 22px;
-  --ag-header-height: 24px;
-  --ag-cell-horizontal-padding: 6px;
-  --ag-borders: solid 1px;
-  --ag-border-color: var(--border-color);
-  --ag-grid-size: 4px;
-  --ag-row-animation-speed: 0s;
-}
-
-.ag-theme-compact .ag-cell {
-  border-right: 1px solid var(--border-color-light);
-  will-change: auto;
-}
-
-.ag-theme-compact .ag-header-cell {
-  border-right: 1px solid var(--border-color);
-}
-
-.ag-theme-compact.ag-theme-alpine-dark .ag-cell {
-  border-right: 1px solid var(--border-color);
-}
-
-.ag-theme-compact.ag-theme-alpine-dark .ag-header-cell {
-  border-right: 1px solid var(--border-color-dark);
-}
-
-.ag-theme-compact .ag-cell-last-in-row,
-.ag-theme-compact .ag-header-cell:last-child .ag-header-cell {
-  border-right: none !important;
-}
-
-.ag-theme-compact .ag-header {
-  background-color: var(--background-toolbar);
-  font-weight: 500;
-  will-change: auto;
-}
-
-.ag-theme-compact.ag-theme-alpine-dark .ag-header {
-  background-color: var(--background-toolbar);
-}
-
-.ag-theme-compact .ag-row-selected {
-  background-color: var(--row-selected-bg) !important;
-}
-
-.ag-theme-compact.ag-theme-alpine-dark .ag-row-selected {
-  background-color: var(--row-selected-bg) !important;
-}
-
-.ag-theme-compact .ag-row-hover {
-  background-color: var(--background-hover);
-  transition: none !important;
-}
-
-.ag-theme-compact.ag-theme-alpine-dark .ag-row-hover {
-  background-color: var(--row-hover-bg);
-  transition: none !important;
-}
-
-.ag-theme-compact .ag-body-viewport {
-  scroll-behavior: auto;
-  overflow-anchor: none;
-}
-
-.ag-theme-compact .ag-body-viewport::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.ag-theme-compact .ag-row {
-  transition: none !important;
-  will-change: transform;
-}
-
-.ag-theme-compact .ag-cell {
-  line-height: 22px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  opacity: 1 !important;
 }
 
 /* ==================== Tabs 紧凑模式 ==================== */

@@ -1614,6 +1614,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       <Tabs
         type="editable-card"
         size="small"
+        className="workspace-tabs"
         activeKey={activeKey}
         onChange={(key) => { setActivePane('primary'); setActiveKey(key); }}
         hideAdd
@@ -1624,7 +1625,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           flexDirection: 'column',
           minHeight: 0,
         }}
-        tabBarStyle={{ margin: 0, padding: '0 10px', background: 'transparent', flexShrink: 0 }}
+        tabBarStyle={{
+          margin: 0,
+          padding: '0 10px',
+          background: 'var(--background-toolbar)',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+        }}
         tabBarGutter={4}
         items={primaryTabItems}
         onEdit={handleTabEdit}
@@ -1643,6 +1650,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         <Tabs
           type="editable-card"
           size="small"
+          className="workspace-tabs"
           activeKey={secondaryActiveKey}
           onChange={(key) => { setActivePane('secondary'); setSecondaryActiveKey(key); }}
           hideAdd
@@ -1653,7 +1661,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             flexDirection: 'column',
             minHeight: 0,
           }}
-          tabBarStyle={{ margin: 0, padding: '0 10px', background: 'transparent', flexShrink: 0 }}
+          tabBarStyle={{
+            margin: 0,
+            padding: '0 10px',
+            background: 'var(--background-toolbar)',
+            borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
+          }}
           tabBarGutter={4}
           items={secondaryTabItems}
           onEdit={handleSecondaryPaneEdit}

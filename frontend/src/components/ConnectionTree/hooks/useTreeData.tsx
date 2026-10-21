@@ -510,9 +510,9 @@ export function useTreeData({
                           : db.loaded
                             ? 'var(--color-success)'
                             : undefined,
-                        fontWeight: db.loaded ? 600 : undefined,
-                        fontSize: 12.5,
-                        fontFamily: 'var(--font-family-code)',
+                        fontWeight: db.loaded ? 500 : undefined,
+                        fontSize: 13,
+                        fontFamily: 'var(--font-family)',
                         userSelect: 'none',
                       }}
                     >
@@ -926,7 +926,8 @@ export function useTreeData({
                           width: 8,
                           height: 8,
                           borderRadius: '50%',
-                          background: 'var(--text-disabled)',
+                          background: 'var(--text-tertiary)',
+                          border: '1px solid var(--border)',
                           display: 'inline-block',
                           marginLeft: 6,
                           flexShrink: 0,

@@ -88,20 +88,6 @@
     0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
-/* ==================== Focus 焦点样式增强 ==================== */
-.focus-ring:focus-visible,
-.focus-ring:focus {
-  outline: none;
-  box-shadow: var(--focus-ring-shadow, 0 0 0 2px rgba(0, 0, 0, 0.12));
-  border-color: var(--focus-ring-color, var(--color-primary));
-}
-
-[data-theme='dark'] .focus-ring:focus-visible,
-[data-theme='dark'] .focus-ring:focus {
-  box-shadow: var(--focus-ring-shadow, 0 0 0 2px rgba(255, 255, 255, 0.06));
-  border-color: var(--focus-ring-color, var(--color-primary));
-}
-
 /* ==================== 统一 hover 工具类 ==================== */
 /* 替代散落各组件的 onMouseEnter/Leave 命令式 hover，统一过渡曲线与配色 */
 .hoverable {
@@ -599,75 +585,19 @@
   color: var(--text-tertiary) !important;
 }
 
-/* AG Grid 增强 */
-.ag-theme-alpine .ag-header {
-  background: linear-gradient(
-    180deg,
-    var(--background-toolbar) 0%,
-    var(--background-hover) 100%
-  ) !important;
-  border-bottom: 2px solid var(--color-primary) !important;
-}
-
-.ag-theme-alpine .ag-row:hover {
-  background: var(--background-hover) !important;
-}
-
-.ag-theme-alpine .ag-row-selected {
-  background: var(--background-active) !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-header {
-  background: var(--background-toolbar) !important;
-  border-bottom: 2px solid var(--color-primary) !important;
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.03);
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-root-wrapper {
-  background: transparent !important;
-  border-color: rgba(255, 255, 255, 0.06) !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-row {
-  background: transparent !important;
-  border-bottom-color: rgba(255, 255, 255, 0.04) !important;
-  color: var(--text-primary) !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-row:hover {
-  background: var(--background-hover) !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-row-selected {
-  background: var(--background-active) !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-cell {
-  color: var(--text-primary) !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-header-cell {
-  color: var(--text-tertiary) !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-row-even {
-  background: rgba(255, 255, 255, 0.01) !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-row-odd {
-  background: transparent !important;
-}
-
-[data-theme='dark'] .ag-theme-alpine .ag-border-right {
-  border-right-color: rgba(255, 255, 255, 0.06) !important;
-}
-
 /* ==================== 侧边栏增强效果 ==================== */
 /* 渐变背景 + 右边缘层次阴影（移除原 2px 主色竖条，改为更克制的边缘表达） */
 .sidebar-enhanced {
   position: relative !important;
   background: var(--background-card) !important;
   border-right: 1px solid var(--border-color) !important;
+}
+
+/* ==================== 工作区 Tab 条（主/副标签栏）====================
+   实体背景 + 底边线由 TabPanel 的 tabBarStyle 内联提供；
+   这里关闭 antd 默认的 nav::before 下划线，避免与底边线形成双线 */
+.workspace-tabs.ant-tabs > .ant-tabs-nav::before {
+  display: none !important;
 }
 
 [data-theme='dark'] .sidebar-enhanced {
@@ -1453,12 +1383,6 @@
   border-bottom: 1.5px solid var(--color-primary) !important;
 }
 
-/* --- AG Grid 表头 Modern 暗色配色 --- */
-[data-theme-preset='modern'][data-theme='dark'] .ag-theme-alpine .ag-header {
-  background: var(--background-toolbar) !important;
-  border-bottom: 1.5px solid var(--color-primary) !important;
-}
-
 /* --- 状态栏 Modern 暗色适配 --- */
 [data-theme-preset='modern'][data-theme='dark'] .status-bar-enhanced {
   background: linear-gradient(
@@ -1579,20 +1503,6 @@
 [data-theme-preset='ink'][data-theme='dark'] .ant-table-tbody > tr.selected-row > td {
   background: rgba(255, 255, 255, 0.08) !important;
   border-left: 2px solid rgba(255, 255, 255, 0.3);
-}
-
-/* --- AG Grid 黑白 --- */
-[data-theme-preset='ink'][data-theme='dark'] .ag-theme-alpine .ag-header {
-  background: linear-gradient(180deg, #111111 0%, #0A0A0A 100%) !important;
-  border-bottom: 1.5px solid rgba(255, 255, 255, 0.12) !important;
-}
-
-[data-theme-preset='ink'][data-theme='dark'] .ag-theme-alpine .ag-row:hover {
-  background: rgba(255, 255, 255, 0.04) !important;
-}
-
-[data-theme-preset='ink'][data-theme='dark'] .ag-theme-alpine .ag-row-selected {
-  background: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* --- 连接树黑白 --- */

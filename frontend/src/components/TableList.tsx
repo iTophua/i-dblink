@@ -929,6 +929,7 @@ function TableListComponent({
     >
       {/* Toolbar */}
       <div
+        className="tablelist-toolbar"
         style={{
           flexShrink: 0,
           borderBottom: '1px solid var(--border)',
@@ -1086,7 +1087,6 @@ function TableListComponent({
               />
             </span>
           </Tooltip>
-          <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
           <Tooltip title={t('common.refresh')}>
             <span>
               <Button
