@@ -8,6 +8,10 @@
 package mcpserver
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -26,10 +30,77 @@ func New(app *backend.App) *Server {
 		"iDBLink",
 		"0.1.0",
 		server.WithToolCapabilities(true),
+		server.WithToolHandlerMiddleware(connectionRefMiddleware(app)),
 	)
 	srv := &Server{mcp: s, app: app}
 	srv.registerTools()
 	return srv
+}
+
+// connectionRefMiddleware 在工具分派前把 connection_id 参数里的
+// 主机/名称片段（如 "11.114"）解析成唯一连接的真实 ID 并原地替换。
+// 调用方因此不必先 list_connections 拿 UUID；歧义/无匹配时直接返回
+// 带候选列表（含真实 ID）的错误，调用方一次重试即可定位。
+func connectionRefMiddleware(app *backend.App) server.ToolHandlerMiddleware {
+	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := req.GetArguments()
+			if ref, ok := args["connection_id"].(string); ok && ref != "" {
+				conns, err := app.GetConnections()
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("failed to resolve connection_id", err), nil
+				}
+				resolved, errRes := resolveConnectionRef(conns, ref)
+				if errRes != nil {
+					return errRes, nil
+				}
+				args["connection_id"] = resolved
+			}
+			return next(ctx, req)
+		}
+	}
+}
+
+// resolveConnectionRef 解析连接引用。优先级：精确 ID > 唯一主机片段 > 唯一名称片段。
+// 返回非 nil 的错误结果表示解析失败（错误信息已带指引）。
+func resolveConnectionRef(conns []backend.ConnectionOutput, ref string) (string, *mcp.CallToolResult) {
+	for _, c := range conns {
+		if c.ID == ref {
+			return c.ID, nil
+		}
+	}
+
+	lower := strings.ToLower(ref)
+	var byHost, byName []backend.ConnectionOutput
+	for _, c := range conns {
+		switch {
+		case strings.Contains(strings.ToLower(c.Host), lower):
+			byHost = append(byHost, c)
+		case strings.Contains(strings.ToLower(c.Name), lower):
+			byName = append(byName, c)
+		}
+	}
+	if len(byHost) == 1 {
+		return byHost[0].ID, nil
+	}
+	if len(byName) == 1 && len(byHost) == 0 {
+		return byName[0].ID, nil
+	}
+
+	if len(byHost)+len(byName) == 0 {
+		return "", mcp.NewToolResultError(fmt.Sprintf(
+			"no saved connection matches %q. Call list_connections to see available connections.", ref))
+	}
+	all := append(byHost, byName...)
+	var sb strings.Builder
+	for i, c := range all {
+		if i > 0 {
+			sb.WriteString("; ")
+		}
+		fmt.Fprintf(&sb, "%s %s (%s) [id=%s]", c.DbType, c.Host, c.Name, c.ID)
+	}
+	return "", mcp.NewToolResultError(fmt.Sprintf(
+		"connection_id %q is ambiguous, matches: %s. Retry with one of the listed connection_id values.", ref, sb.String()))
 }
 
 // ServeStdio 以 stdio 传输模式启动 MCP Server（阻塞，直到客户端断开）。
@@ -147,7 +218,7 @@ func (s *Server) registerQueryTools() {
 			mcp.WithDescription("List all available databases/schemas on a connection. "+
 				"Useful when you need to find which databases exist before querying tables."),
 			mcp.WithString("connection_id", mcp.Required(),
-				mcp.Description("Connection ID (from list_connections)")),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListDatabases,
@@ -161,7 +232,7 @@ func (s *Server) registerQueryTools() {
 					"For full column/index details use describe_table; for exact DDL use get_table_ddl. "+
 					"Optionally filter by a search keyword."),
 				mcp.WithString("connection_id", mcp.Required(),
-					mcp.Description("Connection ID")),
+					mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 				mcp.WithString("database",
 					mcp.Description("Database/schema name (optional, uses default if omitted)")),
 				mcp.WithString("search",
@@ -177,7 +248,7 @@ func (s *Server) registerQueryTools() {
 			mcp.WithDescription("Get the full structure of a table: columns (name, type, nullable, default), "+
 				"primary keys, indexes, and foreign keys. Use this before writing complex queries "+
 				"to understand the schema."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("table_name", mcp.Required(), mcp.Description("Table name")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
@@ -192,7 +263,7 @@ func (s *Server) registerQueryTools() {
 		mcp.NewTool("get_table_ddl",
 			mcp.WithDescription("Get the CREATE TABLE DDL statement for a table. "+
 				"Useful to understand exact column definitions, constraints, and indexes."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("table_name", mcp.Required(), mcp.Description("Table name")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
@@ -210,8 +281,8 @@ func (s *Server) registerQueryTools() {
 				"when truncated=true is set, more rows exist — add LIMIT/OFFSET or raise max_rows to page through. "+
 				"String cells longer than 300 chars are truncated with a length note. "+
 				"Only read-only statements are allowed; use execute_update for INSERT/UPDATE/DELETE, execute_ddl for schema changes. "+
-				"Call list_connections first to get a valid connection_id."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+				"connection_id accepts a unique host/name fragment like '11.114' — no need to call list_connections first."),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single read-only SQL statement (SELECT, WITH, SHOW, EXPLAIN, DESCRIBE)")),
 			mcp.WithNumber("max_rows",
@@ -234,7 +305,7 @@ func (s *Server) registerMutationTools() {
 			mcp.WithDescription("Execute a data modification statement (INSERT, UPDATE, DELETE, REPLACE, MERGE). "+
 				"Returns the number of rows affected. "+
 				"For schema changes (CREATE/DROP/ALTER TABLE), use execute_ddl."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single INSERT, UPDATE, DELETE, or REPLACE statement")),
 			mcp.WithString("database",
@@ -255,7 +326,7 @@ func (s *Server) registerMutationTools() {
 				"DML scripts run in a single transaction and roll back on any error; "+
 				"DDL runs sequentially and stops on error by default (succeeded DDL is not rolled back). "+
 				"Useful for migrations, seed data, and schema scripts."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("Multi-statement SQL script, statements separated by semicolons "+
 					"(semicolons inside string literals are respected)")),
@@ -278,7 +349,7 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithDescription("Execute a DDL statement (CREATE, DROP, ALTER, TRUNCATE, RENAME) "+
 				"to create or modify database structure (tables, views, indexes, etc). "+
 				"DML (INSERT/UPDATE/DELETE/REPLACE) is rejected; use execute_update for data changes."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single DDL statement (CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE VIEW, etc.)")),
 			mcp.WithString("database",
@@ -294,7 +365,7 @@ func (s *Server) registerMetadataTools() {
 		mcp.NewTool("list_views",
 			mcp.WithDescription("List all views in a database/schema. "+
 				"Returns view names. Use get_table_ddl to get the view definition."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
@@ -308,7 +379,7 @@ func (s *Server) registerMetadataTools() {
 		mcp.NewTool("list_procedures",
 			mcp.WithDescription("List all stored procedures in a database/schema. "+
 				"Use get_procedure_body to get the source code of a specific procedure."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
@@ -321,7 +392,7 @@ func (s *Server) registerMetadataTools() {
 	s.mcp.AddTool(
 		mcp.NewTool("get_procedure_body",
 			mcp.WithDescription("Get the source code (body) of a stored procedure."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("procedure_name", mcp.Required(), mcp.Description("Procedure name")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
@@ -336,7 +407,7 @@ func (s *Server) registerMetadataTools() {
 		mcp.NewTool("list_functions",
 			mcp.WithDescription("List all functions in a database/schema. "+
 				"Use get_function_body to get the source code of a specific function."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
@@ -349,7 +420,7 @@ func (s *Server) registerMetadataTools() {
 	s.mcp.AddTool(
 		mcp.NewTool("get_function_body",
 			mcp.WithDescription("Get the source code (body) of a function."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("function_name", mcp.Required(), mcp.Description("Function name")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
@@ -364,7 +435,7 @@ func (s *Server) registerMetadataTools() {
 		mcp.NewTool("list_triggers",
 			mcp.WithDescription("List all triggers in a database/schema, "+
 				"including their associated table, timing (BEFORE/AFTER), and event (INSERT/UPDATE/DELETE)."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
@@ -378,7 +449,7 @@ func (s *Server) registerMetadataTools() {
 		mcp.NewTool("list_sequences",
 			mcp.WithDescription("List all sequences in a database/schema, "+
 				"including current value, min/max, and increment."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
@@ -392,7 +463,7 @@ func (s *Server) registerMetadataTools() {
 		mcp.NewTool("get_database_ddl",
 			mcp.WithDescription("Get DDL statements for all tables (and optionally views) in a database/schema. "+
 				"Returns a concatenated script of CREATE statements. Useful for schema export and documentation."),
-			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
+			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
 			mcp.WithString("database", mcp.Required(), mcp.Description("Database/schema name")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
