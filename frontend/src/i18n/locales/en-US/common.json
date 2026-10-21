@@ -2050,7 +2050,11 @@
       "step2": "Open the config file (path above) and paste the config",
       "step3": "Restart your AI client (e.g. Claude Desktop)",
       "step4": "Your AI client can now manage your databases via iDBLink",
-      "loadFailed": "Failed to load MCP config"
+      "loadFailed": "Failed to load MCP config",
+      "installTitle": "Install to Agent",
+      "installHint": "Copy this instruction to any agent (ZCode / Cursor / Claude, etc.) and it will install and enable the MCP itself:",
+      "installInstruction": "Please install the iDBLink MCP server into your MCP configuration and enable it: server name idblink, type stdio, command \"{{path}}\", args [\"--mcp\", \"--stdio\"]. If an entry with the same name already exists, update its command to the path above. Once installed, I can use the mcp__idblink__* tools to access the database connections saved in my local iDBLink (queries, schema, DDL, writes).",
+      "copyInstruction": "Copy install instruction"
     },
     "docGenerator": {
       "title": "Generate Database Documentation",

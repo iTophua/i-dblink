@@ -132,7 +132,9 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
               {t('common.aiSettings.autoSaveHint')}
             </span>
           ) : (
-            <Button onClick={handleReset} data-testid="settings-reset-btn">{t('common.reset')}</Button>
+            <Button onClick={handleReset} data-testid="settings-reset-btn">
+              {t('common.reset')}
+            </Button>
           )}
           <div>
             <Button onClick={onCancel} style={{ marginRight: 8 }}>
@@ -490,7 +492,9 @@ function ShortcutsSettings() {
                         fontFamily: 'monospace',
                         fontSize: 12,
                         padding: '2px 8px',
-                        color: !effectiveShortcuts[shortcut.id] ? 'var(--text-tertiary)' : undefined,
+                        color: !effectiveShortcuts[shortcut.id]
+                          ? 'var(--text-tertiary)'
+                          : undefined,
                       }}
                       onClick={() => handleShortcutClick(shortcut.id)}
                     >
@@ -535,16 +539,26 @@ function EditorSettings() {
   const editorWordWrap = settings.editorWordWrap === true;
 
   // Group templates by category
-  const grouped = SQL_LIVE_TEMPLATES.reduce<Record<string, typeof SQL_LIVE_TEMPLATES>>((acc, tpl) => {
-    if (!acc[tpl.category]) acc[tpl.category] = [];
-    acc[tpl.category].push(tpl);
-    return acc;
-  }, {});
+  const grouped = SQL_LIVE_TEMPLATES.reduce<Record<string, typeof SQL_LIVE_TEMPLATES>>(
+    (acc, tpl) => {
+      if (!acc[tpl.category]) acc[tpl.category] = [];
+      acc[tpl.category].push(tpl);
+      return acc;
+    },
+    {}
+  );
 
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 12,
+          }}
+        >
           <div>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
               {t('common.editorSettings.wordWrap')}
@@ -561,7 +575,14 @@ function EditorSettings() {
       </div>
 
       <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 12,
+          }}
+        >
           <div>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
               {t('common.liveTemplates.title')}
@@ -580,7 +601,14 @@ function EditorSettings() {
       {liveTemplatesEnabled &&
         Object.entries(grouped).map(([category, templates]) => (
           <div key={category} style={{ marginBottom: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)', fontSize: 13 }}>
+            <div
+              style={{
+                fontWeight: 600,
+                marginBottom: 8,
+                color: 'var(--color-primary)',
+                fontSize: 13,
+              }}
+            >
               {LIVE_TEMPLATE_CATEGORIES[category] || category}
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
@@ -640,10 +668,30 @@ function EditorSettings() {
 
 // AI 预置服务商列表（与后端 ai.PresetProviders 对应）
 const AI_PRESET_PROVIDERS = [
-  { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-  { id: 'qwen', name: '通义千问 (Qwen)', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
-  { id: 'zhipu', name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
-  { id: 'moonshot', name: '月之暗面 (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+  },
+  {
+    id: 'qwen',
+    name: '通义千问 (Qwen)',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-plus',
+  },
+  {
+    id: 'zhipu',
+    name: '智谱 GLM',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    model: 'glm-4-flash',
+  },
+  {
+    id: 'moonshot',
+    name: '月之暗面 (Kimi)',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    model: 'moonshot-v1-8k',
+  },
   { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
   { id: 'custom', name: '自定义 (OpenAI 兼容)', baseUrl: '', model: '' },
 ];
@@ -827,18 +875,29 @@ function AISettings() {
   return (
     <div>
       {contextHolder}
-      <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}>
+      <div
+        style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}
+      >
         {t('common.aiSettings.description')}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 16,
+        }}
+      >
         <span style={{ fontWeight: 600 }}>{t('common.aiSettings.enableAI')}</span>
         <Switch checked={enabled} onChange={handleEnabledChange} />
       </div>
 
       <div style={{ display: 'grid', gap: 12 }}>
         <div>
-          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>{t('common.aiSettings.provider')}</div>
+          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+            {t('common.aiSettings.provider')}
+          </div>
           <Select
             value={provider}
             onChange={handleProviderChange}
@@ -848,7 +907,9 @@ function AISettings() {
         </div>
 
         <div>
-          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>{t('common.aiSettings.baseUrl')}</div>
+          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+            {t('common.aiSettings.baseUrl')}
+          </div>
           <Input
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
@@ -858,7 +919,9 @@ function AISettings() {
         </div>
 
         <div>
-          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>{t('common.aiSettings.apiKey')}</div>
+          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
+            {t('common.aiSettings.apiKey')}
+          </div>
           <Input.Password
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
@@ -934,6 +997,7 @@ function MCPSettings() {
   const [config, setConfig] = useState<import('../api').MCPConfigInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [copiedInstruction, setCopiedInstruction] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
   useEffect(() => {
@@ -957,6 +1021,20 @@ function MCPSettings() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // 一句话安装说明：agent 最清楚自己的配置格式与位置，把含真实路径的
+  // 指令复制给它即可自行安装/更新，免去逐客户端适配配置文件
+  const instructionText = config
+    ? t('common.mcpSettings.installInstruction', { path: config.executablePath })
+    : '';
+
+  const handleCopyInstruction = () => {
+    if (!instructionText) return;
+    navigator.clipboard.writeText(instructionText);
+    setCopiedInstruction(true);
+    messageApi.success(t('common.mcpSettings.copied'));
+    setTimeout(() => setCopiedInstruction(false), 2000);
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>
@@ -976,7 +1054,9 @@ function MCPSettings() {
   return (
     <div>
       {contextHolder}
-      <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}>
+      <div
+        style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}
+      >
         {t('common.mcpSettings.description')}
       </div>
 
@@ -1007,6 +1087,51 @@ function MCPSettings() {
         )}
       </div>
 
+      {/* 安装到 Agent：复制一句话，agent 自行完成安装 */}
+      <div style={{ marginBottom: 16 }}>
+        <div
+          style={{
+            marginBottom: 4,
+            fontSize: 13,
+            fontWeight: 500,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>{t('common.mcpSettings.installTitle')}</span>
+          <Button
+            size="small"
+            type="primary"
+            onClick={handleCopyInstruction}
+            icon={copiedInstruction ? <CheckOutlined /> : <CopyOutlined />}
+          >
+            {t('common.mcpSettings.copyInstruction')}
+          </Button>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+          {t('common.mcpSettings.installHint')}
+        </div>
+        <pre
+          style={{
+            background: 'var(--color-primary-alpha-15)',
+            border: '1px solid var(--color-primary-alpha-30)',
+            borderRadius: 6,
+            padding: 12,
+            fontSize: 12,
+            lineHeight: 1.7,
+            overflow: 'auto',
+            margin: 0,
+            maxHeight: 160,
+            color: 'var(--text-primary)',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+          }}
+        >
+          {instructionText}
+        </pre>
+      </div>
+
       {/* Claude Desktop 配置 JSON */}
       <div style={{ marginBottom: 16 }}>
         <div
@@ -1020,7 +1145,12 @@ function MCPSettings() {
           }}
         >
           <span>{t('common.mcpSettings.configJSON')}</span>
-          <Button size="small" type="link" onClick={handleCopyConfig} icon={copied ? <CheckOutlined /> : <CopyOutlined />}>
+          <Button
+            size="small"
+            type="link"
+            onClick={handleCopyConfig}
+            icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+          >
             {t('common.mcpSettings.copyConfig')}
           </Button>
         </div>
@@ -1076,7 +1206,15 @@ function MCPSettings() {
         <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500 }}>
           {t('common.mcpSettings.steps')}
         </div>
-        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+        <ol
+          style={{
+            margin: 0,
+            paddingLeft: 20,
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+            lineHeight: 1.8,
+          }}
+        >
           <li>{t('common.mcpSettings.step1')}</li>
           <li>{t('common.mcpSettings.step2')}</li>
           <li>{t('common.mcpSettings.step3')}</li>

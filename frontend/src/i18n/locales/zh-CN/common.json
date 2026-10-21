@@ -2062,7 +2062,11 @@
       "step2": "打开配置文件（上方路径），将配置粘贴进去",
       "step3": "重启 AI 客户端（如 Claude Desktop）",
       "step4": "在 AI 客户端中即可使用 iDBLink 管理你的数据库",
-      "loadFailed": "加载 MCP 配置失败"
+      "loadFailed": "加载 MCP 配置失败",
+      "installTitle": "安装到 Agent",
+      "installHint": "把下面这句话复制给任何 agent（ZCode / Cursor / Claude 等），它会自动完成 MCP 安装并启用：",
+      "installInstruction": "请把 iDBLink 的 MCP server 安装到你的 MCP 配置并启用：服务名 idblink，类型 stdio，command \"{{path}}\"，args [\"--mcp\", \"--stdio\"]。如已存在同名配置，请把 command 更新为上述路径。安装后我可以通过 mcp__idblink__* 工具直接使用本机 iDBLink 保存的数据库连接（查询、表结构、DDL、写入）。",
+      "copyInstruction": "复制安装说明"
     },
     "docGenerator": {
       "title": "生成数据库文档",
