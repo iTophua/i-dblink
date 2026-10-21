@@ -211,3 +211,60 @@ func TestConvertValueBigintAsString(t *testing.T) {
 		t.Errorf("small int should stay numeric, got %v (%T)", got, got)
 	}
 }
+
+// TestQueryMaxRows 验证 max_rows：达到上限提前停止扫描并置 truncated=true；
+// 未达到上限或未设置时不截断。GUI 路径（nil）行为不变。
+func TestQueryMaxRows(t *testing.T) {
+	handler, _ := setupTestHandler(t)
+
+	connectReq := models.ConnectRequest{ConnectionID: "test-maxrows", DbType: "sqlite", Database: ":memory:"}
+	connectBytes, _ := json.Marshal(connectReq)
+	req := httptest.NewRequest("POST", "/connect", bytes.NewReader(connectBytes))
+	req.Header.Set("Content-Type", "application/json")
+	handler.Connect(httptest.NewRecorder(), req)
+
+	exec := func(t *testing.T, sql string, maxRows *int) models.QueryResult {
+		t.Helper()
+		qr := models.QueryRequest{ConnectionID: "test-maxrows", SQL: sql, MaxRows: maxRows}
+		b, _ := json.Marshal(qr)
+		r := httptest.NewRequest("POST", "/query", bytes.NewReader(b))
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.Query(w, r)
+		var res models.QueryResult
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &res))
+		require.Empty(t, res.Error)
+		return res
+	}
+
+	// 准备 5 行
+	exec(t, "CREATE TABLE t (id INTEGER PRIMARY KEY)", nil)
+	exec(t, "INSERT INTO t (id) VALUES (1),(2),(3),(4),(5)", nil)
+
+	t.Run("caps rows and sets truncated", func(t *testing.T) {
+		two := 2
+		res := exec(t, "SELECT id FROM t ORDER BY id", &two)
+		assert.Len(t, res.Rows, 2)
+		assert.True(t, res.Truncated)
+	})
+
+	t.Run("under limit no truncation", func(t *testing.T) {
+		ten := 10
+		res := exec(t, "SELECT id FROM t ORDER BY id", &ten)
+		assert.Len(t, res.Rows, 5)
+		assert.False(t, res.Truncated)
+	})
+
+	t.Run("nil max_rows unlimited (GUI path)", func(t *testing.T) {
+		res := exec(t, "SELECT id FROM t ORDER BY id", nil)
+		assert.Len(t, res.Rows, 5)
+		assert.False(t, res.Truncated)
+	})
+
+	t.Run("limit equals row count no truncation", func(t *testing.T) {
+		five := 5
+		res := exec(t, "SELECT id FROM t ORDER BY id", &five)
+		assert.Len(t, res.Rows, 5)
+		assert.False(t, res.Truncated)
+	})
+}

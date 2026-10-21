@@ -277,6 +277,7 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 				sr.Rows = res.Rows
 				sr.RowCount = len(res.Rows)
 			}
+			truncateCellStrings(sr.Rows, mcpCellMaxChars)
 			result.Results = append(result.Results, sr)
 		}
 	}

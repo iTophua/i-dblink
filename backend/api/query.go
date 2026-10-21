@@ -119,7 +119,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(timeResp)
 	} else {
 		// 传统模式 - 一次性加载所有数据
-		result, err := executeSQL(ctx, exec, req.SQL)
+		result, err := executeSQL(ctx, exec, req.SQL, req.MaxRows)
 
 		executionTimeMs := time.Since(startTime).Milliseconds()
 
@@ -201,7 +201,9 @@ func streamQueryResults(w http.ResponseWriter, ctx context.Context, exec db.Exec
 	return nil
 }
 
-func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.QueryResult, error) {
+// executeSQL 执行查询并收集结果。maxRows 非 nil 且 >0 时限制返回行数：
+// 达到上限即提前停止扫描（不再从数据库读剩余行），并置 result.Truncated=true。
+func executeSQL(ctx context.Context, exec db.Executor, sqlStr string, maxRows *int) (*models.QueryResult, error) {
 	debugLog("executeSQL start: sql=%s", sqlStr)
 
 	// DML（INSERT/UPDATE/DELETE/MERGE）无结果集，用 ExecContext 获取 RowsAffected
@@ -251,8 +253,18 @@ func executeSQL(ctx context.Context, exec db.Executor, sqlStr string) (*models.Q
 		Rows:    make([][]interface{}, 0),
 	}
 
+	rowLimit := 0 // 0 = 不限制
+	if maxRows != nil && *maxRows > 0 {
+		rowLimit = *maxRows
+	}
+
 	rowCount := 0
 	for rows.Next() {
+		if rowLimit > 0 && rowCount >= rowLimit {
+			result.Truncated = true
+			debugLog("max_rows reached (%d), stop scanning", rowLimit)
+			break
+		}
 		row := make([]interface{}, len(columns))
 		rowPtrs := make([]interface{}, len(columns))
 		for i := range row {

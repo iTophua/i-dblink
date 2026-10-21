@@ -51,6 +51,7 @@ type QueryResult struct {
 	Error           string          `json:"error,omitempty"`
 	ExecutionTimeMs int64           `json:"execution_time_ms,omitempty"`
 	Streaming       bool            `json:"streaming,omitempty"` // 是否为流式传输
+	Truncated       bool            `json:"truncated,omitempty"` // 因 MaxRows 提前停止扫描：还有更多行未返回
 }
 
 // TablesResult 分类表和视图
@@ -130,6 +131,9 @@ type QueryRequest struct {
 	// UseTransaction 显式 false = 绕过活跃事务走自动提交（nil/true = 默认：
 	// 该连接有活跃事务则进事务）。防止自动提交模式的语句被别处的手动事务捕获。
 	UseTransaction *bool `json:"use_transaction,omitempty"`
+	// MaxRows 返回行数上限：达到后提前停止扫描并置 QueryResult.Truncated。
+	// nil 或 <=0 = 不限制（GUI 默认；MCP 等自动化调用方用来防止大结果集）。
+	MaxRows *int `json:"max_rows,omitempty"`
 }
 
 // MetadataRequest 元数据请求

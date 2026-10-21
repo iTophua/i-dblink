@@ -11,6 +11,17 @@ import (
 // ExecuteQuery 执行 SQL 查询。useTransaction 显式传 false 时绕过活跃事务
 // 走自动提交（nil/true 保持默认：该连接有活跃事务则进事务）。
 func (a *App) ExecuteQuery(connectionID string, sql string, database *string, useTransaction *bool) (models.QueryResult, error) {
+	return a.executeQuery(connectionID, sql, database, useTransaction, nil)
+}
+
+// ExecuteQueryLimited 执行 SQL 查询并限制返回行数（MCP 等自动化调用方使用，
+// 防止无界 SELECT 撑爆调用方上下文）。maxRows <= 0 表示不限制；
+// 达到上限时结果携带 truncated=true 且不再继续扫描。
+func (a *App) ExecuteQueryLimited(connectionID string, sql string, database *string, maxRows int) (models.QueryResult, error) {
+	return a.executeQuery(connectionID, sql, database, nil, &maxRows)
+}
+
+func (a *App) executeQuery(connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return models.QueryResult{}, err
 	}
@@ -20,6 +31,7 @@ func (a *App) ExecuteQuery(connectionID string, sql string, database *string, us
 		SQL:            sql,
 		Database:       "",
 		UseTransaction: useTransaction,
+		MaxRows:        maxRows,
 	}
 	if database != nil {
 		req.Database = *database

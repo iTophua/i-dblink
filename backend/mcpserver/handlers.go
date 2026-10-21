@@ -9,9 +9,34 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"idblink/backend"
+	"idblink/backend/models"
 )
 
 // ==================== 辅助函数 ====================
+
+// MCP 返回体的 token 预算约束：超长字符串截断、行数默认上限。
+const (
+	mcpCellMaxChars   = 300 // 单元格字符串最大字符数，超出截断并标注原始长度
+	mcpDefaultMaxRows = 100 // execute_query 默认返回行数
+	mcpHardMaxRows    = 1000
+)
+
+// truncateCellStrings 就地截断行数据中的超长字符串。
+// TEXT/JSON 列动辄数千字符，agent 通常只需开头预览；截断后附加原始长度提示。
+func truncateCellStrings(rows [][]interface{}, maxChars int) {
+	for _, row := range rows {
+		for i, v := range row {
+			s, ok := v.(string)
+			if !ok {
+				continue
+			}
+			r := []rune(s)
+			if len(r) > maxChars {
+				row[i] = string(r[:maxChars]) + fmt.Sprintf("…(truncated, %d chars total)", len(r))
+			}
+		}
+	}
+}
 
 // argStr 从参数 map 中提取字符串，不存在返回空字符串。
 func argStr(args map[string]any, key string) string {
@@ -78,6 +103,37 @@ func jsonListResult(key string, data any, err error, errMsg string) (*mcp.CallTo
 
 // ==================== 连接管理 handlers ====================
 
+// connectionSummary list_connections 的瘦身投影：agent 只需要定位连接的字段。
+// 全量 ConnectionOutput（含 SSH/SSL 路径、颜色等）对调用方是纯 token 开销，
+// 曾导致响应被客户端截断；需要完整字段时传 include_details=true。
+type connectionSummary struct {
+	ConnectionID string  `json:"connection_id"`
+	Name         string  `json:"name"`
+	DbType       string  `json:"db_type"`
+	Host         string  `json:"host"`
+	Port         int     `json:"port"`
+	Username     string  `json:"username"`
+	Database     *string `json:"database,omitempty"`
+	Status       string  `json:"status"`
+}
+
+func connectionSummaries(conns []backend.ConnectionOutput) []connectionSummary {
+	out := make([]connectionSummary, 0, len(conns))
+	for _, c := range conns {
+		out = append(out, connectionSummary{
+			ConnectionID: c.ID,
+			Name:         c.Name,
+			DbType:       c.DbType,
+			Host:         c.Host,
+			Port:         c.Port,
+			Username:     c.Username,
+			Database:     c.Database,
+			Status:       c.Status,
+		})
+	}
+	return out
+}
+
 func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	conns, err := s.app.GetConnections()
 	if err != nil {
@@ -104,7 +160,10 @@ func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequ
 		conns = filtered
 	}
 
-	return mcp.NewToolResultJSON(map[string]any{"connections": conns})
+	if v, ok := req.GetArguments()["include_details"].(bool); ok && v {
+		return mcp.NewToolResultJSON(map[string]any{"connections": conns, "count": len(conns)})
+	}
+	return mcp.NewToolResultJSON(map[string]any{"connections": connectionSummaries(conns), "count": len(conns)})
 }
 
 func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -382,6 +441,31 @@ func (s *Server) handleListDatabases(ctx context.Context, req mcp.CallToolReques
 	return jsonListResult("databases", dbs, err, "failed to list databases")
 }
 
+// tableSummary list_tables 的瘦身投影：agent 关心名称/类型/行数/注释。
+// engine/尺寸/时间戳/排序规则对 MCP 调用方是 token 噪音（445 张表时差 3 倍体积），
+// 需要完整定义时用 describe_table / get_table_ddl。
+type tableSummary struct {
+	TableName string  `json:"table_name"`
+	TableType string  `json:"table_type"`
+	Schema    string  `json:"schema,omitempty"`
+	RowCount  *uint64 `json:"row_count,omitempty"`
+	Comment   *string `json:"comment,omitempty"`
+}
+
+func tableSummaries(tables []models.TableInfo) []tableSummary {
+	out := make([]tableSummary, 0, len(tables))
+	for _, t := range tables {
+		out = append(out, tableSummary{
+			TableName: t.TableName,
+			TableType: t.TableType,
+			Schema:    t.Schema,
+			RowCount:  t.RowCount,
+			Comment:   t.Comment,
+		})
+	}
+	return out
+}
+
 func (s *Server) handleListTables(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := req.GetArguments()
 	connID := argStr(args, "connection_id")
@@ -395,7 +479,13 @@ func (s *Server) handleListTables(ctx context.Context, req mcp.CallToolRequest) 
 	}
 
 	result, err := s.app.GetTablesCategorized(connID, database, argStrPtr(args, "search"))
-	return jsonResult(result, err, "failed to list tables")
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to list tables", err), nil
+	}
+	return mcp.NewToolResultJSON(map[string]any{
+		"tables": tableSummaries(result.Tables),
+		"views":  tableSummaries(result.Views),
+	})
 }
 
 func (s *Server) handleDescribeTable(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -452,7 +542,20 @@ func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest
 		database = &d
 	}
 
-	result, err := s.app.ExecuteQuery(connID, sqlText, database, nil)
+	// 行数上限：默认 100、硬上限 1000。防止 agent 无意中 SELECT 大表
+	// 把调用方上下文撑爆；截断时结果带 truncated=true，调用方可用 LIMIT 细化。
+	maxRows := argInt(args, "max_rows", mcpDefaultMaxRows)
+	if maxRows <= 0 {
+		maxRows = mcpDefaultMaxRows
+	}
+	if maxRows > mcpHardMaxRows {
+		maxRows = mcpHardMaxRows
+	}
+
+	result, err := s.app.ExecuteQueryLimited(connID, sqlText, database, maxRows)
+	if err == nil {
+		truncateCellStrings(result.Rows, mcpCellMaxChars)
+	}
 	return jsonResult(result, err, "query failed")
 }
 

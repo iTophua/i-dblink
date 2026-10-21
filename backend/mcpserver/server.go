@@ -48,15 +48,17 @@ func (s *Server) registerTools() {
 // ==================== 连接管理 tools ====================
 
 func (s *Server) registerConnectionTools() {
-	// list_connections — 列出所有已保存的连接
+	// list_connections — 列出所有已保存的连接（默认瘦身投影）
 	s.mcp.AddTool(
 		mcp.NewTool("list_connections",
-			mcp.WithDescription("List all saved database connections in iDBLink. "+
-				"Returns connection_id, name, db_type, host, port, and connection status. "+
-				"Use the connection_id from the result to call other tools. "+
-				"Optionally filter by a search keyword matching name, host, db_type, or username."),
+			mcp.WithDescription("List saved database connections. "+
+				"Returns connection_id, name, db_type, host, port, username, database, status. "+
+				"Use the connection_id to call other tools. "+
+				"Set include_details=true only if you need SSH/SSL tunnel fields."),
 			mcp.WithString("search",
 				mcp.Description("Optional keyword to filter connections by name, host, db_type, or username")),
+			mcp.WithBoolean("include_details",
+				mcp.Description("Include SSH/SSL tunnel configuration fields (default false, omitted for brevity)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListConnections,
@@ -151,22 +153,23 @@ func (s *Server) registerQueryTools() {
 		s.handleListDatabases,
 	)
 
-	// list_tables
-	s.mcp.AddTool(
-		mcp.NewTool("list_tables",
-			mcp.WithDescription("List tables and views in a database. "+
-				"Returns table names, types (table/view), and row counts where available. "+
-				"Optionally filter by a search keyword."),
-			mcp.WithString("connection_id", mcp.Required(),
-				mcp.Description("Connection ID")),
-			mcp.WithString("database",
-				mcp.Description("Database/schema name (optional, uses default if omitted)")),
-			mcp.WithString("search",
-				mcp.Description("Optional keyword to filter table names")),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleListTables,
-	)
+		// list_tables
+		s.mcp.AddTool(
+			mcp.NewTool("list_tables",
+				mcp.WithDescription("List tables and views in a database. "+
+					"Returns table_name, table_type, row_count, and comment. "+
+					"For full column/index details use describe_table; for exact DDL use get_table_ddl. "+
+					"Optionally filter by a search keyword."),
+				mcp.WithString("connection_id", mcp.Required(),
+					mcp.Description("Connection ID")),
+				mcp.WithString("database",
+					mcp.Description("Database/schema name (optional, uses default if omitted)")),
+				mcp.WithString("search",
+					mcp.Description("Optional keyword to filter table names")),
+				mcp.WithReadOnlyHintAnnotation(true),
+			),
+			s.handleListTables,
+		)
 
 	// describe_table
 	s.mcp.AddTool(
@@ -199,16 +202,20 @@ func (s *Server) registerQueryTools() {
 		s.handleGetTableDDL,
 	)
 
-	// execute_query — 只读查询，强制白名单
+	// execute_query — 只读查询，强制白名单，带行数/单元格预算
 	s.mcp.AddTool(
 		mcp.NewTool("execute_query",
 			mcp.WithDescription("Execute a read-only SQL query (SELECT, WITH, EXPLAIN, SHOW, DESCRIBE). "+
-				"Returns column names and rows as JSON. Only read-only statements are allowed; "+
-				"use execute_update for INSERT/UPDATE/DELETE, execute_ddl for schema changes. "+
+				"Returns columns and rows as JSON. Rows are capped at max_rows (default 100, max 1000); "+
+				"when truncated=true is set, more rows exist — add LIMIT/OFFSET or raise max_rows to page through. "+
+				"String cells longer than 300 chars are truncated with a length note. "+
+				"Only read-only statements are allowed; use execute_update for INSERT/UPDATE/DELETE, execute_ddl for schema changes. "+
 				"Call list_connections first to get a valid connection_id."),
 			mcp.WithString("connection_id", mcp.Required(), mcp.Description("Connection ID")),
 			mcp.WithString("sql", mcp.Required(),
 				mcp.Description("A single read-only SQL statement (SELECT, WITH, SHOW, EXPLAIN, DESCRIBE)")),
+			mcp.WithNumber("max_rows",
+				mcp.Description("Max rows to return, 1-1000 (default 100). Result carries truncated=true when more rows exist")),
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
