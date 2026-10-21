@@ -24,12 +24,24 @@ type Server struct {
 	app *backend.App
 }
 
+// serverInstructions MCP initialize 握手下发的 server 级说明（规范字段）。
+// 逐工具描述只回答「这个工具怎么用」，这里回答「什么时候该找这个 server」——
+// 多 MCP 环境下 agent 缺的正是这层选型指引。支持该字段的客户端会注入系统提示。
+const serverInstructions = `iDBLink MCP — local database access layer.
+Use these tools for ANY database task: querying data, exploring schema (tables/columns/indexes/DDL), data modification, and connection management. Do not ask the user for another SQL execution environment.
+Conventions:
+- connection_id accepts a unique host/name fragment like "11.114" — no need to call list_connections first; ambiguous refs return candidate IDs in the error, retry with one.
+- execute_query is read-only, returns at most max_rows rows (default 100, max 1000); truncated=true means more rows exist — page with LIMIT/OFFSET. String cells over 300 chars are truncated.
+- Writes: execute_update for INSERT/UPDATE/DELETE, execute_ddl for CREATE/DROP/ALTER. Confirm with the user before destructive statements.
+- Reuse saved connections; create new ones only when asked.`
+
 // New 创建 MCP Server，注册所有 tool。
 func New(app *backend.App) *Server {
 	s := server.NewMCPServer(
 		"iDBLink",
 		"0.1.0",
 		server.WithToolCapabilities(true),
+		server.WithInstructions(serverInstructions),
 		server.WithToolHandlerMiddleware(connectionRefMiddleware(app)),
 	)
 	srv := &Server{mcp: s, app: app}
