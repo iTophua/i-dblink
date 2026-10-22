@@ -919,21 +919,6 @@ export function useTreeData({
                         }}
                       />
                     </Tooltip>
-                  ) : conn.status !== 'loading' ? (
-                    <Tooltip title={t('common.mainLayout.disconnected')}>
-                      <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          background: 'var(--text-tertiary)',
-                          border: '1px solid var(--border)',
-                          display: 'inline-block',
-                          marginLeft: 6,
-                          flexShrink: 0,
-                        }}
-                      />
-                    </Tooltip>
                   ) : null}
                 {conn.status === 'loading' && (
                   <>

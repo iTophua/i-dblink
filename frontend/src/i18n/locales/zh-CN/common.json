@@ -509,7 +509,6 @@
       "connecting": "连接中...",
       "connectFailed": "连接失败",
       "connected": "已连接",
-      "disconnected": "已断开",
       "refreshConnections": "刷新连接列表",
       "addNewConnection": "添加新连接",
       "editConnectionLabel": "编辑连接",
