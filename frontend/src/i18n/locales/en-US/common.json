@@ -471,7 +471,8 @@
       "sqlCommented": "Commented",
       "sqlUncommented": "Uncommented",
       "sqlUppercased": "Uppercased",
-      "sqlLowercased": "Lowercased"
+      "sqlLowercased": "Lowercased",
+      "saveFailed": "Save failed"
     },
     "mainLayout": {
       "searchPlaceholder": "Search...",

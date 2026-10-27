@@ -123,6 +123,8 @@ vi.mock('../../bindings/idblink/backend/app', () => ({
   TakePendingOpenFile: vi.fn().mockResolvedValue(''),
   SetCloseGuardState: vi.fn().mockResolvedValue(undefined),
   OpenResultPopup: vi.fn().mockResolvedValue('result-1'),
+  SaveSqlFileDialog: vi.fn().mockResolvedValue(''),
+  WriteSqlFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@wailsio/runtime', () => ({

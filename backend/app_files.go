@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // sqlFileMaxBytes 拖放/双击打开的 SQL 文件大小上限（5MB）。
@@ -60,4 +62,32 @@ func (a *App) ReadSqlFile(path string) (string, error) {
 		return "", fmt.Errorf("读取文件失败：%w", err)
 	}
 	return string(data), nil
+}
+
+// SaveSqlFileDialog 原生「保存 SQL」对话框，返回所选路径（取消返回空串）。
+func (a *App) SaveSqlFileDialog(defaultName string) (string, error) {
+	app := application.Get()
+	if app == nil {
+		return "", fmt.Errorf("应用未运行")
+	}
+	return app.Dialog.SaveFile().
+		SetFilename(defaultName).
+		AddFilter("SQL 脚本", "*.sql;*.txt").
+		CanCreateDirectories(true).
+		PromptForSingleSelection()
+}
+
+// WriteSqlFile 把编辑器 SQL 内容写入用户经原生对话框选择的路径。
+func (a *App) WriteSqlFile(path string, content string) error {
+	if path == "" {
+		return fmt.Errorf("文件路径为空")
+	}
+	if len(content) > 20<<20 {
+		return fmt.Errorf("内容过大（%dMB），上限 20MB", len(content)/(1<<20))
+	}
+	dir := filepath.Dir(path)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return fmt.Errorf("目录不存在：%s", dir)
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
 }

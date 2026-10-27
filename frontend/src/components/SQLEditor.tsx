@@ -114,6 +114,11 @@ export function SQLEditor({
 
   // Ref to link handleExecuteQuery to Monaco shortcuts (avoids closure trap)
   const handleExecuteQueryRef = useRef<(explicitSql?: string) => void>(() => {});
+  // 保存/另存为的最新回调（tab-action 监听用 ref 转发，避免重注册）
+  const saveSQLRef = useRef<() => void>(() => {});
+  const saveSQLAsRef = useRef<() => void>(() => {});
+  // dirty 基线：初始内容/最近一次保存的内容（关闭保护用）
+  const sqlSavedBaselineRef = useRef(defaultQuery || '');
   // Ref to link formatSQL to Monaco shortcuts
   const formatSQLRef = useRef<() => void>(() => {});
   // 格式化前的原文快照（用于"还原"）+ 标记是否已格式化
@@ -275,6 +280,10 @@ export function SQLEditor({
       const detail = (event as CustomEvent).detail;
       if (detail?.action === 'execute-query') {
         handleExecuteQueryRef.current();
+      } else if (detail?.action === 'save') {
+        saveSQLRef.current();
+      } else if (detail?.action === 'save-as') {
+        saveSQLAsRef.current();
       }
     };
     window.addEventListener('tab-action', handleTabAction);
@@ -353,19 +362,49 @@ export function SQLEditor({
     message.success(t('common.editorCleared'));
   }, []);
 
-  const saveSQL = useCallback(() => {
+  // 原生「保存/另存为」：优先写回已保存路径；未保存过（或另存为）走
+  // 原生对话框选路径。替代旧 blob 下载（落 ~/Downloads 且不记路径）。
+  const savedPathRef = useRef<string>('');
+
+  const saveSQLAs = useCallback(async () => {
     const now = new Date();
-    const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
-    const fileName = `query_${ts}.sql`;
-    const blob = new Blob([sql], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-    message.success(t('common.sqlSaved'));
-  }, [sql, t]);
+    const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}_${String(now.getSeconds()).padStart(2,'0')}`;
+    const fallback = sql.trim().split('\n')[0]?.replace(/[^\w一-龥.-]/g, '').slice(0, 40);
+    const defaultName = savedPathRef.current
+      ? savedPathRef.current.split('/').pop() || `query_${ts}.sql`
+      : `${fallback || 'query'}_${ts}.sql`.replace(/^[_.]+/, '') || `query_${ts}.sql`;
+    try {
+      const path = await api.saveSqlFileDialog(defaultName);
+      if (!path) return; // 取消
+      await api.writeSqlFile(path, sql);
+      savedPathRef.current = path;
+      sqlSavedBaselineRef.current = sql; // 保存后重置 dirty 基线
+      message.success(t('common.sqlSaved'));
+    } catch (err) {
+      message.error(`${t('common.sqlEditor.saveFailed')}: ${getErrorMessage(err)}`);
+    }
+  }, [sql]);
+
+  const saveSQL = useCallback(() => {
+    const path = savedPathRef.current;
+    if (path) {
+      api
+        .writeSqlFile(path, sql)
+        .then(() => {
+          sqlSavedBaselineRef.current = sql;
+          message.success(t('common.sqlSaved'));
+        })
+        .catch((err) => message.error(`${t('common.sqlEditor.saveFailed')}: ${getErrorMessage(err)}`));
+    } else {
+      void saveSQLAs();
+    }
+  }, [sql, saveSQLAs]);
+
+  // 同步保存回调到 ref（tab-action 监听避免重注册）
+  useEffect(() => {
+    saveSQLRef.current = saveSQL;
+    saveSQLAsRef.current = saveSQLAs;
+  }, [saveSQL, saveSQLAs]);
 
   const copySQL = useCallback(() => {
     navigator.clipboard.writeText(sql);

@@ -487,7 +487,8 @@
       "sqlCommented": "已注释",
       "sqlUncommented": "已取消注释",
       "sqlUppercased": "已转大写",
-      "sqlLowercased": "已转小写"
+      "sqlLowercased": "已转小写",
+      "saveFailed": "保存失败"
     },
     "mainLayout": {
       "searchPlaceholder": "搜索...",

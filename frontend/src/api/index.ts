@@ -62,6 +62,8 @@ import {
   ReadSqlFile,
   SetCloseGuardState,
   OpenResultPopup,
+  SaveSqlFileDialog,
+  WriteSqlFile,
   TakePendingOpenFile,
   TestConnection,
   TruncateTable,
@@ -937,6 +939,16 @@ export const api = {
   /** 读取本地 SQL 脚本文件（双击打开/拖放载入，仅 .sql/.txt ≤5MB） */
   async readSqlFile(path: string): Promise<string> {
     return await ReadSqlFile(path);
+  },
+
+  /** 原生保存 SQL 对话框，返回路径（取消为空串） */
+  async saveSqlFileDialog(defaultName: string): Promise<string> {
+    return (await SaveSqlFileDialog(defaultName)) ?? '';
+  },
+
+  /** 把 SQL 内容写入指定路径 */
+  async writeSqlFile(path: string, content: string): Promise<void> {
+    await WriteSqlFile(path, content);
   },
 
   /** 创建独立「查询结果」弹窗，返回 popupId */

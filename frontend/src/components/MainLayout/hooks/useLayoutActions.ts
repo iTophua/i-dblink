@@ -248,7 +248,7 @@ export function useLayoutActions({
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'save' } }));
           break;
         case 'save-as':
-          message.info(t('common.featureNotImplemented'));
+          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'save-as' } }));
           break;
         case 'import':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'import' } }));
