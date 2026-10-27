@@ -242,6 +242,20 @@ func runGUI() {
 		Description: "A cross-platform database management tool",
 		// 双击 .sql 文件用 iDBLink 打开（Finder「打开方式」）
 		FileAssociations: []string{".sql"},
+		// ⌘R：WKWebView 原生当作「页面刷新」（整个前端重载丢全部状态），
+		// 这里在 performKeyEquivalent 层拦截并转为「执行查询」——与
+		// 前端 menuShortcuts 声明的 macKeys mod+r 语义一致（Navicat 习惯）
+		KeyBindings: map[string]func(window application.Window){
+			"CmdOrCtrl+r": func(window application.Window) {
+				if window == nil {
+					return
+				}
+				if name := window.Name(); name != "" && name != "main" {
+					return // 结果弹窗/连接面板等子窗口不触发执行
+				}
+				wailsApp.Event.Emit("menu-action", "execute-query")
+			},
+		},
 		// ⌘Q / 菜单退出路径的保护：返回 false 拦下本次退出，弹确认后经
 		// quitConfirmed 放行二次 Quit()
 		ShouldQuit: func() bool {
