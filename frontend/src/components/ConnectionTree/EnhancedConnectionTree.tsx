@@ -120,6 +120,26 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   useEffect(() => { connectionDatabasesRef.current = connectionDatabases; }, [connectionDatabases]);
   useEffect(() => { expandedKeysRef.current = expandedKeys; }, [expandedKeys]);
 
+  // 托盘快速连接后的定位：滚动到目标连接节点（连接后树会异步加载子节点
+  // 触发重排，复用双延时补滚策略；幂等无害）
+  useEffect(() => {
+    const onLocate = (e: Event) => {
+      const { connectionId } = (e as CustomEvent<{ connectionId: string }>).detail;
+      if (!connectionId) return;
+      const scrollToConn = () => {
+        treeRef.current?.scrollTo({ key: connectionId, align: 'top' });
+      };
+      const t1 = setTimeout(scrollToConn, 150);
+      const t2 = setTimeout(scrollToConn, 450);
+      setTimeout(() => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      }, 800);
+    };
+    window.addEventListener('locate-connection', onLocate);
+    return () => window.removeEventListener('locate-connection', onLocate);
+  }, []);
+
   // 搜索清除后（防抖值变空、树已恢复完整数据），滚动到用户打开的连接。
   // 清空搜索会触发全量树重建（所有连接×库×表），大树重排可能超过单次延时——
   // 补滚一次保证 scrollTo 落在重建完成之后（幂等，重复滚动无害）

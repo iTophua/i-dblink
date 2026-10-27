@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Window as WailsWindow } from '@wailsio/runtime';
+import { Events, Window as WailsWindow } from '@wailsio/runtime';
 import { Layout, Form, Input, Modal, Tooltip, message } from 'antd';
 import {
   ReloadOutlined,
@@ -224,6 +224,26 @@ function MainLayoutComponent() {
       offDrop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── 托盘「快速连接」面板的数据源：应答其请求，返回连接+分组快照 ──
+  useEffect(() => {
+    const off = EventsOn('conn-picker:request-data', () => {
+      const store = useAppStore.getState();
+      Events.Emit('conn-picker:data', {
+        connections: store.connections.map((c) => ({
+          id: c.id,
+          name: c.name,
+          db_type: c.db_type,
+          host: c.host,
+          port: c.port,
+          status: c.status,
+          group_id: c.group_id ?? null,
+        })),
+        groups: store.groups.map((g) => ({ id: g.id, name: g.name })),
+      }).catch(() => {});
+    });
+    return off;
   }, []);
 
   // ── 关闭保护聚合：SQL 编辑器 dirty（多实例并集）∨ 数据 tab dirty → backend ──

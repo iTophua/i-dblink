@@ -287,6 +287,27 @@ func runGUI() {
 
 	// ── 系统托盘：快速连接 + 显示/退出 ──
 	tray := wailsApp.SystemTray.New()
+	// 快速连接面板：左键点托盘弹出（AttachWindow），紧凑可搜索可滚动；
+	// HideOnFocusLost 点击别处自动收起，Esc 隐藏；窗口常驻仅隐藏保持热态。
+	// 右键托盘仍弹出完整菜单（v3 自动路由）。
+	connPickerWin := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "conn-picker",
+		Title:            "快速连接",
+		URL:              "/#conn-picker",
+		Width:            360,
+		Height:           460,
+		Frameless:        true,
+		AlwaysOnTop:      true,
+		Hidden:           true,
+		DisableResize:    true,
+		HideOnEscape:     true,
+		HideOnFocusLost:  true,
+		EnableFileDrop:   false,
+		BackgroundType:   application.BackgroundTypeTransparent,
+		BackgroundColour: application.NewRGB(242, 241, 237),
+		Windows:          application.WindowsWindow{HiddenOnTaskbar: true},
+	})
+	tray.AttachWindow(connPickerWin).WindowOffset(6)
 	if gos.GOOS == "darwin" {
 		tray.SetTemplateIcon(trayTemplateIcon)
 	} else {
@@ -297,57 +318,7 @@ func runGUI() {
 			w.Show()
 		}
 	}
-	// 托盘菜单：状态行 + 常用操作 + 快速连接级联（分组）+ 外观 + 退出。
-	// 连接经回调随增删/连接状态变化重建（NSMenu 超高自动滚动）。
-	buildConnSubmenu := func() *application.Menu {
-		sub := wailsApp.NewMenu()
-		conns, err := app.GetConnections()
-		if err != nil || len(conns) == 0 {
-			sub.Add("（暂无连接）").SetEnabled(false)
-			return sub
-		}
-		groups, _ := app.GetGroups()
-		byGroup := map[string][]backend.ConnectionOutput{}
-		var ungrouped []backend.ConnectionOutput
-		for _, c := range conns {
-			if c.GroupID != nil && *c.GroupID != "" {
-				byGroup[*c.GroupID] = append(byGroup[*c.GroupID], c)
-			} else {
-				ungrouped = append(ungrouped, c)
-			}
-		}
-		addConnItem := func(m *application.Menu, c backend.ConnectionOutput) {
-			label := c.Name + " · " + c.DbType
-			if c.Status == "connected" {
-				label = "● " + label
-			} else {
-				label = "○ " + label
-			}
-			m.Add(label).OnClick(func(*application.Context) {
-				showMain()
-				wailsApp.Event.Emit("tray-connect", c.ID)
-			})
-		}
-		for _, g := range groups {
-			list := byGroup[g.ID]
-			if len(list) == 0 {
-				continue
-			}
-			gm := sub.AddSubmenu(g.Name)
-			for _, c := range list {
-				addConnItem(gm, c)
-			}
-		}
-		if len(ungrouped) > 0 {
-			if len(groups) > 0 {
-				sub.AddSectionHeader("未分组")
-			}
-			for _, c := range ungrouped {
-				addConnItem(sub, c)
-			}
-		}
-		return sub
-	}
+	// 托盘菜单（右键）：状态行 + 常用操作 + 外观 + 退出。
 	rebuildTrayMenu := func() {
 		conns, _ := app.GetConnections()
 		total, connected := len(conns), 0
@@ -374,7 +345,6 @@ func runGUI() {
 			wailsApp.Event.Emit("menu-action", "new-connection")
 		})
 		m.AddSeparator()
-		m.AddSubmenu("快速连接").Append(buildConnSubmenu())
 		if connected > 0 {
 			m.AddSeparator()
 			m.Add("断开全部连接").OnClick(func(*application.Context) {
