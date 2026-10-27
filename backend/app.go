@@ -238,15 +238,7 @@ func (a *App) Context() context.Context {
 
 // Shutdown 应用关闭时调用（Wails v3 ServiceShutdown 接口）
 func (a *App) ServiceShutdown() error {
-	// 关闭所有 SSH 隧道（避免 goroutine / sshClient 泄漏）
-	if a.tunnel != nil {
-		a.tunnel.CloseAll()
-	}
-	if a.dbManager != nil {
-		for _, connID := range a.snapshotActiveConns() {
-			_ = a.dbManager.Disconnect(connID)
-		}
-	}
+	a.disconnectAll()
 	if a.storage != nil {
 		a.storage.Close()
 	}

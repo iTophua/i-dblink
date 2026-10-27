@@ -297,37 +297,116 @@ func runGUI() {
 			w.Show()
 		}
 	}
-	// 托盘「快速连接」二级面板：可搜索可滚动（连接多时长菜单不可用）。
-	// 首次打开创建窗口并常驻隐藏（关闭即 Hide，保持热态），面板经
-	// conn-picker:request-data 向主窗口拉最新连接列表。
-	showConnPicker := func() {
-		if w, ok := wailsApp.Window.Get("conn-picker"); !ok {
-			pw := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
-				Name:  "conn-picker",
-				Title: "快速连接",
-				URL:   "/#conn-picker",
-				Width: 460, Height: 560,
-				MinWidth: 360, MinHeight: 380,
-				BackgroundType:   application.BackgroundTypeTransparent,
-				BackgroundColour: application.NewRGB(242, 241, 237),
-			})
-			pw.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-				e.Cancel()
-				pw.Hide()
-			})
-		} else {
-			w.Show()
+	// 托盘菜单：状态行 + 常用操作 + 快速连接级联（分组）+ 外观 + 退出。
+	// 连接经回调随增删/连接状态变化重建（NSMenu 超高自动滚动）。
+	buildConnSubmenu := func() *application.Menu {
+		sub := wailsApp.NewMenu()
+		conns, err := app.GetConnections()
+		if err != nil || len(conns) == 0 {
+			sub.Add("（暂无连接）").SetEnabled(false)
+			return sub
 		}
-		wailsApp.Event.Emit("conn-picker:open")
+		groups, _ := app.GetGroups()
+		byGroup := map[string][]backend.ConnectionOutput{}
+		var ungrouped []backend.ConnectionOutput
+		for _, c := range conns {
+			if c.GroupID != nil && *c.GroupID != "" {
+				byGroup[*c.GroupID] = append(byGroup[*c.GroupID], c)
+			} else {
+				ungrouped = append(ungrouped, c)
+			}
+		}
+		addConnItem := func(m *application.Menu, c backend.ConnectionOutput) {
+			label := c.Name + " · " + c.DbType
+			if c.Status == "connected" {
+				label = "● " + label
+			} else {
+				label = "○ " + label
+			}
+			m.Add(label).OnClick(func(*application.Context) {
+				showMain()
+				wailsApp.Event.Emit("tray-connect", c.ID)
+			})
+		}
+		for _, g := range groups {
+			list := byGroup[g.ID]
+			if len(list) == 0 {
+				continue
+			}
+			gm := sub.AddSubmenu(g.Name)
+			for _, c := range list {
+				addConnItem(gm, c)
+			}
+		}
+		if len(ungrouped) > 0 {
+			if len(groups) > 0 {
+				sub.AddSectionHeader("未分组")
+			}
+			for _, c := range ungrouped {
+				addConnItem(sub, c)
+			}
+		}
+		return sub
 	}
-	{
+	rebuildTrayMenu := func() {
+		conns, _ := app.GetConnections()
+		total, connected := len(conns), 0
+		for _, c := range conns {
+			if c.Status == "connected" {
+				connected++
+			}
+		}
+
 		m := wailsApp.NewMenu()
-		m.Add("显示 iDBLink").OnClick(func(*application.Context) { showMain() })
-		m.Add("快速连接…").OnClick(func(*application.Context) { showConnPicker() })
+		// 状态行（置顶、不可点）
+		m.AddSectionHeader(fmt.Sprintf("iDBLink · 已连接 %d/%d", connected, total))
+		m.Add("显示主窗口").OnClick(func(*application.Context) { showMain() })
+		m.Add("新建查询").OnClick(func(*application.Context) {
+			showMain()
+			wailsApp.Event.Emit("menu-action", "new-query")
+		})
+		m.Add("全局搜索…").OnClick(func(*application.Context) {
+			showMain()
+			wailsApp.Event.Emit("menu-action", "search")
+		})
+		m.Add("新建连接…").OnClick(func(*application.Context) {
+			showMain()
+			wailsApp.Event.Emit("menu-action", "new-connection")
+		})
 		m.AddSeparator()
-		m.Add("退出").OnClick(func(*application.Context) { wailsApp.Quit() })
+		m.AddSubmenu("快速连接").Append(buildConnSubmenu())
+		if connected > 0 {
+			m.AddSeparator()
+			m.Add("断开全部连接").OnClick(func(*application.Context) {
+				_ = app.DisconnectAllConnections()
+			})
+		}
+		m.AddSeparator()
+		themeMenu := m.AddSubmenu("外观")
+		for _, mode := range []struct{ label, value string }{
+			{"浅色", "light"}, {"深色", "dark"}, {"跟随系统", "system"},
+		} {
+			mv := mode.value
+			themeMenu.Add(mode.label).OnClick(func(*application.Context) {
+				showMain()
+				wailsApp.Event.Emit("tray-set-theme", mv)
+			})
+		}
+		m.AddSeparator()
+		m.Add("检查更新…").OnClick(func(*application.Context) {
+			showMain()
+			wailsApp.Event.Emit("menu-action", "check-update")
+		})
+		m.AddSeparator()
+		m.Add("退出 iDBLink").SetAccelerator("CmdOrCtrl+q").OnClick(func(*application.Context) {
+			wailsApp.Quit()
+		})
 		tray.SetMenu(m)
 	}
+	app.SetConnectionsChangedCallback(rebuildTrayMenu)
+	wailsApp.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		rebuildTrayMenu()
+	})
 
 	win := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:               "main",

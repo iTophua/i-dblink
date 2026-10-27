@@ -316,8 +316,10 @@ export function useLayoutActions({
         case 'prev-tab':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'prev-tab' } }));
           break;
-        case 'documentation':
         case 'search':
+          setGlobalSearchOpen(true);
+          break;
+        case 'documentation':
           window.dispatchEvent(new CustomEvent('app-action', { detail: { action } }));
           break;
         case 'check-update':

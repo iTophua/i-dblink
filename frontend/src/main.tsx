@@ -2,7 +2,6 @@ import ReactDOM from 'react-dom/client';
 import { StrictMode } from 'react';
 import App from './App';
 import { ResultPopup } from './components/ResultPopup';
-import { ConnPicker } from './components/ConnPicker';
 import './style.css';
 import './styles/theme-enhancements.css';
 import './i18n';
@@ -56,13 +55,9 @@ const observer = new MutationObserver((mutations) => {
 disableInputSpellcheck()
 observer.observe(document.body, { childList: true, subtree: true })
 
-// 多窗口路由：/#popup/<id> 结果弹窗、/#conn-picker 托盘快速连接面板（均不加载主界面）
-const hash = window.location.hash;
-const isResultPopup = /^#popup\//.test(hash);
-const isConnPicker = hash.startsWith('#conn-picker');
+// 多窗口路由：/#popup/<id> 为独立结果弹窗（不加载主界面）
+const isResultPopup = /^#popup\//.test(window.location.hash);
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <StrictMode>
-    {isResultPopup ? <ResultPopup /> : isConnPicker ? <ConnPicker /> : <App />}
-  </StrictMode>
+  <StrictMode>{isResultPopup ? <ResultPopup /> : <App />}</StrictMode>
 );

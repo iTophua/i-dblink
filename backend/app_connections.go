@@ -429,6 +429,26 @@ func (a *App) SaveConnection(input ConnectionInput) (ConnectionOutput, error) {
 	return output, nil
 }
 
+// DisconnectAllConnections 断开全部连接（托盘菜单入口）。
+func (a *App) DisconnectAllConnections() error {
+	a.disconnectAll()
+	a.fireConnectionsChanged()
+	return nil
+}
+
+// disconnectAll 关闭所有连接与 SSH 隧道（退出清理与托盘「断开全部」共用）。
+func (a *App) disconnectAll() {
+	if a.tunnel != nil {
+		a.tunnel.CloseAll()
+	}
+	if a.dbManager != nil {
+		for _, connID := range a.snapshotActiveConns() {
+			_ = a.dbManager.Disconnect(connID)
+			a.setActiveConn(connID, false)
+		}
+	}
+}
+
 // DeleteConnection 删除连接
 func (a *App) DeleteConnection(id string) error {
 	err := a.storage.DeleteConnection(id)
@@ -498,6 +518,7 @@ func (a *App) SaveGroup(input GroupInput) (GroupOutput, error) {
 		return GroupOutput{}, fmt.Errorf("failed to save group: %w", err)
 	}
 
+	a.fireConnectionsChanged() // 分组影响托盘级联菜单结构
 	return GroupOutput{
 		ID:       group.ID,
 		Name:     group.Name,
@@ -512,7 +533,11 @@ func (a *App) DeleteGroup(id string) error {
 	if id == "default" {
 		return fmt.Errorf("cannot delete default group")
 	}
-	return a.storage.DeleteGroup(id)
+	err := a.storage.DeleteGroup(id)
+	if err == nil {
+		a.fireConnectionsChanged()
+	}
+	return err
 }
 
 // ensureConnected 确保指定连接已建立（含自动 ping + 重连）
