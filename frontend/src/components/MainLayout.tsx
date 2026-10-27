@@ -213,6 +213,34 @@ function MainLayoutComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── 关闭保护聚合：SQL 编辑器 dirty（多实例并集）∨ 数据 tab dirty → backend ──
+  const guardSqlDirtyIdsRef = useRef<Set<string>>(new Set());
+  const guardDataDirtyRef = useRef(false);
+  useEffect(() => {
+    const pushGuard = () => {
+      api
+        .setCloseGuardState(guardDataDirtyRef.current || guardSqlDirtyIdsRef.current.size > 0)
+        .catch(() => {});
+    };
+    const onSql = (e: Event) => {
+      const { id, dirty } = (e as CustomEvent<{ id: string; dirty: boolean }>).detail;
+      if (dirty) guardSqlDirtyIdsRef.current.add(id);
+      else guardSqlDirtyIdsRef.current.delete(id);
+      pushGuard();
+    };
+    const onData = (e: Event) => {
+      guardDataDirtyRef.current = !!(e as CustomEvent<{ dirty: boolean }>).detail?.dirty;
+      pushGuard();
+    };
+    window.addEventListener('sql-dirty-change', onSql);
+    window.addEventListener('data-dirty-change', onData);
+    pushGuard();
+    return () => {
+      window.removeEventListener('sql-dirty-change', onSql);
+      window.removeEventListener('data-dirty-change', onData);
+    };
+  }, []);
+
   // ── 托盘「快速连接」面板的数据源：应答其请求，返回 appStore 最新连接 ──
   useEffect(() => {
     const off = EventsOn('conn-picker:request-data', () => {

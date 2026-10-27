@@ -658,10 +658,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     </DefaultTabBar>
   );
 
-  // 关闭保护：向 backend 上报数据 tab 脏状态（配合 WindowClosing/ShouldQuit 原生确认框）
+  // 关闭保护：数据 tab 脏状态经事件上移，由 MainLayout 与 SQL dirty 聚合后统一上报
   const hasDirtyDataTabs = openedTables.some((t) => t.isDirty);
   useEffect(() => {
-    api.setCloseGuardState(hasDirtyDataTabs).catch(() => {});
+    window.dispatchEvent(new CustomEvent('data-dirty-change', { detail: { dirty: hasDirtyDataTabs } }));
   }, [hasDirtyDataTabs]);
 
   // 监听 tab-action 事件（来自菜单或工具栏）

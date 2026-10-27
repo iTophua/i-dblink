@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect, useId } from 'react';
 import Editor from '@monaco-editor/react';
 
 import {
@@ -118,7 +118,7 @@ export function SQLEditor({
   const saveSQLRef = useRef<() => void>(() => {});
   const saveSQLAsRef = useRef<() => void>(() => {});
   // dirty 基线：初始内容/最近一次保存的内容（关闭保护用）
-  const sqlSavedBaselineRef = useRef(defaultQuery || '');
+  const [sqlBaseline, setSqlBaseline] = useState(defaultQuery || '');
   // Ref to link formatSQL to Monaco shortcuts
   const formatSQLRef = useRef<() => void>(() => {});
   // 格式化前的原文快照（用于"还原"）+ 标记是否已格式化
@@ -378,7 +378,7 @@ export function SQLEditor({
       if (!path) return; // 取消
       await api.writeSqlFile(path, sql);
       savedPathRef.current = path;
-      sqlSavedBaselineRef.current = sql; // 保存后重置 dirty 基线
+      setSqlBaseline(sql); // 保存后重置 dirty 基线
       message.success(t('common.sqlSaved'));
     } catch (err) {
       message.error(`${t('common.sqlEditor.saveFailed')}: ${getErrorMessage(err)}`);
@@ -391,7 +391,7 @@ export function SQLEditor({
       api
         .writeSqlFile(path, sql)
         .then(() => {
-          sqlSavedBaselineRef.current = sql;
+          setSqlBaseline(sql);
           message.success(t('common.sqlSaved'));
         })
         .catch((err) => message.error(`${t('common.sqlEditor.saveFailed')}: ${getErrorMessage(err)}`));
@@ -405,6 +405,22 @@ export function SQLEditor({
     saveSQLRef.current = saveSQL;
     saveSQLAsRef.current = saveSQLAs;
   }, [saveSQL, saveSQLAs]);
+
+  // 关闭保护：SQL 文本偏离基线（初始内容/最近保存）即上报 dirty，
+  // 经 sql-dirty-change 事件由 MainLayout 聚合（多编辑器实例取并集），
+  // tab 关闭（卸载）时自动清除本实例的 dirty
+  const editorInstanceId = useId();
+  useEffect(() => {
+    const dirty = sql !== sqlBaseline;
+    window.dispatchEvent(
+      new CustomEvent('sql-dirty-change', { detail: { id: editorInstanceId, dirty } })
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent('sql-dirty-change', { detail: { id: editorInstanceId, dirty: false } })
+      );
+    };
+  }, [sql, sqlBaseline, editorInstanceId]);
 
   const copySQL = useCallback(() => {
     navigator.clipboard.writeText(sql);
