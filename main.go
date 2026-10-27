@@ -20,6 +20,12 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed build/appicon.png
+var appIconPNG []byte
+
+//go:embed build/trayicon-template.png
+var trayTemplateIcon []byte
+
 // sqlFileFromArgs 从命令行参数中找出第一个 .sql 文件路径（双击文件冷启动场景）。
 func sqlFileFromArgs(args []string) string {
 	for _, arg := range args {
@@ -253,8 +259,9 @@ func runGUI() {
 			Handler: application.AssetFileServerFS(assets),
 		},
 		Mac: application.MacOptions{
-			// 关闭最后一个窗口时退出应用（与 v2 行为一致）
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+			// 关窗常驻：红绿灯关闭只是隐藏窗口（保留全部前端状态），
+			// 退出走托盘菜单/⌘Q；点击 dock 图标由框架 reopen 处理自动恢复窗口
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
 	})
 
@@ -262,6 +269,45 @@ func runGUI() {
 
 	// AI 流式输出专用通道（替代 v2 时代 ai-stream-<requestID> 事件广播）
 	wailsApp.HandleStream("ai-chat", app.HandleAIChatStream)
+
+	// ── 系统托盘：快速连接 + 显示/退出 ──
+	tray := wailsApp.SystemTray.New()
+	if gos.GOOS == "darwin" {
+		tray.SetTemplateIcon(trayTemplateIcon)
+	} else {
+		tray.SetIcon(appIconPNG)
+	}
+	showMain := func() {
+		if w, ok := wailsApp.Window.Get("main"); ok {
+			w.Show()
+		}
+	}
+	rebuildTrayMenu := func() {
+		m := wailsApp.NewMenu()
+		m.Add("显示 iDBLink").OnClick(func(*application.Context) { showMain() })
+		m.AddSeparator()
+		if conns, err := app.GetConnections(); err == nil && len(conns) > 0 {
+			m.AddSectionHeader("快速连接")
+			for i := range conns {
+				c := conns[i]
+				dot := "○"
+				if c.Status == "connected" {
+					dot = "●"
+				}
+				m.Add(dot + " " + c.Name + " · " + c.DbType).OnClick(func(*application.Context) {
+					showMain()
+					wailsApp.Event.Emit("tray-connect", c.ID)
+				})
+			}
+		}
+		m.AddSeparator()
+		m.Add("退出").OnClick(func(*application.Context) { wailsApp.Quit() })
+		tray.SetMenu(m)
+	}
+	app.SetConnectionsChangedCallback(rebuildTrayMenu)
+	wailsApp.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		rebuildTrayMenu()
+	})
 
 	win := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:               "main",
@@ -287,20 +333,16 @@ func runGUI() {
 		},
 	})
 
-	// 关闭窗口（红绿灯红色按钮）路径的保护：取消本次关闭，确认后经
-	// Close() 无条件关闭（不再触发本钩子）
+	// 关窗常驻：红绿灯关闭=隐藏窗口（前端状态全保留，无丢失风险）。
+	// 未保存修改/执行中查询的确认只在真正退出时（ShouldQuit）触发。
 	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		if quitConfirmed.Load() || app.CloseGuardReason() == "" {
-			return
+		if quitConfirmed.Load() {
+			return // 退出流程中的窗口关闭不拦截
 		}
 		e.Cancel()
-		confirmDiscard(func() {
-			// 置位以放行随后 terminate 路径的 ShouldQuit，避免二次确认
-			quitConfirmed.Store(true)
-			if w, ok := wailsApp.Window.Get("main"); ok {
-				w.Close()
-			}
-		})
+		if w, ok := wailsApp.Window.Get("main"); ok {
+			w.Hide()
+		}
 	})
 
 	// 拖放文件转发前端（前端按扩展名分发：.sql → 打开为新查询 tab）

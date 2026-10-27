@@ -206,6 +206,7 @@ func (a *App) DisconnectDatabase(connectionID string) error {
 	_ = a.tunnel.StopTunnel(connectionID)
 	err := a.dbManager.Disconnect(connectionID)
 	a.setActiveConn(connectionID, false)
+	defer a.fireConnectionsChanged()
 	_ = a.storage.RecordHistory(connectionID, "disconnect", err == nil, "")
 	if err != nil {
 		return fmt.Errorf("connection %s not found or already disconnected", connectionID)
@@ -424,12 +425,17 @@ func (a *App) SaveConnection(input ConnectionInput) (ConnectionOutput, error) {
 			output.SSHPort = &p
 		}
 	}
+	a.fireConnectionsChanged()
 	return output, nil
 }
 
 // DeleteConnection 删除连接
 func (a *App) DeleteConnection(id string) error {
-	return a.storage.DeleteConnection(id)
+	err := a.storage.DeleteConnection(id)
+	if err == nil {
+		a.fireConnectionsChanged()
+	}
+	return err
 }
 
 // BatchDeleteConnections 批量删除连接
@@ -439,6 +445,7 @@ func (a *App) BatchDeleteConnections(ids []string) error {
 			return fmt.Errorf("failed to delete connection %s: %w", id, err)
 		}
 	}
+	a.fireConnectionsChanged()
 	return nil
 }
 

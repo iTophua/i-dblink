@@ -109,6 +109,9 @@ func (a *App) ImportConnections(jsonStr string, overwrite bool) (int, int, error
 		}
 		importedConns++
 	}
+	if importedConns > 0 {
+		a.fireConnectionsChanged()
+	}
 
 	return importedConns, importedGroups, nil
 }
@@ -138,6 +141,9 @@ func (a *App) ImportNavicatConnections(ncxContent string, overwrite bool) (int, 
 			continue
 		}
 		imported++
+	}
+	if imported > 0 {
+		a.fireConnectionsChanged()
 	}
 
 	return imported, nil

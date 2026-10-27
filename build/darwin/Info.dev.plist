@@ -10,7 +10,7 @@
 					<string>sql</string>
 				</array>
 				<key>CFBundleTypeIconFile</key>
-				<string/>
+				<string>icon</string>
 				<key>CFBundleTypeName</key>
 				<string>SQL Script</string>
 				<key>CFBundleTypeRole</key>

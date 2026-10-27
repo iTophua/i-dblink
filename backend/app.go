@@ -126,6 +126,19 @@ type App struct {
 	// 关闭保护：前端上报的数据修改脏状态 + 后端统计的执行中查询数
 	closeGuardDirty atomic.Bool
 	queriesInFlight atomic.Int32
+
+	// 连接增删/连接状态变化回调（main 注入：刷新托盘快速连接菜单）
+	connectionsChanged func()
+}
+
+// SetConnectionsChangedCallback 注册连接变化回调（托盘菜单刷新）。
+func (a *App) SetConnectionsChangedCallback(f func()) { a.connectionsChanged = f }
+
+// fireConnectionsChanged 连接列表或连接状态发生变化后通知（连接 CRUD/连接/断开）。
+func (a *App) fireConnectionsChanged() {
+	if a.connectionsChanged != nil {
+		a.connectionsChanged()
+	}
 }
 
 // NewApp 创建新应用

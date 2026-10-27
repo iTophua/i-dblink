@@ -85,6 +85,15 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     return cleanup;
   }, []);
 
+  // 托盘「快速连接」：后端转发 connectionId，走正常连接流程
+  useEffect(() => {
+    const cleanup = EventsOn('tray-connect', (connectionId: string) => {
+      connect(connectionId).catch(() => {});
+    });
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const {
     connections,
     isLoading,
