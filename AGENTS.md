@@ -39,7 +39,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 | 层 | 路径 | 关键文件 |
 |----|------|----------|
-| 入口 | `main.go` | Wails 应用设置，7 个菜单 38 个菜单项，macOS 特殊处理 |
+| 入口 | `main.go` | Wails 应用设置、菜单、托盘、单实例、关闭保护、ai-chat 流 |
 | 后端 | `backend/` | `app.go`（332 LOC）+ 16 个 `app_*.go`（按功能拆分的 80+ 绑定方法），`db/`（10 种驱动），`api/`，`localdb/`，`security.go` |
 | 前端 | `frontend/src/` | `api/index.ts`（80 个方法），`components/`（~34 个 + 子目录），`hooks/`（6 个），`stores/`（3 个 Zustand） |
 | 绑定 | `frontend/bindings/` | `wails3 generate bindings -ts -i` 生成（interfaces 模式），**已 gitignore**，构建/测试前需先生成 |
@@ -59,9 +59,12 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   元素上方漏出（Chromium 完全正常，只在 WKWebView 出现）。表头类常驻元素要放
   滚动容器**外**（`TableList.tsx` 已改为 sibling + CSS 变量补偿滚动条宽度保持
   列对齐，勿改回 sticky）；`ResultGrid.tsx` 的 sticky 行在普通 overflow 容器内，不受影响
-- **`ConnectionInput` 命名空间**：Wails TS 绑定中在 `backend` 命名空间下：`new backend.ConnectionInput(source)`
+- **`ConnectionInput` 等模型**：v3 绑定生成 interfaces（`-i`），前端直接用对象字面量传参，无模型类
 - **Wails 绑定**（`frontend/bindings/`）已 gitignore，`wails3 task build`/`dev` 时自动生成；跑 `tsc`/`pnpm test` 前若缺失需先 `~/go/bin/wails3 generate bindings -ts -i`（setupTests 已 mock 绑定模块，测试不依赖生成物）
-- **浮动窗口功能无效**：历史遗留（v2 时代无多窗口 API）；v3 已支持多窗口，但此功能尚未接
+- **多窗口**：查询结果可弹出到独立窗口（`/#popup/<id>` hash 路由到 ResultPopup，
+  经 popup-result:request/data 事件从源 SQLEditor 取快照；快照语义不联动）
+- **关窗=隐藏不退出**：红绿灯关闭只是 Hide（状态全保留），退出走托盘菜单/⌘Q；
+  dock 角标显示执行中查询数（NSDockTile CGO，backend/window_appearance_darwin.go）
 - **i18n 大部分已接入**（2026-10 实测）：2035 个 key、双语言全对齐（此前 12 个
   en 缺失已补）。剩余硬编码中文约 387 行/52 文件，大头在数据类内容
   （`constants/sqlFunctions.ts` 函数文档 61 行、`convertRules.ts` 26 行等）；
