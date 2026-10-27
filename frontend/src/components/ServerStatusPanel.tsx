@@ -25,6 +25,7 @@ import {
   SettingOutlined,
 } from '@ant-design/icons';
 import { api } from '../api';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 const { Text } = Typography;
 
@@ -78,7 +79,7 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
       }
       setStatus(result);
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const errMsg = getErrorMessage(err);
       message.error(t('common.serverStatus.fetchFailed') + ': ' + errMsg);
     } finally {
       setLoading(false);

@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 interface Favorite {
   id: string;
@@ -43,7 +44,7 @@ export function Favorites({ open, onClose, onSelectTable, onSelectQuery }: Favor
       const result = await api.getFavorites();
       setFavorites(result || []);
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       message.error(`${t('common.favoritesLoadFailed')}: ${errorMsg}`);
     } finally {
       setLoading(false);
@@ -71,7 +72,7 @@ export function Favorites({ open, onClose, onSelectTable, onSelectQuery }: Favor
           setFavorites((prev) => prev.filter((f) => f.id !== id));
           message.success(t('common.deleteSuccess'));
         } catch (err: unknown) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
+          const errorMsg = getErrorMessage(err);
           message.error(`${t('common.dataGrid.deleteFailed')}: ${errorMsg}`);
         }
       },

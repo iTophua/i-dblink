@@ -17,6 +17,7 @@ import { useAIChatStore } from '../../stores/aiChatStore';
 import { streamChat } from '../../services/aiService';
 import { buildTableInfo } from '../../utils/buildTableInfo';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 const { TextArea } = Input;
 
@@ -138,7 +139,7 @@ export function AIChatPanel({
       await streamChat(requestMessages, (chunk) => appendAssistantChunk(chunk));
       finalizeAssistantMessage();
     } catch (err) {
-      appendAssistantChunk(`\n\n[Error] ${err instanceof Error ? err.message : String(err)}`);
+      appendAssistantChunk(`\n\n[Error] ${getErrorMessage(err)}`);
       finalizeAssistantMessage();
     }
   }, [

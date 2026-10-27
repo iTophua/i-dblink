@@ -44,6 +44,7 @@ import { CellPreviewDialog } from './DataTable/CellPreviewDialog';
 import { SqlInput } from './SqlInput';
 import { EnhancedEmptyState, TableDataSkeleton } from './LoadingStates';
 import { appModal } from '../utils/appModal';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface DataTableProps {
   connectionId: string;
@@ -247,7 +248,7 @@ export const DataTable = memo(function DataTable({
       }
     } catch (err: unknown) {
       if (requestId !== reqIdRef.current) return;
-      message.error(`${t('common.failedToLoadData')}: ${err instanceof Error ? err.message : String(err)}`);
+      message.error(`${t('common.failedToLoadData')}: ${getErrorMessage(err)}`);
       setColumns([]); setRowData([]); setHasLoaded(true);
     } finally {
       if (requestId === reqIdRef.current) { setLoading(false); loadingRef.current = false; abortRef.current = null; }
@@ -644,7 +645,7 @@ export const DataTable = memo(function DataTable({
       await loadData();
       await loadCount();
     } catch (err) {
-      message.error(`${t('common.dataGrid.updateFailed')}: ${err instanceof Error ? err.message : String(err)}`);
+      message.error(`${t('common.dataGrid.updateFailed')}: ${getErrorMessage(err)}`);
     } finally {
       committingRef.current = false;
       setLoading(false);

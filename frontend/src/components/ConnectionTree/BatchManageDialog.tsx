@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import type { Connection, ConnectionGroup } from '../../stores/appStore';
 import { DatabaseIcon } from '../DatabaseIcon';
 import { api } from '../../api';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 interface BatchManageDialogProps {
   open: boolean;
@@ -103,7 +104,7 @@ export function BatchManageDialog({
           setSelectedRowKeys([]);
           onRefresh?.();
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
+          const msg = getErrorMessage(err);
           message.error(t('common.batchManage.deleteFailed') + ': ' + msg);
         } finally {
           setLoading(false);
@@ -129,7 +130,7 @@ export function BatchManageDialog({
       URL.revokeObjectURL(url);
       message.success(t('common.batchManage.exportSuccess'));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       message.error(t('common.batchManage.exportFailed') + ': ' + msg);
     } finally {
       setLoading(false);
@@ -161,7 +162,7 @@ export function BatchManageDialog({
         setSelectedRowKeys([]);
         onRefresh?.();
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         message.error(t('common.batchManage.moveFailed') + ': ' + msg);
       } finally {
         setLoading(false);

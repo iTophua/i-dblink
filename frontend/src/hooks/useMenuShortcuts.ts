@@ -19,9 +19,6 @@ export interface MenuActions {
   onSelectAll?: () => void;
   onFind?: () => void;
   onRefresh?: () => void;
-  onZoomIn?: () => void;
-  onZoomOut?: () => void;
-  onZoomReset?: () => void;
   onFullscreen?: () => void;
   onConnectSelected?: () => void;
   onDisconnect?: () => void;
@@ -160,9 +157,6 @@ export function useMenuShortcuts(actions?: MenuActions) {
 
   // 查看操作
   register('refresh', () => safeActions.onRefresh?.(), defaultOptions, [safeActions.onRefresh]);
-  register('zoom-in', () => safeActions.onZoomIn?.(), defaultOptions, [safeActions.onZoomIn]);
-  register('zoom-out', () => safeActions.onZoomOut?.(), defaultOptions, [safeActions.onZoomOut]);
-  register('zoom-reset', () => safeActions.onZoomReset?.(), defaultOptions, [safeActions.onZoomReset]);
   register('fullscreen', () => safeActions.onFullscreen?.(), defaultOptions, [safeActions.onFullscreen]);
 
   // 连接操作

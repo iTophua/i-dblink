@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	goruntime "runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -405,6 +406,27 @@ func callHandlerRaw(handlerFunc func(http.ResponseWriter, *http.Request), reqBod
 // 关闭/退出时后端结合执行中查询数决定是否弹原生确认框。
 func (a *App) SetCloseGuardState(dataDirty bool) {
 	a.closeGuardDirty.Store(dataDirty)
+}
+
+// queryStarted / queryFinished 维护执行中查询计数并同步 dock 角标。
+func (a *App) queryStarted() {
+	a.queriesInFlight.Add(1)
+	a.updateDockBadge()
+}
+
+func (a *App) queryFinished() {
+	a.queriesInFlight.Add(-1)
+	a.updateDockBadge()
+}
+
+// updateDockBadge 按执行中查询数设置 dock 角标（macOS；0 清除）。
+// 常驻模式下窗口可能隐藏，角标是长查询进行中的唯一可见信号。
+func (a *App) updateDockBadge() {
+	if n := a.queriesInFlight.Load(); n > 0 {
+		setDockBadgeDarwin(strconv.Itoa(int(n)))
+	} else {
+		setDockBadgeDarwin("")
+	}
 }
 
 // CloseGuardReason 返回需要关闭保护的原因；空串表示无需拦截。

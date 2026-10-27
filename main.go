@@ -79,15 +79,28 @@ func createEditMenu() *application.Menu {
 	return m
 }
 
-func createViewMenu() *application.Menu {
+func createViewMenu(wailsApp *application.App) *application.Menu {
+	// 原生窗口操作（v3）：菜单直调窗口方法，不经前端事件转发
+	withMain := func(f func(application.Window)) func(*application.Context) {
+		return func(*application.Context) {
+			if w, ok := wailsApp.Window.Get("main"); ok {
+				f(w)
+			}
+		}
+	}
+	// macOS 全屏用系统惯例 ⌃⌘F，其他平台 F11
+	fullscreenAccel := "f11"
+	if gos.GOOS == "darwin" {
+		fullscreenAccel = "Ctrl+Cmd+f"
+	}
 	m := application.NewMenu()
 	m.Add("刷新").SetAccelerator("f5").OnClick(callback("refresh"))
 	m.AddSeparator()
-	m.Add("放大").SetAccelerator("CmdOrCtrl+plus").OnClick(callback("zoom-in"))
-	m.Add("缩小").SetAccelerator("CmdOrCtrl+-").OnClick(callback("zoom-out"))
-	m.Add("实际大小").SetAccelerator("CmdOrCtrl+0").OnClick(callback("zoom-reset"))
+	m.Add("放大").SetAccelerator("CmdOrCtrl+plus").OnClick(withMain(func(w application.Window) { w.ZoomIn() }))
+	m.Add("缩小").SetAccelerator("CmdOrCtrl+-").OnClick(withMain(func(w application.Window) { w.ZoomOut() }))
+	m.Add("实际大小").SetAccelerator("CmdOrCtrl+0").OnClick(withMain(func(w application.Window) { w.ZoomReset() }))
 	m.AddSeparator()
-	m.Add("全屏切换").SetAccelerator("f11").OnClick(callback("fullscreen"))
+	m.Add("全屏切换").SetAccelerator(fullscreenAccel).OnClick(withMain(func(w application.Window) { w.ToggleFullscreen() }))
 	return m
 }
 
@@ -118,12 +131,18 @@ func createToolsMenu() *application.Menu {
 }
 
 func createWindowMenu() *application.Menu {
+	// macOS 的 ⌘Tab/⇧⌘Tab 是系统级应用切换，应用层收不到，
+	// 改用 ⌥⌘→/⌥⌘←（与 macOS 编辑器标签切换惯例一致）
+	nextTabAccel, prevTabAccel := "CmdOrCtrl+tab", "Shift+CmdOrCtrl+tab"
+	if gos.GOOS == "darwin" {
+		nextTabAccel, prevTabAccel = "OptionOrAlt+Cmd+ArrowRight", "OptionOrAlt+Cmd+ArrowLeft"
+	}
 	m := application.NewMenu()
 	m.Add("新建标签页").SetAccelerator("CmdOrCtrl+t").OnClick(callback("new-tab"))
 	m.Add("关闭标签页").SetAccelerator("CmdOrCtrl+w").OnClick(callback("close-tab"))
 	m.AddSeparator()
-	m.Add("切换到下一个标签页").SetAccelerator("CmdOrCtrl+tab").OnClick(callback("next-tab"))
-	m.Add("切换到上一个标签页").SetAccelerator("Shift+CmdOrCtrl+tab").OnClick(callback("previous-tab"))
+	m.Add("切换到下一个标签页").SetAccelerator(nextTabAccel).OnClick(callback("next-tab"))
+	m.Add("切换到上一个标签页").SetAccelerator(prevTabAccel).OnClick(callback("previous-tab"))
 	m.AddSeparator()
 	m.Add("层叠").OnClick(callback("cascade"))
 	m.Add("水平平铺").OnClick(callback("tile-horizontally"))
@@ -145,7 +164,7 @@ func createHelpMenu(app *backend.App) *application.Menu {
 	return m
 }
 
-func createMenu(app *backend.App) *application.Menu {
+func createMenu(app *backend.App, wailsApp *application.App) *application.Menu {
 	menu := application.NewMenu()
 
 	if gos.GOOS == "darwin" {
@@ -159,7 +178,7 @@ func createMenu(app *backend.App) *application.Menu {
 		menu.AddSubmenu("编辑").Append(createEditMenu())
 	}
 
-	menu.AddSubmenu("查看").Append(createViewMenu())
+	menu.AddSubmenu("查看").Append(createViewMenu(wailsApp))
 	menu.AddSubmenu("连接").Append(createConnectionMenu())
 	menu.AddSubmenu("工具").Append(createToolsMenu())
 	menu.AddSubmenu("窗口").Append(createWindowMenu())
@@ -265,7 +284,7 @@ func runGUI() {
 		},
 	})
 
-	wailsApp.Menu.Set(createMenu(app))
+	wailsApp.Menu.Set(createMenu(app, wailsApp))
 
 	// AI 流式输出专用通道（替代 v2 时代 ai-stream-<requestID> 事件广播）
 	wailsApp.HandleStream("ai-chat", app.HandleAIChatStream)

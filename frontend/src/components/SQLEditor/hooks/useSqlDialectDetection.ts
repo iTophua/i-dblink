@@ -6,6 +6,7 @@ import { detectSqlDialect, mergeCompatibleDialect, type DialectDetection } from 
 import { convertByRules } from '../../../utils/sqlDialects/convertRules';
 import { streamAITask } from '../../../services/aiService';
 import { useAIStore } from '../../../stores/aiStore';
+import { getErrorMessage } from '../../../utils/getErrorMessage';
 
 // 从 AI 输出中提取第一个 sql 代码块内容；无代码块则返回去空白原文。
 // 与 AIPanel.tsx 的 extractSQL 及后端 ai.ExtractSQL 保持一致。
@@ -102,7 +103,7 @@ export function useSqlDialectDetection(
       setSql(converted);
       message.success(t('common.sqlEditor.dialectConverted', { source: dialectMismatch.dialect, target: dbType }));
     } catch (err) {
-      message.error(`${t('common.sqlEditor.aiConvertFailed')}: ${err instanceof Error ? err.message : String(err)}`);
+      message.error(`${t('common.sqlEditor.aiConvertFailed')}: ${getErrorMessage(err)}`);
     } finally {
       setAiConverting(false);
     }

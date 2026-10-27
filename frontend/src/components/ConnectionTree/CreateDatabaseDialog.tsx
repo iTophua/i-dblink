@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Modal, Form, Input, Select, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 interface CreateDatabaseDialogProps {
   open: boolean;
@@ -243,7 +244,7 @@ export function CreateDatabaseDialog({
       form.resetFields();
       onSuccess();
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       message.error(`${t('common.error')}: ${errorMsg}`);
     } finally {
       setLoading(false);

@@ -33,6 +33,7 @@ import {
 } from '../constants/menuShortcuts';
 import { SQL_LIVE_TEMPLATES } from '../constants/sqlLiveTemplates';
 import { useTranslation } from 'react-i18next';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -765,7 +766,7 @@ function AISettings() {
           model: cur.model,
         });
       } catch (err) {
-        messageApi.error(t('common.aiSettings.saveFailed') + ': ' + String(err));
+        messageApi.error(t('common.aiSettings.saveFailed') + ': ' + getErrorMessage(err));
       } finally {
         setSavingField((cur2) => (cur2 === fieldName ? null : cur2));
       }
@@ -837,7 +838,7 @@ function AISettings() {
         apiKey, // 空则后端用已存的 key
       });
     } catch (err) {
-      messageApi.error(t('common.aiSettings.loadModelsFailed') + ': ' + String(err));
+      messageApi.error(t('common.aiSettings.loadModelsFailed') + ': ' + getErrorMessage(err));
     }
   };
 
@@ -866,7 +867,7 @@ function AISettings() {
         messageApi.error(t('common.aiSettings.testFailed') + ': ' + result.message);
       }
     } catch (err) {
-      messageApi.error(t('common.aiSettings.testFailed') + ': ' + String(err));
+      messageApi.error(t('common.aiSettings.testFailed') + ': ' + getErrorMessage(err));
     } finally {
       setTesting(false);
     }

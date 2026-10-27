@@ -5,6 +5,7 @@ import { useThemeColors } from '../hooks/useThemeColors';
 import { FolderOutlined, DatabaseOutlined, UploadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { GlobalInput } from './GlobalInput';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface BackupRestoreDialogProps {
   open: boolean;
@@ -104,7 +105,7 @@ export function BackupRestoreDialog({
       }
       onSuccess();
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       message.error(
         `${t('common.failedToBackupOrRestore', { mode: mode === 'backup' ? t('common.backup') : t('common.restore') })}: ${errorMsg}`
       );

@@ -4,6 +4,7 @@ import { DownloadOutlined, UploadOutlined, SearchOutlined } from '@ant-design/ic
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { useAppStore } from '../stores/appStore';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface Props {
   open: boolean;
@@ -91,7 +92,7 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
       message.success(t('common.connectionExportDialog.exportSuccess'));
     } catch (err) {
       message.error(
-        `${t('common.connectionExportDialog.exportFailed')}: ${err instanceof Error ? err.message : String(err)}`
+        `${t('common.connectionExportDialog.exportFailed')}: ${getErrorMessage(err)}`
       );
     } finally {
       setExporting(false);
@@ -111,7 +112,7 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
         onClose();
       } catch (err) {
         message.error(
-          `${t('common.connectionExportDialog.importFailed')}: ${err instanceof Error ? err.message : String(err)}`
+          `${t('common.connectionExportDialog.importFailed')}: ${getErrorMessage(err)}`
         );
       } finally {
         setImporting(false);
@@ -132,7 +133,7 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
         onClose();
       } catch (err) {
         message.error(
-          `${t('common.connectionExportDialog.navicatImportFailed')}: ${err instanceof Error ? err.message : String(err)}`
+          `${t('common.connectionExportDialog.navicatImportFailed')}: ${getErrorMessage(err)}`
         );
       } finally {
         setImporting(false);

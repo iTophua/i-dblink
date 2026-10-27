@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useAIStore } from '../stores/aiStore';
 import { streamAITask } from '../services/aiService';
 import type { DatabaseType } from '../types/api';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 const { TextArea } = Input;
 
@@ -132,7 +133,7 @@ export function AIPanel({ sql, dbType, onInsertSQL, onReplaceSQL, getTableInfo }
         setOutput((prev) => prev + chunk);
       });
     } catch (err) {
-      setOutput((prev) => prev + `\n\n[Error] ${String(err)}`);
+      setOutput((prev) => prev + `\n\n[Error] ${getErrorMessage(err)}`);
     } finally {
       setStreaming(false);
     }

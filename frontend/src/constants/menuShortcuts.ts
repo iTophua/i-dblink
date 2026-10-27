@@ -34,7 +34,7 @@ export const MENU_SHORTCUTS: ShortcutMapping[] = [
   { id: 'zoom-in', keys: 'mod+=', description: '放大', category: 'view' },
   { id: 'zoom-out', keys: 'mod+-', description: '缩小', category: 'view' },
   { id: 'zoom-reset', keys: 'mod+0', description: '实际大小', category: 'view' },
-  { id: 'fullscreen', keys: 'f11', description: '全屏切换', category: 'view' },
+  { id: 'fullscreen', keys: isMacOS() ? 'mod+ctrl+f' : 'f11', description: '全屏切换', category: 'view' },
 
   // 连接操作
   { id: 'connect-selected', keys: 'mod+shift+c', description: '连接所选', category: 'connection' },
@@ -57,8 +57,8 @@ export const MENU_SHORTCUTS: ShortcutMapping[] = [
   // 窗口操作
   { id: 'new-tab', keys: 'mod+t', description: '新建标签页', category: 'window' },
   { id: 'close-tab', keys: 'mod+w', description: '关闭标签页', category: 'window' },
-  { id: 'next-tab', keys: 'mod+tab', description: '下一个标签页', category: 'window' },
-  { id: 'prev-tab', keys: 'mod+shift+tab', description: '上一个标签页', category: 'window' },
+  { id: 'next-tab', keys: isMacOS() ? 'mod+alt+arrowright' : 'mod+tab', description: '下一个标签页', category: 'window' },
+  { id: 'prev-tab', keys: isMacOS() ? 'mod+alt+arrowleft' : 'mod+shift+tab', description: '上一个标签页', category: 'window' },
 
   // 帮助操作
   { id: 'documentation', keys: 'f1', description: '帮助目录', category: 'help' },

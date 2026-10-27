@@ -7,6 +7,7 @@ import i18n from '../i18n';
 import type { ConnectionInput, GroupInput } from '../types/api';
 
 import { getDialect } from '../utils/sqlDialects';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 // 性能优化：带 TTL 的 LRU 缓存
 interface CacheEntry<T> {
@@ -330,7 +331,7 @@ export const useConnections = () => {
           setConnections((prev) =>
             prev.map((c) => (c.id === connectionId ? { ...c, status: 'disconnected' as const } : c))
           );
-          const errorMsg = err instanceof Error ? err.message : String(err);
+          const errorMsg = getErrorMessage(err);
           // 检查是否是密码错误（后端返回 PASSWORD_REQUIRED）
           if (
             errorMsg === 'PASSWORD_REQUIRED' ||

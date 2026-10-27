@@ -8,3 +8,6 @@ package backend
 // （如 Windows 由系统注册表 / Mica 自动跟随），无需应用层干预。
 // 此空实现保证跨平台编译通过。
 func SetWindowAppearance(_ string) {}
+
+// setDockBadgeDarwin 非 macOS 平台 stub（dock 角标仅 macOS 有）。
+func setDockBadgeDarwin(_ string) {}

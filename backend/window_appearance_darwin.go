@@ -23,6 +23,15 @@ static void applyAppearance(NSAppearance *appearance) {
     [NSApp setAppearance:appearance];
 }
 
+// setDockBadge 主线程设置 dock 图标角标；NULL/空串清除角标。
+static void setDockBadge(const char* label) {
+    NSString *l = (label == NULL || *label == '\0') ? nil : [NSString stringWithUTF8String:label];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSDockTile *tile = [[NSApplication sharedApplication] dockTile];
+        tile.badgeLabel = l;  // nil 即清除
+    });
+}
+
 // setWindowAppearance 派发到主线程设置原生窗口外观。
 //   mode: "light" → NSAppearanceNameAqua（标准浅色）
 //        "dark"  → NSAppearanceNameDarkAqua（标准深色）
@@ -66,4 +75,11 @@ func SetWindowAppearance(mode string) {
 	cMode := C.CString(mode)
 	defer C.free(unsafe.Pointer(cMode))
 	C.setWindowAppearance(cMode)
+}
+
+// setDockBadgeDarwin 设置/清除 dock 角标（运行中查询数；空串清除）。
+func setDockBadgeDarwin(label string) {
+	cLabel := C.CString(label)
+	defer C.free(unsafe.Pointer(cLabel))
+	C.setDockBadge(cLabel)
 }

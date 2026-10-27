@@ -152,9 +152,6 @@ export function useLayoutActions({
           loadDatabaseTables(selectedConnectionId, selectedDatabase, true);
         }
       },
-      onZoomIn: () => {},
-      onZoomOut: () => {},
-      onZoomReset: () => {},
       onFullscreen: () => {
         const elem = document.fullscreenElement
           ? document.exitFullscreen()
@@ -272,15 +269,6 @@ export function useLayoutActions({
           break;
         case 'find':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'find' } }));
-          break;
-        case 'zoom-in':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-in' } }));
-          break;
-        case 'zoom-out':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-out' } }));
-          break;
-        case 'zoom-reset':
-          window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'zoom-reset' } }));
           break;
         case 'fullscreen':
           window.dispatchEvent(new CustomEvent('tab-action', { detail: { action: 'fullscreen' } }));
