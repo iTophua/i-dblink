@@ -85,40 +85,6 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     return cleanup;
   }, []);
 
-  // 托盘「快速连接」：连接成功后定位树（展开分组链+连接节点）、
-  // 滚动到该连接，并直接为该连接新建查询 tab
-  useEffect(() => {
-    const cleanup = EventsOn('tray-connect', (connectionId: string) => {
-      connect(connectionId)
-        .then(() => {
-          const store = useAppStore.getState();
-          const conn = store.connections.find((c) => c.id === connectionId);
-          if (conn) {
-            // 展开连接所在分组链 + 连接节点（key 即连接 id）
-            const addKeys = new Set<string>([connectionId]);
-            let gid = conn.group_id;
-            const guard = new Set<string>();
-            while (gid && !guard.has(gid)) {
-              guard.add(gid);
-              addKeys.add(`group-${gid}`);
-              gid = store.groups.find((g) => g.id === gid)?.parent_id;
-            }
-            setExpandedKeys((prev) => Array.from(new Set([...prev, ...addKeys])));
-            // 滚动定位（EnhancedConnectionTree 监听，树异步重建后补滚）
-            window.dispatchEvent(
-              new CustomEvent('locate-connection', { detail: { connectionId } })
-            );
-          }
-          window.dispatchEvent(
-            new CustomEvent('tab-action', { detail: { action: 'new-sql-tab', connectionId } })
-          );
-        })
-        .catch(() => {});
-    });
-    return cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const {
     connections,
     isLoading,
@@ -356,6 +322,38 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
     },
     [connect, getDatabases, connections]
   );
+
+  // 托盘「快速连接」：走 handleConnect 完整流程（含加载数据库列表，否则
+  // 树展开后是"暂无数据库"），成功后展开分组链、滚动定位、新建查询 tab
+  useEffect(() => {
+    const cleanup = EventsOn('tray-connect', (connectionId: string) => {
+      handleConnect(connectionId)
+        .then(() => {
+          const store = useAppStore.getState();
+          const conn = store.connections.find((c) => c.id === connectionId);
+          // 密码弹框/连接失败路径不算成功，不做后续动作
+          if (!conn || conn.status !== 'connected') return;
+          const addKeys = new Set<string>([connectionId]);
+          let gid = conn.group_id;
+          const guard = new Set<string>();
+          while (gid && !guard.has(gid)) {
+            guard.add(gid);
+            addKeys.add(`group-${gid}`);
+            gid = store.groups.find((g) => g.id === gid)?.parent_id;
+          }
+          setExpandedKeys((prev) => Array.from(new Set([...prev, ...addKeys])));
+          // 滚动定位（EnhancedConnectionTree 监听，树异步重建后补滚）
+          window.dispatchEvent(
+            new CustomEvent('locate-connection', { detail: { connectionId } })
+          );
+          window.dispatchEvent(
+            new CustomEvent('tab-action', { detail: { action: 'new-sql-tab', connectionId } })
+          );
+        })
+        .catch(() => {});
+    });
+    return cleanup;
+  }, [handleConnect]);
 
   const handlePasswordSubmit = async () => {
     try {
