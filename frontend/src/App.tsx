@@ -17,9 +17,11 @@ import { Window as WailsWindow } from '@wailsio/runtime';
 // NOTE: Modal 过渡动画已通过全局 CSS 禁用（style.css 中覆盖 rc-motion 相关样式）
 
 // Check if running in Wails environment
+// v2 挂 window.runtime，v3（@wailsio/runtime）挂 window._wails
 const isWails =
   typeof window !== 'undefined' &&
-  !!(window as unknown as Record<string, unknown>).runtime;
+  (!!(window as unknown as Record<string, unknown>)._wails ||
+    !!(window as unknown as Record<string, unknown>).runtime);
 
 function App() {
   const { settings, updateSettings } = useSettingsStore();
@@ -63,6 +65,20 @@ function App() {
       document.documentElement.classList.remove('wails');
     };
   }, []);
+
+  useEffect(() => {
+    if (!isWails) return;
+
+    // 托盘「外观」菜单：直接落主题设置（无需主界面动作路由）
+    const offTheme = EventsOn('tray-set-theme', (mode: string) => {
+      if (mode === 'light' || mode === 'dark' || mode === 'system') {
+        updateSettings({ themeMode: mode });
+      }
+    });
+    return () => {
+      offTheme();
+    };
+  }, [updateSettings]);
 
   useEffect(() => {
     if (!isWails) return;

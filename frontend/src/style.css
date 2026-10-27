@@ -758,8 +758,11 @@ tbody tr:hover {
 /* 工具栏整体可拖动窗口，内部交互元素恢复点击 */
 .toolbar-drag-region {
   -webkit-app-region: drag;
+  /* v3 运行时只检查事件目标元素自身的该 CSS 变量（不查祖先） */
+  --wails-draggable: drag;
   position: relative;
 }
 .toolbar-no-drag {
   -webkit-app-region: no-drag;
+  --wails-draggable: no-drag;
 }
