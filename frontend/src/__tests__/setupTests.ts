@@ -125,6 +125,15 @@ vi.mock('../../bindings/idblink/backend/app', () => ({
 }));
 
 vi.mock('@wailsio/runtime', () => ({
+  JSONStream: vi.fn(() => ({
+    onopen: null,
+    onmessage: null,
+    onclose: null,
+    onerror: null,
+    send: vi.fn(),
+    close: vi.fn(),
+    bufferedAmount: 0,
+  })),
   Events: {
     On: vi.fn(() => vi.fn()),
     Once: vi.fn(() => vi.fn()),

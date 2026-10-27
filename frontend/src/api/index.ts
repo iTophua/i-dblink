@@ -1177,11 +1177,6 @@ export const api = {
     return result as unknown as AITaskResult;
   },
 
-  async executeAITaskStream(req: AITaskRequest): Promise<void> {
-    const { ExecuteAITaskStream } = await import('../../bindings/idblink/backend/app');
-    await ExecuteAITaskStream(req);
-  },
-
   async getAIStatus(): Promise<AIStatus> {
     const { GetAIStatus } = await import('../../bindings/idblink/backend/app');
     const result = await GetAIStatus();

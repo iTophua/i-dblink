@@ -48,6 +48,7 @@ fileAssociations:
   - ext: sql
     name: SQL Script
     description: SQL 脚本文件
+    iconName: icon
     role: Editor
 
 # Other data

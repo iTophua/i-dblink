@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"idblink/backend/ai"
 )
 
@@ -53,7 +52,7 @@ type AITaskRequest struct {
 
 // AIChatMessage 聊天消息（前端透传到 Provider，支持多轮对话）
 type AIChatMessage struct {
-	Role    string `json:"role"`    // "system" | "user" | "assistant"
+	Role    string `json:"role"` // "system" | "user" | "assistant"
 	Content string `json:"content"`
 }
 
@@ -246,46 +245,66 @@ func (a *App) ExecuteAITask(req AITaskRequest) (AITaskResponse, error) {
 	}, nil
 }
 
-// ExecuteAITaskStream 执行 AI 任务（流式）。
-// 在后端起 goroutine 调 Provider.ChatStream + StreamToEvent，立即返回 nil。
-// 前端通过 EventsOn("ai-stream-<requestID>") 消费 token。
-func (a *App) ExecuteAITaskStream(req AITaskRequest) error {
+// aiStreamChunk "ai-chat" 流协议帧：content 增量 / done 结束 / error 失败原因
+type aiStreamChunk struct {
+	Content string `json:"content,omitempty"`
+	Done    bool   `json:"done,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// HandleAIChatStream "ai-chat" 流处理器（wails v3 HandleStream 注册）。
+// 前端每轮请求建立一条流连接，发送一条 AITaskRequest 后按帧接收输出。
+// 相比 v2 时代的事件广播（ai-stream-<requestID>）：无 requestID 串流风险、
+// 前端 close 即取消（ctx 继承自连接，select ctx.Done 终止 Provider 请求）。
+func (a *App) HandleAIChatStream(c *application.StreamConn) {
+	defer c.Close()
+
+	var req AITaskRequest
+	if err := c.ReceiveJSON(&req); err != nil {
+		return // 前端连接即关（组件卸载/页面刷新）
+	}
+
 	provider, err := a.aiManager.GetActive()
 	if err != nil {
-		return err
+		_ = c.SendJSON(aiStreamChunk{Done: true, Error: err.Error()})
+		return
 	}
-
 	task, err := ai.GetTask(ai.TaskID(req.TaskID))
 	if err != nil {
-		return err
+		_ = c.SendJSON(aiStreamChunk{Done: true, Error: err.Error()})
+		return
 	}
-
-	// 确保有 requestID（前端生成或后端补一个）
-	requestID := req.RequestID
-	if requestID == "" {
-		requestID = uuid.New().String()
-		req.RequestID = requestID
-	}
-
 	messages := buildAIMessages(req, task)
 
-	// 流式 context：超时 5 分钟（LLM 长响应）。
-	// 注意：不能用 defer cancel()——本方法立即返回（Wails 绑定是同步 RPC），
-	// defer 会在返回时取消 ctx，导致 Provider 的流式 goroutine 被终止。
-	// cancel 交给 StreamToEventWithError 的 goroutine 在流结束后通过 channel close 间接释放。
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// 流式 context：超时 5 分钟（LLM 长响应）；父 ctx 来自流连接，对端关闭即取消
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Minute)
+	defer cancel()
 
 	stream, err := provider.ChatStream(ctx, &ai.ChatRequest{Messages: messages})
 	if err != nil {
-		cancel()
-		return err
+		_ = c.SendJSON(aiStreamChunk{Done: true, Error: err.Error()})
+		return
 	}
-
-	// 用 app ctx 推事件（Wails EventsEmit 需要 Wails ctx）
-	// goroutine 消费完 stream 后调用 cancel 释放 ctx 资源
-	ai.StreamToEventWithError(requestID, stream, nil, cancel)
-
-	return nil
+	for {
+		select {
+		case chunk, ok := <-stream:
+			if !ok {
+				_ = c.SendJSON(aiStreamChunk{Done: true})
+				return
+			}
+			if chunk.Done {
+				_ = c.SendJSON(aiStreamChunk{Done: true})
+				return
+			}
+			if err := c.SendJSON(aiStreamChunk{Content: chunk.Content}); err != nil {
+				cancel() // 前端已断开，立即终止 Provider 的 HTTP 请求
+				return
+			}
+		case <-ctx.Done():
+			_ = c.SendJSON(aiStreamChunk{Done: true, Error: "请求超时或已取消"})
+			return
+		}
+	}
 }
 
 // GetAIStatus 获取 AI 子系统状态

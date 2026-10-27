@@ -260,6 +260,9 @@ func runGUI() {
 
 	wailsApp.Menu.Set(createMenu(app))
 
+	// AI 流式输出专用通道（替代 v2 时代 ai-stream-<requestID> 事件广播）
+	wailsApp.HandleStream("ai-chat", app.HandleAIChatStream)
+
 	win := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:               "main",
 		Title:              "iDBLink",
