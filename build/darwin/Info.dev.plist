@@ -2,6 +2,21 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 	<dict>
+		<key>CFBundleDocumentTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeExtensions</key>
+				<array>
+					<string>sql</string>
+				</array>
+				<key>CFBundleTypeIconFile</key>
+				<string/>
+				<key>CFBundleTypeName</key>
+				<string>SQL Script</string>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+			</dict>
+		</array>
 		<key>CFBundleExecutable</key>
 		<string>iDBLink</string>
 		<key>CFBundleGetInfoString</key>

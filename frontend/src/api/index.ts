@@ -59,6 +59,8 @@ import {
   SaveGroup,
   SaveSnippet,
   StreamExportTable,
+  ReadSqlFile,
+  TakePendingOpenFile,
   TestConnection,
   TruncateTable,
   UpdateConnectionPassword,
@@ -928,6 +930,16 @@ export const api = {
     serial?: string
   ): Promise<void> {
     await KillProcess(connectionId, database, processId, serial ?? '');
+  },
+
+  /** 读取本地 SQL 脚本文件（双击打开/拖放载入，仅 .sql/.txt ≤5MB） */
+  async readSqlFile(path: string): Promise<string> {
+    return await ReadSqlFile(path);
+  },
+
+  /** 取走冷启动待打开的 .sql 文件路径（双击文件启动应用场景，取后即清） */
+  async takePendingOpenFile(): Promise<string> {
+    return (await TakePendingOpenFile()) ?? '';
   },
 
   async quitApp(): Promise<void> {

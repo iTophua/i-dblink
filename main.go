@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	gos "runtime"
+	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"idblink/backend"
 	"idblink/backend/mcpserver"
@@ -15,6 +18,19 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+// sqlFileFromArgs 从命令行参数中找出第一个 .sql 文件路径（双击文件冷启动场景）。
+func sqlFileFromArgs(args []string) string {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if strings.EqualFold(filepath.Ext(arg), ".sql") {
+			return arg
+		}
+	}
+	return ""
+}
 
 func emitMenuEvent(action string) {
 	if app := application.Get(); app != nil {
@@ -175,9 +191,30 @@ func runMCP() {
 func runGUI() {
 	app := backend.NewApp()
 
-	wailsApp := application.New(application.Options{
+	// 双击 .sql 冷启动：记录待打开文件，前端启动后经 TakePendingOpenFile 拉取
+	if p := sqlFileFromArgs(os.Args); p != "" {
+		backend.SetPendingOpenFile(p)
+	}
+
+	var wailsApp *application.App
+	wailsApp = application.New(application.Options{
 		Name:        "iDBLink",
 		Description: "A cross-platform database management tool",
+		// 双击 .sql 文件用 iDBLink 打开（Finder「打开方式」）
+		FileAssociations: []string{".sql"},
+		// 单实例：重复启动（含双击 .sql）将文件路径转发给已运行实例后自行退出
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: "com.idblink.iDBLink",
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				if p := sqlFileFromArgs(data.Args); p != "" {
+					wailsApp.Event.Emit("open-sql-file", p)
+				}
+				// 已有实例运行时聚焦主窗口，符合"重复打开应用"的预期
+				if w, ok := wailsApp.Window.Get("main"); ok {
+					w.Show()
+				}
+			},
+		},
 		Services: []application.Service{
 			application.NewService(app),
 		},
@@ -192,7 +229,7 @@ func runGUI() {
 
 	wailsApp.Menu.Set(createMenu(app))
 
-	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+	win := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:               "main",
 		Title:              "iDBLink",
 		Width:              1400,
@@ -200,6 +237,8 @@ func runGUI() {
 		MinWidth:           1000,
 		MinHeight:          700,
 		UseApplicationMenu: true,
+		// 允许拖放文件到窗口（配合前端 data-file-drop-target 区域）
+		EnableFileDrop: true,
 		// 初始窗口背景色（webview 透明时作为底色显示）
 		// 取 light 默认背景 #F2F1ED（护眼米色），前端主题加载后由 Window.SetBackgroundColour 同步覆盖。
 		// 选浅色而非深色：深色用户启动闪浅色 → 立即被覆盖，比浅色用户闪黑更可接受。
@@ -212,6 +251,13 @@ func runGUI() {
 			// （由前端在主题切换时通过 Window.SetBackgroundColour 同步，消除启动白屏）
 			TitleBar: application.MacTitleBarHidden,
 		},
+	})
+
+	// 拖放文件转发前端（前端按扩展名分发：.sql → 打开为新查询 tab）
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		if files := event.Context().DroppedFiles(); len(files) > 0 {
+			wailsApp.Event.Emit("files-dropped", files)
+		}
 	})
 
 	if err := wailsApp.Run(); err != nil {

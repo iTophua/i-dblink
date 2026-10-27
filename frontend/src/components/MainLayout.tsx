@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Window as WailsWindow } from '@wailsio/runtime';
-import { Layout, Form, Input, Modal, Tooltip } from 'antd';
+import { Layout, Form, Input, Modal, Tooltip, message } from 'antd';
 import {
   ReloadOutlined,
   AppstoreOutlined,
@@ -36,7 +36,8 @@ import { DocGeneratorDialog } from './DocGeneratorDialog';
 import { DataMigrationDialog } from './DataMigrationDialog';
 import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { api } from '../api';
+import { api, EventsOn } from '../api';
+import { getErrorMessage } from '../utils/getErrorMessage';
 import { useConnectionManager } from './MainLayout/hooks/useConnectionManager';
 import { useTabManager } from './MainLayout/hooks/useTabManager';
 import { useLayoutActions } from './MainLayout/hooks/useLayoutActions';
@@ -173,6 +174,45 @@ function MainLayoutComponent() {
     return () => window.removeEventListener('palette-inject-sql', onInject);
   }, [handleInjectSQL]);
 
+  // ── 双击 .sql / 拖放文件打开（Wails v3 文件能力）──
+  useEffect(() => {
+    let cancelled = false;
+    const openSqlFile = (path: string) => {
+      const name = path.split(/[\\/]/).pop() || 'query.sql';
+      api
+        .readSqlFile(path)
+        .then((content) => {
+          if (cancelled) return;
+          tabPanelRef.current?.openSqlTab({ title: name, defaultQuery: content });
+        })
+        .catch((err) => {
+          message.error(`${t('common.mainLayout.openSqlFileFailed')}: ${getErrorMessage(err)}`);
+        });
+    };
+    // 冷启动：双击 .sql 拉起应用，启动后取待打开路径
+    api
+      .takePendingOpenFile()
+      .then((p) => {
+        if (p && !cancelled) openSqlFile(p);
+      })
+      .catch(() => {});
+    // 已运行实例：双击 .sql（单实例转发）与窗口拖放经事件推送
+    const offOpen = EventsOn('open-sql-file', (path: string) => openSqlFile(path));
+    const offDrop = EventsOn('files-dropped', (files: string[]) => {
+      const sqlFiles = (files || []).filter((f) => /\.sql$/i.test(f));
+      sqlFiles.forEach((f) => openSqlFile(f));
+      if ((files || []).length > sqlFiles.length) {
+        message.info(t('common.mainLayout.dropUnsupported'));
+      }
+    });
+    return () => {
+      cancelled = true;
+      offOpen();
+      offDrop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const paletteCommands = useMemo((): Command[] => {
     const dispatch = (action: string) =>
       window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
@@ -272,7 +312,7 @@ function MainLayoutComponent() {
   }, [connMgr.connections, connMgr.connectionDatabases, paletteSnippets, paletteHistory]);
 
   return (
-    <Layout style={layout.styles.root}>
+    <Layout style={layout.styles.root} data-file-drop-target="main">
       <Toolbar
         sidebarCollapsed={layout.collapsed}
         onToggleSidebar={() => layout.setCollapsed(!layout.collapsed)}

@@ -43,5 +43,12 @@ dev_mode:
       type: primary
       exit_policy: shutdown
 
+# File Associations：双击 .sql 文件用 iDBLink 打开
+fileAssociations:
+  - ext: sql
+    name: SQL Script
+    description: SQL 脚本文件
+    role: Editor
+
 # Other data
 other: []

@@ -524,7 +524,9 @@
         "table": "Table",
         "row": "Row",
         "column": "Column"
-      }
+      },
+      "openSqlFileFailed": "Failed to open SQL file",
+      "dropUnsupported": "Only .sql files can be dropped"
     },
     "erDiagram": {
       "title": "ER Diagram",
