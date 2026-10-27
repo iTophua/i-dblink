@@ -301,32 +301,37 @@ func runGUI() {
 			w.Show()
 		}
 	}
-	rebuildTrayMenu := func() {
+	// 托盘「快速连接」二级面板：可搜索可滚动（连接多时长菜单不可用）。
+	// 首次打开创建窗口并常驻隐藏（关闭即 Hide，保持热态），面板经
+	// conn-picker:request-data 向主窗口拉最新连接列表。
+	showConnPicker := func() {
+		if w, ok := wailsApp.Window.Get("conn-picker"); !ok {
+			pw := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+				Name:  "conn-picker",
+				Title: "快速连接",
+				URL:   "/#conn-picker",
+				Width: 460, Height: 560,
+				MinWidth: 360, MinHeight: 380,
+				BackgroundType:   application.BackgroundTypeTransparent,
+				BackgroundColour: application.NewRGB(242, 241, 237),
+			})
+			pw.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+				e.Cancel()
+				pw.Hide()
+			})
+		} else {
+			w.Show()
+		}
+		wailsApp.Event.Emit("conn-picker:open")
+	}
+	{
 		m := wailsApp.NewMenu()
 		m.Add("显示 iDBLink").OnClick(func(*application.Context) { showMain() })
-		m.AddSeparator()
-		if conns, err := app.GetConnections(); err == nil && len(conns) > 0 {
-			m.AddSectionHeader("快速连接")
-			for i := range conns {
-				c := conns[i]
-				dot := "○"
-				if c.Status == "connected" {
-					dot = "●"
-				}
-				m.Add(dot + " " + c.Name + " · " + c.DbType).OnClick(func(*application.Context) {
-					showMain()
-					wailsApp.Event.Emit("tray-connect", c.ID)
-				})
-			}
-		}
+		m.Add("快速连接…").OnClick(func(*application.Context) { showConnPicker() })
 		m.AddSeparator()
 		m.Add("退出").OnClick(func(*application.Context) { wailsApp.Quit() })
 		tray.SetMenu(m)
 	}
-	app.SetConnectionsChangedCallback(rebuildTrayMenu)
-	wailsApp.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		rebuildTrayMenu()
-	})
 
 	win := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:               "main",

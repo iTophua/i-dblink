@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Window as WailsWindow } from '@wailsio/runtime';
+import { Events, Window as WailsWindow } from '@wailsio/runtime';
 import { Layout, Form, Input, Modal, Tooltip, message } from 'antd';
 import {
   ReloadOutlined,
@@ -211,6 +211,22 @@ function MainLayoutComponent() {
       offDrop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── 托盘「快速连接」面板的数据源：应答其请求，返回 appStore 最新连接 ──
+  useEffect(() => {
+    const off = EventsOn('conn-picker:request-data', () => {
+      const conns = useAppStore.getState().connections.map((c) => ({
+        id: c.id,
+        name: c.name,
+        db_type: c.db_type,
+        host: c.host,
+        port: c.port,
+        status: c.status,
+      }));
+      Events.Emit('conn-picker:data', conns).catch(() => {});
+    });
+    return off;
   }, []);
 
   const paletteCommands = useMemo((): Command[] => {
