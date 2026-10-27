@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -90,4 +91,39 @@ func (a *App) WriteSqlFile(path string, content string) error {
 		return fmt.Errorf("目录不存在：%s", dir)
 	}
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+// importFileMaxBytes 拖放导入文件大小上限（20MB，与向导批量写入能力匹配）
+const importFileMaxBytes = 20 << 20
+
+// ImportFileContent 拖放导入文件内容（base64，前端还原为 File 走向导解析管线）
+type ImportFileContent struct {
+	Name string `json:"name"`
+	Data string `json:"data"` // base64
+}
+
+// ReadImportFile 读取拖放进窗口的导入文件（csv/xlsx/json/xml/txt/sql），
+// 供 TableImportWizard 预填。白名单 + 20MB 上限，不提供任意文件读取。
+func (a *App) ReadImportFile(path string) (ImportFileContent, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".csv", ".txt", ".json", ".xml", ".xlsx", ".xls", ".sql":
+	default:
+		return ImportFileContent{}, fmt.Errorf("不支持的导入文件类型：%s", ext)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return ImportFileContent{}, fmt.Errorf("无法访问文件：%s", path)
+	}
+	if info.Size() > importFileMaxBytes {
+		return ImportFileContent{}, fmt.Errorf("文件过大（%.1fMB），上限 20MB", float64(info.Size())/(1<<20))
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ImportFileContent{}, fmt.Errorf("读取文件失败：%w", err)
+	}
+	return ImportFileContent{
+		Name: filepath.Base(path),
+		Data: base64.StdEncoding.EncodeToString(data),
+	}, nil
 }

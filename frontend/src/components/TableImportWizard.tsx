@@ -21,6 +21,7 @@ import i18n from '../i18n';
 import { UploadOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import { api } from '../api';
+import { getErrorMessage } from '../utils/getErrorMessage';
 import type { ColumnInfo, DatabaseType } from '../types/api';
 import { parseSqlStatements, type SqlParseResult } from '../utils/parseSql';
 
@@ -63,6 +64,8 @@ interface TableImportWizardProps {
   dbType?: DatabaseType;
   columns: ColumnInfo[];
   onSuccess?: () => void;
+  /** 拖放导入：经后端读取的文件路径，打开时自动预填（用后即清） */
+  initialFilePath?: string;
 }
 
 const DEFAULT_FORMAT_OPTIONS: FormatOptions = {
@@ -253,6 +256,7 @@ export function TableImportWizard({
   database,
   columns,
   onSuccess,
+  initialFilePath,
 }: TableImportWizardProps) {
   const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
@@ -416,6 +420,25 @@ export function TableImportWizard({
     },
     [dynamicColumns, formatOptions, isSqlMode, t]
   );
+
+  // 拖放预填：initialFilePath（后端白名单读取，base64 → File），复用正常解析管线
+  const prefilledPathRef = useRef<string>('');
+  useEffect(() => {
+    if (!open) {
+      prefilledPathRef.current = '';
+      return;
+    }
+    if (!initialFilePath || prefilledPathRef.current === initialFilePath) return;
+    prefilledPathRef.current = initialFilePath;
+    api
+      .readImportFile(initialFilePath)
+      .then(({ name, data }) => {
+        const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+        return handleFileUpload(new File([bytes], name));
+      })
+      .catch((err) => message.error(getErrorMessage(err)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialFilePath]);
 
   const handleSqlImport = useCallback(async () => {
     if (!sqlParseResult) return;

@@ -147,6 +147,7 @@ export interface TabPanelRef {
   getConnectionTabInfo: (connectionId: string) => { dataTabCount: number; sqlTabCount: number };
   getDatabaseTabInfo: (connectionId: string, database: string) => { dataTabCount: number; sqlTabCount: number };
   getActiveTabInfo: () => ActiveTabInfo;
+  openImportWizard: (filePath?: string) => void;
   getQueryStatus: () => { resultRows?: number; executionTime?: number };
 }
 
@@ -218,6 +219,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [wizardTableName, setWizardTableName] = useState('');
   const [wizardColumns, setWizardColumns] = useState<ColumnInfo[]>([]);
+  const [wizardInitialFile, setWizardInitialFile] = useState<string | undefined>(undefined);
 
   // 生成数据浏览 Tab 的 key（包含 connectionId 避免不同连接冲突）
   const getDataTabKey = useCallback(
@@ -434,6 +436,15 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         (t) => t.connectionId === connectionId && t.database === database
       ).length,
     }),
+    openImportWizard: (filePath?: string) => {
+      // 仅当前活跃 tab 是数据表时可用（导入目标表）
+      const table = openedTables.find((t) => getDataTabKey(t) === activeKey);
+      if (!table) return;
+      setWizardTableName(table.name);
+      setWizardColumns([]);
+      setWizardInitialFile(filePath);
+      setImportWizardOpen(true);
+    },
     getActiveTabInfo: () => {
       if (activeKey === 'objects') {
         return { type: 'objects' as const, title: t('common.objectList') };
@@ -1791,7 +1802,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
       <TableImportWizard
         open={importWizardOpen}
-        onClose={() => setImportWizardOpen(false)}
+        initialFilePath={wizardInitialFile}
+        onClose={() => {
+          setImportWizardOpen(false);
+          setWizardInitialFile(undefined);
+        }}
         connectionId={selectedConnectionId || ''}
         tableName={wizardTableName}
         database={selectedDatabase}

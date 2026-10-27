@@ -544,7 +544,8 @@
       },
       "openSqlFileFailed": "打开 SQL 文件失败",
       "dropUnsupported": "仅支持拖入 .sql 文件",
-      "selectConnectionFirst": "请先在左侧选择一个连接"
+      "selectConnectionFirst": "请先在左侧选择一个连接",
+      "dropImportNeedsTable": "请先打开目标数据表，再拖入导入文件"
     },
     "erDiagram": {
       "title": "ER 图",

@@ -125,6 +125,7 @@ vi.mock('../../bindings/idblink/backend/app', () => ({
   OpenResultPopup: vi.fn().mockResolvedValue('result-1'),
   SaveSqlFileDialog: vi.fn().mockResolvedValue(''),
   WriteSqlFile: vi.fn().mockResolvedValue(undefined),
+  ReadImportFile: vi.fn().mockResolvedValue({ name: '', data: '' }),
 }));
 
 vi.mock('@wailsio/runtime', () => ({

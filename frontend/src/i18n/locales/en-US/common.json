@@ -528,7 +528,8 @@
       },
       "openSqlFileFailed": "Failed to open SQL file",
       "dropUnsupported": "Only .sql files can be dropped",
-      "selectConnectionFirst": "Select a connection in the sidebar first"
+      "selectConnectionFirst": "Select a connection in the sidebar first",
+      "dropImportNeedsTable": "Open a data table first, then drop the import file"
     },
     "erDiagram": {
       "title": "ER Diagram",

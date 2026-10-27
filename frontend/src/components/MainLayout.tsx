@@ -200,9 +200,21 @@ function MainLayoutComponent() {
     // 已运行实例：双击 .sql（单实例转发）与窗口拖放经事件推送
     const offOpen = EventsOn('open-sql-file', (path: string) => openSqlFile(path));
     const offDrop = EventsOn('files-dropped', (files: string[]) => {
-      const sqlFiles = (files || []).filter((f) => /\.sql$/i.test(f));
+      const list = files || [];
+      const sqlFiles = list.filter((f) => /\.sql$/i.test(f));
       sqlFiles.forEach((f) => openSqlFile(f));
-      if ((files || []).length > sqlFiles.length) {
+      // 导入文件 → 当前数据表的导入向导（无数据表时提示）
+      const importFiles = list.filter((f) => /\.(csv|xlsx|xls|json|xml|txt)$/i.test(f));
+      if (importFiles.length > 0) {
+        const active = tabPanelRef.current?.getActiveTabInfo();
+        if (active?.type === 'data') {
+          tabPanelRef.current?.openImportWizard(importFiles[0]);
+        } else {
+          message.info(t('common.mainLayout.dropImportNeedsTable'));
+        }
+      }
+      const rest = list.length - sqlFiles.length - importFiles.length;
+      if (rest > 0) {
         message.info(t('common.mainLayout.dropUnsupported'));
       }
     });

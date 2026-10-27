@@ -64,6 +64,7 @@ import {
   OpenResultPopup,
   SaveSqlFileDialog,
   WriteSqlFile,
+  ReadImportFile,
   TakePendingOpenFile,
   TestConnection,
   TruncateTable,
@@ -944,6 +945,12 @@ export const api = {
   /** 原生保存 SQL 对话框，返回路径（取消为空串） */
   async saveSqlFileDialog(defaultName: string): Promise<string> {
     return (await SaveSqlFileDialog(defaultName)) ?? '';
+  },
+
+  /** 读取拖放的导入文件（白名单类型，base64），供导入向导预填 */
+  async readImportFile(path: string): Promise<{ name: string; data: string }> {
+    const result = await ReadImportFile(path);
+    return result ?? { name: '', data: '' };
   },
 
   /** 把 SQL 内容写入指定路径 */
