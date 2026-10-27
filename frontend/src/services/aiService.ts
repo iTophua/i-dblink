@@ -14,13 +14,29 @@ import { api, type AITaskRequest, type AIChatMessage } from '../api';
 export async function streamAITask(
   req: Omit<AITaskRequest, 'requestId'>,
   onChunk: (text: string) => void,
-  onError?: (err: string) => void
+  onError?: (err: string) => void,
+  signal?: AbortSignal
 ): Promise<string> {
   let full = '';
 
   return new Promise<string>((resolve, reject) => {
     const socket = JSONStream('ai-chat');
     let settled = false;
+
+    // 停止生成：关闭流连接（后端随即终止 Provider 请求），保留已生成部分
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      socket.close();
+      resolve(full);
+    };
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
 
     const fail = (err: string) => {
       if (settled) return;
@@ -74,7 +90,8 @@ export async function executeAITask(req: AITaskRequest): Promise<string> {
 export async function streamChat(
   messages: AIChatMessage[],
   onChunk: (text: string) => void,
-  onError?: (err: string) => void
+  onError?: (err: string) => void,
+  signal?: AbortSignal
 ): Promise<string> {
-  return streamAITask({ taskId: 'chat', messages }, onChunk, onError);
+  return streamAITask({ taskId: 'chat', messages }, onChunk, onError, signal);
 }

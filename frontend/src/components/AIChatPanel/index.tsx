@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Drawer, Select, Checkbox, Button, Input, Space, Tooltip, Collapse, Tag, Empty, App } from 'antd';
 import {
   RobotOutlined,
+  PauseCircleOutlined,
   SendOutlined,
   DatabaseOutlined,
   SettingOutlined,
@@ -66,6 +67,7 @@ export function AIChatPanel({
   const checkStatus = useAIStore((s) => s.checkStatus);
 
   const [input, setInput] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 应用启动时检查 AI 状态
@@ -136,10 +138,14 @@ export function AIChatPanel({
       ];
 
       // 4. 流式发送（错误统一由 catch 处理，不传 onError 避免重复追加）
-      await streamChat(requestMessages, (chunk) => appendAssistantChunk(chunk));
+      const controller = new AbortController();
+      abortRef.current = controller;
+      await streamChat(requestMessages, (chunk) => appendAssistantChunk(chunk), undefined, controller.signal);
+      abortRef.current = null;
       finalizeAssistantMessage();
     } catch (err) {
       appendAssistantChunk(`\n\n[Error] ${getErrorMessage(err)}`);
+      abortRef.current = null;
       finalizeAssistantMessage();
     }
   }, [
@@ -155,6 +161,12 @@ export function AIChatPanel({
     },
     [onApplySQL, message, t]
   );
+
+  const handleStop = useCallback(() => {
+    if (!abortRef.current) return;
+    appendAssistantChunk('\n\n（已停止）');
+    abortRef.current.abort(); // streamChat 以已完成部分 resolve，随后正常 finalize
+  }, [appendAssistantChunk]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -329,6 +341,14 @@ export function AIChatPanel({
                 disabled={streaming}
                 style={{ borderRadius: '6px 0 0 6px' }}
               />
+              {streaming && (
+                <Button
+                  icon={<PauseCircleOutlined />}
+                  onClick={handleStop}
+                  title={t('common.aiChat.stopGeneration')}
+                  style={{ height: 'auto' }}
+                />
+              )}
               <Button
                 type="primary"
                 icon={streaming ? <LoadingOutlined /> : <SendOutlined />}
