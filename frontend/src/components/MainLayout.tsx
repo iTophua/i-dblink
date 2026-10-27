@@ -30,6 +30,7 @@ import { ConnectionDialog } from './ConnectionDialog';
 import { ConnectionExportDialog } from './ConnectionExportDialog';
 import { BatchManageDialog } from './ConnectionTree/BatchManageDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { BackupRestoreDialog } from './BackupRestoreDialog';
 import { OperationLog } from './OperationLog';
 import { UpdateDialog } from './UpdateDialog';
 import { DocGeneratorDialog } from './DocGeneratorDialog';
@@ -600,6 +601,19 @@ function MainLayoutComponent() {
       />
 
       <SettingsDialog open={layout.settingsDialogOpen} onCancel={() => layout.setSettingsDialogOpen(false)} />
+
+      {/* 工具菜单 备份/恢复数据库（与连接树右键同一对话框） */}
+      <BackupRestoreDialog
+        open={layout.backupRestore.open}
+        mode={layout.backupRestore.mode}
+        connectionId={connMgr.selectedConnectionId || ''}
+        database={connMgr.selectedDatabase}
+        dbType={
+          connMgr.connections.find((c) => c.id === connMgr.selectedConnectionId)?.db_type || ''
+        }
+        onCancel={() => layout.setBackupRestore((v) => ({ ...v, open: false }))}
+        onSuccess={() => layout.setBackupRestore((v) => ({ ...v, open: false }))}
+      />
 
       <ConnectionExportDialog
         open={connMgr.connectionExportOpen}

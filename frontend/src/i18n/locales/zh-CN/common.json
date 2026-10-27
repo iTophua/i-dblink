@@ -543,7 +543,8 @@
         "column": "列"
       },
       "openSqlFileFailed": "打开 SQL 文件失败",
-      "dropUnsupported": "仅支持拖入 .sql 文件"
+      "dropUnsupported": "仅支持拖入 .sql 文件",
+      "selectConnectionFirst": "请先在左侧选择一个连接"
     },
     "erDiagram": {
       "title": "ER 图",

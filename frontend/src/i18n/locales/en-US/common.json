@@ -527,7 +527,8 @@
         "column": "Column"
       },
       "openSqlFileFailed": "Failed to open SQL file",
-      "dropUnsupported": "Only .sql files can be dropped"
+      "dropUnsupported": "Only .sql files can be dropped",
+      "selectConnectionFirst": "Select a connection in the sidebar first"
     },
     "erDiagram": {
       "title": "ER Diagram",

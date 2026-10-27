@@ -143,10 +143,6 @@ func createWindowMenu() *application.Menu {
 	m.AddSeparator()
 	m.Add("切换到下一个标签页").SetAccelerator(nextTabAccel).OnClick(callback("next-tab"))
 	m.Add("切换到上一个标签页").SetAccelerator(prevTabAccel).OnClick(callback("previous-tab"))
-	m.AddSeparator()
-	m.Add("层叠").OnClick(callback("cascade"))
-	m.Add("水平平铺").OnClick(callback("tile-horizontally"))
-	m.Add("垂直平铺").OnClick(callback("tile-vertically"))
 	return m
 }
 

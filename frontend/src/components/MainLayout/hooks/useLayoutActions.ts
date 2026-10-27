@@ -56,6 +56,10 @@ export function useLayoutActions({
   const [searchText, setSearchText] = useState('');
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [backupRestore, setBackupRestore] = useState<{
+    open: boolean;
+    mode: 'backup' | 'restore';
+  }>({ open: false, mode: 'backup' });
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [operationLogOpen, setOperationLogOpen] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
@@ -207,7 +211,8 @@ export function useLayoutActions({
           setConnectionDialogOpen(true);
           break;
         case 'open-connection':
-          message.info(t('common.featureNotImplemented'));
+          // 打开连接 → 全局搜索面板（⌘K，内含全部连接，选中即连接）
+          setGlobalSearchOpen(true);
           break;
         case 'import-connections':
         case 'export-connections':
@@ -328,21 +333,17 @@ export function useLayoutActions({
           setFavoritesOpen(true);
           break;
         case 'backup':
-          message.info(t('common.featureNotImplemented'));
-          break;
         case 'restore':
-          message.info(t('common.featureNotImplemented'));
+          if (!selectedConnectionId) {
+            message.warning(t('common.mainLayout.selectConnectionFirst'));
+            break;
+          }
+          setBackupRestore({
+            open: true,
+            mode: action === 'backup' ? 'backup' : 'restore',
+          });
           break;
         case 'model-designer':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'cascade':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'tile-horizontally':
-          message.info(t('common.featureNotImplemented'));
-          break;
-        case 'tile-vertically':
           message.info(t('common.featureNotImplemented'));
           break;
         case 'operation-log':
@@ -401,6 +402,8 @@ export function useLayoutActions({
     setSettingsDialogOpen,
     globalSearchOpen,
     setGlobalSearchOpen,
+    backupRestore,
+    setBackupRestore,
     favoritesOpen,
     setFavoritesOpen,
     operationLogOpen,
