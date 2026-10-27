@@ -1,21 +1,13 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"fmt"
+	"log"
 	"os"
 	gos "runtime"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/menu"
-	"github.com/wailsapp/wails/v2/pkg/menu/keys"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"idblink/backend"
 	"idblink/backend/mcpserver"
@@ -24,136 +16,133 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func emitMenuEvent(ctx context.Context, action string) {
-	runtime.EventsEmit(ctx, "menu-action", action)
-}
-
-func callback(app *backend.App, action string) func(*menu.CallbackData) {
-	return func(_ *menu.CallbackData) {
-		ctx := app.Context()
-		if ctx == nil {
-			return
-		}
-		emitMenuEvent(ctx, action)
+func emitMenuEvent(action string) {
+	if app := application.Get(); app != nil {
+		app.Event.Emit("menu-action", action)
 	}
 }
 
-func createFileMenu(app *backend.App) *menu.Menu {
-	m := menu.NewMenu()
-	m.Append(menu.Text("新建连接", keys.CmdOrCtrl("n"), callback(app, "new-connection")))
-	m.Append(menu.Text("打开连接", keys.CmdOrCtrl("o"), callback(app, "open-connection")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("保存", keys.CmdOrCtrl("s"), callback(app, "save")))
-	m.Append(menu.Text("另存为...", keys.CmdOrCtrl("shift-s"), callback(app, "save-as")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("导入连接配置...", keys.CmdOrCtrl("i"), callback(app, "import-connections")))
-	m.Append(menu.Text("导出连接配置...", keys.CmdOrCtrl("e"), callback(app, "export-connections")))
+func callback(action string) func(*application.Context) {
+	return func(*application.Context) {
+		emitMenuEvent(action)
+	}
+}
+
+func createFileMenu() *application.Menu {
+	m := application.NewMenu()
+	m.Add("新建连接").SetAccelerator("CmdOrCtrl+n").OnClick(callback("new-connection"))
+	m.Add("打开连接").SetAccelerator("CmdOrCtrl+o").OnClick(callback("open-connection"))
+	m.AddSeparator()
+	m.Add("保存").SetAccelerator("CmdOrCtrl+s").OnClick(callback("save"))
+	m.Add("另存为...").SetAccelerator("Shift+CmdOrCtrl+s").OnClick(callback("save-as"))
+	m.AddSeparator()
+	m.Add("导入连接配置...").SetAccelerator("CmdOrCtrl+i").OnClick(callback("import-connections"))
+	m.Add("导出连接配置...").SetAccelerator("CmdOrCtrl+e").OnClick(callback("export-connections"))
 	return m
 }
 
-func createEditMenu(app *backend.App) *menu.Menu {
-	m := menu.NewMenu()
-	// 非 macOS 平台的编辑菜单（macOS 使用 menu.EditMenu() 角色菜单）
-	m.Append(menu.Text("撤销", nil, callback(app, "undo")))
-	m.Append(menu.Text("重做", nil, callback(app, "redo")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("剪切", nil, callback(app, "cut")))
-	m.Append(menu.Text("复制", nil, callback(app, "copy")))
-	m.Append(menu.Text("粘贴", nil, callback(app, "paste")))
-	m.Append(menu.Text("全选", nil, callback(app, "select-all")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("查找/替换...", keys.CmdOrCtrl("f"), callback(app, "find")))
+func createEditMenu() *application.Menu {
+	m := application.NewMenu()
+	// 非 macOS 平台的编辑菜单（macOS 使用 EditMenu 角色菜单）
+	m.Add("撤销").OnClick(callback("undo"))
+	m.Add("重做").OnClick(callback("redo"))
+	m.AddSeparator()
+	m.Add("剪切").OnClick(callback("cut"))
+	m.Add("复制").OnClick(callback("copy"))
+	m.Add("粘贴").OnClick(callback("paste"))
+	m.Add("全选").OnClick(callback("select-all"))
+	m.AddSeparator()
+	m.Add("查找/替换...").SetAccelerator("CmdOrCtrl+f").OnClick(callback("find"))
 	return m
 }
 
-func createViewMenu(app *backend.App) *menu.Menu {
-	m := menu.NewMenu()
-	m.Append(menu.Text("刷新", keys.Key("f5"), callback(app, "refresh")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("放大", keys.CmdOrCtrl("+"), callback(app, "zoom-in")))
-	m.Append(menu.Text("缩小", keys.CmdOrCtrl("-"), callback(app, "zoom-out")))
-	m.Append(menu.Text("实际大小", keys.CmdOrCtrl("0"), callback(app, "zoom-reset")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("全屏切换", keys.Key("f11"), callback(app, "fullscreen")))
+func createViewMenu() *application.Menu {
+	m := application.NewMenu()
+	m.Add("刷新").SetAccelerator("f5").OnClick(callback("refresh"))
+	m.AddSeparator()
+	m.Add("放大").SetAccelerator("CmdOrCtrl+plus").OnClick(callback("zoom-in"))
+	m.Add("缩小").SetAccelerator("CmdOrCtrl+-").OnClick(callback("zoom-out"))
+	m.Add("实际大小").SetAccelerator("CmdOrCtrl+0").OnClick(callback("zoom-reset"))
+	m.AddSeparator()
+	m.Add("全屏切换").SetAccelerator("f11").OnClick(callback("fullscreen"))
 	return m
 }
 
-func createConnectionMenu(app *backend.App) *menu.Menu {
-	m := menu.NewMenu()
-	m.Append(menu.Text("连接所选", keys.CmdOrCtrl("shift-c"), callback(app, "connect-selected")))
-	m.Append(menu.Text("断开连接", nil, callback(app, "disconnect")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("新建查询", keys.CmdOrCtrl("q"), callback(app, "new-query")))
-	m.Append(menu.Text("执行查询", keys.CmdOrCtrl("enter"), callback(app, "execute-query")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("关闭所有连接", nil, callback(app, "close-all")))
+func createConnectionMenu() *application.Menu {
+	m := application.NewMenu()
+	m.Add("连接所选").SetAccelerator("Shift+CmdOrCtrl+c").OnClick(callback("connect-selected"))
+	m.Add("断开连接").OnClick(callback("disconnect"))
+	m.AddSeparator()
+	m.Add("新建查询").SetAccelerator("CmdOrCtrl+q").OnClick(callback("new-query"))
+	m.Add("执行查询").SetAccelerator("CmdOrCtrl+enter").OnClick(callback("execute-query"))
+	m.AddSeparator()
+	m.Add("关闭所有连接").OnClick(callback("close-all"))
 	return m
 }
 
-func createToolsMenu(app *backend.App) *menu.Menu {
-	m := menu.NewMenu()
-	m.Append(menu.Text("选项/设置...", keys.CmdOrCtrl(","), callback(app, "options")))
-	m.Append(menu.Text("操作日志", nil, callback(app, "operation-log")))
-	m.Append(menu.Text("数据迁移...", nil, callback(app, "data-migration")))
-	m.Append(menu.Text("数据同步...", nil, callback(app, "data-sync")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("备份数据库...", nil, callback(app, "backup")))
-	m.Append(menu.Text("恢复数据库...", nil, callback(app, "restore")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("模型设计器...", nil, callback(app, "model-designer")))
+func createToolsMenu() *application.Menu {
+	m := application.NewMenu()
+	m.Add("选项/设置...").SetAccelerator("CmdOrCtrl+,").OnClick(callback("options"))
+	m.Add("操作日志").OnClick(callback("operation-log"))
+	m.Add("数据迁移...").OnClick(callback("data-migration"))
+	m.Add("数据同步...").OnClick(callback("data-sync"))
+	m.AddSeparator()
+	m.Add("备份数据库...").OnClick(callback("backup"))
+	m.Add("恢复数据库...").OnClick(callback("restore"))
+	m.AddSeparator()
+	m.Add("模型设计器...").OnClick(callback("model-designer"))
 	return m
 }
 
-func createWindowMenu(app *backend.App) *menu.Menu {
-	m := menu.NewMenu()
-	m.Append(menu.Text("新建标签页", keys.CmdOrCtrl("t"), callback(app, "new-tab")))
-	m.Append(menu.Text("关闭标签页", keys.CmdOrCtrl("w"), callback(app, "close-tab")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("切换到下一个标签页", keys.CmdOrCtrl("tab"), callback(app, "next-tab")))
-	m.Append(menu.Text("切换到上一个标签页", keys.CmdOrCtrl("shift-tab"), callback(app, "previous-tab")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("层叠", nil, callback(app, "cascade")))
-	m.Append(menu.Text("水平平铺", nil, callback(app, "tile-horizontally")))
-	m.Append(menu.Text("垂直平铺", nil, callback(app, "tile-vertically")))
+func createWindowMenu() *application.Menu {
+	m := application.NewMenu()
+	m.Add("新建标签页").SetAccelerator("CmdOrCtrl+t").OnClick(callback("new-tab"))
+	m.Add("关闭标签页").SetAccelerator("CmdOrCtrl+w").OnClick(callback("close-tab"))
+	m.AddSeparator()
+	m.Add("切换到下一个标签页").SetAccelerator("CmdOrCtrl+tab").OnClick(callback("next-tab"))
+	m.Add("切换到上一个标签页").SetAccelerator("Shift+CmdOrCtrl+tab").OnClick(callback("previous-tab"))
+	m.AddSeparator()
+	m.Add("层叠").OnClick(callback("cascade"))
+	m.Add("水平平铺").OnClick(callback("tile-horizontally"))
+	m.Add("垂直平铺").OnClick(callback("tile-vertically"))
 	return m
 }
 
-func createHelpMenu(app *backend.App) *menu.Menu {
-	m := menu.NewMenu()
-	m.Append(menu.Text("文档", keys.Key("f1"), callback(app, "documentation")))
-	m.Append(menu.Text("搜索...", nil, callback(app, "search")))
-	m.Append(menu.Separator())
-	m.Append(menu.Text("检查更新...", nil, callback(app, "check-update")))
+func createHelpMenu(app *backend.App) *application.Menu {
+	m := application.NewMenu()
+	m.Add("文档").SetAccelerator("f1").OnClick(callback("documentation"))
+	m.Add("搜索...").OnClick(callback("search"))
+	m.AddSeparator()
+	m.Add("检查更新...").OnClick(callback("check-update"))
 
-	m.Append(menu.Separator())
-	m.Append(menu.Text("开发者工具", keys.Key("f12"), func(_ *menu.CallbackData) {
+	m.AddSeparator()
+	m.Add("开发者工具").SetAccelerator("f12").OnClick(func(*application.Context) {
 		app.ShowDevTools()
-	}))
+	})
 	return m
 }
 
-func createMenu(app *backend.App) *menu.Menu {
-	items := []*menu.MenuItem{
-		menu.AppMenu(),
-		menu.SubMenu("文件", createFileMenu(app)),
-	}
+func createMenu(app *backend.App) *application.Menu {
+	menu := application.NewMenu()
 
 	if gos.GOOS == "darwin" {
-		// macOS: 使用 EditMenu 角色菜单，系统会自动将 Cmd+C/V/X/Z/A 转发给 WebView
-		items = append(items, menu.EditMenu())
+		// macOS: AppMenu 角色菜单（关于/服务/隐藏/退出），EditMenu 角色菜单
+		// 系统会自动将 Cmd+C/V/X/Z/A 转发给 WebView
+		menu.AddRole(application.AppMenu)
+		menu.AddSubmenu("文件").Append(createFileMenu())
+		menu.AddRole(application.EditMenu)
 	} else {
-		items = append(items, menu.SubMenu("编辑", createEditMenu(app)))
+		menu.AddSubmenu("文件").Append(createFileMenu())
+		menu.AddSubmenu("编辑").Append(createEditMenu())
 	}
 
-	items = append(items,
-		menu.SubMenu("查看", createViewMenu(app)),
-		menu.SubMenu("连接", createConnectionMenu(app)),
-		menu.SubMenu("工具", createToolsMenu(app)),
-		menu.SubMenu("窗口", createWindowMenu(app)),
-		menu.SubMenu("帮助", createHelpMenu(app)),
-	)
+	menu.AddSubmenu("查看").Append(createViewMenu())
+	menu.AddSubmenu("连接").Append(createConnectionMenu())
+	menu.AddSubmenu("工具").Append(createToolsMenu())
+	menu.AddSubmenu("窗口").Append(createWindowMenu())
+	menu.AddSubmenu("帮助").Append(createHelpMenu(app))
 
-	return menu.NewMenuFromItems(items[0], items[1:]...)
+	return menu
 }
 
 func main() {
@@ -186,48 +175,46 @@ func runMCP() {
 func runGUI() {
 	app := backend.NewApp()
 
-	err := wails.Run(&options.App{
-		Title:     "iDBLink",
-		Width:     1400,
-		Height:    900,
-		MinWidth:  1000,
-		MinHeight: 700,
-		// 初始窗口背景色（webview 透明时作为底色显示）
-		// 取 light 默认背景 #F2F1ED（护眼米色），前端主题加载后由 WindowSetBackgroundColour 同步覆盖。
-		// 选浅色而非深色：深色用户启动闪浅色 → 立即被覆盖，比浅色用户闪黑更可接受。
-		BackgroundColour: options.NewRGB(242, 241, 237),
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	wailsApp := application.New(application.Options{
+		Name:        "iDBLink",
+		Description: "A cross-platform database management tool",
+		Services: []application.Service{
+			application.NewService(app),
 		},
-		Menu:       createMenu(app),
-		OnStartup:  app.Startup,
-		OnShutdown: app.Shutdown,
-		Bind: []interface{}{
-			app,
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
 		},
-		Windows: &windows.Options{
-			WebviewIsTransparent: false,
-			WindowIsTranslucent:  false,
-			BackdropType:         windows.Mica,
+		Mac: application.MacOptions{
+			// 关闭最后一个窗口时退出应用（与 v2 行为一致）
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
-		Mac: &mac.Options{
-			// 隐藏标题栏：内容延伸到窗口顶部，红绿灯按钮保留在左上角。
-			// 配合前端 Toolbar 的 -webkit-app-region: drag 实现窗口拖动。
-			// WebviewIsTransparent: 让 webview 透明，窗口 BackgroundColour 作为底色
-			// （由前端在主题切换时通过 WindowSetBackgroundColour 同步，消除启动白屏）
-			TitleBar:             mac.TitleBarHidden(),
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  false,
-			About: &mac.AboutInfo{
-				Title:   "iDBLink",
-				Message: "A cross-platform database management tool",
-			},
-		},
-		Linux: &linux.Options{},
 	})
 
-	if err != nil {
-		os.Stderr.WriteString(err.Error())
-		os.Exit(1)
+	wailsApp.Menu.Set(createMenu(app))
+
+	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:               "main",
+		Title:              "iDBLink",
+		Width:              1400,
+		Height:             900,
+		MinWidth:           1000,
+		MinHeight:          700,
+		UseApplicationMenu: true,
+		// 初始窗口背景色（webview 透明时作为底色显示）
+		// 取 light 默认背景 #F2F1ED（护眼米色），前端主题加载后由 Window.SetBackgroundColour 同步覆盖。
+		// 选浅色而非深色：深色用户启动闪浅色 → 立即被覆盖，比浅色用户闪黑更可接受。
+		BackgroundType:   application.BackgroundTypeTransparent,
+		BackgroundColour: application.NewRGB(242, 241, 237),
+		Mac: application.MacWindow{
+			// 隐藏标题栏：内容延伸到窗口顶部，红绿灯按钮保留在左上角。
+			// 配合前端 Toolbar 的 -webkit-app-region: drag 实现窗口拖动。
+			// Webview 透明（BackgroundTypeTransparent），窗口 BackgroundColour 作为底色
+			// （由前端在主题切换时通过 Window.SetBackgroundColour 同步，消除启动白屏）
+			TitleBar: application.MacTitleBarHidden,
+		},
+	})
+
+	if err := wailsApp.Run(); err != nil {
+		log.Fatal(err)
 	}
 }

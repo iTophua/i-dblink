@@ -1,0 +1,47 @@
+# This file contains the configuration for this project.
+# When you update `info` or `fileAssociations`, run `wails3 task common:update:build-assets` to update the assets.
+# Note that this will overwrite any changes you have made to the assets.
+version: '3'
+
+# This information is used to generate the build assets.
+info:
+  companyName: "iDBLink Team" # The name of the company
+  productName: "iDBLink" # The name of the application
+  productIdentifier: "com.idblink.iDBLink" # The unique product identifier
+  description: "A cross-platform database management tool" # The application description
+  copyright: "Copyright © 2025 iDBLink Team" # Copyright text
+  comments: "A cross-platform database management tool" # Comments
+  version: "0.1.0" # The application version
+
+# Dev mode configuration
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - build/bin
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go" # Watch for changes to Go files; the frontend directory is excluded entirely by the setting above.
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: wails3 task common:dev:frontend
+      type: background
+      # The standard frontend task waits up to 60s for HTTP 200 from
+      # FRONTEND_DEVSERVER_URL before starting the app.
+    - cmd: wails3 task run
+      type: primary
+      exit_policy: shutdown
+
+# Other data
+other: []

@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "dev": "GOTOOLCHAIN=go1.25.7 $HOME/go/bin/wails dev",
-    "build": "GOTOOLCHAIN=go1.25.7 $HOME/go/bin/wails build",
+    "dev": "PATH=\"$HOME/go/bin:$PATH\" wails3 task dev",
+    "build": "PATH=\"$HOME/go/bin:$PATH\" wails3 task package",
     "dev:frontend": "cd frontend && pnpm dev",
-    "dev:backend": "GOTOOLCHAIN=go1.25.7 $HOME/go/bin/wails dev",
+    "dev:backend": "PATH=\"$HOME/go/bin:$PATH\" wails3 task dev",
     "test": "cd frontend && pnpm test",
     "package": "bash scripts/package.sh",
     "test:go": "go test ./...",

@@ -11,7 +11,7 @@ import type { Connection } from '../../../stores/appStore';
 import { useAppStore } from '../../../stores/appStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { api } from '../../../api';
-import { EventsOn } from '../../../../wailsjs/runtime/runtime';
+import { EventsOn } from '../../../api';
 
 interface UseConnectionManagerParams {
   tabPanelRef: React.RefObject<TabPanelRef | null>;

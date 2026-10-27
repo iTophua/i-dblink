@@ -1,4 +1,4 @@
-import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { Events } from '@wailsio/runtime';
 import {
   BackupDatabase,
   BatchImport,
@@ -77,11 +77,7 @@ import {
   CreateSchema,
   DropSchema,
   GetCheckConstraints,
-} from '../../wailsjs/go/backend/App';
-import { backend } from '../../wailsjs/go/models';
-const ConnectionInput = backend.ConnectionInput;
-const AITaskRequestClass = backend.AITaskRequest;
-
+} from '../../bindings/idblink/backend/app';
 import type {
   ConnectionOutput,
   GroupInput,
@@ -93,7 +89,13 @@ import type {
   QueryResult,
 } from '../types/api';
 
-export { EventsOn };
+/**
+ * v2 EventsOn 兼容层：v3 的 Events.On 回调收到 WailsEvent（.name/.data），此处解包出 data。
+ * 返回取消订阅函数（v2 行为一致）。
+ */
+export function EventsOn<T = unknown>(name: string, cb: (data: T) => void): () => void {
+  return Events.On(name, (ev) => cb(ev.data as T));
+}
 export { ConnectDatabase, DisconnectDatabase, UpdateConnectionPassword };
 
 export interface TablesResult {
@@ -213,7 +215,8 @@ export const api = {
       ssl_skip_verify?: boolean;
     }
   ): Promise<void> {
-    const input = new ConnectionInput({
+    const input = {
+      name: '',
       db_type: dbType,
       host,
       port,
@@ -233,7 +236,7 @@ export const api = {
       ssl_cert_path: sslConfig?.ssl_cert_path,
       ssl_key_path: sslConfig?.ssl_key_path,
       ssl_skip_verify: sslConfig?.ssl_skip_verify || false,
-    });
+    };
     await TestConnection(input);
   },
 
@@ -291,7 +294,7 @@ export const api = {
     ssl_key_path?: string;
     ssl_skip_verify?: boolean;
   }): Promise<ConnectionOutput> {
-    const connInput = new ConnectionInput({
+    const connInput = {
       id: input.id,
       name: input.name,
       db_type: input.db_type,
@@ -315,7 +318,7 @@ export const api = {
       ssl_cert_path: input.ssl_cert_path,
       ssl_key_path: input.ssl_key_path,
       ssl_skip_verify: input.ssl_skip_verify || false,
-    });
+    };
     const result = await SaveConnection(connInput);
     return result as unknown as ConnectionOutput;
   },
@@ -329,12 +332,12 @@ export const api = {
   },
 
   async reorderConnections(orders: Record<string, number>): Promise<void> {
-    const { ReorderConnections } = await import('../../wailsjs/go/backend/App');
+    const { ReorderConnections } = await import('../../bindings/idblink/backend/app');
     await ReorderConnections(orders);
   },
 
   async batchDeleteConnections(ids: string[]): Promise<void> {
-    const { BatchDeleteConnections } = await import('../../wailsjs/go/backend/App');
+    const { BatchDeleteConnections } = await import('../../bindings/idblink/backend/app');
     await BatchDeleteConnections(ids);
   },
 
@@ -353,7 +356,7 @@ export const api = {
   },
 
   async getDatabases(connectionId: string): Promise<string[]> {
-    return await GetDatabases(connectionId);
+    return (await GetDatabases(connectionId)) ?? [];
   },
 
   async getTables(
@@ -438,11 +441,11 @@ export const api = {
   },
 
   async getProcedures(connectionId: string, database?: string): Promise<string[]> {
-    return await GetProcedures(connectionId, database ?? null);
+    return (await GetProcedures(connectionId, database ?? null)) ?? [];
   },
 
   async getFunctions(connectionId: string, database?: string): Promise<string[]> {
-    return await GetFunctions(connectionId, database ?? null);
+    return (await GetFunctions(connectionId, database ?? null)) ?? [];
   },
 
   async getProcedureBody(
@@ -624,7 +627,7 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<string[]> {
-    return await GetTableDDL(connectionId, tableName, database ?? null);
+    return (await GetTableDDL(connectionId, tableName, database ?? null)) ?? [];
   },
 
   async getDatabaseDDL(connectionId: string, database: string): Promise<string> {
@@ -933,7 +936,7 @@ export const api = {
 
   async getConnectionHistory(limit: number = 100): Promise<any[]> {
     try {
-      return await GetConnectionHistory(limit);
+      return (await GetConnectionHistory(limit)) ?? [];
     } catch {
       return [];
     }
@@ -980,7 +983,7 @@ export const api = {
     connectionId: string,
     database?: string
   ): Promise<string[]> {
-    return await GetSchemas(connectionId, database ?? null);
+    return (await GetSchemas(connectionId, database ?? null)) ?? [];
   },
 
   async createSchema(
@@ -1025,7 +1028,7 @@ export const api = {
     },
     lang: string
   ): Promise<string> {
-    const { GenerateDatabaseDoc } = await import('../../wailsjs/go/backend/App');
+    const { GenerateDatabaseDoc } = await import('../../bindings/idblink/backend/app');
     const result = await GenerateDatabaseDoc(connectionId, database, options, lang);
     return result as unknown as string;
   },
@@ -1040,7 +1043,7 @@ export const api = {
     download_url: string;
     published_at: string;
   }> {
-    const { CheckForUpdate } = await import('../../wailsjs/go/backend/App');
+    const { CheckForUpdate } = await import('../../bindings/idblink/backend/app');
     const result = await CheckForUpdate();
     return result as unknown as {
       current_version: string;
@@ -1053,7 +1056,7 @@ export const api = {
   },
 
   async getAppVersion(): Promise<string> {
-    const { GetAppVersion } = await import('../../wailsjs/go/backend/App');
+    const { GetAppVersion } = await import('../../bindings/idblink/backend/app');
     return await GetAppVersion();
   },
 
@@ -1075,7 +1078,7 @@ export const api = {
     }[];
     warnings: string[];
   }> {
-    const { GetMigrationPreview } = await import('../../wailsjs/go/backend/App');
+    const { GetMigrationPreview } = await import('../../bindings/idblink/backend/app');
     const result = await GetMigrationPreview(sourceConnId, targetConnId, database, targetDatabase, tables);
     return result as unknown as {
       tables: {
@@ -1108,7 +1111,7 @@ export const api = {
     success: boolean;
     error: string;
   }> {
-    const { ExecuteMigration } = await import('../../wailsjs/go/backend/App');
+    const { ExecuteMigration } = await import('../../bindings/idblink/backend/app');
     const result = await ExecuteMigration(sourceConnId, targetConnId, database, targetDatabase, tables, options);
     return result as unknown as {
       tables: { table_name: string; row_count: number; time_ms: number; success: boolean; error: string; warnings?: string[] }[];
@@ -1122,47 +1125,47 @@ export const api = {
   // ── AI ──
 
   async getAIPresetProviders(): Promise<AIPresetProvider[]> {
-    const { GetAIPresetProviders } = await import('../../wailsjs/go/backend/App');
+    const { GetAIPresetProviders } = await import('../../bindings/idblink/backend/app');
     const result = await GetAIPresetProviders();
     return (result as unknown as { providers: AIPresetProvider[] }).providers;
   },
 
   async getAIModels(req: AIModelsRequest): Promise<AIModel[]> {
-    const { GetAIModels } = await import('../../wailsjs/go/backend/App');
+    const { GetAIModels } = await import('../../bindings/idblink/backend/app');
     const result = await GetAIModels(req);
     return (result as unknown as { models: AIModel[] }).models;
   },
 
   async getAICloudConfig(): Promise<AICloudConfig> {
-    const { GetAICloudConfig } = await import('../../wailsjs/go/backend/App');
+    const { GetAICloudConfig } = await import('../../bindings/idblink/backend/app');
     const result = await GetAICloudConfig();
     return result as unknown as AICloudConfig;
   },
 
   async saveAICloudConfig(config: AICloudConfigInput): Promise<void> {
-    const { SaveAICloudConfig } = await import('../../wailsjs/go/backend/App');
+    const { SaveAICloudConfig } = await import('../../bindings/idblink/backend/app');
     await SaveAICloudConfig(config);
   },
 
   async testAIConnection(config: AICloudConfigInput): Promise<AIConnTestResult> {
-    const { TestAIConnection } = await import('../../wailsjs/go/backend/App');
+    const { TestAIConnection } = await import('../../bindings/idblink/backend/app');
     const result = await TestAIConnection(config);
     return result as unknown as AIConnTestResult;
   },
 
   async executeAITask(req: AITaskRequest): Promise<AITaskResult> {
-    const { ExecuteAITask } = await import('../../wailsjs/go/backend/App');
-    const result = await ExecuteAITask(new AITaskRequestClass(req));
+    const { ExecuteAITask } = await import('../../bindings/idblink/backend/app');
+    const result = await ExecuteAITask(req);
     return result as unknown as AITaskResult;
   },
 
   async executeAITaskStream(req: AITaskRequest): Promise<void> {
-    const { ExecuteAITaskStream } = await import('../../wailsjs/go/backend/App');
-    await ExecuteAITaskStream(new AITaskRequestClass(req));
+    const { ExecuteAITaskStream } = await import('../../bindings/idblink/backend/app');
+    await ExecuteAITaskStream(req);
   },
 
   async getAIStatus(): Promise<AIStatus> {
-    const { GetAIStatus } = await import('../../wailsjs/go/backend/App');
+    const { GetAIStatus } = await import('../../bindings/idblink/backend/app');
     const result = await GetAIStatus();
     return result as unknown as AIStatus;
   },
@@ -1170,7 +1173,7 @@ export const api = {
   // ── MCP ──
 
   async getMCPConfig(): Promise<MCPConfigInfo> {
-    const { GetMCPConfig } = await import('../../wailsjs/go/backend/App');
+    const { GetMCPConfig } = await import('../../bindings/idblink/backend/app');
     const result = await GetMCPConfig();
     return result as unknown as MCPConfigInfo;
   },

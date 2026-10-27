@@ -11,8 +11,8 @@ import i18n from './i18n';
 import './style.css';
 import './App.css';
 import { EventsOn } from './api';
-import { SetNativeWindowAppearance } from '../wailsjs/go/backend/App';
-import { WindowSetBackgroundColour } from '../wailsjs/runtime/runtime';
+import { SetNativeWindowAppearance } from '../bindings/idblink/backend/app';
+import { Window as WailsWindow } from '@wailsio/runtime';
 
 // NOTE: Modal 过渡动画已通过全局 CSS 禁用（style.css 中覆盖 rc-motion 相关样式）
 
@@ -172,7 +172,7 @@ function App() {
         const r = parseInt(hex.slice(0, 2), 16);
         const g = parseInt(hex.slice(2, 4), 16);
         const b = parseInt(hex.slice(4, 6), 16);
-        WindowSetBackgroundColour(r, g, b, 255);
+        WailsWindow.SetBackgroundColour(r, g, b, 255);
       }
 
       window.setTimeout(() => {

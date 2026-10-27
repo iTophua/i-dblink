@@ -5,10 +5,10 @@
 ```bash
 # --- 依赖 & 构建 ---
 pnpm install                          # 安装依赖
-~/go/bin/wails dev                    # 开发模式（Vite:5100 + Wails 窗口）
-~/go/bin/wails build                  # 生产构建 → build/bin/iDBLink.app/
-                                      # wails ≥v2.17 内置 x/tools v0.47，
-                                      # 直接用系统 Go（1.27+）即可，无需 GOTOOLCHAIN 锁定
+~/go/bin/wails3 task dev              # 开发模式（Vite:5100 + Wails 窗口）
+~/go/bin/wails3 task package          # 生产构建 → build/bin/iDBLink.app/
+                                      # wails3 v3.0.0 要求 Go ≥1.26，系统 Go 1.27 即可
+~/go/bin/wails3 generate bindings -ts -i   # 手动再生成前端绑定（构建时也会自动生成）
 pnpm package                          # 构建 + 创建 DMG（需要 create-dmg）
 
 # --- 前端测试（根目录执行，内部 cd frontend） ---
@@ -31,23 +31,24 @@ pnpm format:check                     # Prettier 检查
 pnpm exec -- tsc --noEmit             # TypeScript 类型检查
 ```
 
-**`wails` CLI 路径：** `~/go/bin/wails` v2.17.0 — 不在 PATH 中，使用完整路径。
+**`wails3` CLI 路径：** `~/go/bin/wails3` v3.0.0 — 不在 PATH 中，使用完整路径（Taskfile 内部以裸 `wails3` 调用，跑 task 时需 `PATH="$HOME/go/bin:$PATH"`，`pnpm dev`/`pnpm build` 已内置）。
 
 ## Architecture
 
-Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust、无 sidecar、无 HTTP 转发。
+Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust、无 sidecar。构建由 Taskfile 驱动（`Taskfile.yml` + `build/Taskfile.yml` + 平台 Taskfile，`build/config.yml` 为 dev 模式配置）。
 
 | 层 | 路径 | 关键文件 |
 |----|------|----------|
 | 入口 | `main.go` | Wails 应用设置，7 个菜单 38 个菜单项，macOS 特殊处理 |
 | 后端 | `backend/` | `app.go`（332 LOC）+ 16 个 `app_*.go`（按功能拆分的 80+ 绑定方法），`db/`（10 种驱动），`api/`，`localdb/`，`security.go` |
 | 前端 | `frontend/src/` | `api/index.ts`（80 个方法），`components/`（~34 个 + 子目录），`hooks/`（6 个），`stores/`（3 个 Zustand） |
-| 绑定 | `frontend/wailsjs/` | `wails dev` 自动生成，**已 gitignore** |
+| 绑定 | `frontend/bindings/` | `wails3 generate bindings -ts -i` 生成（interfaces 模式），**已 gitignore**，构建/测试前需先生成 |
 | E2E | `e2e/` | Playwright 测试（12 个测试文件） |
 
 **通信方式：**
-- 前端 → 后端：Wails 绑定调用 `frontend/wailsjs/go/backend/App.*`
-- 后端 → 前端：`runtime.EventsEmit("menu-action", ...)` 事件推送，前端通过 `EventsOn` 监听
+- 前端 → 后端：绑定调用 `frontend/bindings/idblink/backend/app`（具名函数导出），`api/index.ts` 统一封装
+- 后端 → 前端：`application.Get().Event.Emit("menu-action", ...)` 事件推送；前端 `Events.On`（`api/index.ts` 提供 v2 风格 `EventsOn` 兼容层，回调直接收 data）
+- 前端窗口操作：`@wailsio/runtime` 的 `Window.SetTitle/SetBackgroundColour/Minimise/Hide`
 
 **关键设计模式：** `backend/app.go` 通过 `httptest` 的 `callHandler` 模式包装 HTTP handler，复用现有业务逻辑实现 Wails 绑定——非常规但有意为之。
 
@@ -59,8 +60,8 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   滚动容器**外**（`TableList.tsx` 已改为 sibling + CSS 变量补偿滚动条宽度保持
   列对齐，勿改回 sticky）；`ResultGrid.tsx` 的 sticky 行在普通 overflow 容器内，不受影响
 - **`ConnectionInput` 命名空间**：Wails TS 绑定中在 `backend` 命名空间下：`new backend.ConnectionInput(source)`
-- **Wails 绑定**（`frontend/wailsjs/`）已 gitignore，`wails dev` 时自动生成，CI 中也会重新生成
-- **浮动窗口功能无效**：Wails v2 不支持前端多窗口 API
+- **Wails 绑定**（`frontend/bindings/`）已 gitignore，`wails3 task build`/`dev` 时自动生成；跑 `tsc`/`pnpm test` 前若缺失需先 `~/go/bin/wails3 generate bindings -ts -i`（setupTests 已 mock 绑定模块，测试不依赖生成物）
+- **浮动窗口功能无效**：历史遗留（v2 时代无多窗口 API）；v3 已支持多窗口，但此功能尚未接
 - **i18n 大部分已接入**（2026-10 实测）：2035 个 key、双语言全对齐（此前 12 个
   en 缺失已补）。剩余硬编码中文约 387 行/52 文件，大头在数据类内容
   （`constants/sqlFunctions.ts` 函数文档 61 行、`convertRules.ts` 26 行等）；
@@ -78,12 +79,12 @@ Wails v2 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   import { mockExecuteQuery } from '../setupTests'
   ```
 - Vitest 配置：`frontend/vitest.config.ts`，jsdom 环境，globals 启用
-- ESLint：flat config 位于 `frontend/eslint.config.mjs`，忽略 `dist` 和 `wailsjs`
+- ESLint：flat config 位于 `frontend/eslint.config.mjs`，忽略 `dist`、`wailsjs`（历史）和 `bindings`（生成物）
 - E2E 测试：Playwright 配置位于根目录 `playwright.config.ts`，测试在 `e2e/`。
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
   `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
   桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
-  `pnpm test`（417）+ `go test ./...` + `wails dev` 人工冒烟为准；修复需按当前
+  `pnpm test`（417）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
   UI 重写整套用例。另外 e2e 脚本须从仓库根用
   `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
   运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）

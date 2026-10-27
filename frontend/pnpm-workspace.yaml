@@ -3,3 +3,5 @@ packages:
 allowBuilds:
   esbuild: true
   msw: true
+minimumReleaseAgeExclude:
+  - '@wailsio/runtime@3.0.0'

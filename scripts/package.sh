@@ -5,9 +5,7 @@ APP_NAME="iDBLink"
 BUILD_DIR="build/bin"
 DMG_NAME="${APP_NAME}.dmg"
 VOLNAME="${APP_NAME}"
-WAILS="${WAILS:-$HOME/go/bin/wails}"
-# 本机 Go 1.27 的导出数据 wails v2.12 内置 x/tools 解析不了，必须固定工具链
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.25.7}"
+WAILS3="${WAILS3:-$HOME/go/bin/wails3}"
 
 # --- 前置检查 ---
 if ! command -v create-dmg &>/dev/null; then
@@ -15,14 +13,15 @@ if ! command -v create-dmg &>/dev/null; then
   exit 1
 fi
 
-if [ ! -x "$WAILS" ]; then
-  echo "Error: wails CLI not found at $WAILS"
+if [ ! -x "$WAILS3" ]; then
+  echo "Error: wails3 CLI not found at $WAILS3"
+  echo "Install via: go install github.com/wailsapp/wails/v3/cmd/wails3@latest"
   exit 1
 fi
 
-# --- 构建 ---
+# --- 构建（wails3 task package：编译 + 组装 .app bundle + adhoc 签名） ---
 echo "==> Building ${APP_NAME}..."
-"$WAILS" build
+PATH="$HOME/go/bin:$PATH" "$WAILS3" task package
 
 APP_PATH="${BUILD_DIR}/${APP_NAME}.app"
 if [ ! -d "${APP_PATH}" ]; then

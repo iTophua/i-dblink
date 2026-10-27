@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"idblink/backend/ai"
 	"idblink/backend/api"
 	"idblink/backend/db"
@@ -157,16 +158,16 @@ func (a *App) snapshotActiveConns() []string {
 	return ids
 }
 
-// Startup 应用启动时调用（Wails 生命周期）
-func (a *App) Startup(ctx context.Context) {
+// ServiceStartup 应用启动时调用（Wails v3 服务生命周期）
+func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	a.ctx = ctx
 
 	// 初始化存储
 	dataDir := a.getDataDir()
 	storage, err := NewStorage(dataDir)
 	if err != nil {
-		runtime.LogErrorf(ctx, "Failed to initialize storage: %v", err)
-		return
+		slog.Error("Failed to initialize storage", "error", err)
+		return err
 	}
 	a.storage = storage
 
@@ -182,8 +183,9 @@ func (a *App) Startup(ctx context.Context) {
 	// 初始化 AI Provider 管理器（从存储加载配置，若已配置则创建 Provider）
 	a.aiManager = ai.NewProviderManager()
 	if err := a.aiManager.ReloadFromConfig(a.storage); err != nil {
-		runtime.LogWarningf(ctx, "Failed to init AI manager: %v", err)
+		slog.Warn("Failed to init AI manager", "error", err)
 	}
+	return nil
 }
 
 // InitStandalone 在无 Wails 环境下初始化（供 MCP sidecar 等 CLI 场景使用）。
@@ -215,8 +217,8 @@ func (a *App) Context() context.Context {
 	return a.ctx
 }
 
-// Shutdown 应用关闭时调用
-func (a *App) Shutdown(ctx context.Context) {
+// Shutdown 应用关闭时调用（Wails v3 ServiceShutdown 接口）
+func (a *App) ServiceShutdown() error {
 	// 关闭所有 SSH 隧道（避免 goroutine / sshClient 泄漏）
 	if a.tunnel != nil {
 		a.tunnel.CloseAll()
@@ -229,21 +231,24 @@ func (a *App) Shutdown(ctx context.Context) {
 	if a.storage != nil {
 		a.storage.Close()
 	}
+	return nil
 }
 
 // ShowDevTools 打开开发者工具（仅在 dev 模式下有效）
 func (a *App) ShowDevTools() {
-	if a.ctx == nil {
+	app := application.Get()
+	if app == nil {
 		return
 	}
 	if a.isDevMode() {
-		runtime.WindowExecJS(a.ctx, `window.WailsInvoke("wails:openInspector")`)
+		if w := app.Window.Current(); w != nil {
+			w.OpenDevTools()
+		}
 	} else {
-		runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-			Type:    runtime.InfoDialog,
-			Title:   "开发者工具",
-			Message: "开发者工具仅在开发模式下可用。请使用 wails dev 启动应用。",
-		})
+		app.Dialog.Info().
+			SetTitle("开发者工具").
+			SetMessage("开发者工具仅在开发模式下可用。请使用 wails3 dev 启动应用。").
+			Show()
 	}
 }
 
@@ -380,7 +385,9 @@ func callHandlerRaw(handlerFunc func(http.ResponseWriter, *http.Request), reqBod
 
 // QuitApp 退出应用
 func (a *App) QuitApp() {
-	runtime.Quit(a.ctx)
+	if app := application.Get(); app != nil {
+		app.Quit()
+	}
 }
 
 // GetConnectionHistory 获取操作历史

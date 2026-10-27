@@ -2,11 +2,11 @@ package backend
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"idblink/backend/db"
 	"idblink/backend/localdb"
 )
@@ -155,7 +155,7 @@ func (a *App) doConnectDatabase(connectionID string) error {
 		// SSH 凭据：从 connection_ssh_credentials 表获取（与 DB 密码分开加密存储）
 		sshPassword, sshPassphrase, sshErr := a.storage.GetSSHCredentials(connectionID)
 		if sshErr != nil {
-			runtime.LogWarningf(a.ctx, "failed to load ssh credentials for %s: %v", connectionID, sshErr)
+			slog.Warn(fmt.Sprintf("failed to load ssh credentials for %s: %v", connectionID, sshErr))
 		}
 		tunnel, err := a.tunnel.StartTunnel(
 			connectionID,
@@ -517,7 +517,7 @@ func (a *App) ensureConnected(connectionID string) error {
 			return nil
 		}
 		// Ping 失败，尝试断开后重连
-		runtime.LogWarningf(a.ctx, "connection %s ping failed, attempting reconnect: %v", connectionID, pingErr)
+		slog.Warn(fmt.Sprintf("connection %s ping failed, attempting reconnect: %v", connectionID, pingErr))
 		_ = a.dbManager.Disconnect(connectionID)
 		a.setActiveConn(connectionID, false)
 	}

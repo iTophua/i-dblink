@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { WindowSetTitle } from '../../wailsjs/runtime/runtime';
+import { Window as WailsWindow } from '@wailsio/runtime';
 import { Layout, Form, Input, Modal, Tooltip } from 'antd';
 import {
   ReloadOutlined,
@@ -88,14 +88,10 @@ function MainLayoutComponent() {
     const title = parts.length > 0 ? `${parts.join(' > ')} - iDBLink` : 'iDBLink';
     document.title = title;
 
-    // Wails 窗口标题
-    if (typeof window !== 'undefined' && (window as any).runtime) {
-      try {
-        WindowSetTitle(title);
-      } catch {
-        // fallback silently
-      }
-    }
+    // Wails 窗口标题（纯浏览器环境下调用会 reject，静默忽略）
+    WailsWindow.SetTitle(title).catch(() => {
+      // fallback silently
+    });
   }, [connMgr.selectedConnectionId, connMgr.connections, tabMgr.activeTabInfo]);
 
   // AI 面板"应用到编辑器"：注入 SQL 到当前 SQL tab，无 SQL tab 则自动新建

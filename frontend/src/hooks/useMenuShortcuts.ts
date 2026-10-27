@@ -199,7 +199,7 @@ export function useMenuShortcuts(actions?: MenuActions) {
     useHotkeys(
       'mod+h',
       () => {
-        import('../../wailsjs/runtime/runtime').then(({ Hide }) => Hide());
+        import('@wailsio/runtime').then(({ Window }) => Window.Hide());
       },
       defaultOptions,
       []
@@ -217,7 +217,7 @@ export function useMenuShortcuts(actions?: MenuActions) {
     useHotkeys(
       'mod+m',
       () => {
-        import('../../wailsjs/runtime/runtime').then(({ WindowMinimise }) => WindowMinimise());
+        import('@wailsio/runtime').then(({ Window }) => Window.Minimise());
       },
       defaultOptions,
       []

@@ -5,7 +5,7 @@ import { vi } from 'vitest';
  */
 export function mockWailsBinding() {
   const fn = vi.fn();
-  vi.mock('../../wailsjs/go/backend/App', () => {
+  vi.mock('../../bindings/idblink/backend/app', () => {
     const handler = () => fn();
     return {
       TestConnection: handler,

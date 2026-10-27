@@ -60,7 +60,7 @@ export const mockGreet = vi.fn().mockResolvedValue('');
 export const mockGetConnectionSSHCredentials = vi.fn().mockResolvedValue({ password: '', passphrase: '' });
 export const mockGetConnectionPassword = vi.fn().mockResolvedValue('');
 
-vi.mock('../../wailsjs/go/backend/App', () => ({
+vi.mock('../../bindings/idblink/backend/app', () => ({
   TestConnection: mockTestConnection,
   ConnectDatabase: mockConnectDatabase,
   DisconnectDatabase: mockDisconnectDatabase,
@@ -121,29 +121,19 @@ vi.mock('../../wailsjs/go/backend/App', () => ({
   SetNativeWindowAppearance: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('../../wailsjs/runtime/runtime', () => ({
-  EventsOn: vi.fn(() => vi.fn()),
-  EventsEmit: vi.fn(),
-  WindowSetTitle: vi.fn(),
-  WindowMinimise: vi.fn(),
-  Hide: vi.fn(),
-  Quit: vi.fn(),
-  WindowSetBackgroundColour: vi.fn(),
+vi.mock('@wailsio/runtime', () => ({
+  Events: {
+    On: vi.fn(() => vi.fn()),
+    Once: vi.fn(() => vi.fn()),
+    Off: vi.fn(),
+    OffAll: vi.fn(),
+    Emit: vi.fn(() => Promise.resolve(true)),
+  },
+  Window: {
+    SetTitle: vi.fn(() => Promise.resolve()),
+    Minimise: vi.fn(() => Promise.resolve()),
+    Hide: vi.fn(() => Promise.resolve()),
+    SetBackgroundColour: vi.fn(() => Promise.resolve()),
+  },
 }));
 
-vi.mock('../../wailsjs/go/models', () => ({
-  backend: {
-    ConnectionInput: class {
-    constructor(source: any = {}) { Object.assign(this, source); }
-    id?: string; name: string = ''; db_type: string = ''; host: string = '';
-    port: number = 0; username: string = ''; password?: string;
-    database?: string; group_id?: string; color?: string;
-    ssh_enabled: boolean = false; ssh_host?: string; ssh_port?: number;
-    ssh_username?: string; ssh_auth_method?: string;
-    ssh_password?: string; ssh_private_key_path?: string;
-    ssh_passphrase?: string; ssl_enabled: boolean = false;
-    ssl_ca_path?: string; ssl_cert_path?: string;
-    ssl_key_path?: string; ssl_skip_verify: boolean = false;
-  },
-  },
-}));

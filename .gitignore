@@ -20,9 +20,11 @@ dist-ssr
 .vite/
 *.tsbuildinfo
 
-# Wails
-build/
-frontend/wailsjs/
+# Wails（build/ 下仅忽略构建产物，Taskfile/config/plist 需提交）
+build/bin/
+build/darwin/icons.icns
+build/windows/icon.ico
+frontend/bindings/
 frontend/package.json.md5
 
 # Go build output
@@ -97,3 +99,6 @@ e2e/screenshots/
 .env.test
 .zcode/
 .playwright-mcp/
+
+# wails3 task cache
+.task/

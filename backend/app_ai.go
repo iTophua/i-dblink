@@ -283,7 +283,7 @@ func (a *App) ExecuteAITaskStream(req AITaskRequest) error {
 
 	// 用 app ctx 推事件（Wails EventsEmit 需要 Wails ctx）
 	// goroutine 消费完 stream 后调用 cancel 释放 ctx 资源
-	ai.StreamToEventWithError(a.ctx, requestID, stream, nil, cancel)
+	ai.StreamToEventWithError(requestID, stream, nil, cancel)
 
 	return nil
 }
