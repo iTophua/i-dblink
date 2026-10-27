@@ -2135,6 +2135,7 @@
     "pageSize": "Rows Per Page",
     "uiLanguage": "UI Language",
     "zoomIn": "Zoom In",
-    "zoomOut": "Zoom Out"
+    "zoomOut": "Zoom Out",
+    "popOutResult": "Open result in new window"
   }
 }

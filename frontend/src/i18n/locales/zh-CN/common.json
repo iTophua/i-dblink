@@ -2135,6 +2135,7 @@
     "history": "历史",
     "tablesLabel": "表",
     "viewsLabel": "视图",
-    "connections": "连接"
+    "connections": "连接",
+    "popOutResult": "在新窗口打开结果"
   }
 }

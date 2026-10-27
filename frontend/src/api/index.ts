@@ -61,6 +61,7 @@ import {
   StreamExportTable,
   ReadSqlFile,
   SetCloseGuardState,
+  OpenResultPopup,
   TakePendingOpenFile,
   TestConnection,
   TruncateTable,
@@ -936,6 +937,11 @@ export const api = {
   /** 读取本地 SQL 脚本文件（双击打开/拖放载入，仅 .sql/.txt ≤5MB） */
   async readSqlFile(path: string): Promise<string> {
     return await ReadSqlFile(path);
+  },
+
+  /** 创建独立「查询结果」弹窗，返回 popupId */
+  async openResultPopup(): Promise<string> {
+    return (await OpenResultPopup()) ?? '';
   },
 
   /** 上报关闭保护状态（数据 tab 存在未保存修改时为 true） */

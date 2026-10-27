@@ -1,6 +1,7 @@
 import ReactDOM from 'react-dom/client';
 import { StrictMode } from 'react';
 import App from './App';
+import { ResultPopup } from './components/ResultPopup';
 import './style.css';
 import './styles/theme-enhancements.css';
 import './i18n';
@@ -54,8 +55,9 @@ const observer = new MutationObserver((mutations) => {
 disableInputSpellcheck()
 observer.observe(document.body, { childList: true, subtree: true })
 
+// 多窗口路由：/#popup/<id> 为独立结果弹窗（不加载主界面）
+const isResultPopup = /^#popup\//.test(window.location.hash);
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
+  <StrictMode>{isResultPopup ? <ResultPopup /> : <App />}</StrictMode>
 );

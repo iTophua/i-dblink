@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react';
 
 import {
   App,
+  Button,
   Tabs,
   TabsProps,
   Tag,
@@ -11,8 +12,11 @@ import {
   Drawer,
   Space,
 } from 'antd';
+import { ExpandAltOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
+import { api } from '../api';
+import { Events } from '@wailsio/runtime';
 import { useAppStore } from '../stores/appStore';
 import { DatabaseIcon } from './DatabaseIcon';
 import { format as formatSql } from 'sql-formatter';
@@ -399,6 +403,49 @@ export function SQLEditor({
     message.success(t('common.resultsExportedAsCsv'));
   }, [result, results]);
 
+  // ── 结果弹出到独立窗口（Wails v3 多窗口）──
+  const popupIdsRef = useRef<Set<string>>(new Set());
+
+  const allResultsSnapshot = useCallback(
+    () => (results.length > 0 ? results : result ? [result] : []),
+    [results, result]
+  );
+
+  const sendPopupData = useCallback(
+    (popupId: string) => {
+      const all = allResultsSnapshot();
+      if (all.length === 0) return;
+      const titleLine = sql.trim().split('\n')[0]?.slice(0, 60) || '查询结果';
+      Events.Emit(`popup-result:data:${popupId}`, {
+        title: titleLine,
+        sql,
+        results: all,
+      }).catch(() => {});
+    },
+    [allResultsSnapshot, sql]
+  );
+
+  const handlePopOutResult = useCallback(async () => {
+    if (allResultsSnapshot().length === 0) return;
+    try {
+      const popupId = await api.openResultPopup();
+      if (!popupId) return;
+      popupIdsRef.current.add(popupId);
+      sendPopupData(popupId); // 立即推一次；弹窗加载完成后再 request 兜底
+    } catch {
+      // 创建失败静默（无窗口环境等）
+    }
+  }, [allResultsSnapshot, sendPopupData]);
+
+  // 弹窗就绪后主动请求数据（仅响应自己创建的弹窗，避免多编辑器串扰）
+  useEffect(() => {
+    const off = Events.On('popup-result:request', (ev) => {
+      const popupId = ev.data as string;
+      if (popupIdsRef.current.has(popupId)) sendPopupData(popupId);
+    });
+    return off;
+  }, [sendPopupData]);
+
   // 渲染单个结果集的表格（AG Grid）
   const renderResultTable = useCallback(
     (queryResult: QueryResultWithTiming) => {
@@ -472,6 +519,16 @@ export function SQLEditor({
       label: (
         <Space size={4}>
           <span>{resultLabel}</span>
+          {allResults.length > 0 && (
+            <Button
+              type="text"
+              size="small"
+              icon={<ExpandAltOutlined />}
+              onClick={handlePopOutResult}
+              style={{ padding: '0 4px', height: 18, fontSize: 12 }}
+              title={t('common.popOutResult')}
+            />
+          )}
           {allResults.length > 1 && (
             <Dropdown
               menu={{
