@@ -658,6 +658,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     </DefaultTabBar>
   );
 
+  // 关闭保护：向 backend 上报数据 tab 脏状态（配合 WindowClosing/ShouldQuit 原生确认框）
+  const hasDirtyDataTabs = openedTables.some((t) => t.isDirty);
+  useEffect(() => {
+    api.setCloseGuardState(hasDirtyDataTabs).catch(() => {});
+  }, [hasDirtyDataTabs]);
+
   // 监听 tab-action 事件（来自菜单或工具栏）
   useEffect(() => {
     const handleTabAction = (

@@ -60,6 +60,7 @@ import {
   SaveSnippet,
   StreamExportTable,
   ReadSqlFile,
+  SetCloseGuardState,
   TakePendingOpenFile,
   TestConnection,
   TruncateTable,
@@ -935,6 +936,11 @@ export const api = {
   /** 读取本地 SQL 脚本文件（双击打开/拖放载入，仅 .sql/.txt ≤5MB） */
   async readSqlFile(path: string): Promise<string> {
     return await ReadSqlFile(path);
+  },
+
+  /** 上报关闭保护状态（数据 tab 存在未保存修改时为 true） */
+  async setCloseGuardState(dataDirty: boolean): Promise<void> {
+    await SetCloseGuardState(dataDirty);
   },
 
   /** 取走冷启动待打开的 .sql 文件路径（双击文件启动应用场景，取后即清） */

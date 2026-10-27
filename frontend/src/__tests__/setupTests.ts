@@ -121,6 +121,7 @@ vi.mock('../../bindings/idblink/backend/app', () => ({
   SetNativeWindowAppearance: vi.fn(() => Promise.resolve()),
   ReadSqlFile: vi.fn().mockResolvedValue(''),
   TakePendingOpenFile: vi.fn().mockResolvedValue(''),
+  SetCloseGuardState: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@wailsio/runtime', () => ({

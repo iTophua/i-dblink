@@ -14,6 +14,7 @@ import (
 	goruntime "runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"idblink/backend/ai"
@@ -121,6 +122,10 @@ type App struct {
 	// 进行中的连接尝试（键为 connectionID），防止并发连接撞 already exists
 	connectFlights map[string]*connectFlight
 	connMu         sync.RWMutex // 保护 activeConns / connectFlights 的并发访问
+
+	// 关闭保护：前端上报的数据修改脏状态 + 后端统计的执行中查询数
+	closeGuardDirty atomic.Bool
+	queriesInFlight atomic.Int32
 }
 
 // NewApp 创建新应用
@@ -382,6 +387,27 @@ func callHandlerRaw(handlerFunc func(http.ResponseWriter, *http.Request), reqBod
 }
 
 // ==================== 应用控制 ====================
+
+// SetCloseGuardState 前端上报「存在未保存的数据修改」（数据 tab 编辑态）。
+// 关闭/退出时后端结合执行中查询数决定是否弹原生确认框。
+func (a *App) SetCloseGuardState(dataDirty bool) {
+	a.closeGuardDirty.Store(dataDirty)
+}
+
+// CloseGuardReason 返回需要关闭保护的原因；空串表示无需拦截。
+func (a *App) CloseGuardReason() string {
+	dirty := a.closeGuardDirty.Load()
+	running := a.queriesInFlight.Load() > 0
+	switch {
+	case dirty && running:
+		return "存在未保存的数据修改，且有查询正在执行"
+	case dirty:
+		return "存在未保存的数据修改"
+	case running:
+		return "有查询正在执行"
+	}
+	return ""
+}
 
 // QuitApp 退出应用
 func (a *App) QuitApp() {

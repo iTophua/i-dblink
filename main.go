@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	gos "runtime"
 	"strings"
+	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -197,11 +198,41 @@ func runGUI() {
 	}
 
 	var wailsApp *application.App
+	var quitConfirmed atomic.Bool // 用户已在确认框中选择放弃修改并退出
+
+	// confirmDiscard 存在未保存修改/执行中查询时弹原生确认框，确认后执行 action
+	confirmDiscard := func(action func()) {
+		reason := app.CloseGuardReason()
+		if reason == "" {
+			action()
+			return
+		}
+		dlg := wailsApp.Dialog.Question().
+			SetTitle("退出确认").
+			SetMessage(reason + "，退出后将丢失。确定要退出吗？")
+		exitBtn := dlg.AddButton("放弃并退出")
+		exitBtn.OnClick(action).SetAsDefault()
+		dlg.AddButton("取消").SetAsCancel()
+		dlg.Show()
+	}
+
 	wailsApp = application.New(application.Options{
 		Name:        "iDBLink",
 		Description: "A cross-platform database management tool",
 		// 双击 .sql 文件用 iDBLink 打开（Finder「打开方式」）
 		FileAssociations: []string{".sql"},
+		// ⌘Q / 菜单退出路径的保护：返回 false 拦下本次退出，弹确认后经
+		// quitConfirmed 放行二次 Quit()
+		ShouldQuit: func() bool {
+			if quitConfirmed.Load() || app.CloseGuardReason() == "" {
+				return true
+			}
+			confirmDiscard(func() {
+				quitConfirmed.Store(true)
+				wailsApp.Quit()
+			})
+			return false
+		},
 		// 单实例：重复启动（含双击 .sql）将文件路径转发给已运行实例后自行退出
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.idblink.iDBLink",
@@ -251,6 +282,22 @@ func runGUI() {
 			// （由前端在主题切换时通过 Window.SetBackgroundColour 同步，消除启动白屏）
 			TitleBar: application.MacTitleBarHidden,
 		},
+	})
+
+	// 关闭窗口（红绿灯红色按钮）路径的保护：取消本次关闭，确认后经
+	// Close() 无条件关闭（不再触发本钩子）
+	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if quitConfirmed.Load() || app.CloseGuardReason() == "" {
+			return
+		}
+		e.Cancel()
+		confirmDiscard(func() {
+			// 置位以放行随后 terminate 路径的 ShouldQuit，避免二次确认
+			quitConfirmed.Store(true)
+			if w, ok := wailsApp.Window.Get("main"); ok {
+				w.Close()
+			}
+		})
 	})
 
 	// 拖放文件转发前端（前端按扩展名分发：.sql → 打开为新查询 tab）
