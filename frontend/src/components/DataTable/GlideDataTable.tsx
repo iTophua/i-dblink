@@ -475,7 +475,23 @@ export function GlideDataTable({
     };
   }, []);
 
-  // ===== 滚动位置记忆：容器尺寸 0 → 恢复时还原滚动 =====
+  // ===== 滚动位置记忆：像素捕获（事件委托）+ 容器尺寸 0 → 恢复时还原 =====
+  // glide 隐藏（尺寸归零）会整体卸载 .dvn-scroller，重现时重建全新元素
+  //（scrollTop=0）；且本版本 onVisibleRegionChanged 的 tx/ty 恒为 0，
+  // 像素偏移只能经 capture 阶段委托监听 wrapper 下的 scroller scroll 事件直接读。
+  const scrollPixelRef = useRef({ top: 0, left: 0 });
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const onScrollCapture = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      if (!t?.classList?.contains('dvn-scroller')) return;
+      scrollPixelRef.current = { top: t.scrollTop, left: t.scrollLeft };
+    };
+    el.addEventListener('scroll', onScrollCapture, true);
+    return () => el.removeEventListener('scroll', onScrollCapture, true);
+  }, []);
+
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -485,16 +501,13 @@ export function GlideDataTable({
         wasHiddenRef.current = true;
       } else if (wasHiddenRef.current) {
         wasHiddenRef.current = false;
-        const { x, y, tx, ty } = lastRegionRef.current;
-        if (x > 0 || y > 0 || tx > 0 || ty > 0) {
-          // 等两帧让 glide 完成恢复重排后再还原滚动。
-          // tx/ty 即 glide 滚动容器（div.dvn-scroller）的 scrollLeft/scrollTop，
-          // 直接设置容器滚动属性可像素级精确还原（含半行/半列位置）；
-          // glide 监听容器 scroll 事件自行重绘。容器找不到时退回 cell 对齐。
-          // 一次性设置会被两种竞态破坏：①显示后 glide 仍在异步重排，稍后把
-          // 滚动覆盖回去；②scrollHeight 尚未恢复，赋值被钳制。因此设置后
-          // 回读校验，未命中短间隔重试（~50ms×12）；用户一旦主动滚动/点击
-          // 立即放弃，避免抢用户。
+        // 优先像素级还原（capture 阶段捕获的真实 scrollTop/Left）；
+        // scroller 由 glide 重建是异步的（React 重渲染），需等它出现；
+        // 设置后回读校验，未命中短间隔重试；用户主动滚动/点击立即放弃。
+        // 无像素记录时退化用 cell 坐标 scrollTo（region 事件的 x/y 可用）。
+        const { top: ty, left: tx } = scrollPixelRef.current;
+        const { x, y } = lastRegionRef.current;
+        if (ty > 0 || tx > 0) {
           let attempt = 0;
           let cancelled = false;
           const abort = () => {
@@ -505,25 +518,41 @@ export function GlideDataTable({
           const tryRestore = () => {
             if (cancelled) return;
             const scroller = el.querySelector('.dvn-scroller') as HTMLElement | null;
-            if (scroller && (tx > 0 || ty > 0)) {
-              if (tx > 0) scroller.scrollLeft = tx;
-              if (ty > 0) scroller.scrollTop = ty;
-              requestAnimationFrame(() => {
-                if (cancelled) return;
-                const s2 = el.querySelector('.dvn-scroller') as HTMLElement | null;
-                if (!s2) return;
-                const okY = ty <= 0 || Math.abs(s2.scrollTop - ty) < 2;
-                const okX = tx <= 0 || Math.abs(s2.scrollLeft - tx) < 2;
-                if ((!okY || !okX) && attempt < 12) {
-                  attempt += 1;
-                  setTimeout(tryRestore, 50);
-                }
-              });
-            } else {
-              gridRef.current?.scrollTo(x, y, 'both');
+            if (!scroller) {
+              // glide 尚未重建 scroller，等待
+              if (attempt < 25) {
+                attempt += 1;
+                setTimeout(tryRestore, 60);
+              }
+              return;
             }
+            if (tx > 0) scroller.scrollLeft = tx;
+            if (ty > 0) scroller.scrollTop = ty;
+            requestAnimationFrame(() => {
+              if (cancelled) return;
+              const s2 = el.querySelector('.dvn-scroller') as HTMLElement | null;
+              if (!s2) {
+                if (attempt < 25) {
+                  attempt += 1;
+                  setTimeout(tryRestore, 60);
+                }
+                return;
+              }
+              const okY = ty <= 0 || Math.abs(s2.scrollTop - ty) <= 2;
+              const okX = tx <= 0 || Math.abs(s2.scrollLeft - tx) <= 2;
+              if ((!okY || !okX) && attempt < 25) {
+                attempt += 1;
+                setTimeout(tryRestore, 60);
+              }
+            });
           };
           requestAnimationFrame(() => requestAnimationFrame(tryRestore));
+        } else if (x > 0 || y > 0) {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              gridRef.current?.scrollTo(x, y, 'both');
+            })
+          );
         }
       }
     });
