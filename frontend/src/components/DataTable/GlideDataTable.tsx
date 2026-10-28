@@ -487,21 +487,43 @@ export function GlideDataTable({
         wasHiddenRef.current = false;
         const { x, y, tx, ty } = lastRegionRef.current;
         if (x > 0 || y > 0 || tx > 0 || ty > 0) {
-          // 等两帧让 glide 完成恢复重排后再还原滚动，避免被重排覆盖。
+          // 等两帧让 glide 完成恢复重排后再还原滚动。
           // tx/ty 即 glide 滚动容器（div.dvn-scroller）的 scrollLeft/scrollTop，
           // 直接设置容器滚动属性可像素级精确还原（含半行/半列位置）；
-          // glide 监听容器 scroll 事件自行重绘。容器找不到时退回 cell 对齐
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-              const scroller = wrapperRef.current?.querySelector('.dvn-scroller') as HTMLElement | null;
-              if (scroller && (tx > 0 || ty > 0)) {
-                if (tx > 0) scroller.scrollLeft = tx;
-                if (ty > 0) scroller.scrollTop = ty;
-              } else {
-                gridRef.current?.scrollTo(x, y, 'both');
-              }
-            })
-          );
+          // glide 监听容器 scroll 事件自行重绘。容器找不到时退回 cell 对齐。
+          // 一次性设置会被两种竞态破坏：①显示后 glide 仍在异步重排，稍后把
+          // 滚动覆盖回去；②scrollHeight 尚未恢复，赋值被钳制。因此设置后
+          // 回读校验，未命中短间隔重试（~50ms×12）；用户一旦主动滚动/点击
+          // 立即放弃，避免抢用户。
+          let attempt = 0;
+          let cancelled = false;
+          const abort = () => {
+            cancelled = true;
+          };
+          el.addEventListener('wheel', abort, { once: true, passive: true });
+          el.addEventListener('pointerdown', abort, { once: true, passive: true });
+          const tryRestore = () => {
+            if (cancelled) return;
+            const scroller = el.querySelector('.dvn-scroller') as HTMLElement | null;
+            if (scroller && (tx > 0 || ty > 0)) {
+              if (tx > 0) scroller.scrollLeft = tx;
+              if (ty > 0) scroller.scrollTop = ty;
+              requestAnimationFrame(() => {
+                if (cancelled) return;
+                const s2 = el.querySelector('.dvn-scroller') as HTMLElement | null;
+                if (!s2) return;
+                const okY = ty <= 0 || Math.abs(s2.scrollTop - ty) < 2;
+                const okX = tx <= 0 || Math.abs(s2.scrollLeft - tx) < 2;
+                if ((!okY || !okX) && attempt < 12) {
+                  attempt += 1;
+                  setTimeout(tryRestore, 50);
+                }
+              });
+            } else {
+              gridRef.current?.scrollTo(x, y, 'both');
+            }
+          };
+          requestAnimationFrame(() => requestAnimationFrame(tryRestore));
         }
       }
     });
