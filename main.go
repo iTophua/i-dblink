@@ -322,6 +322,32 @@ func runGUI() {
 		Windows:          application.WindowsWindow{HiddenOnTaskbar: true},
 	})
 	tray.AttachWindow(connPickerWin).WindowOffset(6)
+	trayPanelWindow = connPickerWin
+	// 面板外点击隐藏的两层兜底：
+	// 1) monitor（tray_panel_darwin.go）：全局+本地鼠标按下监听，点击面板外任意位置
+	//    即隐藏 —— 覆盖 app 未激活时（wails HideOnFocusLost 只挂 windowDidResignKey，
+	//    而 app 未激活时点击别处不会有任何 focus/resign 事件）。
+	// 2) resign active：app 激活后切到其他 app 时收起（此时窗口并不 resign key）。
+	if gos.GOOS == "darwin" {
+		// monitor 安装时机：启动完成即装；若届时窗口尚未创建（pendingRun 异步），
+		// 面板首次显示事件（WindowShow）时兜底再装（ObjC 侧自带幂等）。
+		ensurePanelMonitor := func() {
+			if native := connPickerWin.NativeWindow(); native != nil {
+				installTrayPanelOutsideClickMonitor(native)
+			}
+		}
+		wailsApp.Event.OnApplicationEvent(events.Mac.ApplicationDidFinishLaunching, func(*application.ApplicationEvent) {
+			ensurePanelMonitor()
+		})
+		connPickerWin.OnWindowEvent(events.Common.WindowShow, func(*application.WindowEvent) {
+			ensurePanelMonitor()
+		})
+		wailsApp.Event.OnApplicationEvent(events.Mac.ApplicationDidResignActive, func(*application.ApplicationEvent) {
+			if connPickerWin.IsVisible() {
+				connPickerWin.Hide()
+			}
+		})
+	}
 	if gos.GOOS == "darwin" {
 		tray.SetTemplateIcon(trayTemplateIcon)
 	} else {
