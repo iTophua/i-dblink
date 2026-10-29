@@ -126,6 +126,9 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
           flexDirection: 'column',
           overflow: 'hidden',
           flexShrink: 0,
+          // 面板必须有实心背景：表列表的列头在窄窗口下会溢出到本区域，
+          // 透明底会让两处文字叠在一起（表的列头从面板上方透出来）
+          background: 'var(--background-card)',
         }}
       >
         {!tableName ? (
@@ -157,8 +160,8 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
             <div
               style={{
                 padding: '10px 12px 8px',
-                borderBottom: '1px solid transparent',
-                background: 'transparent',
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--background-card)',
                 flexShrink: 0,
               }}
             >
@@ -214,7 +217,11 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
               }}
             >
               {displayDdl ? (
-                <DDLViewer ddl={displayDdl} style={{ flex: 1, minHeight: 0 }} />
+                <DDLViewer
+                  ddl={displayDdl}
+                  connectionId={connectionId}
+                  style={{ flex: 1, minHeight: 0 }}
+                />
               ) : (
                 <div
                   style={{

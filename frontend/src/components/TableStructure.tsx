@@ -423,7 +423,7 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
             key: 'ddl',
             label: t('common.ddl'),
             children: ddl ? (
-              <DDLViewer ddl={ddl} maxHeight="calc(100vh - 240px)" />
+              <DDLViewer ddl={ddl} connectionId={connectionId} maxHeight="calc(100vh - 240px)" />
             ) : (
               <Empty description={t('common.noData')} />
             ),

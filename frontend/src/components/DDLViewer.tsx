@@ -3,21 +3,57 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { CopyOutlined } from '@ant-design/icons';
 import { Tooltip, App } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { format as formatSql } from 'sql-formatter';
+import { format as formatSql, type SqlLanguage } from 'sql-formatter';
 import { useThemeColors } from '../hooks/useThemeColors';
+import { useAppStore } from '../stores/appStore';
+import type { DatabaseType } from '../types/api';
 
 interface DDLViewerProps {
   ddl: string;
   maxHeight?: string | number;
   /** 外部样式（用于 flex 布局下让组件占满父容器，如 { flex: 1, minHeight: 0 }） */
   style?: React.CSSProperties;
+  /** 连接 ID：用于按数据库方言格式化（方言不对会把 CHARACTER SET 之类拆错行） */
+  connectionId?: string;
 }
 
-export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight, style }) => {
+// sql-formatter 的方言名与我们的 db_type 不同名，且同族数据库共用同一方言
+function dialectOf(dbType: DatabaseType | undefined): SqlLanguage {
+  switch (dbType) {
+    case 'mysql':
+    case 'mariadb':
+      return 'mysql';
+    case 'postgresql':
+    case 'kingbase':
+    case 'highgo':
+    case 'vastbase':
+      return 'postgresql';
+    case 'oracle':
+    case 'dameng':
+      return 'plsql';
+    case 'sqlserver':
+      return 'transactsql';
+    case 'sqlite':
+      return 'sqlite';
+    default:
+      // 未知类型用通用方言兜底
+      return 'sql';
+  }
+}
+
+export const DDLViewer: React.FC<DDLViewerProps> = ({
+  ddl,
+  maxHeight,
+  style,
+  connectionId,
+}) => {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const tc = useThemeColors();
   const containerRef = useRef<HTMLDivElement>(null);
+  const dbType = useAppStore(
+    (state) => state.connections.find((c) => c.id === connectionId)?.db_type
+  );
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(ddl).then(() => {
@@ -50,11 +86,14 @@ export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight, style }) =
     []
   );
 
-  if (!ddl) return null;
-
   const formattedDDL = useMemo(() => {
     try {
-      const formatted = formatSql(ddl, { keywordCase: 'upper', indentStyle: 'standard', linesBetweenQueries: 2 });
+      const formatted = formatSql(ddl, {
+        language: dialectOf(dbType),
+        keywordCase: 'upper',
+        indentStyle: 'standard',
+        linesBetweenQueries: 2,
+      });
       // 后处理：sql-formatter 会在 DDL 表选项的 = 两边加空格（ENGINE = InnoDB），
       // 但 DDL 约定表选项的 = 无空格（ENGINE=InnoDB）。这里只针对表选项关键字去空格。
       return formatted.replace(
@@ -64,7 +103,11 @@ export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight, style }) =
     } catch {
       return ddl;
     }
-  }, [ddl]);
+  }, [ddl, dbType]);
+
+  // 注意：函数内所有 hook 必须在 return 之前调用（此前 ddl 为空时会跳过后面的
+  // useMemo，ddl 由空转非空时 hook 数量变化会触发 React 报错）
+  if (!ddl) return null;
 
   const sqlTheme = {
     'code[class*="language-"]': {
@@ -137,8 +180,10 @@ export const DDLViewer: React.FC<DDLViewerProps> = ({ ddl, maxHeight, style }) =
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          background: 'transparent',
-          padding: '0 4px',
+          // 实心底色：复制按钮浮在代码上方，透明底会和首行文字叠在一起
+          background: tc.backgroundCard,
+          boxShadow: `0 0 0 1px ${borderColor}`,
+          padding: '2px 6px',
           borderRadius: 4,
         }}
       >

@@ -195,7 +195,7 @@ export function DatabaseProperties({ connectionId, databaseName }: DatabasePrope
             {ddlError}
           </Text>
         ) : (
-          <DDLViewer ddl={ddl} maxHeight={200} />
+          <DDLViewer ddl={ddl} connectionId={connectionId} maxHeight={200} />
         )}
       </Card>
     </div>

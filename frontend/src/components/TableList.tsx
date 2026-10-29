@@ -1215,6 +1215,9 @@ function TableListComponent({
               minHeight: 0,
               display: 'flex',
               flexDirection: 'column',
+              // 列头是 grid 且不在横向滚动容器内：窗口较窄时其总宽会超过本列宽，
+              // 不加裁剪会绘制到右侧表详情面板底下（表现为两处文字重叠）
+              overflow: 'hidden',
             }}
           >
             {/* 表头须在滚动容器外：sticky 表头 + contain/contentVisibility 滚动容器

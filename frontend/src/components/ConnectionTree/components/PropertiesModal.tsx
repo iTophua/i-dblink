@@ -133,7 +133,11 @@ export const PropertiesModal: React.FC<PropertiesModalProps> = ({
               <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
                 {t('common.ddl')}
               </Text>
-              <DDLViewer ddl={propertiesContent} maxHeight="60vh" />
+              <DDLViewer
+                ddl={propertiesContent}
+                connectionId={propertiesTarget?.connId}
+                maxHeight="60vh"
+              />
             </div>
           ) : (
             <Text type="secondary">{t('common.noData')}</Text>
