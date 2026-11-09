@@ -77,6 +77,21 @@ func (h *Handler) GetProcessList(w http.ResponseWriter, r *http.Request) {
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
 
+	// 按数据库过滤（方言无关后置过滤：MySQL/PG 系/SQLServer 都填充 Database 字段）。
+	// 从库级入口打开时只看该库的会话；连接级/全局入口不传 database 看全实例。
+	// Oracle/达梦的 v$session 映射不含 schema 字段（补查 schemaname 在达梦上
+	// 兼容性未验证，贸然加列会弄挂整个面板），降级为不过滤返回全部。
+	oracleLike := dbType == "oracle" || dbType == "dameng"
+	if err == nil && !oracleLike && req.Database != nil && *req.Database != "" {
+		filtered := make([]ProcessInfo, 0, len(processes))
+		for _, p := range processes {
+			if p.Database != nil && *p.Database == *req.Database {
+				filtered = append(filtered, p)
+			}
+		}
+		processes = filtered
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		writeJSONError(w, err.Error())

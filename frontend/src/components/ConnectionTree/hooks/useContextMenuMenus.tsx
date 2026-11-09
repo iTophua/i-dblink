@@ -124,6 +124,11 @@ export function useContextMenuMenus(
                 label: t('common.createDatabase'),
                 icon: <DatabaseOutlined />,
               },
+              {
+                key: 'process-list',
+                label: t('common.processList.title'),
+                icon: <DashboardOutlined />,
+              },
               { type: 'divider' },
               {
                 key: 'move',
@@ -238,6 +243,10 @@ export function useContextMenuMenus(
             dbType: connInfo?.db_type,
           });
           dialogSetters.setCreateDatabaseOpen(true);
+        } else if (key === 'process-list') {
+          // 连接级入口：不指定 database，展示整个实例的进程
+          dialogSetters.setProcessListTarget({ connId: conn.id });
+          dialogSetters.setProcessListOpen(true);
         } else if (key === 'connection-properties') {
           dialogSetters.setPropertiesType('connection');
           dialogSetters.setPropertiesTarget({ connId: conn.id, name: conn.name, data: conn });
