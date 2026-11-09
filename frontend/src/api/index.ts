@@ -19,6 +19,7 @@ import {
   DropView,
   ExecuteDDL,
   ExecuteQuery,
+  ExecuteQueryLimited,
   GetAllColumns,
   GetColumns,
   GetConnectionHistory,
@@ -484,17 +485,16 @@ export const api = {
     sql: string,
     database?: string,
     signal?: AbortSignal,
-    opts?: { useTransaction?: boolean }
+    opts?: { useTransaction?: boolean; maxRows?: number }
   ): Promise<QueryResult> {
     // Wails binding 调用本身无法被 abort；用 Promise.race 让 UI 在 abort 时立即响应，
     // 后端查询仍会继续到完成（结果被丢弃）。真正的后端取消需要扩展 binding 接口。
     // useTransaction: false = 绕过活跃事务走自动提交（默认 null = 有事务则进事务）
-    const binding = ExecuteQuery(
-      connectionId,
-      sql,
-      database ?? null,
-      opts?.useTransaction === undefined ? null : opts.useTransaction
-    );
+    // maxRows: 传入时后端扫描到该行数即停（truncated=true），避免整表拉回后才截断
+    const txFlag = opts?.useTransaction === undefined ? null : opts.useTransaction;
+    const binding = opts?.maxRows != null && opts.maxRows > 0
+      ? ExecuteQueryLimited(connectionId, sql, database ?? null, txFlag, opts.maxRows)
+      : ExecuteQuery(connectionId, sql, database ?? null, txFlag);
     if (!signal) {
       const result = await binding;
       return result as unknown as QueryResult;

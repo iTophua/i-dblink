@@ -147,6 +147,8 @@ export interface QueryResult {
   rows_affected?: number;
   error?: string;
   execution_time_ms?: number;
+  /** 后端因 maxRows 提前停止扫描：还有更多行未返回 */
+  truncated?: boolean;
 }
 
 export interface DatabaseObject {

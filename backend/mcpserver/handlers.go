@@ -552,7 +552,7 @@ func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest
 		maxRows = mcpHardMaxRows
 	}
 
-	result, err := s.app.ExecuteQueryLimited(connID, sqlText, database, maxRows)
+	result, err := s.app.ExecuteQueryLimited(connID, sqlText, database, nil, maxRows)
 	if err == nil {
 		truncateCellStrings(result.Rows, mcpCellMaxChars)
 	}

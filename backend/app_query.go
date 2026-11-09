@@ -16,13 +16,14 @@ func (a *App) ExecuteQuery(connectionID string, sql string, database *string, us
 	return a.executeQuery(connectionID, sql, database, useTransaction, nil)
 }
 
-// ExecuteQueryLimited 执行 SQL 查询并限制返回行数（MCP 等自动化调用方使用，
-// 防止无界 SELECT 撑爆调用方上下文）。maxRows <= 0 表示不限制；
-// 达到上限时结果携带 truncated=true 且不再继续扫描。
-func (a *App) ExecuteQueryLimited(connectionID string, sql string, database *string, maxRows int) (models.QueryResult, error) {
+// ExecuteQueryLimited 执行 SQL 查询并限制返回行数（编辑器传设置里的最大行数，
+// 防止 SELECT 把整表拉回本地；MCP 等自动化调用方同样使用）。
+// maxRows <= 0 表示不限制；达到上限时结果携带 truncated=true 且不再继续扫描。
+// useTransaction 语义与 ExecuteQuery 相同（显式 false 绕过活跃事务）。
+func (a *App) ExecuteQueryLimited(connectionID string, sql string, database *string, useTransaction *bool, maxRows int) (models.QueryResult, error) {
 	a.queryStarted()
 	defer a.queryFinished()
-	return a.executeQuery(connectionID, sql, database, nil, &maxRows)
+	return a.executeQuery(connectionID, sql, database, useTransaction, &maxRows)
 }
 
 func (a *App) executeQuery(connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
@@ -49,6 +50,13 @@ func (a *App) executeQuery(connectionID string, sql string, database *string, us
 	var result models.QueryResult
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		return models.QueryResult{}, err
+	}
+	// 查询成功即证明连接可用，刷新存活时间戳（TTL 内后续查询跳过 Ping）；
+	// 出错则标记可疑：若是连接类错误，下一次 ensureConnected 仍走 Ping → 重连自愈
+	if result.Error == "" {
+		a.markConnAlive(connectionID)
+	} else {
+		a.markConnSuspect(connectionID)
 	}
 	errMsg := ""
 	if result.Error != "" {

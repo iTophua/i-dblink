@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"idblink/backend/ai"
@@ -124,6 +125,11 @@ type App struct {
 	connectFlights map[string]*connectFlight
 	connMu         sync.RWMutex // 保护 activeConns / connectFlights 的并发访问
 
+	// 连接活跃性时间戳（键为 connectionID，值为最近一次确认连通的时间）。
+	// ensureConnected 据此跳过 TTL 内的重复 Ping：远端库每次 Ping 都是一个
+	// 完整网络往返，逐查询 Ping 会让小查询的固定开销翻倍（Navicat 不做这事）。
+	connAlive sync.Map
+
 	// 关闭保护：前端上报的数据修改脏状态 + 后端统计的执行中查询数
 	closeGuardDirty atomic.Bool
 	queriesInFlight atomic.Int32
@@ -165,6 +171,34 @@ func (a *App) setActiveConn(connID string, active bool) {
 		delete(a.activeConns, connID)
 	}
 	a.connMu.Unlock()
+	// 断开时同步清掉存活时间戳，重连后从"未验证"状态重新起步
+	if !active {
+		a.connAlive.Delete(connID)
+	} else {
+		a.connAlive.Store(connID, time.Now())
+	}
+}
+
+// connCheckTTL 连接活跃性检查有效期：期内跳过 Ping。
+// Ping 成功或查询成功都算"确认连通"；查询出错则立即失效，保证下一次
+// ensureConnected 仍会 Ping → 失败重连的自愈路径不被 TTL 掩盖。
+const connCheckTTL = 30 * time.Second
+
+func (a *App) markConnAlive(connID string) {
+	a.connAlive.Store(connID, time.Now())
+}
+
+func (a *App) markConnSuspect(connID string) {
+	a.connAlive.Delete(connID)
+}
+
+func (a *App) connRecentlyAlive(connID string) bool {
+	v, ok := a.connAlive.Load(connID)
+	if !ok {
+		return false
+	}
+	t, ok := v.(time.Time)
+	return ok && time.Since(t) < connCheckTTL
 }
 
 func (a *App) snapshotActiveConns() []string {

@@ -780,7 +780,7 @@ export const useDatabase = () => {
       sql: string,
       database?: string,
       signal?: AbortSignal,
-      opts?: { useTransaction?: boolean }
+      opts?: { useTransaction?: boolean; maxRows?: number }
     ) => {
       try {
         setLoading(true);

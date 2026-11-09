@@ -184,19 +184,26 @@ export function useQueryExecution({
               stmt,
               database,
               abortControllerRef.current?.signal,
-              useTx === undefined ? undefined : { useTransaction: useTx }
+              {
+                useTransaction: useTx,
+                // 限行下推到后端：达到行数即停止扫描，不再整表拉回后才截断
+                maxRows,
+              }
             );
             const executionTime = queryResult.execution_time_ms ?? 0;
 
             // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
             const rows = queryResult.rows ?? [];
 
-            const truncated = rows.length > maxRows;
-            if (truncated) {
+            const truncated = rows.length > maxRows || queryResult.truncated === true;
+            if (rows.length > maxRows) {
               hasTruncated = true;
               queryResult.rows = rows.slice(0, maxRows);
             } else {
               queryResult.rows = rows;
+            }
+            if (queryResult.truncated === true) {
+              hasTruncated = true;
             }
 
             if (queryResult.error) {
@@ -284,12 +291,15 @@ export function useQueryExecution({
 
         const useTx = getUseTransactionRef.current?.();
         const txOpts = useTx === undefined ? undefined : { useTransaction: useTx };
+        const maxRows = useSettingsStore.getState().settings.maxResultRows;
+        // 限行下推：后端扫描到 maxRows 即停（truncated=true），不再整表拉回
+        const queryOpts = { ...txOpts, maxRows };
         let queryResult = await executeQueryApi(
           connectionId,
           sqlToExecute,
           database,
           abortControllerRef.current?.signal,
-          txOpts
+          queryOpts
         );
         // 如果查询因连接问题失败，等待 1 秒后重试一次
         if (queryResult.error && isConnectionError(queryResult.error)) {
@@ -300,7 +310,7 @@ export function useQueryExecution({
             sqlToExecute,
             database,
             abortControllerRef.current?.signal,
-            txOpts
+            queryOpts
           );
         }
 
@@ -321,8 +331,10 @@ export function useQueryExecution({
         } else {
           const maxRows = useSettingsStore.getState().settings.maxResultRows;
           const allRows = queryResult.rows ?? [];
-          const truncated = allRows.length > maxRows;
-          const truncatedRows = truncated ? allRows.slice(0, maxRows) : allRows;
+          // 截断可能来自后端（maxRows 下推后停止扫描，truncated=true），
+          // 也保留前端裁剪兜底（防御 maxRows 未生效的路径）
+          const truncated = allRows.length > maxRows || queryResult.truncated === true;
+          const truncatedRows = truncated && allRows.length > maxRows ? allRows.slice(0, maxRows) : allRows;
           const rowCount = truncatedRows.length;
           const affectedRows = queryResult.rows_affected || 0;
 

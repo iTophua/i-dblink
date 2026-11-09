@@ -540,12 +540,18 @@ func (a *App) DeleteGroup(id string) error {
 	return err
 }
 
-// ensureConnected 确保指定连接已建立（含自动 ping + 重连）
+// ensureConnected 确保指定连接已建立（含自动 ping + 重连）。
+// TTL 内刚确认过连通（Ping 成功或查询成功）则跳过 Ping——远端库每个 Ping
+// 都是一次完整网络往返，逐查询 Ping 会让小查询固定开销翻倍。
 func (a *App) ensureConnected(connectionID string) error {
 	if a.isActiveConn(connectionID) {
+		if a.connRecentlyAlive(connectionID) {
+			return nil
+		}
 		// 连接标记为活跃，但需验证实际连通性
 		pingErr := a.dbManager.Ping(connectionID)
 		if pingErr == nil {
+			a.markConnAlive(connectionID)
 			return nil
 		}
 		// Ping 失败，尝试断开后重连
