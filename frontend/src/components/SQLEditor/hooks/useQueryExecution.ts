@@ -274,7 +274,9 @@ export function useQueryExecution({
           setActiveTab('messages');
         }
       } else {
-        // 单语句执行（含连接断开自动重试）
+        // 单语句执行（含连接断开自动重试）。
+        // 与脚本共用批量通道（一条语句的"脚本"）：同一取消令牌机制，
+        // stop 可中断正在执行的长查询（驱动 ctx 关闭查询），而非只弃 UI 等待
         const isConnectionError = (msg: string) => {
           const lower = msg.toLowerCase();
           return lower.includes('connection') || lower.includes('closed') ||
@@ -283,29 +285,36 @@ export function useQueryExecution({
         };
 
         const useTx = getUseTransactionRef.current?.();
-        const txOpts = useTx === undefined ? undefined : { useTransaction: useTx };
         const maxRows = useSettingsStore.getState().settings.maxResultRows;
-        // 限行下推：后端扫描到 maxRows 即停（truncated=true），不再整表拉回
-        const queryOpts = { ...txOpts, maxRows };
-        let queryResult = await executeQueryApi(
-          connectionId,
-          sqlToExecute,
-          database,
-          abortControllerRef.current?.signal,
-          queryOpts
-        );
+        const cancelToken =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `script-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        scriptTokenRef.current = cancelToken;
+        // 限行随语句下推：后端扫描到 maxRows 即停（truncated=true），不再整表拉回
+        const runSingle = async (): Promise<QueryResult> => {
+          const sr = await api.executeScriptBatch(
+            connectionId,
+            [sqlToExecute],
+            database,
+            abortControllerRef.current?.signal,
+            { useTransaction: useTx, maxRows, cancelToken }
+          );
+          // 后端确认被取消：与 UI 侧 abort 走同一条"已停止"路径
+          if (sr.cancelled) {
+            throw new DOMException('Aborted', 'AbortError');
+          }
+          return sr.results[0] ?? { columns: [], rows: [] };
+        };
+
+        let queryResult = await runSingle();
         // 如果查询因连接问题失败，等待 1 秒后重试一次
         if (queryResult.error && isConnectionError(queryResult.error)) {
           message.info(t('common.connectionLostReconnecting', { defaultValue: 'Connection lost, attempting to reconnect...' }));
           await new Promise(resolve => setTimeout(resolve, 1000));
-          queryResult = await executeQueryApi(
-            connectionId,
-            sqlToExecute,
-            database,
-            abortControllerRef.current?.signal,
-            queryOpts
-          );
+          queryResult = await runSingle();
         }
+        scriptTokenRef.current = null;
 
         const executionTime = queryResult.execution_time_ms ?? 0;
         const totalTime = Date.now() - requestStartTimeRef.current;
@@ -322,7 +331,6 @@ export function useQueryExecution({
             duration: executionTime,
           });
         } else {
-          const maxRows = useSettingsStore.getState().settings.maxResultRows;
           const allRows = queryResult.rows ?? [];
           // 截断可能来自后端（maxRows 下推后停止扫描，truncated=true），
           // 也保留前端裁剪兜底（防御 maxRows 未生效的路径）

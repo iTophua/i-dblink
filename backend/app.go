@@ -130,8 +130,10 @@ type App struct {
 	// 完整网络往返，逐查询 Ping 会让小查询的固定开销翻倍（Navicat 不做这事）。
 	connAlive sync.Map
 
-	// 脚本批量执行的取消标记（键为前端生成的 cancelToken）。
-	// 绑定调用无法真正中断，ExecuteScriptBatch 在语句间轮询标记提前停止。
+	// 脚本/单语句执行的取消注册表（键为前端生成的 cancelToken，值为
+	// context.CancelFunc）。绑定调用无法真正中断，CancelScriptBatch 调用
+	// 对应 CancelFunc：正在执行的语句经驱动 ctx 监视器立即中断（rows.Next
+	// 返回 context canceled），未开始的语句在语句间检查跳过。
 	scriptCancels sync.Map
 
 	// 关闭保护：前端上报的数据修改脏状态 + 后端统计的执行中查询数

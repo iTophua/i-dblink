@@ -1,8 +1,12 @@
 package backend
 
 import (
+	"context"
+	"errors"
+	"strings"
 	"time"
 
+	"idblink/backend/api"
 	"idblink/backend/models"
 )
 
@@ -27,7 +31,9 @@ func (a *App) ExecuteQueryLimited(connectionID string, sql string, database *str
 }
 
 func (a *App) executeQuery(connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
-	result, err := a.executeQueryCore(connectionID, sql, database, useTransaction, maxRows)
+	ctx, cancel := context.WithTimeout(context.Background(), api.LongOpTimeout)
+	defer cancel()
+	result, err := a.executeQueryCore(ctx, connectionID, sql, database, useTransaction, maxRows)
 	if err != nil {
 		return result, err
 	}
@@ -42,8 +48,8 @@ func (a *App) executeQuery(connectionID string, sql string, database *string, us
 // executeQueryCore 不写历史的查询执行体（ExecuteScriptBatch 逐语句复用，
 // 整个脚本只记一条历史，避免逐语句 SQLite 提交的 fsync 开销）。
 // 走 ExecuteQueryDirect 直通路径：不经 callHandler 的 JSON 编解码，
-// 大结果集省两次全量序列化。
-func (a *App) executeQueryCore(connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
+// 大结果集省两次全量序列化。ctx 控制本条语句的超时与取消。
+func (a *App) executeQueryCore(ctx context.Context, connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return models.QueryResult{}, err
 	}
@@ -59,7 +65,7 @@ func (a *App) executeQueryCore(connectionID string, sql string, database *string
 		req.Database = *database
 	}
 
-	result := a.handler.ExecuteQueryDirect(&req)
+	result := a.handler.ExecuteQueryDirect(ctx, &req)
 	// 查询成功即证明连接可用，刷新存活时间戳（TTL 内后续查询跳过 Ping）；
 	// 出错则标记可疑：若是连接类错误，下一次 ensureConnected 仍走 Ping → 重连自愈
 	if result.Error == "" {
@@ -70,16 +76,26 @@ func (a *App) executeQueryCore(connectionID string, sql string, database *string
 	return *result, nil
 }
 
-// ExecuteScriptBatch 批量顺序执行整个脚本（编辑器多语句执行）：
+// ExecuteScriptBatch 批量顺序执行整个脚本（编辑器多语句与单语句执行共用）：
 // 一次绑定调用执行全部语句，省去逐语句 IPC 往返与逐语句历史提交。
 // 语句出错不中断（与既有逐条执行语义一致）；逐语句结果在 results 中，
 // 单语句耗时在 results[i].execution_time_ms。
-// cancelToken 非空时，CancelScriptBatch(cancelToken) 置位后在语句间提前停止。
+// cancelToken 非空时注册到取消表：CancelScriptBatch(token) 取消脚本级 ctx，
+// 正在执行的语句经驱动 ctx 监视器立即中断，未开始的语句在语句间跳过，
+// 结果携带 cancelled=true。
 func (a *App) ExecuteScriptBatch(connectionID string, statements []string, database *string, useTransaction *bool, maxRows int, cancelToken string) (models.ScriptResult, error) {
 	a.queryStarted()
 	defer a.queryFinished()
+
+	// 脚本级 ctx：无总超时（语句数 × 单句上限由各语句自行约束），
+	// 取消是唯一的全局停止阀
+	scriptCtx := context.Background()
+	var cancelScript context.CancelFunc
 	if cancelToken != "" {
+		scriptCtx, cancelScript = context.WithCancel(context.Background())
+		defer cancelScript()
 		defer a.scriptCancels.Delete(cancelToken)
+		a.scriptCancels.Store(cancelToken, cancelScript)
 	}
 
 	start := time.Now()
@@ -91,16 +107,25 @@ func (a *App) ExecuteScriptBatch(connectionID string, statements []string, datab
 	allOK := true
 	firstErr := ""
 
+	stopped := false
 	for _, stmt := range statements {
-		if cancelToken != "" {
-			if _, cancelled := a.scriptCancels.Load(cancelToken); cancelled {
-				result.Cancelled = true
-				break
-			}
+		// 语句间取消检查：未开始的语句直接跳过
+		if scriptCtx.Err() != nil {
+			stopped = true
+			break
 		}
-		res, err := a.executeQueryCore(connectionID, stmt, database, useTransaction, maxRowsPtr)
+
+		// 单语句超时从脚本 ctx 派生：取消向上传播、超时各自独立
+		stmtCtx, cancelStmt := context.WithTimeout(scriptCtx, api.LongOpTimeout)
+		res, err := a.executeQueryCore(stmtCtx, connectionID, stmt, database, useTransaction, maxRowsPtr)
+		cancelStmt()
 		if err != nil {
 			res = models.QueryResult{Error: err.Error()}
+		}
+		// 用户取消导致本条中断：不计为失败，也不追加半截结果
+		if isContextCanceled(scriptCtx, res.Error) {
+			stopped = true
+			break
 		}
 		if res.Error != "" {
 			allOK = false
@@ -110,16 +135,36 @@ func (a *App) ExecuteScriptBatch(connectionID string, statements []string, datab
 		}
 		result.Results = append(result.Results, res)
 	}
+	if stopped {
+		result.Cancelled = true
+	}
 
 	result.TotalTimeMs = time.Since(start).Milliseconds()
-	_ = a.storage.RecordHistory(connectionID, "query", allOK, firstErr)
+	_ = a.storage.RecordHistory(connectionID, "query", allOK && !stopped, firstErr)
 	return result, nil
 }
 
-// CancelScriptBatch 请求中止指定 token 的脚本批量执行（语句间生效）。
+// isContextCanceled 判断语句错误是否源于脚本被用户取消
+// （驱动/scan 返回 "context canceled"，可能带包装前缀；需与超时
+// "context deadline exceeded" 区分——只有 Cancel 才算用户主动停止）。
+func isContextCanceled(scriptCtx context.Context, errMsg string) bool {
+	if scriptCtx == nil || !errors.Is(scriptCtx.Err(), context.Canceled) {
+		return false
+	}
+	return errMsg == "context canceled" || strings.HasSuffix(errMsg, ": context canceled")
+}
+
+// CancelScriptBatch 中止指定 token 的脚本执行：
+// 取消脚本级 ctx——正在执行的语句立即中断（驱动 ctx 监视器关闭查询），
+// 未开始的语句在语句间跳过。幂等：token 不存在或已结束时为 no-op。
 func (a *App) CancelScriptBatch(cancelToken string) {
-	if cancelToken != "" {
-		a.scriptCancels.Store(cancelToken, true)
+	if cancelToken == "" {
+		return
+	}
+	if v, ok := a.scriptCancels.LoadAndDelete(cancelToken); ok {
+		if cancel, ok := v.(context.CancelFunc); ok {
+			cancel()
+		}
 	}
 }
 

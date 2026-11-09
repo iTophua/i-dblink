@@ -68,12 +68,11 @@ func (h *Handler) getQueryExecutor(req *models.QueryRequest) (db.Executor, error
 // 完全相同的执行逻辑，但不做请求/响应的 JSON 编解码——大结果集在此前的
 // callHandler 路径要付两次全量序列化（编码→解码→再编码给前端桥）。
 // 错误统一落在 QueryResult.Error（与 HTTP 路径语义一致）。
-func (h *Handler) ExecuteQueryDirect(req *models.QueryRequest) *models.QueryResult {
+// ctx 由调用方传入（超时与取消都由它决定）：rows.Next/Scan 全程感知取消，
+// 驱动层的 ctx 监视器会中断正在执行的语句。
+func (h *Handler) ExecuteQueryDirect(ctx context.Context, req *models.QueryRequest) *models.QueryResult {
 	startTime := time.Now()
 	debugLog("Query(direct): connectionID=%s, database=%s, sql=%s", req.ConnectionID, req.Database, req.SQL)
-
-	ctx, cancel := context.WithTimeout(context.Background(), LongOpTimeout)
-	defer cancel()
 
 	exec, err := h.getQueryExecutor(req)
 	if err != nil {
