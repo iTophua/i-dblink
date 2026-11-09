@@ -15,6 +15,7 @@ import {
   BookOutlined,
   HistoryOutlined,
   DashboardOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
@@ -321,6 +322,14 @@ function MainLayoutComponent() {
         category: t('common.commands'),
         icon: <DashboardOutlined />,
         action: () => dispatch('process-list'),
+      },
+      {
+        id: 'act-server-status',
+        label: t('common.serverStatus.title'),
+        description: connMgr.selectedConnectionId ? activeConnName : undefined,
+        category: t('common.commands'),
+        icon: <CloudServerOutlined />,
+        action: () => dispatch('server-status'),
       },
     ];
 

@@ -210,6 +210,18 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
     window.addEventListener('open-process-list', onOpenProcessList);
     return () => window.removeEventListener('open-process-list', onOpenProcessList);
   }, []);
+
+  // 服务器状态的全局入口（原生菜单/命令面板）
+  useEffect(() => {
+    const onOpenServerStatus = (e: Event) => {
+      const { connId } = (e as CustomEvent<{ connId: string }>).detail;
+      if (!connId) return;
+      dialogsRef.current.setServerStatusTarget({ connId });
+      dialogsRef.current.setServerStatusOpen(true);
+    };
+    window.addEventListener('open-server-status', onOpenServerStatus);
+    return () => window.removeEventListener('open-server-status', onOpenServerStatus);
+  }, []);
   const connectionActions = useConnectionActions(connections, groups, onSaveConnection, onRefreshConnections);
 
   const menus = useContextMenuMenus(
@@ -438,7 +450,10 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
                     background: 'var(--background-card)',
                     boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
                     borderRadius: 6,
-                    overflow: 'hidden',
+                    // 与 .ant-dropdown-menu 一致：限高滚动，避免菜单超出窗口底部被截断
+                    maxHeight: 'calc(100vh - 16px)',
+                    overflowY: 'auto',
+                    overscrollBehavior: 'contain',
                     minWidth: 160,
                   }}
                   className="connection-tree-empty-menu"

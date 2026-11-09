@@ -129,6 +129,11 @@ export function useContextMenuMenus(
                 label: t('common.processList.title'),
                 icon: <DashboardOutlined />,
               },
+              {
+                key: 'server-status',
+                label: t('common.serverStatus.title'),
+                icon: <CloudServerOutlined />,
+              },
               { type: 'divider' },
               {
                 key: 'move',
@@ -247,6 +252,11 @@ export function useContextMenuMenus(
           // 连接级入口：不指定 database，展示整个实例的进程
           dialogSetters.setProcessListTarget({ connId: conn.id });
           dialogSetters.setProcessListOpen(true);
+        } else if (key === 'server-status') {
+          // 服务器状态本就是实例级信息（版本/uptime/连接数/缓存命中率），
+          // 挂在连接级；库级菜单不再提供
+          dialogSetters.setServerStatusTarget({ connId: conn.id });
+          dialogSetters.setServerStatusOpen(true);
         } else if (key === 'connection-properties') {
           dialogSetters.setPropertiesType('connection');
           dialogSetters.setPropertiesTarget({ connId: conn.id, name: conn.name, data: conn });
@@ -360,7 +370,6 @@ export function useContextMenuMenus(
         { key: 'user-management', label: t('common.userPrivileges') },
         { key: 'schema-compare', label: t('common.schemaCompare') },
         { key: 'process-list', label: t('common.processList.title'), icon: <DashboardOutlined /> },
-        { key: 'server-status', label: t('common.serverStatus.title'), icon: <CloudServerOutlined /> },
         { type: 'divider' },
         { key: 'run-sql-file', label: t('common.runSqlFile') },
         { key: 'generate-doc', label: t('common.docGenerator.title') },
@@ -407,9 +416,6 @@ export function useContextMenuMenus(
         } else if (key === 'process-list') {
           dialogSetters.setProcessListTarget({ connId, database: dbName });
           dialogSetters.setProcessListOpen(true);
-        } else if (key === 'server-status') {
-          dialogSetters.setServerStatusTarget({ connId });
-          dialogSetters.setServerStatusOpen(true);
         } else if (key === 'run-sql-file') {
           dialogSetters.setRunSqlTarget({ connId, database: dbName });
           dialogSetters.setRunSqlDialogOpen(true);

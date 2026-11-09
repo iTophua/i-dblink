@@ -419,6 +419,11 @@
   padding: 6px !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
   background: var(--background-card);
+  /* 菜单项多（连接/库级右键菜单 20+ 项）时不再被窗口底部截断：
+     限高 + 内部滚动，定位由 antd 按可用空间自动翻转 */
+  max-height: calc(100vh - 80px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
 }
 
 .ant-dropdown-menu-item {

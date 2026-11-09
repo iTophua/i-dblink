@@ -123,6 +123,7 @@ func createToolsMenu() *application.Menu {
 	m.Add("数据迁移...").OnClick(callback("data-migration"))
 	m.Add("数据同步...").OnClick(callback("data-sync"))
 	m.Add("进程管理...").OnClick(callback("process-list"))
+	m.Add("服务器状态...").OnClick(callback("server-status"))
 	m.AddSeparator()
 	m.Add("备份数据库...").OnClick(callback("backup"))
 	m.Add("恢复数据库...").OnClick(callback("restore"))

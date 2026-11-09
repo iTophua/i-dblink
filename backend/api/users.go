@@ -117,7 +117,10 @@ func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 
 // getMySQLUsers 获取 MySQL 用户列表
 func (h *Handler) getMySQLUsers(ctx context.Context, exec interface{ QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) }) ([]map[string]string, error) {
-	rows, err := exec.QueryContext(ctx, "SELECT User, Host FROM mysql.user")
+	// Super_priv 在 MySQL 5.7+/8.0 与 MariaDB 的 mysql.user 中都存在，
+	// 用它区分 superuser/normal，避免前端"类型"列永远显示 "-"
+	rows, err := exec.QueryContext(ctx,
+		"SELECT User, Host, CASE WHEN Super_priv = 'Y' THEN 'superuser' ELSE 'normal' END AS type FROM mysql.user")
 	if err != nil {
 		return nil, err
 	}
@@ -125,11 +128,11 @@ func (h *Handler) getMySQLUsers(ctx context.Context, exec interface{ QueryContex
 
 	var users []map[string]string
 	for rows.Next() {
-		var user, host string
-		if err := rows.Scan(&user, &host); err != nil {
+		var user, host, userType string
+		if err := rows.Scan(&user, &host, &userType); err != nil {
 			continue
 		}
-		users = append(users, map[string]string{"user": user, "host": host})
+		users = append(users, map[string]string{"user": user, "host": host, "type": userType})
 	}
 	return users, nil
 }

@@ -300,9 +300,10 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
     {
       title: t('common.actions'),
       key: 'action',
-      width: 120,
+      // 120 放不下"查看权限 + 删除"，删除按钮会被裁掉半个
+      width: 210,
       render: (_: unknown, record: UserItem) => (
-        <Space>
+        <Space size={4}>
           <Button type="link" size="small" onClick={() => handleUserSelect(record)}>
             {t('common.viewPrivileges')}
           </Button>
@@ -337,6 +338,9 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
         footer={null}
         transitionName=""
         maskTransitionName=""
+        // 用户列表(300) + 授权表单 + 权限列表(250) 叠加后高于窗口，
+        // body 限高滚动，否则底部权限行会被窗口边缘直接切掉
+        styles={{ body: { maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' } }}
       >
         <Space orientation="vertical" style={{ width: '100%' }} size="large">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

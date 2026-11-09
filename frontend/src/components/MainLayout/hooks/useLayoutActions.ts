@@ -244,6 +244,16 @@ export function useLayoutActions({
             handleConnect(selectedConnectionId);
           }
           break;
+        case 'server-status':
+          // 服务器状态（实例级）：当前选中连接打开面板，经事件转交连接树
+          if (selectedConnectionId) {
+            window.dispatchEvent(
+              new CustomEvent('open-server-status', { detail: { connId: selectedConnectionId } })
+            );
+          } else {
+            message.warning(t('common.pleaseSelectADatabaseConnection'));
+          }
+          break;
         case 'process-list':
           // 进程管理：当前选中连接打开面板（面板挂在连接树上，经事件转交）
           if (selectedConnectionId) {
