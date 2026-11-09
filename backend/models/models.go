@@ -136,6 +136,15 @@ type QueryRequest struct {
 	MaxRows *int `json:"max_rows,omitempty"`
 }
 
+// ScriptResult 脚本批量执行结果（ExecuteScriptBatch）：逐语句结果与整体状态。
+// 语句出错不中断（与编辑器逐条执行的既有语义一致），错误在对应结果的 error 字段。
+type ScriptResult struct {
+	Results   []QueryResult `json:"results"`
+	Cancelled bool          `json:"cancelled,omitempty"`
+	// TotalTimeMs 整个脚本耗时；单语句耗时在各自 results[i].execution_time_ms
+	TotalTimeMs int64 `json:"total_time_ms,omitempty"`
+}
+
 // MetadataRequest 元数据请求
 type MetadataRequest struct {
 	ConnectionID string  `json:"connection_id"`

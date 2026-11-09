@@ -15,7 +15,10 @@ type Pool struct {
 
 // NewPool 创建新的 SQLite 连接池
 func NewPool(dbPath string) (*Pool, error) {
-	uri := fmt.Sprintf("file:%s?mode=rwc&cache=shared", dbPath)
+	// synchronous 是 per-connection PRAGMA，用 DSN 参数保证池里每个连接都生效；
+	// WAL 下 NORMAL 不做逐提交 fsync（掉电最多丢最后几条历史，库不损坏）。
+	// 查询历史逐语句写入，FULL 的每次提交 fsync 会让脚本执行平添毫秒级/条开销。
+	uri := fmt.Sprintf("file:%s?mode=rwc&cache=shared&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)", dbPath)
 
 	db, err := sql.Open("sqlite", uri)
 	if err != nil {
@@ -28,10 +31,6 @@ func NewPool(dbPath string) (*Pool, error) {
 
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping sqlite: %w", err)
-	}
-
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
 	return &Pool{db: db}, nil

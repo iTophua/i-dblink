@@ -2,6 +2,7 @@ package backend
 
 import (
 	"encoding/json"
+	"time"
 
 	"idblink/backend/models"
 )
@@ -27,6 +28,21 @@ func (a *App) ExecuteQueryLimited(connectionID string, sql string, database *str
 }
 
 func (a *App) executeQuery(connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
+	result, err := a.executeQueryCore(connectionID, sql, database, useTransaction, maxRows)
+	if err != nil {
+		return result, err
+	}
+	errMsg := ""
+	if result.Error != "" {
+		errMsg = result.Error
+	}
+	_ = a.storage.RecordHistory(connectionID, "query", result.Error == "", errMsg)
+	return result, nil
+}
+
+// executeQueryCore 不写历史的查询执行体（ExecuteScriptBatch 逐语句复用，
+// 整个脚本只记一条历史，避免逐语句 SQLite 提交的 fsync 开销）。
+func (a *App) executeQueryCore(connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return models.QueryResult{}, err
 	}
@@ -58,12 +74,60 @@ func (a *App) executeQuery(connectionID string, sql string, database *string, us
 	} else {
 		a.markConnSuspect(connectionID)
 	}
-	errMsg := ""
-	if result.Error != "" {
-		errMsg = result.Error
-	}
-	_ = a.storage.RecordHistory(connectionID, "query", result.Error == "", errMsg)
 	return result, nil
+}
+
+// ExecuteScriptBatch 批量顺序执行整个脚本（编辑器多语句执行）：
+// 一次绑定调用执行全部语句，省去逐语句 IPC 往返与逐语句历史提交。
+// 语句出错不中断（与既有逐条执行语义一致）；逐语句结果在 results 中，
+// 单语句耗时在 results[i].execution_time_ms。
+// cancelToken 非空时，CancelScriptBatch(cancelToken) 置位后在语句间提前停止。
+func (a *App) ExecuteScriptBatch(connectionID string, statements []string, database *string, useTransaction *bool, maxRows int, cancelToken string) (models.ScriptResult, error) {
+	a.queryStarted()
+	defer a.queryFinished()
+	if cancelToken != "" {
+		defer a.scriptCancels.Delete(cancelToken)
+	}
+
+	start := time.Now()
+	result := models.ScriptResult{Results: make([]models.QueryResult, 0, len(statements))}
+	var maxRowsPtr *int
+	if maxRows > 0 {
+		maxRowsPtr = &maxRows
+	}
+	allOK := true
+	firstErr := ""
+
+	for _, stmt := range statements {
+		if cancelToken != "" {
+			if _, cancelled := a.scriptCancels.Load(cancelToken); cancelled {
+				result.Cancelled = true
+				break
+			}
+		}
+		res, err := a.executeQueryCore(connectionID, stmt, database, useTransaction, maxRowsPtr)
+		if err != nil {
+			res = models.QueryResult{Error: err.Error()}
+		}
+		if res.Error != "" {
+			allOK = false
+			if firstErr == "" {
+				firstErr = res.Error
+			}
+		}
+		result.Results = append(result.Results, res)
+	}
+
+	result.TotalTimeMs = time.Since(start).Milliseconds()
+	_ = a.storage.RecordHistory(connectionID, "query", allOK, firstErr)
+	return result, nil
+}
+
+// CancelScriptBatch 请求中止指定 token 的脚本批量执行（语句间生效）。
+func (a *App) CancelScriptBatch(cancelToken string) {
+	if cancelToken != "" {
+		a.scriptCancels.Store(cancelToken, true)
+	}
 }
 
 // ExecuteDDL 执行 DDL 语句

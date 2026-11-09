@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../../hooks/useApi';
+import { api } from '../../../api';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { splitSqlStatements } from '../../../utils/sqlUtils';
 import { getDialect } from '../../../utils/sqlDialects';
@@ -82,6 +83,8 @@ export function useQueryExecution({
 
   const execTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // 当前脚本批量执行的取消令牌：stop 时通知后端在语句间停止剩余语句
+  const scriptTokenRef = useRef<string | null>(null);
   const requestStartTimeRef = useRef(0);
   const returnedRowsRef = useRef(0);
 
@@ -171,93 +174,83 @@ export function useQueryExecution({
         const maxRows = useSettingsStore.getState().settings.maxResultRows;
         let hasTruncated = false;
 
-        // 顺序执行：脚本语句间可能有依赖（临时过程 create→call→drop、先建表后插入等），
-        // 并发批次会打乱依赖顺序；逐条 await 保证与 mysql 客户端一致的执行语义
-        for (let i = 0; i < statements.length; i++) {
-          if (abortControllerRef.current?.signal.aborted) break;
+        // 批量执行：整个脚本一次绑定调用，后端顺序逐条执行（语句间依赖保序），
+        // 省去逐语句 IPC 往返/前端渲染churn/逐条历史提交；stop 可在语句间真正停止
+        const cancelToken =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `script-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        scriptTokenRef.current = cancelToken;
+        const useTx = getUseTransactionRef.current?.();
+        const scriptResult = await api.executeScriptBatch(
+          connectionId,
+          statements,
+          database,
+          abortControllerRef.current?.signal,
+          { useTransaction: useTx, maxRows, cancelToken }
+        );
+        scriptTokenRef.current = null;
 
+        scriptResult.results.forEach((queryResult, i) => {
           const stmt = statements[i];
-          try {
-            const useTx = getUseTransactionRef.current?.();
-            const queryResult = await executeQueryApi(
-              connectionId,
-              stmt,
-              database,
-              abortControllerRef.current?.signal,
-              {
-                useTransaction: useTx,
-                // 限行下推到后端：达到行数即停止扫描，不再整表拉回后才截断
-                maxRows,
-              }
-            );
-            const executionTime = queryResult.execution_time_ms ?? 0;
+          const executionTime = queryResult.execution_time_ms ?? 0;
 
-            // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
-            const rows = queryResult.rows ?? [];
+          // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
+          const rows = queryResult.rows ?? [];
+          const truncated = rows.length > maxRows || queryResult.truncated === true;
+          if (rows.length > maxRows) {
+            queryResult.rows = rows.slice(0, maxRows);
+          } else {
+            queryResult.rows = rows;
+          }
+          if (queryResult.truncated === true) {
+            hasTruncated = true;
+          }
 
-            const truncated = rows.length > maxRows || queryResult.truncated === true;
-            if (rows.length > maxRows) {
-              hasTruncated = true;
-              queryResult.rows = rows.slice(0, maxRows);
-            } else {
-              queryResult.rows = rows;
-            }
-            if (queryResult.truncated === true) {
-              hasTruncated = true;
-            }
-
-            if (queryResult.error) {
-              msgs.push(t('common.statementFailed', { index: i + 1, error: queryResult.error }));
-              totalErrors++;
-              highlightErrorRef.current(queryResult.error);
-              window.__sqlHistoryApi?.addHistory({
-                sql: stmt,
-                success: false,
-                duration: executionTime,
-              });
-            } else {
-              const rowCount = queryResult.rows.length;
-              const affectedRows = queryResult.rows_affected || 0;
-              if (rowCount > 0) {
-                let msg = t('common.statementSuccess', {
-                  index: i + 1,
-                  count: rowCount,
-                  time: executionTime,
-                });
-                if (truncated) msg += t('common.truncatedTo', { count: maxRows });
-                msgs.push(msg);
-              } else if (affectedRows > 0) {
-                msgs.push(
-                  t('common.statementAffected', {
-                    index: i + 1,
-                    count: affectedRows,
-                    time: executionTime,
-                  })
-                );
-              } else {
-                msgs.push(t('common.statementExecuted', { index: i + 1, time: executionTime }));
-              }
-              totalSuccess++;
-              window.__sqlHistoryApi?.addHistory({
-                sql: stmt,
-                success: true,
-                duration: executionTime,
-                rowCount: rowCount > 0 ? rowCount : affectedRows,
-              });
-            }
-            multiResults.push({ ...queryResult, executionTime });
-          } catch (error: unknown) {
-            // 用户主动停止查询时静默跳过（不计为错误）
-            if (error instanceof DOMException && error.name === 'AbortError') {
-              continue;
-            }
-            msgs.push(t('common.statementFailed', { index: i + 1, error: getErrorMessage(error) }));
+          if (queryResult.error) {
+            msgs.push(t('common.statementFailed', { index: i + 1, error: queryResult.error }));
             totalErrors++;
+            highlightErrorRef.current(queryResult.error);
             window.__sqlHistoryApi?.addHistory({
               sql: stmt,
               success: false,
+              duration: executionTime,
+            });
+          } else {
+            const rowCount = queryResult.rows.length;
+            const affectedRows = queryResult.rows_affected || 0;
+            if (rowCount > 0) {
+              let msg = t('common.statementSuccess', {
+                index: i + 1,
+                count: rowCount,
+                time: executionTime,
+              });
+              if (truncated) msg += t('common.truncatedTo', { count: maxRows });
+              msgs.push(msg);
+            } else if (affectedRows > 0) {
+              msgs.push(
+                t('common.statementAffected', {
+                  index: i + 1,
+                  count: affectedRows,
+                  time: executionTime,
+                })
+              );
+            } else {
+              msgs.push(t('common.statementExecuted', { index: i + 1, time: executionTime }));
+            }
+            totalSuccess++;
+            window.__sqlHistoryApi?.addHistory({
+              sql: stmt,
+              success: true,
+              duration: executionTime,
+              rowCount: rowCount > 0 ? rowCount : affectedRows,
             });
           }
+          multiResults.push({ ...queryResult, executionTime });
+        });
+
+        if (scriptResult.cancelled) {
+          msgs.push('⚠ ' + t('common.queryStopped'));
         }
 
         if (hasTruncated) {
@@ -399,6 +392,12 @@ export function useQueryExecution({
   const stopQuery = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      // 脚本批量执行：通知后端停止剩余语句（绑定调用本身无法中断，
+      // 后端在语句间检查令牌提前返回已完成的部分）
+      if (scriptTokenRef.current) {
+        api.cancelScriptBatch(scriptTokenRef.current);
+        scriptTokenRef.current = null;
+      }
       setLoading(false);
       setMessages((prev) => [...prev, '⚠ ' + t('common.queryStopped')]);
       message.warning(t('common.queryStopped'));
@@ -406,7 +405,7 @@ export function useQueryExecution({
     } else {
       message.info(t('common.noQueryExecuting'));
     }
-  }, [onQueryStatusChange]);
+  }, [onQueryStatusChange, t]);
 
   const showExplainPlan = useCallback(async () => {
     if (!sql.trim()) {

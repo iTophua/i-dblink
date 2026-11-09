@@ -26,6 +26,8 @@ export const mockGetProcedureBody = vi.fn().mockResolvedValue('');
 export const mockGetFunctionBody = vi.fn().mockResolvedValue('');
 export const mockExecuteQuery = vi.fn().mockResolvedValue({ columns: [], rows: [] });
 export const mockExecuteQueryLimited = vi.fn().mockResolvedValue({ columns: [], rows: [] });
+export const mockExecuteScriptBatch = vi.fn().mockResolvedValue({ results: [] });
+export const mockCancelScriptBatch = vi.fn().mockResolvedValue(undefined);
 export const mockExecuteDDL = vi.fn().mockResolvedValue(undefined);
 export const mockTruncateTable = vi.fn().mockResolvedValue(undefined);
 export const mockDropTable = vi.fn().mockResolvedValue(undefined);
@@ -88,6 +90,8 @@ vi.mock('../../bindings/idblink/backend/app', () => ({
   GetFunctionBody: mockGetFunctionBody,
   ExecuteQuery: mockExecuteQuery,
   ExecuteQueryLimited: mockExecuteQueryLimited,
+  ExecuteScriptBatch: mockExecuteScriptBatch,
+  CancelScriptBatch: mockCancelScriptBatch,
   ExecuteDDL: mockExecuteDDL,
   TruncateTable: mockTruncateTable,
   DropTable: mockDropTable,

@@ -151,6 +151,13 @@ export interface QueryResult {
   truncated?: boolean;
 }
 
+/** 脚本批量执行结果（ExecuteScriptBatch）：逐语句结果，错误在对应条目的 error */
+export interface ScriptResult {
+  results: QueryResult[];
+  cancelled?: boolean;
+  total_time_ms?: number;
+}
+
 export interface DatabaseObject {
   type: 'table' | 'view' | 'procedure' | 'function' | 'trigger';
   name: string;

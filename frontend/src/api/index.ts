@@ -20,6 +20,8 @@ import {
   ExecuteDDL,
   ExecuteQuery,
   ExecuteQueryLimited,
+  ExecuteScriptBatch,
+  CancelScriptBatch,
   GetAllColumns,
   GetColumns,
   GetConnectionHistory,
@@ -95,6 +97,7 @@ import type {
   IndexInfo,
   ForeignKeyInfo,
   QueryResult,
+  ScriptResult,
 } from '../types/api';
 
 /**
@@ -516,6 +519,56 @@ export const api = {
       // （binding 仍会 resolve/reject，但结果已无意义）
       binding.catch(() => {});
       throw e;
+    }
+  },
+
+  /**
+   * 批量顺序执行整个脚本：一次绑定调用执行全部语句。
+   * 替代前端逐语句循环（逐条各付一次 IPC 往返 + 前端渲染churn + 逐条历史提交）。
+   * 语句出错不中断；cancelToken 配合 cancelScriptBatch 在语句间真正停止后端执行。
+   */
+  async executeScriptBatch(
+    connectionId: string,
+    statements: string[],
+    database?: string,
+    signal?: AbortSignal,
+    opts?: { useTransaction?: boolean; maxRows?: number; cancelToken?: string }
+  ): Promise<ScriptResult> {
+    const txFlag = opts?.useTransaction === undefined ? null : opts.useTransaction;
+    const binding = ExecuteScriptBatch(
+      connectionId,
+      statements,
+      database ?? null,
+      txFlag,
+      opts?.maxRows ?? 0,
+      opts?.cancelToken ?? ''
+    );
+    if (!signal) {
+      const result = await binding;
+      return result as unknown as ScriptResult;
+    }
+    const abortPromise = new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      signal.addEventListener('abort', () => {
+        reject(new DOMException('Aborted', 'AbortError'));
+      }, { once: true });
+    });
+    try {
+      const result = await Promise.race([binding, abortPromise]);
+      return result as unknown as ScriptResult;
+    } catch (e) {
+      binding.catch(() => {});
+      throw e;
+    }
+  },
+
+  /** 请求中止指定 token 的脚本批量执行（后端在语句间生效） */
+  cancelScriptBatch(cancelToken: string): void {
+    if (cancelToken) {
+      CancelScriptBatch(cancelToken).catch(() => {});
     }
   },
 

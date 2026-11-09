@@ -15,7 +15,8 @@ import (
 	"idblink/backend/models"
 )
 
-// isDMLStatement 判断 SQL 是否为 INSERT/UPDATE/DELETE/MERGE（无结果集，需用 ExecContext 获取 RowsAffected）
+// isDMLStatement 判断 SQL 是否为无结果集的写语句（需用 ExecContext 获取 RowsAffected）。
+// REPLACE 是 MySQL 的 INSERT 变体，同样只有 Ok 包（走 QueryContext 拿不到影响行数）。
 func isDMLStatement(sqlStr string) bool {
 	s := strings.TrimSpace(sqlStr)
 	// 去掉前导注释和括号
@@ -35,7 +36,7 @@ func isDMLStatement(sqlStr string) bool {
 		return false
 	}
 	switch strings.ToUpper(fields[0]) {
-	case "INSERT", "UPDATE", "DELETE", "MERGE":
+	case "INSERT", "REPLACE", "UPDATE", "DELETE", "MERGE":
 		return true
 	}
 	return false
