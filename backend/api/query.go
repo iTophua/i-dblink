@@ -50,6 +50,11 @@ func debugLog(format string, args ...interface{}) {
 	}
 }
 
+// LongOpTimeout 查询/DDL 等长操作的服务端上限。此前 60s 会让大查询、
+// 大 ALTER 直接超时失败（Navicat 无此限制）；30 分钟覆盖真实 DBA 工作负载，
+// 且与 MySQL 驱动的 readTimeout 对齐兜底死连接。
+const LongOpTimeout = 30 * time.Minute
+
 // getQueryExecutor 按 use_transaction 路由执行器：
 // 显式 false = 绕过活跃事务（自动提交路径），nil/true = 默认行为（有活跃事务则进事务）
 func (h *Handler) getQueryExecutor(req *models.QueryRequest) (db.Executor, error) {
@@ -57,6 +62,32 @@ func (h *Handler) getQueryExecutor(req *models.QueryRequest) (db.Executor, error
 		return h.mgr.GetExecutorNoTx(req.ConnectionID, req.Database)
 	}
 	return h.mgr.GetExecutor(req.ConnectionID, req.Database)
+}
+
+// ExecuteQueryDirect 查询直通入口（Wails 绑定路径）：复用与 HTTP handler
+// 完全相同的执行逻辑，但不做请求/响应的 JSON 编解码——大结果集在此前的
+// callHandler 路径要付两次全量序列化（编码→解码→再编码给前端桥）。
+// 错误统一落在 QueryResult.Error（与 HTTP 路径语义一致）。
+func (h *Handler) ExecuteQueryDirect(req *models.QueryRequest) *models.QueryResult {
+	startTime := time.Now()
+	debugLog("Query(direct): connectionID=%s, database=%s, sql=%s", req.ConnectionID, req.Database, req.SQL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), LongOpTimeout)
+	defer cancel()
+
+	exec, err := h.getQueryExecutor(req)
+	if err != nil {
+		return &models.QueryResult{Error: err.Error(), ExecutionTimeMs: time.Since(startTime).Milliseconds()}
+	}
+
+	result, err := executeSQL(ctx, exec, req.SQL, req.MaxRows)
+	executionTimeMs := time.Since(startTime).Milliseconds()
+	if err != nil {
+		debugLog("ExecuteQueryDirect error: %v", err)
+		return &models.QueryResult{Error: err.Error(), ExecutionTimeMs: executionTimeMs}
+	}
+	result.ExecutionTimeMs = executionTimeMs
+	return result
 }
 
 // Query 执行 SQL 查询
@@ -71,7 +102,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 
 	startTime := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), LongOpTimeout)
 	defer cancel()
 
 	exec, err := h.getQueryExecutor(&req)

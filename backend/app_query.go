@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"encoding/json"
 	"time"
 
 	"idblink/backend/models"
@@ -42,6 +41,8 @@ func (a *App) executeQuery(connectionID string, sql string, database *string, us
 
 // executeQueryCore 不写历史的查询执行体（ExecuteScriptBatch 逐语句复用，
 // 整个脚本只记一条历史，避免逐语句 SQLite 提交的 fsync 开销）。
+// 走 ExecuteQueryDirect 直通路径：不经 callHandler 的 JSON 编解码，
+// 大结果集省两次全量序列化。
 func (a *App) executeQueryCore(connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return models.QueryResult{}, err
@@ -58,15 +59,7 @@ func (a *App) executeQueryCore(connectionID string, sql string, database *string
 		req.Database = *database
 	}
 
-	respBytes, err := callHandler(a.handler.Query, req)
-	if err != nil {
-		return models.QueryResult{}, err
-	}
-
-	var result models.QueryResult
-	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return models.QueryResult{}, err
-	}
+	result := a.handler.ExecuteQueryDirect(&req)
 	// 查询成功即证明连接可用，刷新存活时间戳（TTL 内后续查询跳过 Ping）；
 	// 出错则标记可疑：若是连接类错误，下一次 ensureConnected 仍走 Ping → 重连自愈
 	if result.Error == "" {
@@ -74,7 +67,7 @@ func (a *App) executeQueryCore(connectionID string, sql string, database *string
 	} else {
 		a.markConnSuspect(connectionID)
 	}
-	return result, nil
+	return *result, nil
 }
 
 // ExecuteScriptBatch 批量顺序执行整个脚本（编辑器多语句执行）：

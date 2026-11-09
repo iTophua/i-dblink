@@ -22,9 +22,15 @@ func openMySQL(args ConnectArgs) (*sql.DB, error) {
 		password = password[:atIdx] + "%40" + password[atIdx+1:]
 	}
 
-	// timeout/readTimeout/writeTimeout：拨号与握手兜底超时，
-	// 网络不通（TCP SYN 无响应）时避免驱动层等 OS 级重试（可达数分钟）
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=true&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
+	// 超时语义：
+	//   timeout=10s    拨号与握手兜底（网络不通时不等 OS 级重试，可达数分钟）
+	//   readTimeout=30m 每次网络读的截止。查询执行期间服务器不回包，大查询/
+	//                   大 ALTER 服务端跑几分钟属正常——此前 30s 会把这类语句
+	//                   直接判死（i/o timeout），与上层 30 分钟 LongOpTimeout 对齐
+	//   writeTimeout=10m 上传超大 SQL 文本（整库脚本）的余量
+	// parseTime=false：时间列以原始字节直通 convertValue 的字符串路径，
+	// 免去驱动逐值 字符串→time.Time(含时区换算)→再 Format 回字符串 的双转换
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&timeout=10s&readTimeout=30m&writeTimeout=10m",
 		args.Username,
 		password,
 		args.Host,
