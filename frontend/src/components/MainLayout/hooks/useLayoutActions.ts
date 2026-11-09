@@ -244,6 +244,18 @@ export function useLayoutActions({
             handleConnect(selectedConnectionId);
           }
           break;
+        case 'process-list':
+          // 进程管理：当前选中连接打开面板（面板挂在连接树上，经事件转交）
+          if (selectedConnectionId) {
+            window.dispatchEvent(
+              new CustomEvent('open-process-list', {
+                detail: { connId: selectedConnectionId, database: selectedDatabase },
+              })
+            );
+          } else {
+            message.warning(t('common.pleaseSelectADatabaseConnection'));
+          }
+          break;
         case 'disconnect':
           if (selectedConnectionId) {
             handleDisconnect(selectedConnectionId);

@@ -195,6 +195,21 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
 
   // ── Hooks ──
   const dialogs = useTreeDialogs(onSaveGroup);
+  // 进程管理全局入口监听用：始终指向最新 dialogs（setter 本身是稳定 useState 引用）
+  const dialogsRef = useRef(dialogs);
+  useEffect(() => { dialogsRef.current = dialogs; }, [dialogs]);
+
+  // 进程管理的全局入口（原生菜单/命令面板）：对指定连接打开进程面板
+  useEffect(() => {
+    const onOpenProcessList = (e: Event) => {
+      const { connId, database } = (e as CustomEvent<{ connId: string; database?: string }>).detail;
+      if (!connId) return;
+      dialogsRef.current.setProcessListTarget({ connId, database });
+      dialogsRef.current.setProcessListOpen(true);
+    };
+    window.addEventListener('open-process-list', onOpenProcessList);
+    return () => window.removeEventListener('open-process-list', onOpenProcessList);
+  }, []);
   const connectionActions = useConnectionActions(connections, groups, onSaveConnection, onRefreshConnections);
 
   const menus = useContextMenuMenus(

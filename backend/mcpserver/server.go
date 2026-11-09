@@ -36,6 +36,7 @@ Conventions:
 - connection_id accepts a unique host/name fragment like "11.114" — no need to call list_connections first; ambiguous refs return candidate IDs in the error, retry with one.
 - execute_query is read-only, returns at most max_rows rows (default 100, max 1000); truncated=true means more rows exist — page with LIMIT/OFFSET. String cells over 300 chars are truncated.
 - Writes: execute_update for INSERT/UPDATE/DELETE, execute_ddl for CREATE/DROP/ALTER. Confirm with the user before destructive statements.
+- Slow/stuck queries: list_processes to inspect live sessions, kill_process to terminate one (human confirmation dialog by default; force only with explicit user approval).
 - Reuse saved connections; create new ones only when asked.`
 
 // New 创建 MCP Server，注册所有 tool。
@@ -217,6 +218,7 @@ func (s *Server) registerTools() {
 	s.registerQueryTools()
 	s.registerMutationTools()
 	s.registerMetadataTools()
+	s.registerProcessTools()
 }
 
 // ==================== 连接管理 tools ====================
@@ -571,5 +573,50 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleGetDatabaseDDL,
+	)
+}
+
+// ==================== 进程管理 tools ====================
+
+func (s *Server) registerProcessTools() {
+	// list_processes — 只读，无门禁
+	s.mcp.AddTool(
+		mcp.NewTool("list_processes",
+			mcp.WithDescription("List active database sessions/processes (equivalent to SHOW PROCESSLIST). "+
+				"Use it to find slow or stuck queries: look at time/duration, state, and the info column (running SQL). "+
+				"Use kill_process to terminate one after human confirmation."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema (optional, for servers that scope the process list)")),
+		),
+		s.handleListProcesses,
+	)
+
+	// kill_process — 高危，默认 elicitation 协议级人工确认
+	s.mcp.AddTool(
+		mcp.NewTool("kill_process",
+			mcp.WithDescription("Terminate a database process/session (KILL / pg_terminate_backend / "+
+				"ALTER SYSTEM KILL SESSION). DANGEROUS and irreversible. "+
+				"By default a human-confirmation dialog (elicitation) is shown to the user with the process details; "+
+				"the kill only runs if the user approves — you cannot answer it yourself. "+
+				"If the client does not support elicitation the call fails with guidance; only retry with force=true "+
+				"after the user explicitly approved in the conversation. "+
+				"Always call list_processes first to show the user what you intend to kill."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("process_id", mcp.Required(),
+				mcp.Description("Process/session ID (numeric), from list_processes")),
+			mcp.WithString("serial",
+				mcp.Description("SERIAL# of the session — required for Oracle/Dameng")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema (optional)")),
+			mcp.WithBoolean("force",
+				mcp.Description("Skip the human-confirmation dialog and execute immediately. "+
+					"Only use after the user explicitly approved in the conversation.")),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+		),
+		s.handleKillProcess,
 	)
 }

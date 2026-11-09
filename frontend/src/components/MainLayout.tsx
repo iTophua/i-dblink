@@ -14,6 +14,7 @@ import {
   EyeOutlined,
   BookOutlined,
   HistoryOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
@@ -275,8 +276,13 @@ function MainLayoutComponent() {
   }, []);
 
   const paletteCommands = useMemo((): Command[] => {
-    const dispatch = (action: string) =>
+    // 显式 void：dispatchEvent 返回 boolean，泄漏到 action 的返回类型会
+    // 与 Command['action'] 的 void | Promise<void> 联合类型冲突
+    const dispatch = (action: string): void => {
       window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
+    };
+    const activeConnName =
+      connMgr.connections.find((c) => c.id === connMgr.selectedConnectionId)?.name || '';
     const cmds: Command[] = [
       {
         id: 'act-new-sql',
@@ -305,6 +311,16 @@ function MainLayoutComponent() {
         category: t('common.commands'),
         icon: <SettingOutlined />,
         action: () => dispatch('options'),
+      },
+      {
+        id: 'act-process-list',
+        label: t('common.processList.title'),
+        description: connMgr.selectedConnectionId
+          ? `${t('common.processList.title')} · ${activeConnName}`
+          : undefined,
+        category: t('common.commands'),
+        icon: <DashboardOutlined />,
+        action: () => dispatch('process-list'),
       },
     ];
 

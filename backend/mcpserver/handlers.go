@@ -2,13 +2,16 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 
 	"idblink/backend"
+	"idblink/backend/api"
 	"idblink/backend/models"
 )
 
@@ -79,6 +82,16 @@ func argIntPtr(args map[string]any, key string) *int {
 func argInt(args map[string]any, key string, def int) int {
 	if p := argIntPtr(args, key); p != nil {
 		return *p
+	}
+	return def
+}
+
+// argBool 提取布尔参数，不存在返回 default 值。
+func argBool(args map[string]any, key string, def bool) bool {
+	if v, ok := args[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
 	}
 	return def
 }
@@ -741,4 +754,197 @@ func (s *Server) handleGetDatabaseDDL(ctx context.Context, req mcp.CallToolReque
 
 	ddl, err := s.app.GetDatabaseDDL(connID, dbName)
 	return jsonResult(map[string]any{"ddl": ddl}, err, "failed to get database DDL")
+}
+
+// ==================== 进程管理 handlers ====================
+//
+// kill 是不可逆的高危操作，门禁分两层：
+//  1. 默认走 MCP elicitation（协议级人工确认）：server 反向请求 MCP 客户端
+//     弹原生确认框，人在框上点确认/拒绝——模型无法代替应答（请求/响应通道
+//     与工具调用隔离），没有人点确认 kill 就不会执行。
+//  2. force=true 跳过弹窗直接执行：留给不支持 elicitation 的客户端或用户
+//     已在对话中明确同意的场景。注意 force 是模型可自行传递的参数，
+//     它是"对话级"门禁而非"协议级"人工确认。
+
+// handleListProcesses 列出数据库服务器的活动进程/会话（只读，无门禁）。
+func (s *Server) handleListProcesses(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	if connID == "" {
+		return mcp.NewToolResultError("connection_id is required"), nil
+	}
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	processes, err := s.app.GetProcessList(connID, database)
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to list processes", err), nil
+	}
+	if processes == nil {
+		processes = []api.ProcessInfo{}
+	}
+	return mcp.NewToolResultJSON(map[string]any{"processes": processes})
+}
+
+// handleKillProcess 终止数据库进程/会话（高危，默认 elicitation 人工确认）。
+func (s *Server) handleKillProcess(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	processID := argStr(args, "process_id")
+	serial := argStr(args, "serial")
+	force := argBool(args, "force", false)
+	if connID == "" || processID == "" {
+		return mcp.NewToolResultError("connection_id and process_id are required"), nil
+	}
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	// 与 GUI 同规则：ID/serial 必须为数字（防注入）
+	if _, err := strconv.Atoi(processID); err != nil {
+		return mcp.NewToolResultError("invalid process_id: must be numeric"), nil
+	}
+	if serial != "" {
+		if _, err := strconv.Atoi(serial); err != nil {
+			return mcp.NewToolResultError("invalid serial: must be numeric"), nil
+		}
+	}
+
+	// 先查目标进程：给人看清楚要杀什么，也顺带确认进程仍存在
+	processes, err := s.app.GetProcessList(connID, database)
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to fetch process list before kill", err), nil
+	}
+	var target *api.ProcessInfo
+	for i := range processes {
+		if processes[i].ID == processID {
+			target = &processes[i]
+			break
+		}
+	}
+	if target == nil {
+		return mcp.NewToolResultError(
+			fmt.Sprintf("process %s not found (it may have already ended). Use list_processes to re-check.", processID)), nil
+	}
+
+	// 自杀保护：不允许 kill 掉本 sidecar 用来执行操作的连接本身
+	if own := s.ownConnectionID(connID, database); own != "" && own == processID {
+		return mcp.NewToolResultError(
+			"refusing to kill process " + processID + ": it is the connection this tool is using"), nil
+	}
+
+	killSummary := fmt.Sprintf("id=%s user=%s host=%s db=%s command=%s state=%s time=%ss",
+		target.ID, target.User, strOr(target.Host, "-"), strOr(target.Database, "-"),
+		strOr(target.Command, "-"), strOr(target.State, "-"), strOr(target.Time, "?"))
+	if target.Info != nil && *target.Info != "" {
+		info := *target.Info
+		if r := []rune(info); len(r) > 200 {
+			info = string(r[:200]) + "…"
+		}
+		killSummary += "\nSQL: " + info
+	}
+
+	// 门禁：非 force 走 elicitation 协议级人工确认
+	if !force {
+		result, err := s.mcp.RequestElicitation(ctx, mcp.ElicitationRequest{
+			Request: mcp.Request{Method: string(mcp.MethodElicitationCreate)},
+			Params: mcp.ElicitationParams{
+				Message: "Confirm killing this database process?\n" + killSummary,
+				RequestedSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"confirm": map[string]any{
+							"type":        "boolean",
+							"description": "true = terminate this process immediately",
+						},
+					},
+					"required": []string{"confirm"},
+				},
+			},
+		})
+		if err != nil {
+			if errors.Is(err, server.ErrElicitationNotSupported) || errors.Is(err, server.ErrNoActiveSession) {
+				return mcp.NewToolResultError(
+					"this MCP client does not support elicitation (human confirmation). "+
+						"Ask the user to kill it via the iDBLink GUI process list, or get the user's explicit "+
+						"approval in the conversation first and retry with force=true."), nil
+			}
+			return mcp.NewToolResultErrorFromErr("human confirmation failed", err), nil
+		}
+		switch result.Action {
+		case mcp.ElicitationResponseActionDecline, mcp.ElicitationResponseActionCancel:
+			return mcp.NewToolResultJSON(map[string]any{"killed": false, "reason": "declined by user"})
+		}
+		// fail-safe：只有显式 confirm==true 才放行。accept 但 content 缺失/
+		// 类型异常一律视为未确认（宁可漏杀不可误杀）
+		confirmed := false
+		if content, ok := result.Content.(map[string]any); ok {
+			confirmed, _ = content["confirm"].(bool)
+		}
+		if !confirmed {
+			return mcp.NewToolResultJSON(map[string]any{"killed": false, "reason": "not confirmed by user"})
+		}
+	}
+
+	if _, err := s.app.KillProcess(connID, strOr(database, ""), processID, serial); err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to kill process "+processID, err), nil
+	}
+	return mcp.NewToolResultJSON(map[string]any{"killed": true, "process_id": processID, "detail": killSummary})
+}
+
+// ownConnectionID 返回本 sidecar 当前连接自身的进程/会话 ID（用于自杀保护）。
+// 查询失败或方言不支持时返回空串（跳过保护，保持可用性优先）。
+func (s *Server) ownConnectionID(connID string, database *string) string {
+	dbType := s.dbTypeOf(connID)
+	var q string
+	switch dbType {
+	case "mysql", "mariadb":
+		q = "SELECT CONNECTION_ID()"
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		q = "SELECT pg_backend_pid()"
+	case "sqlserver":
+		q = "SELECT @@SPID"
+	default:
+		// Oracle/DM 需查 v$session（权限复杂）、SQLite 无进程概念：跳过
+		return ""
+	}
+	res, err := s.app.ExecuteQueryLimited(connID, q, database, nil, 1)
+	if err != nil || res.Error != "" || len(res.Rows) == 0 || len(res.Rows[0]) == 0 {
+		return ""
+	}
+	switch v := res.Rows[0][0].(type) {
+	case string:
+		return v
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// dbTypeOf 查连接的数据库类型（自杀保护选查询用）。
+func (s *Server) dbTypeOf(connID string) string {
+	conns, err := s.app.GetConnections()
+	if err != nil {
+		return ""
+	}
+	for _, c := range conns {
+		if c.ID == connID {
+			return c.DbType
+		}
+	}
+	return ""
+}
+
+// strOr 字符串指针解引用，nil 返回默认值。
+func strOr(p *string, def string) string {
+	if p == nil {
+		return def
+	}
+	return *p
 }
