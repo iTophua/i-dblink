@@ -127,12 +127,14 @@ export const ProcessListPanel: React.FC<ProcessListPanelProps> = ({
       dataIndex: 'user',
       key: 'user',
       width: 120,
+      ellipsis: true,
     },
     {
       title: t('common.processList.host'),
       dataIndex: 'host',
       key: 'host',
       width: 150,
+      ellipsis: true,
       render: (val: string | undefined) => val || '-',
     },
     {
@@ -140,6 +142,7 @@ export const ProcessListPanel: React.FC<ProcessListPanelProps> = ({
       dataIndex: 'database',
       key: 'database',
       width: 120,
+      ellipsis: true,
       render: (val: string | undefined) => val || '-',
     },
     {
@@ -165,7 +168,7 @@ export const ProcessListPanel: React.FC<ProcessListPanelProps> = ({
       title: t('common.processList.state'),
       dataIndex: 'state',
       key: 'state',
-      width: 120,
+      width: 130,
       render: (val: string | undefined) => {
         if (!val) return '-';
         const colorMap: Record<string, string> = {
@@ -177,7 +180,24 @@ export const ProcessListPanel: React.FC<ProcessListPanelProps> = ({
           sleeping: 'default',
         };
         const color = colorMap[val.toLowerCase()] || 'default';
-        return <Tag color={color}>{val}</Tag>;
+        return (
+          <Tooltip title={val} placement="topLeft">
+            {/* 长状态（如 "waiting for handler commit"）必须约束在列内：
+                不裁剪会溢出绘制到右侧 SQL 信息列，两段文字叠出"重影" */}
+            <Tag
+              color={color}
+              style={{
+                maxWidth: '100%',
+                marginInlineEnd: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {val}
+            </Tag>
+          </Tooltip>
+        );
       },
     },
     {
