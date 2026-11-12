@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api';
 import type { ActiveTabInfo } from '../../TabPanel';
@@ -28,6 +28,19 @@ export function useTabManager({ selectedConnectionId, connections }: UseTabManag
   const [currentExecutionTime, setCurrentExecutionTime] = useState<number>(0);
   const [isQuerying, setIsQuerying] = useState(false);
   const [selectedObjectType, setSelectedObjectType] = useState<'table' | 'view' | 'all'>('all');
+
+  // 关闭非活跃 Tab 时 activeTabInfo 内容不变，避免用新对象触发 MainLayout 整体重渲染
+  const updateActiveTabInfo = useCallback((info: ActiveTabInfo) => {
+    setActiveTabInfo((prev) =>
+      prev.type === info.type &&
+      prev.title === info.title &&
+      prev.connectionId === info.connectionId &&
+      prev.database === info.database &&
+      prev.tableName === info.tableName
+        ? prev
+        : info
+    );
+  }, []);
 
   // 监听活跃 Tab 变化，更新状态栏信息
   useEffect(() => {
@@ -61,7 +74,7 @@ export function useTabManager({ selectedConnectionId, connections }: UseTabManag
     sqlTabCount,
     setSqlTabCount,
     activeTabInfo,
-    setActiveTabInfo,
+    setActiveTabInfo: updateActiveTabInfo,
     transactionActive,
     setTransactionActive,
     currentResultRows,

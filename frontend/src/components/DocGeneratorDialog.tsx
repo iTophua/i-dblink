@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
-import { Modal, Steps, Checkbox, Button, message, Spin, Space } from 'antd';
+import { Modal, Steps, Checkbox, Button, App, Spin, Space } from 'antd';
 import { DownloadOutlined, FileTextOutlined, EyeOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { MarkdownRenderer } from './AIChatPanel/MarkdownRenderer';
 
 interface DocGeneratorDialogProps {
   open: boolean;
@@ -35,6 +36,7 @@ const defaultOptions: DocOptions = {
 
 export function DocGeneratorDialog({ open, onClose, connectionId, database }: DocGeneratorDialogProps) {
   const { t, i18n } = useTranslation();
+  const { message } = App.useApp();
   const [currentStep, setCurrentStep] = useState(0);
   const [options, setOptions] = useState<DocOptions>(defaultOptions);
   const [loading, setLoading] = useState(false);
@@ -58,7 +60,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
     } finally {
       setLoading(false);
     }
-  }, [connectionId, database, options, t, i18n.language]);
+  }, [connectionId, database, options, t, i18n.language, message]);
 
   const handleExport = useCallback(() => {
     const blob = new Blob([docContent], { type: 'text/markdown;charset=utf-8' });
@@ -71,7 +73,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 100);
     message.success(t('common.docGenerator.exportSuccess'));
-  }, [docContent, database, t]);
+  }, [docContent, database, t, message]);
 
   const updateOption = useCallback((key: keyof DocOptions, value: boolean) => {
     setOptions((prev) => ({ ...prev, [key]: value }));
@@ -113,7 +115,7 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
         ) : (
           <Space>
             <Button onClick={() => setCurrentStep(0)}>{t('common.back')}</Button>
-            <Button onClick={handleClose}>{t('common.close')}</Button>
+            <Button onClick={handleClose}>{t('common.cancel')}</Button>
             <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}>
               {t('common.docGenerator.exportMarkdown')}
             </Button>
@@ -134,8 +136,9 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '8px 16px',
               padding: '16px',
-              background: 'var(--background)',
-              borderRadius: '8px',
+              background: 'var(--background-toolbar)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
             }}
           >
             {optionItems.map((item) => (
@@ -158,21 +161,18 @@ export function DocGeneratorDialog({ open, onClose, connectionId, database }: Do
               <Spin size="large" tip={t('common.docGenerator.generating')} />
             </div>
           ) : (
-            <pre
+            <div
               style={{
-                maxHeight: '500px',
+                maxHeight: 500,
                 overflow: 'auto',
-                padding: '16px',
-                background: 'var(--background)',
-                borderRadius: '8px',
-                fontSize: '12px',
-                lineHeight: '1.6',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
+                padding: '12px 16px',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                background: 'var(--background-card)',
               }}
             >
-              {docContent}
-            </pre>
+              <MarkdownRenderer content={docContent} />
+            </div>
           )}
         </div>
       )}

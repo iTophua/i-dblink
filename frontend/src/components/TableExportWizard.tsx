@@ -4,7 +4,7 @@ import {
   Steps,
   Button,
   Space,
-  message,
+  App,
   Radio,
   Alert,
   Checkbox,
@@ -19,11 +19,7 @@ import { useTranslation } from 'react-i18next';
 import * as XLSX from 'xlsx';
 import { api } from '../api';
 import { getDialect } from '../utils/sqlDialects';
-import {
-  exportToTXT,
-  exportToXML,
-  exportToMarkdown,
-} from '../utils/exportUtils';
+import { exportToTXT, exportToXML, exportToMarkdown } from '../utils/exportUtils';
 import type { ColumnInfo, DatabaseType } from '../types/api';
 
 export type ExportFormat = 'sql' | 'csv' | 'excel' | 'json' | 'txt' | 'xml' | 'markdown';
@@ -99,6 +95,7 @@ export function TableExportWizard({
   dbType,
 }: TableExportWizardProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const dialect = getDialect(dbType);
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -143,45 +140,57 @@ export function TableExportWizard({
     tablesLoadedRef.current = true;
     let cancelled = false;
     setLoadingTables(true);
-    api.getTables(connectionId, database).then((tables) => {
-      if (!cancelled) setTableList(tables.map((t) => t.table_name));
-    }).catch(() => {
-      if (!cancelled) setTableList([]);
-    }).finally(() => {
-      if (!cancelled) setLoadingTables(false);
-    });
-    return () => { cancelled = true; };
+    api
+      .getTables(connectionId, database)
+      .then((tables) => {
+        if (!cancelled) setTableList(tables.map((t) => t.table_name));
+      })
+      .catch(() => {
+        if (!cancelled) setTableList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTables(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, connectionId, database]);
 
-  const loadTableFields = useCallback(async (tableNames: string[]) => {
-    if (!connectionId) return;
-    setLoadingFields(true);
-    const newFields: Record<string, TableFieldState> = { ...tableFields };
-    for (const name of tableNames) {
-      if (newFields[name]?.loaded) continue;
-      try {
-        const cols = await api.getColumns(connectionId, name, database);
-        newFields[name] = {
-          columns: cols,
-          selectedFields: cols.map((c) => c.column_name),
-          loaded: true,
-        };
-      } catch {
-        newFields[name] = { columns: [], selectedFields: [], loaded: true };
+  const loadTableFields = useCallback(
+    async (tableNames: string[]) => {
+      if (!connectionId) return;
+      setLoadingFields(true);
+      const newFields: Record<string, TableFieldState> = { ...tableFields };
+      for (const name of tableNames) {
+        if (newFields[name]?.loaded) continue;
+        try {
+          const cols = await api.getColumns(connectionId, name, database);
+          newFields[name] = {
+            columns: cols,
+            selectedFields: cols.map((c) => c.column_name),
+            loaded: true,
+          };
+        } catch {
+          newFields[name] = { columns: [], selectedFields: [], loaded: true };
+        }
       }
-    }
-    setTableFields(newFields);
-    setLoadingFields(false);
-  }, [connectionId, database, tableFields]);
+      setTableFields(newFields);
+      setLoadingFields(false);
+    },
+    [connectionId, database, tableFields]
+  );
 
-  const handleSelectedTablesChange = useCallback((tables: string[]) => {
-    setSelectedTables(tables);
-    const toLoad = tables.filter((t) => !tableFields[t]?.loaded);
-    if (toLoad.length > 0) loadTableFields(toLoad);
-    if (tables.length > 0 && !tables.includes(activeFieldTable)) {
-      setActiveFieldTable(tables[0]);
-    }
-  }, [tableFields, activeFieldTable, loadTableFields]);
+  const handleSelectedTablesChange = useCallback(
+    (tables: string[]) => {
+      setSelectedTables(tables);
+      const toLoad = tables.filter((t) => !tableFields[t]?.loaded);
+      if (toLoad.length > 0) loadTableFields(toLoad);
+      if (tables.length > 0 && !tables.includes(activeFieldTable)) {
+        setActiveFieldTable(tables[0]);
+      }
+    },
+    [tableFields, activeFieldTable, loadTableFields]
+  );
 
   const toggleField = useCallback((tableName: string, fieldName: string) => {
     setTableFields((prev) => {
@@ -222,7 +231,12 @@ export function TableExportWizard({
     setTableFields({});
     setActiveFieldTable('');
     setDataRange({ mode: 'all', limitCount: 10000, whereClause: '', orderBy: '' });
-    setSqlOptions({ includeDrop: true, includeCreate: true, includeData: true, insertSyntax: 'insert' });
+    setSqlOptions({
+      includeDrop: true,
+      includeCreate: true,
+      includeData: true,
+      insertSyntax: 'insert',
+    });
     setCsvOptions({ delimiter: ',', textQualifier: '"', includeHeaders: true, encoding: 'UTF-8' });
     setJsonOptions({ prettyPrint: true, format: 'array' });
     setExporting(false);
@@ -237,21 +251,25 @@ export function TableExportWizard({
     onClose();
   }, [onClose, resetState]);
 
-  const buildQuery = useCallback((tblName: string, fields: string[]): string => {
-    const cols = fields.length > 0 ? fields.map((c) => dialect.escapeIdentifier(c)).join(', ') : '*';
-    const tableRef = dialect.buildTableRef(tblName, database);
-    let sql = `SELECT ${cols} FROM ${tableRef}`;
-    if (dataRange.mode === 'where' && dataRange.whereClause.trim()) {
-      sql += ` WHERE ${dataRange.whereClause.trim()}`;
-    }
-    if (dataRange.orderBy.trim()) {
-      sql += ` ORDER BY ${dataRange.orderBy.trim()}`;
-    }
-    if (dataRange.mode === 'limit') {
-      sql = dialect.buildPaginationQuery(sql, { offset: 0, limit: dataRange.limitCount });
-    }
-    return sql;
-  }, [database, dataRange, dialect]);
+  const buildQuery = useCallback(
+    (tblName: string, fields: string[]): string => {
+      const cols =
+        fields.length > 0 ? fields.map((c) => dialect.escapeIdentifier(c)).join(', ') : '*';
+      const tableRef = dialect.buildTableRef(tblName, database);
+      let sql = `SELECT ${cols} FROM ${tableRef}`;
+      if (dataRange.mode === 'where' && dataRange.whereClause.trim()) {
+        sql += ` WHERE ${dataRange.whereClause.trim()}`;
+      }
+      if (dataRange.orderBy.trim()) {
+        sql += ` ORDER BY ${dataRange.orderBy.trim()}`;
+      }
+      if (dataRange.mode === 'limit') {
+        sql = dialect.buildPaginationQuery(sql, { offset: 0, limit: dataRange.limitCount });
+      }
+      return sql;
+    },
+    [database, dataRange, dialect]
+  );
 
   const handleExport = useCallback(async () => {
     if (selectedTables.length === 0) return;
@@ -286,9 +304,10 @@ export function TableExportWizard({
             const columns = (result.columns as string[]) || [];
             const rows = (result.rows || []) as unknown[][];
 
-            const colIndices = fields.length > 0
-              ? columns.map((col, i) => fields.includes(col) ? i : -1).filter((i) => i >= 0)
-              : columns.map((_, i) => i);
+            const colIndices =
+              fields.length > 0
+                ? columns.map((col, i) => (fields.includes(col) ? i : -1)).filter((i) => i >= 0)
+                : columns.map((_, i) => i);
             const colIdents = colIndices.map((i) => dialect.escapeIdentifier(columns[i]));
             const colStr = colIdents.join(', ');
 
@@ -305,7 +324,10 @@ export function TableExportWizard({
           setProgress(Math.round(((ti + 1) / totalTables) * 90));
         }
         const blob = new Blob([sqlContent], { type: 'text/sql;charset=utf-8' });
-        const filename = totalTables === 1 ? `${tables[0]}${fmtInfo.ext}` : `export_${totalTables}tables${fmtInfo.ext}`;
+        const filename =
+          totalTables === 1
+            ? `${tables[0]}${fmtInfo.ext}`
+            : `export_${totalTables}tables${fmtInfo.ext}`;
         downloadBlob(blob, filename);
         totalSize = blob.size;
       } else if (format === 'excel') {
@@ -324,20 +346,26 @@ export function TableExportWizard({
             return obj;
           });
           const colDefs = fields.map((f) => ({ field: f, headerName: f }));
-          const exportData = colDefs.length > 0
-            ? data.map((row) => {
-              const newRow: Record<string, unknown> = {};
-              colDefs.forEach((col) => { newRow[col.headerName] = row[col.field] ?? ''; });
-              return newRow;
-            })
-            : data;
+          const exportData =
+            colDefs.length > 0
+              ? data.map((row) => {
+                  const newRow: Record<string, unknown> = {};
+                  colDefs.forEach((col) => {
+                    newRow[col.headerName] = row[col.field] ?? '';
+                  });
+                  return newRow;
+                })
+              : data;
           const ws = XLSX.utils.json_to_sheet(exportData);
           const sheetName = tbl.substring(0, 31);
           XLSX.utils.book_append_sheet(wb, ws, sheetName);
           totalRows += data.length;
           setProgress(Math.round(((ti + 1) / totalTables) * 90));
         }
-        const filename = totalTables === 1 ? `${tables[0]}${fmtInfo.ext}` : `export_${totalTables}tables${fmtInfo.ext}`;
+        const filename =
+          totalTables === 1
+            ? `${tables[0]}${fmtInfo.ext}`
+            : `export_${totalTables}tables${fmtInfo.ext}`;
         XLSX.writeFile(wb, filename);
       } else {
         for (let ti = 0; ti < tables.length; ti++) {
@@ -357,13 +385,16 @@ export function TableExportWizard({
           const filename = `${tbl}${fmtInfo.ext}`;
 
           if (format === 'csv') {
-            const exportData = colDefs.length > 0
-              ? data.map((row) => {
-                const newRow: Record<string, unknown> = {};
-                colDefs.forEach((col) => { newRow[col.headerName] = row[col.field] ?? ''; });
-                return newRow;
-              })
-              : data;
+            const exportData =
+              colDefs.length > 0
+                ? data.map((row) => {
+                    const newRow: Record<string, unknown> = {};
+                    colDefs.forEach((col) => {
+                      newRow[col.headerName] = row[col.field] ?? '';
+                    });
+                    return newRow;
+                  })
+                : data;
             const ws = XLSX.utils.json_to_sheet(exportData);
             const csv = XLSX.utils.sheet_to_csv(ws, { FS: csvOptions.delimiter });
             const bom = csvOptions.encoding === 'UTF-8' ? '\uFEFF' : '';
@@ -371,10 +402,17 @@ export function TableExportWizard({
             downloadBlob(blob, filename);
             totalSize += blob.size;
           } else if (format === 'json') {
-            const jsonStr = jsonOptions.prettyPrint ? JSON.stringify(data, null, 2) : JSON.stringify(data);
-            const output = jsonOptions.format === 'object'
-              ? JSON.stringify({ table: tbl, data, count: data.length }, null, jsonOptions.prettyPrint ? 2 : 0)
-              : jsonStr;
+            const jsonStr = jsonOptions.prettyPrint
+              ? JSON.stringify(data, null, 2)
+              : JSON.stringify(data);
+            const output =
+              jsonOptions.format === 'object'
+                ? JSON.stringify(
+                    { table: tbl, data, count: data.length },
+                    null,
+                    jsonOptions.prettyPrint ? 2 : 0
+                  )
+                : jsonStr;
             const blob = new Blob([output], { type: 'application/json;charset=utf-8;' });
             downloadBlob(blob, filename);
             totalSize += blob.size;
@@ -400,18 +438,31 @@ export function TableExportWizard({
       });
       message.success(t('common.importExport.exportSuccess', { count: totalRows }));
     } catch (e: unknown) {
-      message.error(`${t('common.importExport.exportFailed')}: ${e instanceof Error ? e.message : e}`);
+      message.error(
+        `${t('common.importExport.exportFailed')}: ${e instanceof Error ? e.message : e}`
+      );
     } finally {
       setExporting(false);
     }
   }, [
-    selectedTables, format, sqlOptions, csvOptions, jsonOptions, tableFields,
-    connectionId, database, dialect, buildQuery, t,
+    selectedTables,
+    format,
+    sqlOptions,
+    csvOptions,
+    jsonOptions,
+    tableFields,
+    connectionId,
+    database,
+    dialect,
+    buildQuery,
+    t,
   ]);
 
   const renderTablesStep = () => (
     <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
-      <div style={{ fontWeight: 500, marginBottom: 4 }}>{t('common.importExport.selectTables')}</div>
+      <div style={{ fontWeight: 500, marginBottom: 4 }}>
+        {t('common.importExport.selectTables')}
+      </div>
       <Select
         mode="multiple"
         showSearch
@@ -426,7 +477,9 @@ export function TableExportWizard({
         }
       >
         {tableList.map((name) => (
-          <Select.Option key={name} value={name}>{name}</Select.Option>
+          <Select.Option key={name} value={name}>
+            {name}
+          </Select.Option>
         ))}
       </Select>
       <div style={{ display: 'flex', gap: 8 }}>
@@ -445,7 +498,9 @@ export function TableExportWizard({
         />
       )}
       <Divider />
-      <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('common.importExport.exportFormat')}</div>
+      <div style={{ fontWeight: 500, marginBottom: 8 }}>
+        {t('common.importExport.exportFormat')}
+      </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {FORMAT_OPTIONS.map((f) => (
           <Button
@@ -462,7 +517,14 @@ export function TableExportWizard({
 
   const renderFieldsStep = () => {
     if (selectedTables.length === 0) {
-      return <Alert message={t('common.importExport.pleaseSelectTableFirst')} type="warning" showIcon style={{ marginTop: 16 }} />;
+      return (
+        <Alert
+          message={t('common.importExport.pleaseSelectTableFirst')}
+          type="warning"
+          showIcon
+          style={{ marginTop: 16 }}
+        />
+      );
     }
     const currentTable = activeFieldTable || selectedTables[0];
     const currentFields = tableFields[currentTable];
@@ -492,7 +554,18 @@ export function TableExportWizard({
           <Button size="small" onClick={() => toggleAllFields(currentTable, false)}>
             {t('common.importExport.deselectAll')}
           </Button>
-          <Button size="small" onClick={() => toggleAllFields(currentTable, !((currentFields?.selectedFields.length || 0) === (currentFields?.columns.length || 0)))}>
+          <Button
+            size="small"
+            onClick={() =>
+              toggleAllFields(
+                currentTable,
+                !(
+                  (currentFields?.selectedFields.length || 0) ===
+                  (currentFields?.columns.length || 0)
+                )
+              )
+            }
+          >
             {t('common.importExport.invertSelection')}
           </Button>
         </div>
@@ -515,7 +588,9 @@ export function TableExportWizard({
                   checked={currentFields?.selectedFields.includes(col.column_name) || false}
                   onChange={() => toggleField(currentTable, col.column_name)}
                 />
-                <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 13 }}>{col.column_name}</span>
+                <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 13 }}>
+                  {col.column_name}
+                </span>
                 <Tag style={{ fontSize: 11 }}>{col.data_type}</Tag>
               </div>
             ))}
@@ -535,14 +610,17 @@ export function TableExportWizard({
                 type="number"
                 min={1}
                 value={dataRange.limitCount}
-                onChange={(e) => setDataRange((prev) => ({ ...prev, limitCount: parseInt(e.target.value) || 1000 }))}
+                onChange={(e) =>
+                  setDataRange((prev) => ({
+                    ...prev,
+                    limitCount: parseInt(e.target.value) || 1000,
+                  }))
+                }
                 style={{ width: 100, marginLeft: 8 }}
                 disabled={dataRange.mode !== 'limit'}
               />
             </Radio>
-            <Radio value="where">
-              {t('common.importExport.customWhere')}
-            </Radio>
+            <Radio value="where">{t('common.importExport.customWhere')}</Radio>
             {dataRange.mode === 'where' && (
               <Input.TextArea
                 value={dataRange.whereClause}
@@ -619,7 +697,9 @@ export function TableExportWizard({
               />
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: 4 }}>{t('common.importExport.encoding')}</label>
+              <label style={{ display: 'block', marginBottom: 4 }}>
+                {t('common.importExport.encoding')}
+              </label>
               <Select
                 value={csvOptions.encoding}
                 onChange={(v) => setCsvOptions((o) => ({ ...o, encoding: v }))}
@@ -679,12 +759,32 @@ export function TableExportWizard({
           showIcon
           description={
             <Space size="large">
-              <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{t('common.importExport.tables')}: {exportStats.tables}</Tag>
-              <Tag color="green">{t('common.importExport.totalRows')}: {exportStats.rows}</Tag>
+              <Tag
+                style={{
+                  background: 'var(--color-primary-alpha-15)',
+                  color: 'var(--color-primary)',
+                  border: '1px solid var(--color-primary-alpha-30)',
+                }}
+              >
+                {t('common.importExport.tables')}: {exportStats.tables}
+              </Tag>
+              <Tag color="green">
+                {t('common.importExport.totalRows')}: {exportStats.rows}
+              </Tag>
               {exportStats.size && (
-                <Tag style={{ background: 'var(--color-info-alpha-15)', color: 'var(--color-info)', border: '1px solid var(--color-info-alpha-30)' }}>{t('common.importExport.fileSize')}: {exportStats.size}</Tag>
+                <Tag
+                  style={{
+                    background: 'var(--color-info-alpha-15)',
+                    color: 'var(--color-info)',
+                    border: '1px solid var(--color-info-alpha-30)',
+                  }}
+                >
+                  {t('common.importExport.fileSize')}: {exportStats.size}
+                </Tag>
               )}
-              <Tag>{t('common.importExport.exportFormat')}: {format.toUpperCase()}</Tag>
+              <Tag>
+                {t('common.importExport.exportFormat')}: {format.toUpperCase()}
+              </Tag>
             </Space>
           }
         />
@@ -728,9 +828,7 @@ export function TableExportWizard({
             {exportDone ? t('common.close') : t('common.cancel')}
           </Button>
           {currentStep > 0 && !exportDone && (
-            <Button onClick={() => setCurrentStep((s) => s - 1)}>
-              {t('common.previousStep')}
-            </Button>
+            <Button onClick={() => setCurrentStep((s) => s - 1)}>{t('common.previousStep')}</Button>
           )}
           {currentStep < 3 && (
             <Button

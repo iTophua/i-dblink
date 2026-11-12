@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useThemeColors } from '../hooks/useThemeColors';
 import {
   Modal,
   Form,
@@ -13,18 +12,19 @@ import {
   Select,
   Checkbox,
   Typography,
+  Empty,
   App,
 } from 'antd';
 import {
   UserOutlined,
   PlusOutlined,
   DeleteOutlined,
-  KeyOutlined,
   SafetyOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { api } from '../api';
+import { useTableScrollHeight } from '../hooks/useTableScrollHeight';
 
 const { Text } = Typography;
 
@@ -57,21 +57,24 @@ const PRIVILEGE_OPTIONS = [
   { label: 'ALL', value: 'ALL' },
 ];
 
-export interface UserManagementDialogProps {
-  open: boolean;
-  onClose: () => void;
+export interface UserManagementPanelProps {
   connectionId: string;
   database?: string;
+  connectionName?: string;
 }
 
-export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
-  open,
-  onClose,
+/**
+ * 用户权限管理（Tab 内容，非弹窗）。
+ *
+ * 左列用户列表 + 右列权限与授权表单；创建用户仍用小表单弹窗（属于子流程，
+ * 不是把整个功能塞回弹窗）。
+ */
+export const UserManagementPanel: React.FC<UserManagementPanelProps> = ({
   connectionId,
   database,
+  connectionName,
 }) => {
   const { t } = useTranslation();
-  const tc = useThemeColors();
   const { message: msg } = App.useApp();
   const [grantForm] = Form.useForm();
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -81,6 +84,16 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
   const [userLoading, setUserLoading] = useState(false);
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createUserForm] = Form.useForm();
+  const {
+    tableScrollHeight: usersHeight,
+    containerRef: usersContainerRef,
+    toolbarRef: usersToolbarRef,
+  } = useTableScrollHeight([users.length]);
+  const {
+    tableScrollHeight: privHeight,
+    containerRef: privContainerRef,
+    toolbarRef: privToolbarRef,
+  } = useTableScrollHeight([privileges.length, selectedUser?.user]);
 
   const loadUsers = useCallback(async () => {
     setUserLoading(true);
@@ -95,17 +108,13 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
     } finally {
       setUserLoading(false);
     }
-  }, [connectionId, database, msg]);
+  }, [connectionId, database, msg, t]);
 
   useEffect(() => {
-    if (open && connectionId) {
-      queueMicrotask(() => {
-        setSelectedUser(null);
-        setPrivileges([]);
-        loadUsers();
-      });
-    }
-  }, [open, connectionId, database, loadUsers]);
+    // 组件按 Tab（连接 + 库）挂载，初始状态即空；这里只负责拉用户列表
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 首屏加载用户列表（含 loading 状态）
+    if (connectionId) loadUsers();
+  }, [connectionId, loadUsers]);
 
   const loadPrivileges = async (user: UserItem) => {
     setLoading(true);
@@ -229,6 +238,52 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
     REPLICATION: 'orange',
   };
 
+  const userColumns: ColumnsType<UserItem> = [
+    {
+      title: t('common.username'),
+      dataIndex: 'user',
+      key: 'user',
+      ellipsis: true,
+      render: (user: string, record) => (
+        <Space size={6}>
+          <UserOutlined style={{ color: 'var(--text-tertiary)' }} />
+          <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.35 }}>
+            <Text strong>{user}</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {record.host}
+            </Text>
+          </span>
+        </Space>
+      ),
+    },
+    {
+      title: t('common.type'),
+      dataIndex: 'type',
+      key: 'type',
+      width: 100,
+      render: (type: string | undefined) => (
+        <Tag color={type === 'superuser' ? 'red' : 'default'}>{type || '-'}</Tag>
+      ),
+    },
+    {
+      title: t('common.actions'),
+      key: 'action',
+      width: 56,
+      align: 'center',
+      render: (_: unknown, record: UserItem) => (
+        <Popconfirm
+          title={t('common.userManagement.confirmDeleteUser')}
+          description={t('common.deleteUserConfirm', { user: record.user })}
+          okText={t('common.confirm')}
+          cancelText={t('common.cancel')}
+          onConfirm={() => handleDropUser(record)}
+        >
+          <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+        </Popconfirm>
+      ),
+    },
+  ];
+
   const privilegeColumns: ColumnsType<PrivilegeItem> = [
     {
       title: t('common.privilege'),
@@ -242,17 +297,19 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
       dataIndex: 'database',
       key: 'database',
       width: 120,
+      ellipsis: true,
     },
     {
       title: t('common.table'),
       dataIndex: 'table',
       key: 'table',
       width: 150,
+      ellipsis: true,
     },
     {
       title: t('common.actions'),
       key: 'action',
-      width: 80,
+      width: 90,
       render: (_: unknown, record: PrivilegeItem) => (
         <Popconfirm
           title={t('common.confirmRevokePrivilege')}
@@ -269,166 +326,146 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
     },
   ];
 
-  const userColumns: ColumnsType<UserItem> = [
-    {
-      title: t('common.username'),
-      dataIndex: 'user',
-      key: 'user',
-      render: (user: string) => (
-        <Space>
-          <UserOutlined />
-          <Text strong>{user}</Text>
-        </Space>
-      ),
-    },
-    {
-      title: t('common.host'),
-      dataIndex: 'host',
-      key: 'host',
-      width: 120,
-      render: (host: string) => <Text code>{host}</Text>,
-    },
-    {
-      title: t('common.type'),
-      dataIndex: 'type',
-      key: 'type',
-      width: 120,
-      render: (type: string) => (
-        <Tag color={type === 'superuser' ? 'red' : 'default'}>{type || '-'}</Tag>
-      ),
-    },
-    {
-      title: t('common.actions'),
-      key: 'action',
-      // 120 放不下"查看权限 + 删除"，删除按钮会被裁掉半个
-      width: 210,
-      render: (_: unknown, record: UserItem) => (
-        <Space size={4}>
-          <Button type="link" size="small" onClick={() => handleUserSelect(record)}>
-            {t('common.viewPrivileges')}
-          </Button>
-          <Popconfirm
-            title={t('common.userManagement.confirmDeleteUser')}
-            description={t('common.deleteUserConfirm', { user: record.user })}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            onConfirm={() => handleDropUser(record)}
-          >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              {t('common.delete')}
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
-
   return (
-    <>
-      <Modal
-        title={
-          <Space>
-            <SafetyOutlined />
-            {t('common.userPrivilegeManagement')}
-          </Space>
-        }
-        open={open}
-        onCancel={onClose}
-        width={900}
-        footer={null}
-        transitionName=""
-        maskTransitionName=""
-        // 用户列表(300) + 授权表单 + 权限列表(250) 叠加后高于窗口，
-        // body 限高滚动，否则底部权限行会被窗口边缘直接切掉
-        styles={{ body: { maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' } }}
+    <div
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        padding: '12px 16px 16px',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexShrink: 0,
+          marginBottom: 10,
+        }}
       >
-        <Space orientation="vertical" style={{ width: '100%' }} size="large">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text strong>{t('common.userList')}</Text>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateUserOpen(true)}>
-              {t('common.createUser')}
-            </Button>
-          </div>
+        <SafetyOutlined style={{ color: 'var(--color-primary)' }} />
+        <Text strong>{t('common.userPrivilegeManagement')}</Text>
+        {database && <Tag color="blue">{database}</Tag>}
+        {connectionName && (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {connectionName}
+          </Text>
+        )}
+        <span style={{ flex: 1 }} />
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateUserOpen(true)}>
+          {t('common.createUser')}
+        </Button>
+      </div>
 
-          <Table
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 16 }}>
+        {/* 左列：用户 */}
+        <div
+          ref={usersContainerRef}
+          style={{
+            width: '42%',
+            minWidth: 260,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            borderRight: '1px solid var(--border)',
+            paddingRight: 16,
+            boxSizing: 'border-box',
+          }}
+        >
+          <div
+            ref={usersToolbarRef}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}
+          >
+            <Text strong style={{ fontSize: 12 }}>
+              {t('common.userList')}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {users.length}
+            </Text>
+          </div>
+          <Table<UserItem>
             dataSource={users}
             columns={userColumns}
             rowKey={(record) => `${record.user}@${record.host}`}
             loading={userLoading}
             size="small"
             pagination={false}
-            scroll={{ y: 300 }}
+            scroll={{ y: Math.max(160, usersHeight - 40) }}
+            rowClassName={(record) =>
+              selectedUser && record.user === selectedUser.user ? 'user-row-selected' : ''
+            }
+            onRow={(record) => ({
+              onClick: () => handleUserSelect(record),
+              style: { cursor: 'pointer' },
+            })}
+            locale={{ emptyText: t('common.userManagement.noUsers') }}
           />
+        </div>
 
-          {selectedUser && (
+        {/* 右列：权限 */}
+        <div
+          ref={privContainerRef}
+          style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+        >
+          {selectedUser ? (
             <>
-              <div style={{ borderTop: `1px solid ${tc.borderLight}`, paddingTop: 16 }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 12,
-                  }}
-                >
-                  <Text strong>
-                    {t('common.userPrivilegesFor', {
-                      user: `${selectedUser.user}@${selectedUser.host}`,
-                    })}
-                  </Text>
-                  <Button icon={<KeyOutlined />} onClick={() => grantForm.resetFields()}>
-                    {t('common.grantPrivilege')}
-                  </Button>
-                </div>
+              <div
+                ref={privToolbarRef}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 8,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <Text strong style={{ fontSize: 12 }}>
+                  {t('common.userPrivilegesFor', {
+                    user: `${selectedUser.user}@${selectedUser.host}`,
+                  })}
+                </Text>
+              </div>
 
-                <Form form={grantForm} layout="inline" onFinish={handleGrant}>
-                  <Form.Item
-                    name="privileges"
-                    rules={[{ required: true, message: t('common.pleaseSelectPermission') }]}
-                  >
-                    <Select
-                      mode="multiple"
-                      options={PRIVILEGE_OPTIONS}
-                      style={{ width: 200 }}
-                      placeholder={t('common.selectUser')}
-                    />
-                  </Form.Item>
-                  <Form.Item name="databaseAll" valuePropName="checked">
-                    <Checkbox>{t('common.allDatabasesTables')}</Checkbox>
-                  </Form.Item>
-                  <Form.Item noStyle shouldUpdate>
-                    {() => (
-                      <>
-                        {!grantForm.getFieldValue('databaseAll') && (
-                          <Select
-                            placeholder={t('common.databaseName')}
-                            style={{ width: 150, marginRight: 8 }}
-                            disabled={
-                              !grantForm.isFieldTouched('databaseAll') &&
-                              !grantForm.getFieldValue('databaseAll')
-                            }
-                          >
-                            <Select.Option value={database}>{database}</Select.Option>
-                          </Select>
-                        )}
-                        {!grantForm.getFieldValue('databaseAll') && (
+              <Form form={grantForm} layout="inline" onFinish={handleGrant}>
+                <Form.Item
+                  name="privileges"
+                  rules={[{ required: true, message: t('common.pleaseSelectPermission') }]}
+                >
+                  <Select
+                    mode="multiple"
+                    options={PRIVILEGE_OPTIONS}
+                    style={{ width: 190 }}
+                    placeholder={t('common.selectUser')}
+                  />
+                </Form.Item>
+                <Form.Item name="databaseAll" valuePropName="checked">
+                  <Checkbox>{t('common.allDatabasesTables')}</Checkbox>
+                </Form.Item>
+                <Form.Item noStyle shouldUpdate>
+                  {() => (
+                    <>
+                      {!grantForm.getFieldValue('databaseAll') && (
+                        <Form.Item name="table">
                           <Input
                             placeholder={t('common.table')}
-                            style={{ width: 150, marginRight: 8 }}
-                            disabled={
-                              !grantForm.isFieldTouched('databaseAll') &&
-                              !grantForm.getFieldValue('databaseAll')
-                            }
+                            style={{ width: 150, marginRight: 8, marginBottom: 8 }}
                           />
-                        )}
-                        <Button type="primary" htmlType="submit" icon={<ThunderboltOutlined />}>
-                          {t('common.sqlEditor.execute')}
-                        </Button>
-                      </>
-                    )}
-                  </Form.Item>
-                </Form>
-              </div>
+                        </Form.Item>
+                      )}
+                      <Button
+                        type="primary"
+                        htmlType="submit"
+                        icon={<ThunderboltOutlined />}
+                        style={{ marginBottom: 8 }}
+                      >
+                        {t('common.grantPrivilege')}
+                      </Button>
+                    </>
+                  )}
+                </Form.Item>
+              </Form>
 
               <Table
                 dataSource={privileges}
@@ -437,12 +474,26 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
                 loading={loading}
                 size="small"
                 pagination={false}
-                scroll={{ y: 250 }}
+                scroll={{ y: Math.max(120, privHeight - 120) }}
               />
             </>
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={t('common.selectUserToViewPrivileges')}
+              />
+            </div>
           )}
-        </Space>
-      </Modal>
+        </div>
+      </div>
 
       <Modal
         title={t('common.createNewUser')}
@@ -475,6 +526,6 @@ export const UserManagementDialog: React.FC<UserManagementDialogProps> = ({
           </Form.Item>
         </Form>
       </Modal>
-    </>
+    </div>
   );
 };

@@ -1,13 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Tabs, Table, Spin, Empty, Tag, App } from 'antd';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { Tabs, Table, Spin, Tag, App, Button, Input, Descriptions, Tooltip, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { KeyOutlined, LinkOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import {
+  KeyOutlined,
+  LinkOutlined,
+  InfoCircleOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  CopyOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useDatabase } from '../hooks/useApi';
+import { useTableScrollHeight } from '../hooks/useTableScrollHeight';
 import { api } from '../api';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo, CheckConstraintInfo } from '../types/api';
 import { DDLViewer } from './DDLViewer';
+import { EnhancedEmptyState } from './LoadingStates';
 
 interface TableInfo {
   table_name: string;
@@ -27,7 +36,11 @@ interface TableStructureProps {
   database?: string;
 }
 
-export function TableStructure({ connectionId, tableName, database }: TableStructureProps) {
+export const TableStructure = memo(function TableStructure({
+  connectionId,
+  tableName,
+  database,
+}: TableStructureProps) {
   const { t } = useTranslation();
   const tc = useThemeColors();
   const { message } = App.useApp();
@@ -39,6 +52,15 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
   const [checkConstraints, setCheckConstraints] = useState<CheckConstraintInfo[]>([]);
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null);
   const [ddl, setDdl] = useState<string>('');
+  const [columnSearch, setColumnSearch] = useState('');
+  const [activeKey, setActiveKey] = useState('columns');
+  const { tableScrollHeight, containerRef, toolbarRef } = useTableScrollHeight([
+    columns.length,
+    indexes.length,
+    foreignKeys.length,
+    checkConstraints.length,
+  ]);
+  const tableHeight = Math.max(160, tableScrollHeight - 52);
 
   const loadStructure = useCallback(async () => {
     setLoading(true);
@@ -80,15 +102,16 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
     getIndexes,
     getForeignKeys,
     getTableInfo,
+    message,
+    t,
   ]);
 
   useEffect(() => {
     if (connectionId && tableName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 切换表后加载结构数据
       loadStructure();
     }
-  }, [loadStructure]);
-
-
+  }, [loadStructure, connectionId, tableName]);
 
   const columnDefs: ColumnsType<ColumnInfo> = [
     {
@@ -153,7 +176,23 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
     },
   ];
 
-  const tableData = useMemo(() => columns, [columns]);
+  const tableData = useMemo(() => {
+    const q = columnSearch.trim().toLowerCase();
+    if (!q) return columns;
+    return columns.filter((column) =>
+      [column.column_name, column.data_type, column.comment]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q))
+    );
+  }, [columns, columnSearch]);
+
+  const handleCopyDdl = useCallback(() => {
+    if (!ddl) return;
+    navigator.clipboard.writeText(ddl).then(
+      () => message.success(t('common.copiedToClipboard')),
+      () => message.error(t('common.copyFailed'))
+    );
+  }, [ddl, message, t]);
 
   const indexDefs: ColumnsType<IndexInfo> = [
     {
@@ -247,31 +286,63 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
     },
   ];
 
-  if (loading) {
+  if (loading && columns.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: 40 }}>
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Spin size="large" />
       </div>
     );
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, padding: '8px 12px' }}>
-      <style>{`
-        .table-compact .ant-table-row td {
-          padding: 4px 8px !important;
-        }
-        .table-compact .ant-table-thead th {
-          padding: 4px 8px !important;
-        }
-        /* 结构详情单行显示：不换行，超长省略（title 提示全文） */
-        .table-compact .ant-table-cell {
-          white-space: nowrap;
-        }
-      `}</style>
+    <div
+      ref={containerRef}
+      style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, padding: '8px 12px' }}
+    >
+      {/* 工具栏：列搜索 / 复制 DDL / 刷新 */}
+      <div
+        ref={toolbarRef}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '2px 0 8px',
+          flexShrink: 0,
+        }}
+      >
+        {activeKey === 'columns' && (
+          <Input
+            allowClear
+            size="small"
+            value={columnSearch}
+            onChange={(e) => setColumnSearch(e.target.value)}
+            prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+            placeholder={t('common.tableStructure.searchColumns')}
+            style={{ width: 220 }}
+          />
+        )}
+        <span style={{ flex: 1 }} />
+        <Space size={6}>
+          <Tooltip title={t('common.tableStructure.copyDdl')}>
+            <Button
+              size="small"
+              icon={<CopyOutlined />}
+              disabled={!ddl}
+              onClick={handleCopyDdl}
+            >
+              {t('common.ddl')}
+            </Button>
+          </Tooltip>
+          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={loadStructure}>
+            {t('common.refresh')}
+          </Button>
+        </Space>
+      </div>
       <Tabs
         size="small"
-        destroyInactiveTabPane
+        activeKey={activeKey}
+        onChange={setActiveKey}
+        destroyOnHidden
         style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         items={[
           {
@@ -285,11 +356,22 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                   rowKey={(record, index) => `${record.column_name}-${index}`}
                   size="small"
                   pagination={false}
-                  scroll={{ x: 'max-content' }}
+                  loading={loading}
+                  scroll={{ x: 'max-content', y: tableHeight }}
                   className="table-compact"
+                  locale={{
+                    emptyText: <EnhancedEmptyState title={t('common.noColumnInfo')} />,
+                  }}
                 />
               ) : (
-                <Empty description={t('common.noColumnInfo')} />
+                <EnhancedEmptyState
+                  title={t('common.noColumnInfo')}
+                  action={{
+                    label: t('common.refresh'),
+                    onClick: loadStructure,
+                    icon: <ReloadOutlined />,
+                  }}
+                />
               ),
           },
           {
@@ -303,11 +385,12 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                   rowKey={(record, index) => `${record.index_name}-${record.column_name}-${index}`}
                   size="small"
                   pagination={false}
-                  scroll={{ x: 'max-content' }}
+                  loading={loading}
+                  scroll={{ x: 'max-content', y: tableHeight }}
                   className="table-compact"
                 />
               ) : (
-                <Empty description={t('common.noIndexes')} />
+                <EnhancedEmptyState title={t('common.noIndexes')} />
               ),
           },
           {
@@ -321,11 +404,12 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                   rowKey={(record, index) => `${record.constraint_name}-${record.column_name}-${index}`}
                   size="small"
                   pagination={false}
-                  scroll={{ x: 'max-content' }}
+                  loading={loading}
+                  scroll={{ x: 'max-content', y: tableHeight }}
                   className="table-compact"
                 />
               ) : (
-                <Empty description={t('common.noForeignKeys')} />
+                <EnhancedEmptyState title={t('common.noForeignKeys')} />
               ),
           },
           {
@@ -339,11 +423,12 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
                   rowKey={(record, index) => `${record.constraint_name}-${index}`}
                   size="small"
                   pagination={false}
-                  scroll={{ x: 'max-content' }}
+                  loading={loading}
+                  scroll={{ x: 'max-content', y: tableHeight }}
                   className="table-compact"
                 />
               ) : (
-                <Empty description={t('common.noCheckConstraints')} />
+                <EnhancedEmptyState title={t('common.noCheckConstraints')} />
               ),
           },
           {
@@ -355,83 +440,87 @@ export function TableStructure({ connectionId, tableName, database }: TableStruc
               </span>
             ),
             children: tableInfo ? (
-              <div style={{ padding: '4px 0' }}>
-                <table style={{ width: '100%', fontSize: 11, lineHeight: '18px' }}>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500, width: 100 }}>
-                        {t('common.tableName')}
-                      </td>
-                      <td>{tableInfo.table_name}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.engine')}</td>
-                      <td>
-                        <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{tableInfo.engine || '-'}</Tag>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>
-                        {t('common.tableList.rowCount')}
-                      </td>
-                      <td>{tableInfo.row_count?.toLocaleString() || '-'}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.dataSize')}</td>
-                      <td>
-                        {tableInfo.data_length
-                          ? `${(tableInfo.data_length / 1024).toFixed(2)} KB`
-                          : '-'}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.indexSize')}</td>
-                      <td>
-                        {tableInfo.index_length
-                          ? `${(tableInfo.index_length / 1024).toFixed(2)} KB`
-                          : '-'}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>
-                        {t('common.databaseProperties.collation')}
-                      </td>
-                      <td>
-                        <Tag color="green">{tableInfo.collation || '-'}</Tag>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.createTime')}</td>
-                      <td>{tableInfo.create_time || '-'}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.updateTime')}</td>
-                      <td>{tableInfo.update_time || '-'}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 0', fontWeight: 500 }}>{t('common.comment')}</td>
-                      <td>{tableInfo.comment || '-'}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              <Descriptions
+                bordered
+                size="small"
+                column={2}
+                style={{ padding: '4px 0' }}
+                items={[
+                  {
+                    key: 'tableName',
+                    label: t('common.tableName'),
+                    children: tableInfo.table_name,
+                  },
+                  {
+                    key: 'engine',
+                    label: t('common.engine'),
+                    children: tableInfo.engine || '-',
+                  },
+                  {
+                    key: 'rowCount',
+                    label: t('common.tableList.rowCount'),
+                    children: tableInfo.row_count?.toLocaleString() || '-',
+                  },
+                  {
+                    key: 'dataSize',
+                    label: t('common.dataSize'),
+                    children: tableInfo.data_length
+                      ? `${(tableInfo.data_length / 1024).toFixed(2)} KB`
+                      : '-',
+                  },
+                  {
+                    key: 'indexSize',
+                    label: t('common.indexSize'),
+                    children: tableInfo.index_length
+                      ? `${(tableInfo.index_length / 1024).toFixed(2)} KB`
+                      : '-',
+                  },
+                  {
+                    key: 'collation',
+                    label: t('common.databaseProperties.collation'),
+                    children: tableInfo.collation || '-',
+                  },
+                  {
+                    key: 'createTime',
+                    label: t('common.createTime'),
+                    children: tableInfo.create_time || '-',
+                  },
+                  {
+                    key: 'updateTime',
+                    label: t('common.updateTime'),
+                    children: tableInfo.update_time || '-',
+                  },
+                  {
+                    key: 'comment',
+                    label: t('common.comment'),
+                    children: tableInfo.comment || '-',
+                    span: 2,
+                  },
+                ]}
+              />
             ) : (
-              <Empty description={t('common.noTableInfo')} />
+              <EnhancedEmptyState title={t('common.noTableInfo')} />
             ),
           },
           {
             key: 'ddl',
             label: t('common.ddl'),
             children: ddl ? (
-              <DDLViewer ddl={ddl} connectionId={connectionId} maxHeight="calc(100vh - 240px)" />
+              <div style={{ height: tableHeight, display: 'flex', flexDirection: 'column' }}>
+                <DDLViewer
+                  ddl={ddl}
+                  connectionId={connectionId}
+                  style={{ flex: 1, minHeight: 0 }}
+                />
+              </div>
             ) : (
-              <Empty description={t('common.noData')} />
+              <EnhancedEmptyState title={t('common.noData')} />
             ),
           },
         ]}
       />
     </div>
   );
-}
+});
 
 export default TableStructure;

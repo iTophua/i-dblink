@@ -1,0 +1,241 @@
+/**
+ * polish.css — 精致质感层（最后加载，覆盖前两层）
+ *
+ * 设计目标：TablePlus / Linear 式的「耐看精致」——
+ * 不加新颜色，只做四类事：
+ *   1. 微交互：所有可交互元素 0.15-0.2s 的颜色/阴影过渡
+ *   2. 纵深：焦点环、浮层阴影、按钮内高光，全部走既有变量
+ *   3. 节奏：圆角/内边距对齐 --radius-* / --spacing-* 令牌
+ *   4. 细节：数字等宽、滚动条细化、选中态圆角化
+ *
+ * 注意：本文件依赖 App.tsx 注入的主题变量（--color-primary、--border 等），
+ * 不引入新的硬编码色值（阴影里的 rgba 中性色除外）。
+ */
+
+/* ==================== 1. 输入控件：焦点环与边框反馈 ==================== */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select .ant-select-selector,
+.ant-picker {
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease !important;
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover,
+.ant-input-number:hover,
+.ant-select:not(.ant-select-disabled):hover .ant-select-selector,
+.ant-picker:hover {
+  border-color: var(--border-dark, #C6C6BE) !important;
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper-focused,
+.ant-input-number-focused,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px var(--color-primary-alpha-15) !important;
+}
+
+/* ==================== 2. 主按钮：顶部微光（Linear 式内高光） ==================== */
+.ant-btn-primary {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 1px 2px rgba(28, 28, 26, 0.12),
+    0 2px 8px var(--color-primary-alpha-15) !important;
+}
+
+.ant-btn-primary:hover {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0) 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 2px 4px rgba(28, 28, 26, 0.12),
+    0 6px 16px var(--color-primary-alpha-30) !important;
+}
+
+.ant-btn-primary:active:not(:disabled) {
+  background-image: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 2px rgba(28, 28, 26, 0.12) !important;
+}
+
+[data-theme='dark'] .ant-btn-primary {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 2px 10px var(--color-primary-alpha-15) !important;
+}
+
+[data-theme='dark'] .ant-btn-primary:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    0 8px 20px var(--color-primary-alpha-30) !important;
+}
+
+/* ==================== 3. Tabs（可编辑卡片）：活动页浮起 ==================== */
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab {
+  border-radius: var(--radius-md) var(--radius-md) 0 0 !important;
+  border-bottom-color: transparent !important;
+  margin-right: 2px !important;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease !important;
+}
+
+/* 非活动页：完全融入工具栏底色，弱化边框 */
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab:hover {
+  background: var(--background-hover, #F0F0EC) !important;
+}
+
+/* 活动页：白底 + 顶缘细高光 + 左右衔接内容区 */
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active,
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active:hover {
+  background: var(--background-card, #FFFFFF) !important;
+  border-color: var(--border-color-light, #E9E9E4) !important;
+  border-bottom-color: var(--background-card, #FFFFFF) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 -1px 2px rgba(28, 28, 26, 0.03) !important;
+}
+
+/* 关闭按钮：平时弱化，悬停出现可点击底 */
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab .ant-tabs-tab-remove {
+  opacity: 0.45;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  border-radius: 4px;
+}
+
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab:hover .ant-tabs-tab-remove,
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active .ant-tabs-tab-remove {
+  opacity: 1;
+}
+
+.ant-tabs.ant-tabs-editable-card .ant-tabs-tab .ant-tabs-tab-remove:hover {
+  background: var(--background-active, #E7EAF6);
+  color: var(--color-primary);
+}
+
+[data-theme='dark'] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme='dark'] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active,
+[data-theme='dark'] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active:hover {
+  background: var(--surface-elevated, #1F1F22) !important;
+  border-bottom-color: var(--surface-elevated, #1F1F22) !important;
+}
+
+/* ==================== 4. 连接树：圆角悬停/选中态 ==================== */
+.connection-tree .ant-tree-node-content-wrapper {
+  border-radius: var(--radius-control, 6px);
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease !important;
+}
+
+/* ==================== 5. 下拉菜单 / 浮层：精致化 ==================== */
+.ant-dropdown .ant-dropdown-menu {
+  border-radius: var(--radius-overlay, 12px);
+  border: 1px solid var(--border-color-light, #E9E9E4);
+  box-shadow:
+    0 12px 40px rgba(28, 28, 26, 0.12),
+    0 2px 8px rgba(28, 28, 26, 0.06);
+  padding: 5px;
+}
+
+.ant-dropdown .ant-dropdown-menu-item {
+  border-radius: var(--radius-control, 6px);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.ant-modal .ant-modal-content {
+  border-radius: var(--radius-overlay, 12px);
+  border: 1px solid var(--border-color-light, #E9E9E4);
+  box-shadow:
+    0 24px 64px rgba(28, 28, 26, 0.16),
+    0 4px 12px rgba(28, 28, 26, 0.08);
+}
+
+/* 弹窗遮罩：极轻的模糊，让浮层「浮」出来 */
+.ant-modal-mask {
+  backdrop-filter: blur(2px) saturate(1.1);
+}
+
+[data-theme='dark'] .ant-dropdown .ant-dropdown-menu,
+[data-theme='dark'] .ant-modal .ant-modal-content {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ==================== 6. 表格：数字等宽 + 表头细节 ==================== */
+.ant-table-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+.ant-table-thead > tr > th {
+  transition: background-color 0.15s ease;
+}
+
+/* 可排序表头 hover：出现轻微底色，提示可点 */
+.ant-table-thead > tr > th.ant-table-column-sort {
+  background: var(--background-hover, #F0F0EC);
+}
+
+/* ==================== 7. 滚动条：细化（8px + 圆角 + hover 加深） ==================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-color: var(--scrollbar-thumb, rgba(28, 28, 26, 0.16));
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb, rgba(28, 28, 26, 0.16));
+  filter: brightness(0.82);
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ==================== 8. 工具栏按钮（text 图标按钮）：hover 出底色 ==================== */
+.ant-btn-text:not(.ant-btn-dangerous):not(:disabled):hover {
+  background: var(--background-hover, #F0F0EC);
+  transition: background-color 0.15s ease !important;
+}
+
+/* 图标按钮按压回弹 */
+.ant-btn:active:not(:disabled) {
+  transition: transform 0.08s ease;
+}
+
+/* ==================== 9. 选中态/空状态图标：统一圆角容器 ==================== */
+.quick-start-card,
+[class*='quickStart'] {
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.quick-start-card:hover,
+[class*='quickStart']:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-dark, #C6C6BE);
+  box-shadow: var(--shadow-md);
+}

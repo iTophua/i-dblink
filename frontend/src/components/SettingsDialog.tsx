@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Modal,
   Form,
@@ -6,25 +6,37 @@ import {
   Select,
   Button,
   Switch,
-  Menu,
   Input,
+  Segmented,
+  Skeleton,
   Space,
   Tag,
   Tooltip,
   message,
-  type InputRef,
 } from 'antd';
 import {
   ApiOutlined,
-  CopyOutlined,
+  BgColorsOutlined,
   CheckOutlined,
-  ReloadOutlined,
+  CopyOutlined,
+  LaptopOutlined,
+  EditOutlined,
+  ExclamationCircleOutlined,
+  GlobalOutlined,
   LoadingOutlined,
+  MoonOutlined,
+  ReloadOutlined,
+  RobotOutlined,
+  SearchOutlined,
+  SettingOutlined,
+  SunOutlined,
+  ThunderboltOutlined,
+  UndoOutlined,
 } from '@ant-design/icons';
 import { useAIStore } from '../stores/aiStore';
 import { api } from '../api';
-import { useSettingsStore, ThemeMode } from '../stores/settingsStore';
-import { THEME_PRESETS_LIST, THEMES } from '../styles/theme';
+import { useSettingsStore, type AppSettings } from '../stores/settingsStore';
+import { THEME_PRESETS_LIST, THEMES, type ThemePreset } from '../styles/theme';
 import {
   MENU_SHORTCUTS,
   isMacOS,
@@ -33,6 +45,7 @@ import {
 } from '../constants/menuShortcuts';
 import { SQL_LIVE_TEMPLATES } from '../constants/sqlLiveTemplates';
 import { useTranslation } from 'react-i18next';
+import { useThemeColors } from '../hooks/useThemeColors';
 import { getErrorMessage } from '../utils/getErrorMessage';
 
 interface SettingsDialogProps {
@@ -42,19 +55,225 @@ interface SettingsDialogProps {
 
 type SettingsTab = 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor' | 'ai' | 'mcp';
 
-const MENU_ITEMS = [
-  { key: 'general', labelKey: 'common.general' },
-  { key: 'appearance', labelKey: 'common.appearance' },
-  { key: 'language', labelKey: 'common.language' },
-  { key: 'shortcuts', labelKey: 'common.shortcuts' },
-  { key: 'editor', labelKey: 'common.editor' },
-  { key: 'ai', labelKey: 'common.ai' },
-  { key: 'mcp', labelKey: 'common.mcp' },
+const MENU_ITEMS: Array<{
+  key: SettingsTab;
+  labelKey: string;
+  icon: React.ReactNode;
+  group: 'basic' | 'advanced';
+}> = [
+  { key: 'general', labelKey: 'common.general', icon: <SettingOutlined />, group: 'basic' },
+  { key: 'appearance', labelKey: 'common.appearance', icon: <BgColorsOutlined />, group: 'basic' },
+  { key: 'language', labelKey: 'common.language', icon: <GlobalOutlined />, group: 'basic' },
+  { key: 'shortcuts', labelKey: 'common.shortcuts', icon: <ThunderboltOutlined />, group: 'advanced' },
+  { key: 'editor', labelKey: 'common.editor', icon: <EditOutlined />, group: 'advanced' },
+  { key: 'ai', labelKey: 'common.ai', icon: <RobotOutlined />, group: 'advanced' },
+  { key: 'mcp', labelKey: 'common.mcp', icon: <ApiOutlined />, group: 'advanced' },
 ];
+
+/** 设置面板分区标题：一个分区内的设置行用 1px 分隔线串起来，不再嵌套卡片 */
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section style={{ marginBottom: 22 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</div>
+      {description && (
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 3, lineHeight: 1.6 }}>
+          {description}
+        </div>
+      )}
+      <div style={{ marginTop: 12, borderTop: '1px solid var(--border)' }}>{children}</div>
+    </section>
+  );
+}
+
+/** 设置行：左侧标题/说明，右侧控件 */
+function SettingsRow({
+  label,
+  description,
+  control,
+}: {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  control: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 24,
+        padding: '12px 0',
+        borderBottom: '1px solid var(--border-light, var(--border))',
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{label}</div>
+        {description && (
+          <div
+            style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2, lineHeight: 1.5 }}
+          >
+            {description}
+          </div>
+        )}
+      </div>
+      <div style={{ flexShrink: 0 }}>{control}</div>
+    </div>
+  );
+}
+
+/** 设置字段：标签在上、控件占满整行的表单式布局（URL/密钥等长输入用） */
+function SettingsField({
+  label,
+  description,
+  children,
+}: {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        padding: '12px 0',
+        borderBottom: '1px solid var(--border-light, var(--border))',
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{label}</div>
+      {description && (
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2, lineHeight: 1.5 }}>
+          {description}
+        </div>
+      )}
+      <div style={{ marginTop: 8 }}>{children}</div>
+    </div>
+  );
+}
+
+/** 主题预设选择：直接看配色预览，比下拉框更直观 */
+function ThemePresetPicker({
+  value,
+  onChange,
+}: {
+  value?: ThemePreset;
+  onChange?: (value: ThemePreset) => void;
+}) {
+  const { isDark } = useThemeColors();
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+      {THEME_PRESETS_LIST.map((preset) => {
+        // 预览块跟随当前明暗模式，避免深色弹窗里出现三块刺眼的白卡
+        const config = isDark ? THEMES[preset.value].dark : THEMES[preset.value].light;
+        const neutral = config.neutralColors;
+        const colors = config.colors;
+        const active = value === preset.value;
+        return (
+          <button
+            key={preset.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange?.(preset.value)}
+            style={{
+              width: 168,
+              padding: 10,
+              textAlign: 'left',
+              cursor: 'pointer',
+              borderRadius: 10,
+              border: active ? `1px solid ${colors.primary}` : '1px solid var(--border)',
+              background: 'var(--surface-elevated)',
+              boxShadow: active ? `0 0 0 3px ${colors.primary}22` : 'none',
+              transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: 6,
+                height: 48,
+                padding: 8,
+                borderRadius: 7,
+                background: neutral.background,
+                border: `1px solid ${neutral.border}`,
+              }}
+            >
+              <span
+                style={{
+                  width: 26,
+                  height: 32,
+                  borderRadius: 4,
+                  background: neutral.backgroundCard,
+                  border: `1px solid ${neutral.border}`,
+                }}
+              />
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+                <span
+                  style={{
+                    height: 8,
+                    width: '70%',
+                    borderRadius: 2,
+                    background: colors.primary,
+                  }}
+                />
+                <span
+                  style={{
+                    height: 6,
+                    width: '100%',
+                    borderRadius: 2,
+                    background: neutral.backgroundHover,
+                  }}
+                />
+                <span
+                  style={{
+                    height: 6,
+                    width: '55%',
+                    borderRadius: 2,
+                    background: neutral.border,
+                  }}
+                />
+              </span>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: active ? 600 : 500 }}>{preset.label}</span>
+              <span style={{ display: 'inline-flex', gap: 3 }}>
+                {[colors.primary, colors.success, colors.warning, colors.error].map((color) => (
+                  <span
+                    key={color}
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: color,
+                    }}
+                  />
+                ))}
+              </span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
   const updateSettings = useSettingsStore((s) => s.updateSettings);
-  const resetSettings = useSettingsStore((s) => s.resetSettings);
   const [form] = Form.useForm();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const { t } = useTranslation();
@@ -63,56 +282,46 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
     if (open) {
       const savedTab = useSettingsStore.getState().settings.settingsActiveTab || 'general';
       form.setFieldsValue(useSettingsStore.getState().settings);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 打开弹窗时恢复上次所在 tab
       setActiveTab(savedTab);
     }
   }, [open, form]);
 
+  const contentRef = useRef<HTMLDivElement>(null);
+
   const handleTabChange = (tab: SettingsTab) => {
     setActiveTab(tab);
     updateSettings({ settingsActiveTab: tab });
+    contentRef.current?.scrollTo({ top: 0 });
   };
 
-  const handleSave = async () => {
-    try {
-      const values = await form.validateFields();
-      updateSettings(values);
-      onCancel();
-    } catch (error) {
-      console.error('Validation failed:', error);
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [activeTab]);
+
+  // 设置即时生效：表单值变化后立即写回 store（setFieldsValue 不会触发本回调）
+  const handleValuesChange = (changed: Partial<AppSettings>) => {
+    const patch = Object.fromEntries(
+      Object.entries(changed).filter(([, value]) => value !== undefined && value !== null)
+    );
+    if (Object.keys(patch).length > 0) {
+      updateSettings(patch as Partial<AppSettings>);
     }
   };
 
-  const handleReset = () => {
-    resetSettings();
-    form.setFieldsValue({
-      pageSize: 1000,
-      maxResultRows: 10000,
-      themeMode: 'system',
-      themePreset: 'default',
-      language: 'zh-CN',
-    });
-  };
+  const footerHint =
+    activeTab === 'ai'
+      ? t('common.aiSettings.autoSaveHint')
+      : activeTab === 'mcp'
+        ? t('common.settingsUi.mcpReadonlyHint')
+        : t('common.settingsUi.instantHint');
 
-  const handleModeChange = (mode: ThemeMode) => {
-    form.setFieldsValue({ themeMode: mode });
-  };
-
-  // AI（自动保存）和 MCP（只读展示）两个 tab 不依赖底部全局保存按钮
-  const isAutoSaveTab = activeTab === 'ai' || activeTab === 'mcp';
-
-  const menuItems = useMemo(
-    () =>
-      MENU_ITEMS.map((item) => ({
-        key: item.key,
-        label: t(item.labelKey),
-        style: {
-          padding: '8px 16px',
-          borderRadius: 6,
-          margin: '2px 8px',
-          width: 'calc(100% - 16px)',
-        },
-      })),
-    [t]
+  const navGroups = useMemo(
+    () => [
+      { key: 'basic' as const, items: MENU_ITEMS.filter((item) => item.group === 'basic') },
+      { key: 'advanced' as const, items: MENU_ITEMS.filter((item) => item.group === 'advanced') },
+    ],
+    []
   );
 
   return (
@@ -120,156 +329,208 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
       title={t('common.settings')}
       open={open}
       onCancel={onCancel}
-      width={780}
-      style={{ maxHeight: 550 }}
+      width={860}
       forceRender
-      styles={{ body: { height: 470, overflow: 'hidden', padding: 0 } }}
       className="settings-dialog-modal"
       data-testid="settings-dialog"
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          {isAutoSaveTab ? (
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-              {t('common.aiSettings.autoSaveHint')}
-            </span>
-          ) : (
-            <Button onClick={handleReset} data-testid="settings-reset-btn">
-              {t('common.reset')}
-            </Button>
-          )}
-          <div>
-            <Button onClick={onCancel} style={{ marginRight: 8 }}>
-              {t('common.close')}
-            </Button>
-            {!isAutoSaveTab && (
-              <Button type="primary" onClick={handleSave}>
-                {t('common.save')}
-              </Button>
-            )}
-          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{footerHint}</span>
+          <Button onClick={onCancel}>{t('common.close')}</Button>
         </div>
       }
     >
-      <div style={{ display: 'flex', height: '100%' }}>
-        <div
+      <div
+        style={{
+          display: 'flex',
+          gap: 12,
+          height: 'min(560px, calc(100vh - 260px))',
+          minHeight: 360,
+        }}
+      >
+        {/* 左栏：圆角导航卡片，和连接弹窗的数据库选择栏保持同一套语汇 */}
+        <nav
+          data-testid="settings-menu"
           style={{
-            width: 140,
+            width: 190,
             flexShrink: 0,
             background: 'var(--background-toolbar)',
-            borderRight: '1px solid var(--border-color)',
-            padding: '8px 0',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: 8,
             overflowY: 'auto',
           }}
         >
-          <Menu
-            mode="inline"
-            selectedKeys={[activeTab]}
-            onClick={({ key }) => handleTabChange(key as SettingsTab)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-            }}
-            items={menuItems}
-          />
-        </div>
-        <div
-          style={{
-            flex: 1,
-            background: 'var(--background-card)',
-            padding: '16px 24px',
-            height: 470,
-            overflowY: 'auto',
-          }}
-        >
-          <Form form={form} layout="vertical" initialValues={useSettingsStore.getState().settings}>
-            {activeTab === 'general' && (
-              <div>
-                <Form.Item
-                  label={t('common.defaultPageSize')}
-                  name="pageSize"
-                  rules={[{ required: true, message: t('common.defaultPageSize') }]}
-                  tooltip={t('common.loadRows')}
-                >
-                  <InputNumber
-                    min={10}
-                    max={10000}
-                    step={100}
-                    style={{ width: '100%' }}
-                    suffix={t('common.rows')}
-                  />
-                </Form.Item>
-                <Form.Item
-                  label={t('common.maxResultRows')}
-                  name="maxResultRows"
-                  rules={[{ required: true, message: t('common.maxResultRows') }]}
-                  tooltip={t('common.maxReturnRows')}
-                >
-                  <InputNumber
-                    min={100}
-                    max={100000}
-                    step={1000}
-                    style={{ width: '100%' }}
-                    suffix={t('common.rows')}
-                  />
-                </Form.Item>
+          {navGroups.map((group) => (
+            <div key={group.key} style={{ marginBottom: group.key === 'basic' ? 10 : 0 }}>
+              <div
+                style={{
+                  padding: '6px 10px 4px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: 0.4,
+                  color: 'var(--text-tertiary)',
+                }}
+              >
+                {t(
+                  group.key === 'basic'
+                    ? 'common.settingsUi.navBasic'
+                    : 'common.settingsUi.navAdvanced'
+                )}
               </div>
+              {group.items.map((item) => {
+                const active = activeTab === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`settings-nav-item${active ? ' is-active' : ''}`}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => handleTabChange(item.key)}
+                  >
+                    <span style={{ fontSize: 14, display: 'inline-flex' }}>{item.icon}</span>
+                    <span>{t(item.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        <div
+          ref={contentRef}
+          style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '2px 4px 8px 2px' }}
+        >
+          <Form
+            form={form}
+            layout="vertical"
+            initialValues={useSettingsStore.getState().settings}
+            onValuesChange={handleValuesChange}
+          >
+            {activeTab === 'general' && (
+              <SettingsSection
+                title={t('common.general')}
+                description={t('common.settingsUi.generalDesc')}
+              >
+                <SettingsRow
+                  label={t('common.defaultPageSize')}
+                  description={t('common.loadRows')}
+                  control={
+                    <Form.Item
+                      name="pageSize"
+                      noStyle
+                      rules={[{ required: true, message: t('common.defaultPageSize') }]}
+                    >
+                      <InputNumber
+                        min={10}
+                        max={10000}
+                        step={100}
+                        style={{ width: 220 }}
+                        suffix={t('common.rows')}
+                      />
+                    </Form.Item>
+                  }
+                />
+                <SettingsRow
+                  label={t('common.maxResultRows')}
+                  description={t('common.maxReturnRows')}
+                  control={
+                    <Form.Item
+                      name="maxResultRows"
+                      noStyle
+                      rules={[{ required: true, message: t('common.maxResultRows') }]}
+                    >
+                      <InputNumber
+                        min={100}
+                        max={100000}
+                        step={1000}
+                        style={{ width: 220 }}
+                        suffix={t('common.rows')}
+                      />
+                    </Form.Item>
+                  }
+                />
+              </SettingsSection>
             )}
 
             {activeTab === 'appearance' && (
               <div>
-                <Form.Item label={t('common.themePreset')} name="themePreset">
-                  <Select optionLabelProp="label">
-                    {THEME_PRESETS_LIST.map((preset) => {
-                      const c = THEMES[preset.value].light.colors;
-                      const dots = [c.primary, c.success, c.warning, c.error];
-                      return (
-                        <Select.Option key={preset.value} value={preset.value} label={preset.label}>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
-                                {dots.map((d) => (
-                                  <span
-                                    key={d}
-                                    style={{
-                                      width: 10,
-                                      height: 10,
-                                      borderRadius: '50%',
-                                      background: d,
-                                      display: 'inline-block',
-                                    }}
-                                  />
-                                ))}
-                              </span>
-                              <span>{preset.label}</span>
-                            </div>
-                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                              {preset.description}
-                            </div>
-                          </div>
-                        </Select.Option>
-                      );
-                    })}
-                  </Select>
-                </Form.Item>
-                <Form.Item label={t('common.themeMode')} name="themeMode">
-                  <Select onChange={handleModeChange}>
-                    <Select.Option value="light">{t('common.light')}</Select.Option>
-                    <Select.Option value="dark">{t('common.dark')}</Select.Option>
-                    <Select.Option value="system">{t('common.followSystem')}</Select.Option>
-                  </Select>
-                </Form.Item>
+                <SettingsSection
+                  title={t('common.themePreset')}
+                  description={t('common.settingsUi.presetDesc')}
+                >
+                  <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border-light, var(--border))' }}>
+                    <Form.Item name="themePreset" noStyle>
+                      <ThemePresetPicker />
+                    </Form.Item>
+                  </div>
+                </SettingsSection>
+                <SettingsSection
+                  title={t('common.settingsUi.modeSection')}
+                  description={t('common.settingsUi.modeDesc')}
+                >
+                  <SettingsRow
+                    label={t('common.themeMode')}
+                    control={
+                      <Form.Item name="themeMode" noStyle>
+                        <Segmented
+                          options={[
+                            {
+                              value: 'light',
+                              label: (
+                                <span className="settings-mode-option">
+                                  <SunOutlined />
+                                  {t('common.light')}
+                                </span>
+                              ),
+                            },
+                            {
+                              value: 'dark',
+                              label: (
+                                <span className="settings-mode-option">
+                                  <MoonOutlined />
+                                  {t('common.dark')}
+                                </span>
+                              ),
+                            },
+                            {
+                              value: 'system',
+                              label: (
+                                <span className="settings-mode-option">
+                                  <LaptopOutlined />
+                                  {t('common.followSystem')}
+                                </span>
+                              ),
+                            },
+                          ]}
+                        />
+                      </Form.Item>
+                    }
+                  />
+                </SettingsSection>
               </div>
             )}
 
             {activeTab === 'language' && (
-              <div>
-                <Form.Item label={t('common.interfaceLanguage')} name="language">
-                  <Select style={{ width: 200 }}>
-                    <Select.Option value="zh-CN">简体中文</Select.Option>
-                    <Select.Option value="en-US">English</Select.Option>
-                  </Select>
-                </Form.Item>
-              </div>
+              <SettingsSection
+                title={t('common.language')}
+                description={t('common.settingsUi.languageDesc')}
+              >
+                <SettingsRow
+                  label={t('common.interfaceLanguage')}
+                  control={
+                    <Form.Item name="language" noStyle>
+                      <Select
+                        style={{ width: 200 }}
+                        options={[
+                          { value: 'zh-CN', label: '简体中文' },
+                          { value: 'en-US', label: 'English' },
+                        ]}
+                      />
+                    </Form.Item>
+                  }
+                />
+              </SettingsSection>
             )}
 
             {activeTab === 'shortcuts' && <ShortcutsSettings />}
@@ -296,7 +557,10 @@ function ShortcutsSettings() {
   const isMac = isMacOS();
   const { t } = useTranslation();
 
-  const shortcuts: Record<string, string> = settings.shortcuts || {};
+  const shortcuts = useMemo<Record<string, string>>(
+    () => settings.shortcuts || {},
+    [settings.shortcuts]
+  );
 
   // 获取当前生效的快捷键映射 (id -> keys)
   const effectiveShortcuts = useMemo(() => {
@@ -397,16 +661,28 @@ function ShortcutsSettings() {
 
   const isCustomized = (shortcutId: string) => shortcutId in shortcuts;
 
+  const [query, setQuery] = useState('');
+
   const categories = useMemo(() => {
+    const q = query.trim().toLowerCase();
     const cats: Record<string, typeof MENU_SHORTCUTS> = {};
     MENU_SHORTCUTS.forEach((s) => {
       // 编辑类快捷键为系统级，不允许修改
       if (s.category === 'edit') return;
+      if (
+        q &&
+        !s.description.toLowerCase().includes(q) &&
+        !(getEffectiveShortcut(s.id, shortcuts, isMac) || '').toLowerCase().includes(q)
+      ) {
+        return;
+      }
       if (!cats[s.category]) cats[s.category] = [];
       cats[s.category].push(s);
     });
     return cats;
-  }, []);
+  }, [query, shortcuts, isMac]);
+
+  const hasResults = Object.keys(categories).length > 0;
 
   const categoryNames: Record<string, string> = {
     file: t('common.fileOperations'),
@@ -421,15 +697,42 @@ function ShortcutsSettings() {
   return (
     <div>
       {contextHolder}
-      <div style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12 }}>
-        {t('common.clickToModifyOrDelete')}
-      </div>
+      <SettingsSection
+        title={t('common.shortcuts')}
+        description={t('common.clickToModifyOrDelete')}
+      >
+        <div style={{ padding: '12px 0' }}>
+          <Input
+            allowClear
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+            placeholder={t('common.settingsUi.shortcutSearch')}
+            style={{ width: 260 }}
+          />
+        </div>
+      </SettingsSection>
+
+      {!hasResults && (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>
+          {t('common.settingsUi.shortcutNoMatch')}
+        </div>
+      )}
+
       {Object.entries(categories).map(([category, catShortcuts]) => (
-        <div key={category} style={{ marginBottom: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>
+        <div key={category} style={{ marginBottom: 18 }}>
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: 0.3,
+              color: 'var(--text-secondary)',
+              marginBottom: 4,
+            }}
+          >
             {categoryNames[category] || category}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ borderTop: '1px solid var(--border)' }}>
             {catShortcuts.map((shortcut) => (
               <div
                 key={shortcut.id}
@@ -437,10 +740,9 @@ function ShortcutsSettings() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '8px 12px',
-                  background: 'var(--background-active)',
-                  borderRadius: 6,
-                  border: '1px solid var(--border)',
+                  gap: 16,
+                  padding: '9px 0',
+                  borderBottom: '1px solid var(--border-light, var(--border))',
                 }}
               >
                 <span style={{ fontSize: 13 }}>{shortcut.description}</span>
@@ -454,7 +756,7 @@ function ShortcutsSettings() {
                         onKeyDown={handleKeyDown}
                         style={{
                           width: 140,
-                          fontFamily: 'monospace',
+                          fontFamily: 'var(--font-family-code)',
                           fontSize: 12,
                           ...(conflictKey
                             ? {
@@ -476,7 +778,6 @@ function ShortcutsSettings() {
                     </Space>
                     {conflictKey && (
                       <div style={{ color: 'var(--color-error)', fontSize: 11, marginTop: 2 }}>
-                        {' '}
                         {t('common.confirmWithKey', {
                           key:
                             MENU_SHORTCUTS.find((s) => s.id === conflictKey)?.description ||
@@ -490,9 +791,10 @@ function ShortcutsSettings() {
                     <Tag
                       style={{
                         cursor: 'pointer',
-                        fontFamily: 'monospace',
+                        fontFamily: 'var(--font-family-code)',
                         fontSize: 12,
                         padding: '2px 8px',
+                        marginInlineEnd: 0,
                         color: !effectiveShortcuts[shortcut.id]
                           ? 'var(--text-tertiary)'
                           : undefined,
@@ -506,10 +808,11 @@ function ShortcutsSettings() {
                         <Button
                           size="small"
                           type="text"
+                          icon={<UndoOutlined />}
                           style={{ fontSize: 11, padding: '0 4px', height: 20 }}
                           onClick={() => handleRestoreDefault(shortcut.id)}
                         >
-                          {t('common.default')}
+                          {t('common.restoreDefault')}
                         </Button>
                       </Tooltip>
                     )}
@@ -551,68 +854,47 @@ function EditorSettings() {
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 12,
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
-              {t('common.editorSettings.wordWrap')}
-            </div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-              {t('common.editorSettings.wordWrapDesc')}
-            </div>
-          </div>
-          <Switch
-            checked={editorWordWrap}
-            onChange={(checked) => updateSettings({ editorWordWrap: checked })}
-          />
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 12,
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
-              {t('common.liveTemplates.title')}
-            </div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-              {t('common.liveTemplates.description')}
-            </div>
-          </div>
-          <Switch
-            checked={liveTemplatesEnabled}
-            onChange={(checked) => updateSettings({ liveTemplatesEnabled: checked })}
-          />
-        </div>
-      </div>
+      <SettingsSection
+        title={t('common.editor')}
+        description={t('common.settingsUi.editorDesc')}
+      >
+        <SettingsRow
+          label={t('common.editorSettings.wordWrap')}
+          description={t('common.editorSettings.wordWrapDesc')}
+          control={
+            <Switch
+              checked={editorWordWrap}
+              onChange={(checked) => updateSettings({ editorWordWrap: checked })}
+            />
+          }
+        />
+        <SettingsRow
+          label={t('common.liveTemplates.title')}
+          description={t('common.liveTemplates.description')}
+          control={
+            <Switch
+              checked={liveTemplatesEnabled}
+              onChange={(checked) => updateSettings({ liveTemplatesEnabled: checked })}
+            />
+          }
+        />
+      </SettingsSection>
 
       {liveTemplatesEnabled &&
         Object.entries(grouped).map(([category, templates]) => (
-          <div key={category} style={{ marginBottom: 20 }}>
+          <div key={category} style={{ marginBottom: 18 }}>
             <div
               style={{
+                fontSize: 12,
                 fontWeight: 600,
-                marginBottom: 8,
-                color: 'var(--color-primary)',
-                fontSize: 13,
+                letterSpacing: 0.3,
+                color: 'var(--text-secondary)',
+                marginBottom: 4,
               }}
             >
               {LIVE_TEMPLATE_CATEGORIES[category] || category}
             </div>
-            <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ borderTop: '1px solid var(--border)' }}>
               {templates.map((tpl) => (
                 <div
                   key={tpl.trigger}
@@ -620,17 +902,16 @@ function EditorSettings() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '8px 12px',
-                    background: 'var(--background-active)',
-                    borderRadius: 6,
-                    border: '1px solid var(--border)',
+                    gap: 16,
+                    padding: '8px 0',
+                    borderBottom: '1px solid var(--border-light, var(--border))',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                     <span
                       style={{
-                        fontFamily: 'monospace',
-                        fontSize: 13,
+                        fontFamily: 'var(--font-family-code)',
+                        fontSize: 12,
                         fontWeight: 600,
                         color: 'var(--color-primary)',
                         background: 'var(--color-primary-alpha-15)',
@@ -649,7 +930,7 @@ function EditorSettings() {
                     style={{
                       fontSize: 12,
                       color: 'var(--text-tertiary)',
-                      fontFamily: 'monospace',
+                      fontFamily: 'var(--font-family-code)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -726,6 +1007,7 @@ function AISettings() {
   const [model, setModel] = useState(config.model);
   const [enabled, setEnabled] = useState(config.enabled);
   const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingField, setSavingField] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -797,7 +1079,6 @@ function AISettings() {
     setBaseUrl(config.baseUrl);
     setModel(config.model);
     setEnabled(config.enabled);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.provider, config.baseUrl, config.model, config.enabled]);
 
   const handleProviderChange = (value: string) => {
@@ -852,6 +1133,7 @@ function AISettings() {
 
   const handleTest = async () => {
     setTesting(true);
+    setTestResult(null);
     try {
       // 从 latestRef 读 apiKey，避免 onBlur 清空 state 后拿到空值
       const result = await testConnection({
@@ -861,13 +1143,19 @@ function AISettings() {
         apiKey: apiKey || latestRef.current.apiKey,
         model,
       });
-      if (result.success) {
-        messageApi.success(t('common.aiSettings.testSuccess') + ': ' + result.message);
-      } else {
-        messageApi.error(t('common.aiSettings.testFailed') + ': ' + result.message);
-      }
+      setTestResult({
+        ok: result.success,
+        text:
+          (result.success
+            ? t('common.aiSettings.testSuccess')
+            : t('common.aiSettings.testFailed')) +
+          (result.message ? ': ' + result.message : ''),
+      });
     } catch (err) {
-      messageApi.error(t('common.aiSettings.testFailed') + ': ' + getErrorMessage(err));
+      setTestResult({
+        ok: false,
+        text: t('common.aiSettings.testFailed') + ': ' + getErrorMessage(err),
+      });
     } finally {
       setTesting(false);
     }
@@ -876,70 +1164,55 @@ function AISettings() {
   return (
     <div>
       {contextHolder}
-      <div
-        style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}
+      <SettingsSection
+        title={t('common.ai')}
+        description={t('common.aiSettings.description')}
       >
-        {t('common.aiSettings.description')}
-      </div>
+        <SettingsRow
+          label={t('common.aiSettings.enableAI')}
+          control={<Switch checked={enabled} onChange={handleEnabledChange} />}
+        />
+      </SettingsSection>
 
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-        }}
+      <SettingsSection
+        title={t('common.settingsUi.aiConnection')}
+        description={t('common.settingsUi.aiConnectionDesc')}
       >
-        <span style={{ fontWeight: 600 }}>{t('common.aiSettings.enableAI')}</span>
-        <Switch checked={enabled} onChange={handleEnabledChange} />
-      </div>
-
-      <div style={{ display: 'grid', gap: 12 }}>
-        <div>
-          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-            {t('common.aiSettings.provider')}
-          </div>
+        <SettingsField label={t('common.aiSettings.provider')}>
           <Select
             value={provider}
             onChange={handleProviderChange}
             style={{ width: '100%' }}
             options={AI_PRESET_PROVIDERS.map((p) => ({ value: p.id, label: p.name }))}
           />
-        </div>
+        </SettingsField>
 
-        <div>
-          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-            {t('common.aiSettings.baseUrl')}
-          </div>
+        <SettingsField label={t('common.aiSettings.baseUrl')}>
           <Input
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             onBlur={handleBaseUrlBlur}
             placeholder="https://api.example.com/v1"
           />
-        </div>
+        </SettingsField>
 
-        <div>
-          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-            {t('common.aiSettings.apiKey')}
-          </div>
+        <SettingsField
+          label={t('common.aiSettings.apiKey')}
+          description={
+            config.apiKeyMask && !apiKey
+              ? `${t('common.aiSettings.apiKeyMasked')}: ${config.apiKeyMask}`
+              : undefined
+          }
+        >
           <Input.Password
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             onBlur={handleApiKeyBlur}
             placeholder={config.apiKeyMask || t('common.aiSettings.apiKeyPlaceholder')}
           />
-          {config.apiKeyMask && !apiKey && (
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-              {t('common.aiSettings.apiKeyMasked')}: {config.apiKeyMask}
-            </div>
-          )}
-        </div>
+        </SettingsField>
 
-        <div>
-          <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-            {t('common.aiSettings.model')}
-          </div>
+        <SettingsField label={t('common.aiSettings.model')} description={t('common.aiSettings.modelTip')}>
           <Space.Compact style={{ width: '100%' }}>
             <Select
               value={model || undefined}
@@ -965,29 +1238,43 @@ function AISettings() {
               />
             </Tooltip>
           </Space.Compact>
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-            {t('common.aiSettings.modelTip')}
-          </div>
-        </div>
+        </SettingsField>
 
-        <div style={{ marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Button
-            icon={<ApiOutlined />}
-            loading={testing}
-            onClick={handleTest}
-            onMouseDown={(e) => e.preventDefault()}
-            style={{ flex: 1 }}
-          >
-            {testing ? t('common.aiSettings.testing') : t('common.aiSettings.testConnection')}
-          </Button>
-          {/* 统一的保存中指示器——任何字段保存时都显示 */}
-          {savingField && (
-            <Tooltip title={t('common.aiSettings.saving')}>
-              <LoadingOutlined style={{ fontSize: 14, color: 'var(--text-tertiary)' }} />
-            </Tooltip>
+        <div style={{ padding: '12px 0' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Button
+              icon={<ApiOutlined />}
+              loading={testing}
+              onClick={handleTest}
+              onMouseDown={(e) => e.preventDefault()}
+              style={{ flex: 1 }}
+            >
+              {testing ? t('common.aiSettings.testing') : t('common.aiSettings.testConnection')}
+            </Button>
+            {/* 统一的保存中指示器——任何字段保存时都显示 */}
+            {savingField && (
+              <Tooltip title={t('common.aiSettings.saving')}>
+                <LoadingOutlined style={{ fontSize: 14, color: 'var(--text-tertiary)' }} />
+              </Tooltip>
+            )}
+          </div>
+          {testResult && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                marginTop: 10,
+                fontSize: 12,
+                color: testResult.ok ? 'var(--color-success)' : 'var(--color-error)',
+              }}
+            >
+              {testResult.ok ? <CheckOutlined /> : <ExclamationCircleOutlined />}
+              <span>{testResult.text}</span>
+            </div>
           )}
         </div>
-      </div>
+      </SettingsSection>
     </div>
   );
 }
@@ -997,21 +1284,27 @@ function MCPSettings() {
   const { t } = useTranslation();
   const [config, setConfig] = useState<import('../api').MCPConfigInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [copiedInstruction, setCopiedInstruction] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
-  useEffect(() => {
-    api
-      .getMCPConfig()
-      .then((info) => {
-        setConfig(info);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Failed to get MCP config:', err);
-        setLoading(false);
-      });
+  const loadConfig = useCallback(async () => {
+    setLoading(true);
+    setLoadFailed(false);
+    try {
+      setConfig(await api.getMCPConfig());
+    } catch (err) {
+      console.error('Failed to get MCP config:', err);
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 进入 MCP tab 时拉取只读配置
+    loadConfig();
+  }, [loadConfig]);
 
   // 一句话安装说明：agent 最清楚自己的配置格式与位置，把含真实路径的
   // 指令复制给它即可自行安装/更新，免去逐客户端适配配置文件
@@ -1029,114 +1322,136 @@ function MCPSettings() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>
-        {t('common.loading')}
+      <div>
+        {contextHolder}
+        <SettingsSection title={t('common.mcp')} description={t('common.mcpSettings.description')}>
+          <div style={{ padding: '12px 0' }}>
+            <Skeleton active title={false} paragraph={{ rows: 4 }} />
+          </div>
+        </SettingsSection>
       </div>
     );
   }
 
-  if (!config) {
+  if (loadFailed || !config) {
     return (
-      <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-error)' }}>
-        {t('common.mcpSettings.loadFailed')}
+      <div>
+        {contextHolder}
+        <SettingsSection title={t('common.mcp')} description={t('common.mcpSettings.description')}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '20px 0',
+              fontSize: 12,
+              color: 'var(--color-error)',
+            }}
+          >
+            <ExclamationCircleOutlined />
+            <span>{t('common.mcpSettings.loadFailed')}</span>
+            <Button size="small" icon={<ReloadOutlined />} onClick={loadConfig}>
+              {t('common.settingsUi.retry')}
+            </Button>
+          </div>
+        </SettingsSection>
       </div>
     );
   }
+
+  const tools = (config.tools || '')
+    .split(',')
+    .map((tool) => tool.trim())
+    .filter(Boolean);
 
   return (
     <div>
       {contextHolder}
-      <div
-        style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}
+      <SettingsSection
+        title={t('common.mcp')}
+        description={t('common.mcpSettings.description')}
       >
-        {t('common.mcpSettings.description')}
-      </div>
-
-      {/* 可执行文件路径 */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-          {t('common.mcpSettings.executablePath')}
-        </div>
-        <Space.Compact style={{ width: '100%' }}>
-          <Input
-            value={config.executablePath}
-            readOnly
-            style={{ flex: 1, minWidth: 0, fontFamily: 'monospace', fontSize: 12 }}
-          />
-          <Button
-            onClick={() => {
-              navigator.clipboard.writeText(config.executablePath);
-              messageApi.success(t('common.mcpSettings.copied'));
-            }}
-          >
-            {t('common.copy')}
-          </Button>
-        </Space.Compact>
-        {config.isDev && (
-          <div style={{ fontSize: 11, color: 'var(--color-warning)', marginTop: 2 }}>
-            {t('common.mcpSettings.devModeWarning')}
-          </div>
-        )}
-      </div>
+        <SettingsField
+          label={t('common.mcpSettings.executablePath')}
+          description={
+            config.isDev ? (
+              <span style={{ color: 'var(--color-warning)' }}>
+                {t('common.mcpSettings.devModeWarning')}
+              </span>
+            ) : undefined
+          }
+        >
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              value={config.executablePath}
+              readOnly
+              style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-family-code)', fontSize: 12 }}
+            />
+            <Button
+              onClick={() => {
+                navigator.clipboard.writeText(config.executablePath);
+                messageApi.success(t('common.mcpSettings.copied'));
+              }}
+            >
+              {t('common.copy')}
+            </Button>
+          </Space.Compact>
+        </SettingsField>
+      </SettingsSection>
 
       {/* 安装到 Agent：复制一句话，agent 自行完成安装 */}
-      <div style={{ marginBottom: 16 }}>
-        <div
-          style={{
-            marginBottom: 4,
-            fontSize: 13,
-            fontWeight: 500,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span>{t('common.mcpSettings.installTitle')}</span>
-          <Button
-            size="small"
-            type="primary"
-            onClick={handleCopyInstruction}
-            icon={copiedInstruction ? <CheckOutlined /> : <CopyOutlined />}
+      <SettingsSection
+        title={t('common.mcpSettings.installTitle')}
+        description={t('common.mcpSettings.installHint')}
+      >
+        <div style={{ padding: '12px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <Button
+              size="small"
+              type="primary"
+              onClick={handleCopyInstruction}
+              icon={copiedInstruction ? <CheckOutlined /> : <CopyOutlined />}
+            >
+              {t('common.mcpSettings.copyInstruction')}
+            </Button>
+          </div>
+          <pre
+            style={{
+              background: 'var(--background-toolbar)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: 12,
+              fontSize: 12,
+              lineHeight: 1.7,
+              overflow: 'auto',
+              margin: 0,
+              maxHeight: 160,
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-family-code)',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}
           >
-            {t('common.mcpSettings.copyInstruction')}
-          </Button>
+            {instructionText}
+          </pre>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>
-          {t('common.mcpSettings.installHint')}
-        </div>
-        <pre
-          style={{
-            background: 'var(--color-primary-alpha-15)',
-            border: '1px solid var(--color-primary-alpha-30)',
-            borderRadius: 6,
-            padding: 12,
-            fontSize: 12,
-            lineHeight: 1.7,
-            overflow: 'auto',
-            margin: 0,
-            maxHeight: 160,
-            color: 'var(--text-primary)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-          }}
-        >
-          {instructionText}
-        </pre>
-      </div>
+      </SettingsSection>
 
-      {/* 可用工具列表 */}
-      <div>
-        <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>
-          {t('common.mcpSettings.availableTools')}
+      <SettingsSection title={t('common.mcpSettings.availableTools')}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '12px 0' }}>
+          {tools.length > 0 ? (
+            tools.map((tool) => (
+              <Tag key={tool} style={{ fontFamily: 'var(--font-family-code)', fontSize: 11 }}>
+                {tool}
+              </Tag>
+            ))
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+              {t('common.settingsUi.noTools')}
+            </span>
+          )}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {config.tools.split(', ').map((tool) => (
-            <Tag key={tool} style={{ fontFamily: 'monospace', fontSize: 11 }}>
-              {tool}
-            </Tag>
-          ))}
-        </div>
-      </div>
+      </SettingsSection>
     </div>
   );
 }

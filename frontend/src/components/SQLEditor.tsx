@@ -11,8 +11,10 @@ import {
   Empty,
   Drawer,
   Space,
+  Segmented,
+  Select,
 } from 'antd';
-import { ExpandAltOutlined } from '@ant-design/icons';
+import { ExpandAltOutlined, CopyOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { api } from '../api';
@@ -40,6 +42,7 @@ import { SQLEditorContextMenu } from './SQLEditor/components/SQLEditorContextMen
 import { getErrorMessage } from '../utils/getErrorMessage';
 import { useSettingsStore } from '../stores/settingsStore';
 import { EnhancedEmptyState, QueryResultSkeleton } from './LoadingStates';
+import { appModal } from '../utils/appModal';
 
 interface QueryResultWithTiming {
   executionTime?: number;
@@ -62,6 +65,62 @@ interface SQLEditorProps {
   onConnectionDatabaseChange?: (connectionId: string, database: string | undefined) => void;
   dbType?: DatabaseType;
   onQueryStatusChange?: (isQuerying: boolean) => void;
+  /** 所属工作区 tab key：用于把未保存状态回传给 tab 标签 */
+  tabKey?: string;
+}
+
+/** 消息面板：错误高亮、自动滚到最新、一键复制全部 */
+function MessagesPanel({ messages }: { messages: string[] }) {
+  const { t } = useTranslation();
+  const { message } = App.useApp();
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, [messages]);
+
+  if (messages.length === 0) {
+    return (
+      <div className="result-messages">
+        <Empty description={t('common.noMessages')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="result-messages">
+      <div className="result-messages-head">
+        <span>
+          {t('common.messageLabel')} · {messages.length}
+        </span>
+        <div style={{ flex: 1 }} />
+        <Button
+          size="small"
+          type="text"
+          icon={<CopyOutlined />}
+          onClick={() => {
+            navigator.clipboard.writeText(messages.join('\n'));
+            message.success(t('common.copied'));
+          }}
+        >
+          {t('common.copyAll')}
+        </Button>
+      </div>
+      <div className="result-messages-list">
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={
+              msg.startsWith('✗') ? 'is-error' : msg.startsWith('⚠') ? 'is-warning' : 'is-success'
+            }
+          >
+            {msg}
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
 }
 
 export function SQLEditor({
@@ -72,6 +131,7 @@ export function SQLEditor({
   onConnectionDatabaseChange,
   dbType: propDbType,
   onQueryStatusChange,
+  tabKey,
 }: SQLEditorProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -119,6 +179,15 @@ export function SQLEditor({
   const saveSQLAsRef = useRef<() => void>(() => {});
   // dirty 基线：初始内容/最近一次保存的内容（关闭保护用）
   const [sqlBaseline, setSqlBaseline] = useState(defaultQuery || '');
+  // 各结果集内未提交编辑（由 ResultGrid 上报）：按结果序号聚合，重跑/关 tab 前确认
+  const [resultDirtyMap, setResultDirtyMap] = useState<Record<string, boolean>>({});
+  const resultDirty = Object.values(resultDirtyMap).some(Boolean);
+  const handleResultDirty = useCallback((dirty: boolean, scope?: number) => {
+    const key = String(scope ?? 0);
+    setResultDirtyMap((prev) => (prev[key] === dirty ? prev : { ...prev, [key]: dirty }));
+  }, []);
+  // 多结果切换索引（Segmented 选择）
+  const [activeResultIndex, setActiveResultIndex] = useState(0);
   // Ref to link formatSQL to Monaco shortcuts
   const formatSQLRef = useRef<() => void>(() => {});
   // 格式化前的原文快照（用于"还原"）+ 标记是否已格式化
@@ -139,7 +208,7 @@ export function SQLEditor({
   // --- Extracted hooks ---
 
   // Editor resizer
-  const { editorRatio, containerRef, handleResizeStart } = useEditorResizer();
+  const { editorRatio, containerRef, handleResizeStart, resetRatio } = useEditorResizer();
 
   // SQL 编辑器自动换行设置（默认关闭）
   const editorWordWrap = useSettingsStore((s) => s.settings.editorWordWrap);
@@ -151,28 +220,23 @@ export function SQLEditor({
   );
 
   // Monaco editor (must be initialized before useQueryExecution since it provides highlightError/clearErrorMarkers)
-  const {
-    editorRef,
-    monacoRef,
-    handleEditorMount,
-    highlightError,
-    clearErrorMarkers,
-  } = useMonacoEditor({
-    connectionId,
-    database,
-    dbType,
-    availableDatabases,
-    sql,
-    setSql,
-    handleExecuteQueryRef,
-    formatSQLRef,
-    containerRef,
-    setContextMenuVisible,
-    setContextMenuPos,
-    contextMenuSelectedSqlRef,
-    contextMenuMeasuredRef,
-    editorWordWrap,
-  });
+  const { editorRef, monacoRef, handleEditorMount, highlightError, clearErrorMarkers } =
+    useMonacoEditor({
+      connectionId,
+      database,
+      dbType,
+      availableDatabases,
+      sql,
+      setSql,
+      handleExecuteQueryRef,
+      formatSQLRef,
+      containerRef,
+      setContextMenuVisible,
+      setContextMenuPos,
+      contextMenuSelectedSqlRef,
+      contextMenuMeasuredRef,
+      editorWordWrap,
+    });
 
   // Transaction（须在 useQueryExecution 之前：执行前钩子要确保手动模式下事务已开启）
   const {
@@ -232,10 +296,33 @@ export function SQLEditor({
     handleDismissDialectBanner,
   } = useSqlDialectDetection(connectionId, dbType, sql, setSql);
 
-  // 同步 handleExecuteQuery 到 ref，供 Monaco 快捷键使用
+  // 执行前守卫：结果集里有未提交编辑时先确认——重新执行会重建结果集并丢弃编辑
+  const handleExecuteGuarded = useCallback(
+    (explicitSql?: string) => {
+      // 新一次执行后多结果默认回到第 1 个
+      setActiveResultIndex(0);
+      if (!resultDirty) {
+        handleExecuteQuery(explicitSql);
+        return;
+      }
+      appModal.confirm({
+        title: t('common.sqlEditor.discardEditsTitle'),
+        content: t('common.sqlEditor.discardEditsContent'),
+        okText: t('common.sqlEditor.executeAnyway'),
+        okType: 'danger',
+        cancelText: t('common.cancel'),
+        transitionName: '',
+        maskTransitionName: '',
+        onOk: () => handleExecuteQuery(explicitSql),
+      });
+    },
+    [resultDirty, handleExecuteQuery, t]
+  );
+
+  // 同步守卫后的执行入口到 ref，供 Monaco 快捷键使用
   useEffect(() => {
-    handleExecuteQueryRef.current = handleExecuteQuery;
-  }, [handleExecuteQuery]);
+    handleExecuteQueryRef.current = handleExecuteGuarded;
+  }, [handleExecuteGuarded]);
 
   // 是否有查询结果需要展示（决定结果面板是否显示）
   const hasResult = result !== null || results.length > 0 || loading || explainPlan.length > 0;
@@ -368,8 +455,12 @@ export function SQLEditor({
 
   const saveSQLAs = useCallback(async () => {
     const now = new Date();
-    const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}_${String(now.getSeconds()).padStart(2,'0')}`;
-    const fallback = sql.trim().split('\n')[0]?.replace(/[^\w一-龥.-]/g, '').slice(0, 40);
+    const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}_${String(now.getSeconds()).padStart(2, '0')}`;
+    const fallback = sql
+      .trim()
+      .split('\n')[0]
+      ?.replace(/[^\w一-龥.-]/g, '')
+      .slice(0, 40);
     const defaultName = savedPathRef.current
       ? savedPathRef.current.split('/').pop() || `query_${ts}.sql`
       : `${fallback || 'query'}_${ts}.sql`.replace(/^[_.]+/, '') || `query_${ts}.sql`;
@@ -394,7 +485,9 @@ export function SQLEditor({
           setSqlBaseline(sql);
           message.success(t('common.sqlSaved'));
         })
-        .catch((err) => message.error(`${t('common.sqlEditor.saveFailed')}: ${getErrorMessage(err)}`));
+        .catch((err) =>
+          message.error(`${t('common.sqlEditor.saveFailed')}: ${getErrorMessage(err)}`)
+        );
     } else {
       void saveSQLAs();
     }
@@ -406,21 +499,25 @@ export function SQLEditor({
     saveSQLAsRef.current = saveSQLAs;
   }, [saveSQL, saveSQLAs]);
 
-  // 关闭保护：SQL 文本偏离基线（初始内容/最近保存）即上报 dirty，
-  // 经 sql-dirty-change 事件由 MainLayout 聚合（多编辑器实例取并集），
-  // tab 关闭（卸载）时自动清除本实例的 dirty
+  // 关闭保护：SQL 文本偏离基线，或结果集里有未提交编辑，都算 dirty。
+  // 事件同时被 MainLayout（关窗聚合）和 TabPanel（tab 未保存标记/关闭确认）消费。
   const editorInstanceId = useId();
+  const sqlDirty = sql !== sqlBaseline;
+  const editorDirty = sqlDirty || resultDirty;
   useEffect(() => {
-    const dirty = sql !== sqlBaseline;
     window.dispatchEvent(
-      new CustomEvent('sql-dirty-change', { detail: { id: editorInstanceId, dirty } })
+      new CustomEvent('sql-dirty-change', {
+        detail: { id: editorInstanceId, tabKey, dirty: editorDirty },
+      })
     );
     return () => {
       window.dispatchEvent(
-        new CustomEvent('sql-dirty-change', { detail: { id: editorInstanceId, dirty: false } })
+        new CustomEvent('sql-dirty-change', {
+          detail: { id: editorInstanceId, tabKey, dirty: false },
+        })
       );
     };
-  }, [sql, sqlBaseline, editorInstanceId]);
+  }, [editorDirty, editorInstanceId, tabKey]);
 
   const copySQL = useCallback(() => {
     navigator.clipboard.writeText(sql);
@@ -428,7 +525,8 @@ export function SQLEditor({
   }, [sql]);
 
   const exportResult = useCallback(() => {
-    const targetResult = result || (results.length > 0 ? results[0] : null);
+    // 多语句执行时 result 可能还是上一次单语句的旧结果，优先导出最新 results
+    const targetResult = results.length > 0 ? results[results.length - 1] : result;
     if (!targetResult || targetResult.rows.length === 0) {
       message.warning(t('common.noDataToExport'));
       return;
@@ -503,7 +601,7 @@ export function SQLEditor({
 
   // 渲染单个结果集的表格（AG Grid）
   const renderResultTable = useCallback(
-    (queryResult: QueryResultWithTiming) => {
+    (queryResult: QueryResultWithTiming, index: number) => {
       return (
         <ResultGrid
           queryResult={queryResult}
@@ -511,44 +609,54 @@ export function SQLEditor({
           executionTime={queryResult.executionTime}
           connectionId={connectionId || undefined}
           database={database}
-          originalSql={sql}
+          originalSql={queryResult.executedSql}
           dbType={dbType}
+          onDirtyChange={handleResultDirty}
+          dirtyScope={index}
         />
       );
     },
-    [tc.isDark, connectionId, database, sql, dbType]
+    [tc.isDark, connectionId, database, dbType, handleResultDirty]
   );
+
+  // 多语句执行后 result 仍是上一次单语句的旧对象：有 results 时以最后一个结果为准
+  const singleResult = results.length > 0 ? results[results.length - 1] : result;
 
   // 渲染单结果（用于 result 标签）
   const renderSingleResult = useMemo(
     () => (
-      <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        {!result ? (
+      <div
+        style={{
+          height: '100%',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+        }}
+      >
+        {!singleResult ? (
           !connectionId ? (
-            <EnhancedEmptyState
-              title={t('common.pleaseSelectDatabaseConnection')}
-            />
+            <EnhancedEmptyState title={t('common.pleaseSelectDatabaseConnection')} />
           ) : loading ? (
             <QueryResultSkeleton />
           ) : (
-            <EnhancedEmptyState
-              title={t('common.noQueryResults')}
-            />
+            <EnhancedEmptyState title={t('common.noQueryResults')} />
           )
         ) : (
           <ResultGrid
-            queryResult={result}
+            queryResult={singleResult}
             isDark={tc.isDark}
-            executionTime={result.executionTime}
+            executionTime={singleResult.executionTime}
             connectionId={connectionId || undefined}
             database={database}
-            originalSql={sql}
+            originalSql={singleResult.executedSql}
             dbType={dbType}
+            onDirtyChange={handleResultDirty}
           />
         )}
       </div>
     ),
-    [loading, connectionId, database, sql, dbType, result, tc.isDark]
+    [loading, connectionId, database, dbType, singleResult, tc.isDark, handleResultDirty, t]
   );
 
   // 结果面板 Tab items
@@ -561,6 +669,14 @@ export function SQLEditor({
     const showAsMulti =
       (resultViewMode === 'all' && allResults.length >= 1) ||
       (resultViewMode === 'auto' && allResults.length > 1);
+
+    const currentResultIndex = Math.min(activeResultIndex, Math.max(0, allResults.length - 1));
+    const resultOptions = allResults.map((r, i) => ({
+      value: String(i),
+      label: `#${i + 1} · ${r.rows.length} ${t('common.rowsCount')}${
+        r.executionTime ? ` · ${r.executionTime}ms` : ''
+      }`,
+    }));
 
     const resultLabel =
       allResults.length > 1
@@ -598,10 +714,20 @@ export function SQLEditor({
               trigger={['click']}
             >
               <Tag
-                style={{ fontSize: 10, lineHeight: '16px', cursor: 'pointer', padding: '0 4px', margin: 0 }}
+                style={{
+                  fontSize: 10,
+                  lineHeight: '16px',
+                  cursor: 'pointer',
+                  padding: '0 4px',
+                  margin: 0,
+                }}
                 color="processing"
               >
-                {resultViewMode === 'auto' ? t('common.autoDisplay') : resultViewMode === 'all' ? t('common.showAllResults') : t('common.showSingleResult')}
+                {resultViewMode === 'auto'
+                  ? t('common.autoDisplay')
+                  : resultViewMode === 'all'
+                    ? t('common.showAllResults')
+                    : t('common.showSingleResult')}
               </Tag>
             </Dropdown>
           )}
@@ -612,16 +738,40 @@ export function SQLEditor({
           style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
         >
           {showAsMulti ? (
-            <Tabs
-              type="card"
-              size="small"
-              style={{ padding: '0 8px' }}
-              items={allResults.map((r, i) => ({
-                key: `result-${i}`,
-                label: `${t('common.resultLabel')} ${i + 1} (${r.rows.length} ${t('common.rowsCount')})${r.executionTime ? ` · ${r.executionTime}ms` : ''}`,
-                children: renderResultTable(r),
-              }))}
-            />
+            <>
+              {allResults.length > 1 && (
+                <div className="result-grid-switcher">
+                  {allResults.length > 6 ? (
+                    <Select
+                      size="small"
+                      value={String(currentResultIndex)}
+                      onChange={(v) => setActiveResultIndex(Number(v))}
+                      options={resultOptions}
+                      style={{ minWidth: 160 }}
+                    />
+                  ) : (
+                    <Segmented
+                      size="small"
+                      value={String(currentResultIndex)}
+                      onChange={(v) => setActiveResultIndex(Number(v))}
+                      options={resultOptions}
+                    />
+                  )}
+                </div>
+              )}
+              {/* 所有结果集保持挂载，只隐藏非当前项：切换结果时不会丢掉各自的编辑状态 */}
+              <div className="result-grid-stack">
+                {allResults.map((r, i) => (
+                  <div
+                    key={i}
+                    className="result-grid-pane"
+                    style={{ display: i === currentResultIndex ? 'flex' : 'none' }}
+                  >
+                    {renderResultTable(r, i)}
+                  </div>
+                ))}
+              </div>
+            </>
           ) : (
             renderSingleResult
           )}
@@ -629,44 +779,19 @@ export function SQLEditor({
       ),
     });
 
+    const messageErrorCount = messages.filter((m) => m.startsWith('✗')).length;
     items.push({
       key: 'messages',
-      label: `${t('common.messageLabel')} (${messages.length})`,
-      children: (
-        <div
-          style={{
-            padding: 12,
-            overflow: 'auto',
-            height: '100%',
-            background: 'var(--background-card)',
-          }}
+      label: (
+        <span
+          style={
+            messageErrorCount > 0 ? { color: 'var(--color-error)', fontWeight: 500 } : undefined
+          }
         >
-          {messages.length === 0 ? (
-            <Empty description={t('common.noMessages')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          ) : (
-            messages.map((msg, i) => (
-              <div
-                key={i}
-                style={{
-                  fontSize: 13,
-                  marginBottom: 6,
-                  fontFamily: 'monospace',
-                  lineHeight: 1.6,
-                  wordBreak: 'break-all',
-                }}
-              >
-                {msg.startsWith('✗') ? (
-                  <span style={{ color: 'var(--color-error)' }}>{msg}</span>
-                ) : msg.startsWith('⚠') ? (
-                  <span style={{ color: 'var(--color-warning)' }}>{msg}</span>
-                ) : (
-                  <span style={{ color: 'var(--color-success)' }}>{msg}</span>
-                )}
-              </div>
-            ))
-          )}
-        </div>
+          {t('common.messageLabel')} ({messages.length})
+        </span>
       ),
+      children: <MessagesPanel messages={messages} />,
     });
 
     if (explainPlan.length > 0) {
@@ -682,7 +807,18 @@ export function SQLEditor({
     }
 
     return items;
-  }, [results, result, messages, explainPlan, tc.isDark, renderResultTable, renderSingleResult, resultViewMode]);
+  }, [
+    results,
+    result,
+    messages,
+    explainPlan,
+    tc.isDark,
+    renderResultTable,
+    renderSingleResult,
+    resultViewMode,
+    activeResultIndex,
+    t,
+  ]);
 
   // 当 Tab items 变化导致当前 activeTab 失效时，自动切换到第一个可用 Tab
   useEffect(() => {
@@ -719,7 +855,7 @@ export function SQLEditor({
       <SQLEditorToolbar
         loading={loading}
         connectionId={connectionId}
-        handleExecuteQuery={handleExecuteQuery}
+        handleExecuteQuery={handleExecuteGuarded}
         stopQuery={stopQuery}
         showExplainPlan={showExplainPlan}
         execElapsed={execElapsed}
@@ -736,6 +872,7 @@ export function SQLEditor({
         copySQL={copySQL}
         clearEditor={clearEditor}
         exportResult={exportResult}
+        hasResult={(result?.rows?.length ?? 0) > 0 || results.some((r) => r.rows.length > 0)}
         setHistoryPanelVisible={setHistoryPanelVisible}
         setSnippetManagerOpen={setSnippetManagerOpen}
         connectionOptions={connectionOptions}
@@ -836,7 +973,7 @@ export function SQLEditor({
             selectedSql={contextMenuSelectedSqlRef.current}
             connectionId={connectionId}
             loading={loading}
-            handleExecuteQuery={handleExecuteQuery}
+            handleExecuteQuery={handleExecuteGuarded}
             formatSQL={formatSQL}
             showExplainPlan={showExplainPlan}
             saveSQL={saveSQL}
@@ -853,10 +990,12 @@ export function SQLEditor({
       {hasResult && (
         <div
           onMouseDown={handleResizeStart}
+          onDoubleClick={resetRatio}
           className="resize-handle"
           style={{
             flex: '0 0 4px',
-            background: 'var(--border)',
+            // 用最深一档窗口底做分隔带，比 4px 纯边框更像「两条区域之间的缝」
+            background: 'var(--background)',
             cursor: 'row-resize',
             display: 'flex',
             alignItems: 'center',
@@ -885,6 +1024,10 @@ export function SQLEditor({
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
+            // 结果区是纯白浮面，靠顶部投影与编辑器区分家（两者底色不再完全同色）
+            background: 'var(--background-card)',
+            borderTop: '1px solid var(--border)',
+            boxShadow: '0 -2px 8px rgba(28, 28, 26, 0.04)',
           }}
         >
           <Tabs
@@ -948,7 +1091,7 @@ export function SQLEditor({
           // 设置替换后的 SQL 并执行
           setSql(finalSql);
           // 延迟执行以确保状态更新
-          setTimeout(() => handleExecuteQuery(), 0);
+          setTimeout(() => handleExecuteGuarded(), 0);
         }}
       />
     </div>

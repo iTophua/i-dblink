@@ -4,19 +4,23 @@
  * 完整功能：拖拽多选、内联编辑、新增行Modal、右键菜单(INSERT/UPDATE/DELETE)、
  * 多格式导出(CSV/JSON/Excel/TXT/XML/MD)、底部SQL预览、提交/撤销。
  */
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Button, Space, Empty, Tag, App, Modal, Dropdown } from 'antd';
+import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react';
+import { Button, Space, Empty, Tag, App, Dropdown } from 'antd';
 import {
-  DeleteOutlined, SaveOutlined, UndoOutlined, CodeOutlined,
-  PlusOutlined, DownloadOutlined,
-  ExclamationCircleOutlined, BgColorsOutlined,
+  DeleteOutlined,
+  SaveOutlined,
+  UndoOutlined,
+  PlusOutlined,
+  DownloadOutlined,
+  ExclamationCircleOutlined,
+  BgColorsOutlined,
+  CopyOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../hooks/useApi';
 import type { QueryResult, DatabaseType, ColumnInfo } from '../../types/api';
 import { exportToExcel } from '../../utils/exportUtils';
 import { getDialect } from '../../utils/sqlDialects';
-import DataEditor from '@glideapps/glide-data-grid';
 import { GlideDataTable, type GlideRow } from '../DataTable/GlideDataTable';
 import { EnhancedEmptyState } from '../LoadingStates';
 import { createResultCellModified } from '../DataTable/adapters/resultAdapter';
@@ -25,7 +29,10 @@ import { ResultGridContextMenu } from './ResultGridContextMenu';
 import { useEditHistory } from '../../hooks/useEditHistory';
 import { isSameEditValue } from '../DataTable/utils';
 import { appModal } from '../../utils/appModal';
-import { ConditionalFormattingPanel, type FormatRule } from '../DataTable/ConditionalFormattingPanel';
+import {
+  ConditionalFormattingPanel,
+  type FormatRule,
+} from '../DataTable/ConditionalFormattingPanel';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 
 // ── Types ──
@@ -37,57 +44,120 @@ interface ResultGridProps {
   database?: string;
   originalSql?: string;
   dbType?: DatabaseType;
+  /** 结果集内未提交编辑的脏状态，供 SQL tab 关闭保护/重新执行确认使用 */
+  onDirtyChange?: (dirty: boolean, scope?: number) => void;
+  /** 多结果时的结果序号，用于父组件按结果聚合脏状态 */
+  dirtyScope?: number;
 }
 
 // ── SQL 解析 ──
 function extractTable(sql: string): string | null {
-  const clean = sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '').replace(/;\s*$/, '').trim();
+  const clean = sql
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/--.*$/gm, '')
+    .replace(/;\s*$/, '')
+    .trim();
   if (/\bJOIN\b|\bUNION\b|\bINTO\b|(?:\()\s*SELECT\b/i.test(clean)) return null;
-  const match = clean.match(/\bFROM\s+(?:[`"']?(\w+)[`"']?\.)?[`"']?(\w+)[`"']?(?:\s+(?:AS\s+)?\w+)?(?:\s*$|\s+(?:WHERE|ORDER|GROUP|HAVING|LIMIT|OFFSET)\b)/i);
-  return match ? (match[2] || match[1] || null) : null;
+  const match = clean.match(
+    /\bFROM\s+(?:[`"']?(\w+)[`"']?\.)?[`"']?(\w+)[`"']?(?:\s+(?:AS\s+)?\w+)?(?:\s*$|\s+(?:WHERE|ORDER|GROUP|HAVING|LIMIT|OFFSET)\b)/i
+  );
+  return match ? match[2] || match[1] || null : null;
 }
 
 // ── 导出工具 ──
 function downloadBlob(content: string, name: string, type: string) {
-  const blob = new Blob([content], { type }); const a = document.createElement('a');
+  const blob = new Blob([content], { type });
+  const a = document.createElement('a');
   const url = URL.createObjectURL(blob);
-  a.href = url; a.download = name; a.click();
+  a.href = url;
+  a.download = name;
+  a.click();
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 function exportToCsv(cols: string[], rows: unknown[][]): string {
-  const esc = (v: unknown) => { const s = v == null ? '' : String(v); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+  const esc = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
   return cols.map(esc).join(',') + '\n' + rows.map((r) => r.map(esc).join(',')).join('\n');
 }
 function exportToJson(cols: string[], rows: unknown[][]): string {
-  return JSON.stringify(rows.map((r) => { const o: Record<string, unknown> = {}; cols.forEach((c, i) => { o[c] = r[i]; }); return o; }), null, 2);
+  return JSON.stringify(
+    rows.map((r) => {
+      const o: Record<string, unknown> = {};
+      cols.forEach((c, i) => {
+        o[c] = r[i];
+      });
+      return o;
+    }),
+    null,
+    2
+  );
 }
 function exportToTxt(cols: string[], rows: unknown[][]): string {
-  const esc = (v: unknown) => { const s = String(v ?? ''); return s.includes('\t') || s.includes('\n') ? s.replace(/\t/g, ' ').replace(/\n/g, '\\n') : s; };
-  return '\uFEFF' + cols.map(esc).join('\t') + '\n' + rows.map((r) => r.map(esc).join('\t')).join('\n');
+  const esc = (v: unknown) => {
+    const s = String(v ?? '');
+    return s.includes('\t') || s.includes('\n') ? s.replace(/\t/g, ' ').replace(/\n/g, '\\n') : s;
+  };
+  return (
+    '\uFEFF' + cols.map(esc).join('\t') + '\n' + rows.map((r) => r.map(esc).join('\t')).join('\n')
+  );
 }
 function exportToXml(cols: string[], rows: unknown[][]): string {
   const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_\u4e00-\u9fff.-]/g, '_');
-  const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const esc = (v: unknown) =>
+    String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<data>'];
-  for (const row of rows) { lines.push('  <row>'); cols.forEach((c, i) => lines.push(`    <${sanitize(c)}>${esc(row[i])}</${sanitize(c)}>`)); lines.push('  </row>'); }
-  lines.push('</data>'); return lines.join('\n');
+  for (const row of rows) {
+    lines.push('  <row>');
+    cols.forEach((c, i) => lines.push(`    <${sanitize(c)}>${esc(row[i])}</${sanitize(c)}>`));
+    lines.push('  </row>');
+  }
+  lines.push('</data>');
+  return lines.join('\n');
 }
 function exportToMd(cols: string[], rows: unknown[][]): string {
-  const esc = (v: unknown) => String(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+  const esc = (v: unknown) =>
+    String(v ?? '')
+      .replace(/\|/g, '\\|')
+      .replace(/\n/g, '<br>');
   const h = '| ' + cols.map(esc).join(' | ') + ' |';
-  return '\uFEFF' + h + '\n| ' + cols.map(() => '---').join(' | ') + ' |\n' + rows.map((r) => '| ' + r.map(esc).join(' | ') + ' |').join('\n');
+  return (
+    '\uFEFF' +
+    h +
+    '\n| ' +
+    cols.map(() => '---').join(' | ') +
+    ' |\n' +
+    rows.map((r) => '| ' + r.map(esc).join(' | ') + ' |').join('\n')
+  );
 }
 
 // ── Component ──
-export function ResultGrid({
-  queryResult, executionTime, isDark: _isDark, connectionId, database, originalSql, dbType,
+export const ResultGrid = memo(function ResultGrid({
+  queryResult,
+  executionTime,
+  connectionId,
+  database,
+  originalSql,
+  dbType,
+  onDirtyChange,
+  dirtyScope,
 }: ResultGridProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const { getColumns, executeQuery } = useDatabase();
 
   const sqlForExtract = queryResult.executedSql || originalSql || '';
-  const tableName = useMemo(() => (sqlForExtract ? extractTable(sqlForExtract) : null), [sqlForExtract]);
+  const tableName = useMemo(
+    () => (sqlForExtract ? extractTable(sqlForExtract) : null),
+    [sqlForExtract]
+  );
   const [tableColumns, setTableColumns] = useState<ColumnInfo[]>([]);
   // 全部主键列：行定位 WHERE 必须全列 AND——只取第一列时复合主键值组合重复
   // 的行会命中多行（UPDATE/DELETE 扩散，数据风险）
@@ -105,29 +175,26 @@ export function ResultGrid({
   // isEditable 定义在 primaryKeyCols 之后（上方）——此处删除旧的单列主键版本
 
   useEffect(() => {
-    if (!connectionId || !tableName) { setTableColumns([]); return; }
-    getColumns(connectionId, tableName, database).then((cols) => {
-      setTableColumns(cols);
-    }).catch(() => {
+    if (!connectionId || !tableName) {
       setTableColumns([]);
-    });
+      return;
+    }
+    getColumns(connectionId, tableName, database)
+      .then((cols) => {
+        setTableColumns(cols);
+      })
+      .catch(() => {
+        setTableColumns([]);
+      });
   }, [connectionId, tableName, database, getColumns]);
-
-  // 重新执行 SQL 时清除编辑状态
-  useEffect(() => {
-    setModifiedRows(new Map());
-    setDeletedIndices(new Set());
-    setNewRows([]);
-    setSelectedIndices(new Set());
-    setOperationSql('');
-    clearEditHistory();
-  }, [queryResult]);
 
   // 编辑状态
   const [modifiedRows, setModifiedRows] = useState<Map<number, unknown[]>>(new Map());
   // ref 同步最新 modifiedRows，供 handleCellEdited 同步读取「当前值」避免闭包陈旧
   const modifiedRowsRef = useRef(modifiedRows);
-  useEffect(() => { modifiedRowsRef.current = modifiedRows; }, [modifiedRows]);
+  useEffect(() => {
+    modifiedRowsRef.current = modifiedRows;
+  }, [modifiedRows]);
   const [deletedIndices, setDeletedIndices] = useState<Set<number>>(new Set());
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [newRows, setNewRows] = useState<unknown[][]>([]);
@@ -141,30 +208,42 @@ export function ResultGrid({
 
   // 行数据
   const allRows = useMemo(() => {
-    const existing = queryResult.rows.map((row, i) => {
-      if (deletedIndices.has(i)) return null;
-      const r = modifiedRows.has(i) ? modifiedRows.get(i)! : row;
-      const obj: Record<string, unknown> = { __id: i, __isNew: false };
-      queryResult.columns.forEach((col, j) => { obj[col] = r[j]; });
-      return obj;
-    }).filter(Boolean) as Record<string, unknown>[];
+    const existing = queryResult.rows
+      .map((row, i) => {
+        if (deletedIndices.has(i)) return null;
+        const r = modifiedRows.has(i) ? modifiedRows.get(i)! : row;
+        const obj: Record<string, unknown> = { __id: i, __isNew: false };
+        queryResult.columns.forEach((col, j) => {
+          obj[col] = r[j];
+        });
+        return obj;
+      })
+      .filter(Boolean) as Record<string, unknown>[];
     const newOnes = newRows.map((row, i) => {
       const obj: Record<string, unknown> = { __id: `new-${i}`, __isNew: true };
-      queryResult.columns.forEach((col, j) => { obj[col] = row[j]; });
+      queryResult.columns.forEach((col, j) => {
+        obj[col] = row[j];
+      });
       return obj;
     });
     return [...existing, ...newOnes];
   }, [queryResult.rows, queryResult.columns, modifiedRows, deletedIndices, newRows]);
 
   // 行状态回调
-  const rowStatus = useCallback((row: GlideRow, _idx: number) => {
-    const id = row.__id as number;
-    if (deletedIndices.has(id)) return 'deleted' as const;
-    if (modifiedRows.has(id)) return 'modified' as const;
-    return undefined;
-  }, [deletedIndices, modifiedRows]);
+  const rowStatus = useCallback(
+    (row: GlideRow) => {
+      const id = row.__id as number;
+      if (deletedIndices.has(id)) return 'deleted' as const;
+      if (modifiedRows.has(id)) return 'modified' as const;
+      return undefined;
+    },
+    [deletedIndices, modifiedRows]
+  );
 
-  const isCellModified = useMemo(() => createResultCellModified(modifiedRows, queryResult.columns, queryResult.rows), [modifiedRows, queryResult.columns, queryResult.rows]);
+  const isCellModified = useMemo(
+    () => createResultCellModified(modifiedRows, queryResult.columns, queryResult.rows),
+    [modifiedRows, queryResult.columns, queryResult.rows]
+  );
 
   // 列头编码 name|type|isPK|comment（与表数据浏览一致）：
   // 类型/注释来自 SQL 中识别到的表结构（单表查询可完整匹配；
@@ -176,127 +255,182 @@ export function ResultGrid({
     const pkSet = new Set(
       tableColumns.filter((c) => c.column_key === 'PRI').map((c) => c.column_name)
     );
-    return queryResult.columns.map((name) => ({
+    // 结果集没有列元数据：按列名 + 前 50 行文本长度估一个初始宽度，
+    // 仍可用表头双击自适应/拖拽微调（全 130px 时宽值列会被截断）
+    const estimateWidth = (name: string, idx: number) => {
+      let maxLen = name.length;
+      const sample = Math.min(queryResult.rows.length, 50);
+      for (let i = 0; i < sample; i++) {
+        const value = queryResult.rows[i]?.[idx];
+        const len = value == null ? 4 : String(value).length;
+        if (len > maxLen) maxLen = len;
+      }
+      return Math.max(90, Math.min(320, Math.ceil(Math.min(maxLen, 36) * 8 + 26)));
+    };
+    return queryResult.columns.map((name, idx) => ({
       id: name,
       title: `${name}|${typeMap.get(name) || ''}|${pkSet.has(name) ? '1' : '0'}|${commentMap.get(name) || ''}`,
+      width: estimateWidth(name, idx),
     }));
-  }, [queryResult.columns, tableColumns]);
+  }, [queryResult.columns, queryResult.rows, tableColumns]);
   const glideRows = useMemo(() => allRows as GlideRow[], [allRows]);
 
   // 选中（存储 allRows 中的索引；已有行 __id=数字=原始索引，新增行 = qLen + k）
   const qLen = queryResult.rows.length;
-  const handleSelectionChange = useCallback((rows: GlideRow[]) => {
-    const indices = new Set<number>();
-    for (const r of rows) {
-      const id = r.__id;
-      if (typeof id === 'number' && id >= 0) {
-        indices.add(id);
-      } else if (typeof id === 'string' && id.startsWith('new-')) {
-        const k = parseInt(id.slice(4), 10);
-        if (!isNaN(k)) indices.add(qLen + k);
+  const handleSelectionChange = useCallback(
+    (rows: GlideRow[]) => {
+      const indices = new Set<number>();
+      for (const r of rows) {
+        const id = r.__id;
+        if (typeof id === 'number' && id >= 0) {
+          indices.add(id);
+        } else if (typeof id === 'string' && id.startsWith('new-')) {
+          const k = parseInt(id.slice(4), 10);
+          if (!isNaN(k)) indices.add(qLen + k);
+        }
       }
-    }
-    setSelectedIndices(indices);
-  }, [qLen]);
+      setSelectedIndices(indices);
+    },
+    [qLen]
+  );
 
   // 撤销
-  const { record: recordEdit, undo: handleUndoStep, clear: clearEditHistory, hasHistory: hasEditHistory } = useEditHistory({
-    onRestore: useCallback((cells: Array<{ rowId: string; colId: string; value: unknown }>) => {
-      setModifiedRows((prev) => {
-        const grouped = new Map<number, Map<number, unknown>>();
-        for (const c of cells) {
-          const rowIdx = Number(c.rowId);
-          const colIdx = Number(c.colId);
-          if (!grouped.has(rowIdx)) grouped.set(rowIdx, new Map());
-          grouped.get(rowIdx)!.set(colIdx, c.value);
-        }
-        if (grouped.size === 0) return prev;
-        const next = new Map(prev);
-        for (const [rowIdx, cols] of grouped) {
-          const current = next.has(rowIdx) ? [...next.get(rowIdx)!] : [...queryResult.rows[rowIdx]];
-          for (const [colIdx, val] of cols) {
-            current[colIdx] = val;
+  const {
+    record: recordEdit,
+    undo: handleUndoStep,
+    clear: clearEditHistory,
+    hasHistory: hasEditHistory,
+  } = useEditHistory({
+    onRestore: useCallback(
+      (cells: Array<{ rowId: string; colId: string; value: unknown }>) => {
+        setModifiedRows((prev) => {
+          const grouped = new Map<number, Map<number, unknown>>();
+          for (const c of cells) {
+            const rowIdx = Number(c.rowId);
+            const colIdx = Number(c.colId);
+            if (!grouped.has(rowIdx)) grouped.set(rowIdx, new Map());
+            grouped.get(rowIdx)!.set(colIdx, c.value);
           }
-          const originalRow = queryResult.rows[rowIdx];
-          const allSame = originalRow.every((v, i) => v === current[i]);
-          if (allSame) next.delete(rowIdx);
-          else next.set(rowIdx, current);
-        }
-        return next;
-      });
-    }, [queryResult.rows]),
+          if (grouped.size === 0) return prev;
+          const next = new Map(prev);
+          for (const [rowIdx, cols] of grouped) {
+            const current = next.has(rowIdx)
+              ? [...next.get(rowIdx)!]
+              : [...queryResult.rows[rowIdx]];
+            for (const [colIdx, val] of cols) {
+              current[colIdx] = val;
+            }
+            const originalRow = queryResult.rows[rowIdx];
+            const allSame = originalRow.every((v, i) => v === current[i]);
+            if (allSame) next.delete(rowIdx);
+            else next.set(rowIdx, current);
+          }
+          return next;
+        });
+      },
+      [queryResult.rows]
+    ),
     enabled: isEditable,
   });
 
+  // 重新执行 SQL 时清除编辑状态（放在所有 state/hook 声明之后，避免 TDZ 报错）
+  useEffect(() => {
+    setModifiedRows(new Map());
+    setDeletedIndices(new Set());
+    setNewRows([]);
+    setSelectedIndices(new Set());
+    setOperationSql('');
+    clearEditHistory();
+  }, [queryResult, clearEditHistory]);
+
   // 内联编辑
-  const handleCellEdited = useCallback((col: number, row: number, newValue: string) => {
-    if (!isEditable) return;
-    const colName = queryResult.columns[col];
-    if (!colName) return;
-    const rowId = row;
+  const handleCellEdited = useCallback(
+    (col: number, row: number, newValue: string) => {
+      if (!isEditable) return;
+      const colName = queryResult.columns[col];
+      if (!colName) return;
+      const rowId = row;
 
-    // 新增行：更新 newRows state
-    if (rowId >= queryResult.rows.length) {
-      const newRowIndex = rowId - queryResult.rows.length;
-      setNewRows((prev) => prev.map((r, i) => {
-        if (i !== newRowIndex) return r;
-        const updated = [...r];
-        updated[col] = newValue === 'NULL' ? null : newValue;
-        return updated;
-      }));
-      return;
-    }
+      // 新增行：更新 newRows state
+      if (rowId >= queryResult.rows.length) {
+        const newRowIndex = rowId - queryResult.rows.length;
+        setNewRows((prev) =>
+          prev.map((r, i) => {
+            if (i !== newRowIndex) return r;
+            const updated = [...r];
+            updated[col] = newValue === 'NULL' ? null : newValue;
+            return updated;
+          })
+        );
+        return;
+      }
 
-    const originalRow = queryResult.rows[rowId];
-    const originalValue = originalRow[col];
+      const originalRow = queryResult.rows[rowId];
+      const originalValue = originalRow[col];
 
-    // 取「当前值」：modifiedRows 里有则用已修改值，否则用原始值。
-    // 之前用原始值做比较，导致已修改过的单元格再次双击不改动时误入栈（oldValue=原始，newValue=已改值，不等就 recordEdit）。
-    const currentModified = modifiedRowsRef.current.get(rowId);
-    const currentValue = currentModified ? currentModified[col] : originalValue;
+      // 取「当前值」：modifiedRows 里有则用已修改值，否则用原始值。
+      // 之前用原始值做比较，导致已修改过的单元格再次双击不改动时误入栈（oldValue=原始，newValue=已改值，不等就 recordEdit）。
+      const currentModified = modifiedRowsRef.current.get(rowId);
+      const currentValue = currentModified ? currentModified[col] : originalValue;
 
-    const resolvedNew = newValue === 'NULL' ? null : newValue;
+      const resolvedNew = newValue === 'NULL' ? null : newValue;
 
-    // 值未真正变化（与当前显示值一致）则不入栈、不改 modifiedRows
-    if (isSameEditValue(currentValue, resolvedNew)) return;
+      // 值未真正变化（与当前显示值一致）则不入栈、不改 modifiedRows
+      if (isSameEditValue(currentValue, resolvedNew)) return;
 
-    // 值被改回原始值：从 modifiedRows 移除该列的修改标记（若整行恢复则删除该行）
-    if (isSameEditValue(originalValue, resolvedNew)) {
-      setModifiedRows((prev) => {
-        if (!prev.has(rowId)) return prev;
-        const next = new Map(prev);
-        const current = [...next.get(rowId)!];
-        current[col] = originalValue;
-        const allSame = originalRow.every((v, i) => {
-          const cv = current[i];
-          return (v == null && cv == null) || (v != null && cv != null && String(v) === String(cv));
+      // 值被改回原始值：从 modifiedRows 移除该列的修改标记（若整行恢复则删除该行）
+      if (isSameEditValue(originalValue, resolvedNew)) {
+        setModifiedRows((prev) => {
+          if (!prev.has(rowId)) return prev;
+          const next = new Map(prev);
+          const current = [...next.get(rowId)!];
+          current[col] = originalValue;
+          const allSame = originalRow.every((v, i) => {
+            const cv = current[i];
+            return (
+              (v == null && cv == null) || (v != null && cv != null && String(v) === String(cv))
+            );
+          });
+          if (allSame) next.delete(rowId);
+          else next.set(rowId, current);
+          return next;
         });
-        if (allSame) next.delete(rowId);
-        else next.set(rowId, current);
+        // 仍需入栈一条记录（记录"从已修改值恢复到原始值"），以便撤销时恢复之前的修改
+        recordEdit([
+          {
+            rowId: String(rowId),
+            colId: String(col),
+            oldValue: currentValue,
+            newValue: resolvedNew,
+          },
+        ]);
+        return;
+      }
+
+      recordEdit([
+        { rowId: String(rowId), colId: String(col), oldValue: currentValue, newValue: resolvedNew },
+      ]);
+
+      setModifiedRows((prev) => {
+        const next = new Map(prev);
+        const current = next.get(rowId) ? [...next.get(rowId)!] : [...originalRow];
+        current[col] = resolvedNew;
+        next.set(rowId, current);
         return next;
       });
-      // 仍需入栈一条记录（记录"从已修改值恢复到原始值"），以便撤销时恢复之前的修改
-      recordEdit([{ rowId: String(rowId), colId: String(col), oldValue: currentValue, newValue: resolvedNew }]);
-      return;
-    }
-
-    recordEdit([{ rowId: String(rowId), colId: String(col), oldValue: currentValue, newValue: resolvedNew }]);
-
-    setModifiedRows((prev) => {
-      const next = new Map(prev);
-      const current = next.get(rowId) ? [...next.get(rowId)!] : [...originalRow];
-      current[col] = resolvedNew;
-      next.set(rowId, current);
-      return next;
-    });
-  }, [isEditable, queryResult, recordEdit]);
+    },
+    [isEditable, queryResult, recordEdit]
+  );
 
   // 范围编辑（批量）
-  const handleCellsEdited = useCallback((edits: Array<{ col: number; row: number; value: string }>) => {
-    for (const edit of edits) {
-      handleCellEdited(edit.col, edit.row, edit.value);
-    }
-  }, [handleCellEdited]);
+  const handleCellsEdited = useCallback(
+    (edits: Array<{ col: number; row: number; value: string }>) => {
+      for (const edit of edits) {
+        handleCellEdited(edit.col, edit.row, edit.value);
+      }
+    },
+    [handleCellEdited]
+  );
 
   // 行定位 WHERE（全主键列 AND）。BIGINT 等大整数以后端字符串形式到达时写裸
   // 数字字面量——字符串与数值列比较在部分库走浮点转换，19 位 ID 会取整失配
@@ -323,13 +457,22 @@ export function ResultGrid({
 
   // 生成操作SQL
   useEffect(() => {
-    if (!tableName || primaryKeyCols.length === 0) { setOperationSql(''); return; }
+    if (!tableName || primaryKeyCols.length === 0) {
+      setOperationSql('');
+      return;
+    }
     const dialect = getDialect(dbType);
     const tableRef = dialect.buildTableRef(tableName, database);
     const lines: string[] = [];
     for (const row of newRows) {
-      const cols: string[] = []; const vals: unknown[] = [];
-      row.forEach((v, i) => { if (v !== null) { cols.push(queryResult.columns[i]); vals.push(v); } });
+      const cols: string[] = [];
+      const vals: unknown[] = [];
+      row.forEach((v, i) => {
+        if (v !== null) {
+          cols.push(queryResult.columns[i]);
+          vals.push(v);
+        }
+      });
       if (cols.length === 0) continue;
       lines.push(dialect.buildInsert(tableRef, cols, [vals])[0] + ';');
     }
@@ -340,7 +483,8 @@ export function ResultGrid({
       queryResult.columns.forEach((c, i) => {
         const cur = row[i];
         const orig = original?.[i];
-        if ((cur == null && orig == null) || (cur != null && String(cur) === String(orig ?? ''))) return;
+        if ((cur == null && orig == null) || (cur != null && String(cur) === String(orig ?? '')))
+          return;
         setters[c] = cur;
       });
       if (Object.keys(setters).length === 0) continue;
@@ -354,7 +498,17 @@ export function ResultGrid({
       lines.push(dialect.buildDelete(tableRef, where) + ';');
     }
     setOperationSql(lines.join('\n'));
-  }, [modifiedRows, deletedIndices, newRows, tableName, primaryKeyCols, queryResult, dbType, database, buildRowWhere]);
+  }, [
+    modifiedRows,
+    deletedIndices,
+    newRows,
+    tableName,
+    primaryKeyCols,
+    queryResult,
+    dbType,
+    database,
+    buildRowWhere,
+  ]);
 
   // 提交
   const handleCommit = useCallback(async () => {
@@ -362,14 +516,25 @@ export function ResultGrid({
     const dialect = getDialect(dbType);
     const tableRef = dialect.buildTableRef(tableName, database);
     try {
-      let success = 0, errMsg = '';
+      let success = 0,
+        errMsg = '';
       for (const row of newRows) {
-        const cols: string[] = []; const vals: unknown[] = [];
-        row.forEach((v, i) => { if (v !== null) { cols.push(queryResult.columns[i]); vals.push(v); } });
+        const cols: string[] = [];
+        const vals: unknown[] = [];
+        row.forEach((v, i) => {
+          if (v !== null) {
+            cols.push(queryResult.columns[i]);
+            vals.push(v);
+          }
+        });
         if (cols.length === 0) continue;
         const sql = dialect.buildInsert(tableRef, cols, [vals])[0];
         const res = await executeQuery(connectionId, sql, database);
-        if (res.error) { errMsg = res.error; break; } success++;
+        if (res.error) {
+          errMsg = res.error;
+          break;
+        }
+        success++;
       }
       if (!errMsg) {
         for (const [rowId, row] of modifiedRows) {
@@ -379,7 +544,11 @@ export function ResultGrid({
           queryResult.columns.forEach((c, i) => {
             const cur = row[i];
             const orig = original?.[i];
-            if ((cur == null && orig == null) || (cur != null && String(cur) === String(orig ?? ''))) return;
+            if (
+              (cur == null && orig == null) ||
+              (cur != null && String(cur) === String(orig ?? ''))
+            )
+              return;
             setters[c] = cur;
           });
           if (Object.keys(setters).length === 0) continue;
@@ -387,7 +556,11 @@ export function ResultGrid({
           if (!where) continue;
           const sql = dialect.buildUpdate(tableRef, setters, where);
           const res = await executeQuery(connectionId, sql, database);
-          if (res.error) { errMsg = res.error; break; } success++;
+          if (res.error) {
+            errMsg = res.error;
+            break;
+          }
+          success++;
         }
       }
       if (!errMsg) {
@@ -396,13 +569,39 @@ export function ResultGrid({
           if (!where) continue;
           const sql = dialect.buildDelete(tableRef, where);
           const res = await executeQuery(connectionId, sql, database);
-          if (res.error) { errMsg = res.error; break; } success++;
+          if (res.error) {
+            errMsg = res.error;
+            break;
+          }
+          success++;
         }
       }
       if (errMsg) message.error(`${t('common.submitFailed')}: ${errMsg}`);
-      else { message.success(`${t('common.submittedSuccessfully')} ${success}`); setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); clearEditHistory(); }
-    } catch (err: unknown) { message.error(`${t('common.submitFailed')}: ${getErrorMessage(err)}`); }
-  }, [connectionId, tableName, primaryKeyCols, modifiedRows, deletedIndices, newRows, queryResult, dbType, database, executeQuery, message, t, buildRowWhere]);
+      else {
+        message.success(`${t('common.submittedSuccessfully')} ${success}`);
+        setModifiedRows(new Map());
+        setDeletedIndices(new Set());
+        setNewRows([]);
+        clearEditHistory();
+      }
+    } catch (err: unknown) {
+      message.error(`${t('common.submitFailed')}: ${getErrorMessage(err)}`);
+    }
+  }, [
+    connectionId,
+    tableName,
+    primaryKeyCols,
+    modifiedRows,
+    deletedIndices,
+    newRows,
+    queryResult,
+    dbType,
+    database,
+    executeQuery,
+    message,
+    t,
+    buildRowWhere,
+  ]);
 
   // 撤销
   const handleUndo = useCallback(() => {
@@ -411,15 +610,30 @@ export function ResultGrid({
       return;
     }
     if (modifiedRows.size === 0 && deletedIndices.size === 0 && newRows.length === 0) return;
-    appModal.confirm({ title: t('common.undoModifications'), content: t('common.confirmDiscardAllChanges'), transitionName: '', maskTransitionName: '',
-      onOk: () => { setModifiedRows(new Map()); setDeletedIndices(new Set()); setNewRows([]); message.info(t('common.allChangesRevoked')); },
+    appModal.confirm({
+      title: t('common.undoModifications'),
+      content: t('common.confirmDiscardAllChanges'),
+      transitionName: '',
+      maskTransitionName: '',
+      onOk: () => {
+        setModifiedRows(new Map());
+        setDeletedIndices(new Set());
+        setNewRows([]);
+        message.info(t('common.allChangesRevoked'));
+      },
     });
   }, [hasEditHistory, handleUndoStep, modifiedRows, deletedIndices, newRows, message, t]);
 
   // 删除选中（已有行 → 标记删除，新增行 → 直接从 newRows 移除）
   const handleDeleteSelected = useCallback(() => {
-    if (!isEditable) { message.warning(t('common.currentResultSetNotEditable')); return; }
-    if (selectedIndices.size === 0) { message.warning(t('common.pleaseSelectRowsToDelete')); return; }
+    if (!isEditable) {
+      message.warning(t('common.currentResultSetNotEditable'));
+      return;
+    }
+    if (selectedIndices.size === 0) {
+      message.warning(t('common.pleaseSelectRowsToDelete'));
+      return;
+    }
 
     const selected = Array.from(selectedIndices)
       .filter((i) => i < allRows.length)
@@ -444,13 +658,19 @@ export function ResultGrid({
       title: t('common.confirmDelete'),
       content: t('common.confirmMarkRowsForDeletion', { count }),
       okText: existingIds.length > 0 ? t('common.markForDeletion') : t('common.delete'),
-      okType: 'danger', transitionName: '', maskTransitionName: '',
+      okType: 'danger',
+      transitionName: '',
+      maskTransitionName: '',
       onOk: () => {
         if (newRowKs.length > 0) {
           setNewRows((prev) => prev.filter((_, i) => !newRowKs.includes(i)));
         }
         if (existingIds.length > 0) {
-          setDeletedIndices((prev) => { const n = new Set(prev); existingIds.forEach((i) => n.add(i)); return n; });
+          setDeletedIndices((prev) => {
+            const n = new Set(prev);
+            existingIds.forEach((i) => n.add(i));
+            return n;
+          });
         }
         setSelectedIndices(new Set());
         if (count > 0) message.success(`${t('common.markedForDeletion')} ${count}`);
@@ -459,68 +679,116 @@ export function ResultGrid({
   }, [isEditable, selectedIndices, allRows, message, t]);
 
   // 导出
-  const handleExport = useCallback((format: string) => {
-    const cols = queryResult.columns; const rows = queryResult.rows;
-    if (format === 'csv') { downloadBlob(exportToCsv(cols, rows), 'result.csv', 'text/csv'); message.success(t('common.exportedCsv')); }
-    else if (format === 'json') { downloadBlob(exportToJson(cols, rows), 'result.json', 'application/json'); message.success(t('common.exportedJson')); }
-    else if (format === 'txt') { downloadBlob(exportToTxt(cols, rows), 'result.txt', 'text/plain'); message.success(t('common.exportedTxt')); }
-    else if (format === 'xml') { downloadBlob(exportToXml(cols, rows), 'result.xml', 'application/xml'); message.success(t('common.exportedXml')); }
-    else if (format === 'md') { downloadBlob(exportToMd(cols, rows), 'result.md', 'text/markdown'); message.success(t('common.exportedMarkdown')); }
-    else if (format === 'xlsx') {
-      const data = rows.map((r) => { const o: Record<string, any> = {}; cols.forEach((c, i) => { o[c] = r[i]; }); return o; });
-      const cdefs = cols.map((c) => ({ field: c, headerName: c }));
-      exportToExcel(data, cdefs, { filename: 'result.xlsx', sheetName: 'Query Result' }); message.success(t('common.exportedExcel'));
-    }
-  }, [queryResult, message, t]);
-
-  // 错误
-  if (queryResult.error)
-    return (
-      <EnhancedEmptyState
-        icon={<ExclamationCircleOutlined style={{ fontSize: 36, color: 'var(--color-error)' }} />}
-        title={queryResult.error}
-      />
-    );
+  const handleExport = useCallback(
+    (format: string) => {
+      const cols = queryResult.columns;
+      const rows = queryResult.rows;
+      if (format === 'csv') {
+        downloadBlob(exportToCsv(cols, rows), 'result.csv', 'text/csv');
+        message.success(t('common.exportedCsv'));
+      } else if (format === 'json') {
+        downloadBlob(exportToJson(cols, rows), 'result.json', 'application/json');
+        message.success(t('common.exportedJson'));
+      } else if (format === 'txt') {
+        downloadBlob(exportToTxt(cols, rows), 'result.txt', 'text/plain');
+        message.success(t('common.exportedTxt'));
+      } else if (format === 'xml') {
+        downloadBlob(exportToXml(cols, rows), 'result.xml', 'application/xml');
+        message.success(t('common.exportedXml'));
+      } else if (format === 'md') {
+        downloadBlob(exportToMd(cols, rows), 'result.md', 'text/markdown');
+        message.success(t('common.exportedMarkdown'));
+      } else if (format === 'xlsx') {
+        const data = rows.map((r) => {
+          const o: Record<string, any> = {};
+          cols.forEach((c, i) => {
+            o[c] = r[i];
+          });
+          return o;
+        });
+        const cdefs = cols.map((c) => ({ field: c, headerName: c }));
+        exportToExcel(data, cdefs, { filename: 'result.xlsx', sheetName: 'Query Result' });
+        message.success(t('common.exportedExcel'));
+      }
+    },
+    [queryResult, message, t]
+  );
 
   const hasChanges = modifiedRows.size > 0 || deletedIndices.size > 0 || newRows.length > 0;
 
+  // selectedRows 必须在错误早退之前计算：否则错误/成功切换时 hooks 数量变化，
+  // React 会抛 "Rendered more hooks than during the previous render"
   const selectedRows = useMemo(() => {
     return Array.from(selectedIndices)
       .filter((i) => i < allRows.length)
       .map((i) => allRows[i]);
   }, [selectedIndices, allRows]);
 
+  // 结果集未提交编辑的脏状态：SQLEditor 用它做重新执行确认，并聚合到 tab dirty
+  useEffect(() => {
+    onDirtyChange?.(hasChanges, dirtyScope);
+  }, [hasChanges, onDirtyChange, dirtyScope]);
+  useEffect(() => () => onDirtyChange?.(false, dirtyScope), [onDirtyChange, dirtyScope]);
+
+  // 错误：图标 + 可滚动的等宽详情 + 复制，避免把长报错直接当标题展示导致溢出
+  if (queryResult.error) {
+    return (
+      <div className="result-grid-error">
+        <ExclamationCircleOutlined className="result-grid-error-icon" />
+        <div className="result-grid-error-title">{t('common.sqlExecutionFailed')}</div>
+        <div className="result-grid-error-detail">{queryResult.error}</div>
+        <Button
+          size="small"
+          icon={<CopyOutlined />}
+          onClick={() => {
+            navigator.clipboard.writeText(queryResult.error || '');
+            message.success(t('common.copied'));
+          }}
+        >
+          {t('common.sqlEditor.copyError')}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Toolbar */}
-      <div style={{ padding: '4px 12px', borderBottom: '1px solid var(--border)', background: 'var(--background-toolbar)', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-        <span style={{ fontSize: 12.5 }}><strong>{queryResult.rows.length.toLocaleString()}</strong> {t('common.rows')}</span>
-        <span style={{ fontSize: 12.5 }}><strong>{queryResult.columns.length}</strong> {t('common.tableStructure.columns')}</span>
-        {executionTime != null && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('common.executionTime')} {executionTime}ms</span>}
-        {queryResult.totalTime != null && queryResult.totalTime > 0 && queryResult.totalTime !== executionTime && (
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{t('common.totalDuration')} {queryResult.totalTime}ms</span>
-        )}
-        {isEditable && (
-          <Tag style={{ margin: 0, fontSize: 11, lineHeight: '20px', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
-            {t('common.editable')}
-          </Tag>
-        )}
+      {/* Toolbar：统计信息收进底部状态条，顶部只留编辑标记与操作 */}
+      <div className="result-grid-toolbar">
+        {isEditable && <Tag className="result-grid-tag is-editable">{t('common.editable')}</Tag>}
         {tableName && !isEditable && (
-          <Tag color="default" style={{ margin: 0, fontSize: 11, lineHeight: '20px' }}>
+          <Tag className="result-grid-tag">
             <ExclamationCircleOutlined /> {t('common.readOnly')}
           </Tag>
         )}
+        {hasChanges && (
+          <Tag className="result-grid-tag is-dirty">
+            {t('common.dataGrid.unsavedCount', {
+              count: modifiedRows.size + deletedIndices.size + newRows.length,
+            })}
+          </Tag>
+        )}
         <div style={{ flex: 1 }} />
-        <Dropdown menu={{ items: [
-          { key: 'csv', label: t('common.exportedCsv'), onClick: () => handleExport('csv') },
-          { key: 'json', label: t('common.exportedJson'), onClick: () => handleExport('json') },
-          { key: 'xlsx', label: t('common.exportedExcel'), onClick: () => handleExport('xlsx') },
-          { type: 'divider' as const },
-          { key: 'txt', label: t('common.exportedTxt'), onClick: () => handleExport('txt') },
-          { key: 'xml', label: t('common.exportedXml'), onClick: () => handleExport('xml') },
-          { key: 'md', label: t('common.exportedMarkdown'), onClick: () => handleExport('md') },
-        ]}}>
-          <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 12, height: 26 }}>{t('common.export')}</Button>
+        <Dropdown
+          menu={{
+            items: [
+              { key: 'csv', label: t('common.exportedCsv'), onClick: () => handleExport('csv') },
+              { key: 'json', label: t('common.exportedJson'), onClick: () => handleExport('json') },
+              {
+                key: 'xlsx',
+                label: t('common.exportedExcel'),
+                onClick: () => handleExport('xlsx'),
+              },
+              { type: 'divider' as const },
+              { key: 'txt', label: t('common.exportedTxt'), onClick: () => handleExport('txt') },
+              { key: 'xml', label: t('common.exportedXml'), onClick: () => handleExport('xml') },
+              { key: 'md', label: t('common.exportedMarkdown'), onClick: () => handleExport('md') },
+            ],
+          }}
+        >
+          <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 12, height: 26 }}>
+            {t('common.export')}
+          </Button>
         </Dropdown>
         <Button
           size="small"
@@ -531,13 +799,6 @@ export function ResultGrid({
         >
           {t('common.dataGrid.conditionalFormatting')}
         </Button>
-        {isEditable && hasChanges && (
-          <Space size={4}>
-            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 12, height: 26 }}>{t('common.submit')}</Button>
-            <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 12, height: 26 }}>{t('common.undo')}</Button>
-            <Button size="small" icon={<CodeOutlined />} onClick={() => appModal.info({ title: t('common.operationSqlPreview'), width: 800, content: <pre style={{ maxHeight: 400, overflow: 'auto', background: 'var(--background-toolbar)', padding: 12, borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }}>{operationSql}</pre>, transitionName: '', maskTransitionName: '' })} style={{ fontSize: 12, height: 26 }}>{t('common.sqlQuery')}</Button>
-          </Space>
-        )}
         {isEditable && (
           <Button
             size="small"
@@ -555,37 +816,60 @@ export function ResultGrid({
             {t('common.addNewRow')}
           </Button>
         )}
-        {isEditable && <Button size="small" danger icon={<DeleteOutlined />} onClick={handleDeleteSelected} disabled={selectedIndices.size === 0} style={{ fontSize: 12, height: 26 }}>{t('common.dataGrid.deleteRow')}</Button>}
+        {isEditable && (
+          <Button
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={handleDeleteSelected}
+            disabled={selectedIndices.size === 0}
+            style={{ fontSize: 12, height: 26 }}
+          >
+            {t('common.dataGrid.deleteRow')}
+          </Button>
+        )}
       </div>
 
       {/* Grid */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        <GlideDataTable
-          columns={glideColumns}
-          rows={glideRows}
-          rowStatus={rowStatus}
-          isCellModified={isCellModified}
-          scrollToRowIndex={scrollToRowIndex}
-          onSelectionChange={handleSelectionChange}
-          onCellEdited={handleCellEdited}
-          onCellsEdited={handleCellsEdited}
-          onCellContextMenu={(col, row, bounds) => {
-            const colName = queryResult.columns[col];
-            const rowData = row >= 0 && row < queryResult.rows.length ? queryResult.rows[row] : undefined;
-            openMenu(bounds.x, bounds.y, {
-              row,
-              col,
-              cellValue: rowData?.[col],
-              colName,
-              rowData: rowData ? { ...rowData, __row_index: row } : undefined,
-            });
-          }}
-          editable={isEditable}
-          enableFindReplace
-          headerHeight={44}
-          rowHeight={28}
-          formatRules={formatRules}
-        />
+        {queryResult.columns.length === 0 ? (
+          <EnhancedEmptyState
+            title={t('common.dataGrid.noResultSet')}
+            description={
+              queryResult.rows_affected
+                ? t('common.dataGrid.affectedRowsSummary', { count: queryResult.rows_affected })
+                : undefined
+            }
+          />
+        ) : (
+          <GlideDataTable
+            columns={glideColumns}
+            rows={glideRows}
+            rowStatus={rowStatus}
+            isCellModified={isCellModified}
+            scrollToRowIndex={scrollToRowIndex}
+            onSelectionChange={handleSelectionChange}
+            onCellEdited={handleCellEdited}
+            onCellsEdited={handleCellsEdited}
+            onCellContextMenu={(col, row, bounds) => {
+              const colName = queryResult.columns[col];
+              const rowData =
+                row >= 0 && row < queryResult.rows.length ? queryResult.rows[row] : undefined;
+              openMenu(bounds.x, bounds.y, {
+                row,
+                col,
+                cellValue: rowData?.[col],
+                colName,
+                rowData: rowData ? { ...rowData, __row_index: row } : undefined,
+              });
+            }}
+            editable={isEditable}
+            enableFindReplace
+            headerHeight={44}
+            rowHeight={28}
+            formatRules={formatRules}
+          />
+        )}
         <ConditionalFormattingPanel
           visible={formatPanelVisible}
           onClose={() => setFormatPanelVisible(false)}
@@ -637,34 +921,100 @@ export function ResultGrid({
           }}
         >
           <span style={{ color: 'var(--color-primary)', flexShrink: 0 }}>SQL ▶</span>
-          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 48, overflow: 'auto' }}>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              maxHeight: 48,
+              overflow: 'auto',
+            }}
+          >
             {operationSql}
           </span>
           <Space size={4} style={{ flexShrink: 0 }}>
-            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} style={{ fontSize: 12, height: 26 }}>{t('common.submit')}</Button>
-            <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} style={{ fontSize: 12, height: 26 }}>{t('common.undo')}</Button>
+            <Button
+              type="primary"
+              size="small"
+              icon={<SaveOutlined />}
+              onClick={handleCommit}
+              style={{ fontSize: 12, height: 26 }}
+            >
+              {t('common.submit')}
+            </Button>
+            <Button
+              size="small"
+              icon={<UndoOutlined />}
+              onClick={handleUndo}
+              style={{ fontSize: 12, height: 26 }}
+            >
+              {t('common.undo')}
+            </Button>
           </Space>
         </div>
       )}
+
+      {/* 底部状态条：行数/列数/耗时统一放这里，避免与 tab 标签和顶部工具栏重复 */}
+      <div className="result-grid-status">
+        <span>
+          <strong>{queryResult.rows.length.toLocaleString()}</strong> {t('common.rows')}
+        </span>
+        <span>
+          <strong>{queryResult.columns.length}</strong> {t('common.tableStructure.columns')}
+        </span>
+        {executionTime != null && (
+          <span>
+            {t('common.executionTime')} {executionTime}ms
+          </span>
+        )}
+        {queryResult.totalTime != null &&
+          queryResult.totalTime > 0 &&
+          queryResult.totalTime !== executionTime && (
+            <span>
+              {t('common.totalDuration')} {queryResult.totalTime}ms
+            </span>
+          )}
+        {queryResult.truncated && (
+          <span className="is-warning">{t('common.dataGrid.truncatedBadge')}</span>
+        )}
+      </div>
     </div>
   );
-}
+});
 
 // ── ExplainPlanGrid ──
 // Color-coding helpers for explain plan rows (MySQL `type` column values)
-const ACCESS_TYPE_COLORS: Record<string, { bg: string; fg: string; level: 'good' | 'moderate' | 'bad' }> = {
-  system:   { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
-  const:    { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
-  eq_ref:   { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
-  ref:      { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
-  range:    { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
-  index:    { bg: '#fff8c5', fg: '#9a6700', level: 'moderate' },
-  ALL:      { bg: '#ffebe9', fg: '#cf222e', level: 'bad' },
-  fulltext: { bg: '#fff8c5', fg: '#9a6700', level: 'moderate' },
-  ref_or_null: { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
-  index_merge: { bg: '#fff8c5', fg: '#9a6700', level: 'moderate' },
-  unique_subquery: { bg: '#e6ffed', fg: '#1a7f37', level: 'good' },
-  index_subquery:  { bg: '#fff8c5', fg: '#9a6700', level: 'moderate' },
+// 全部走主题令牌：亮暗模式自动翻转，且与 app 的 success/warning/error 同源
+// （旧版是 GitHub 配色硬编码 + 手工暗色映射表）
+const ACCESS_TYPE_COLORS: Record<
+  string,
+  { bg: string; fg: string; level: 'good' | 'moderate' | 'bad' }
+> = {
+  system: { bg: 'var(--color-success-alpha-15)', fg: 'var(--color-success)', level: 'good' },
+  const: { bg: 'var(--color-success-alpha-15)', fg: 'var(--color-success)', level: 'good' },
+  eq_ref: { bg: 'var(--color-success-alpha-15)', fg: 'var(--color-success)', level: 'good' },
+  ref: { bg: 'var(--color-success-alpha-15)', fg: 'var(--color-success)', level: 'good' },
+  range: { bg: 'var(--color-success-alpha-15)', fg: 'var(--color-success)', level: 'good' },
+  index: { bg: 'var(--color-warning-alpha-15)', fg: 'var(--color-warning)', level: 'moderate' },
+  ALL: { bg: 'var(--color-error-alpha-15)', fg: 'var(--color-error)', level: 'bad' },
+  fulltext: { bg: 'var(--color-warning-alpha-15)', fg: 'var(--color-warning)', level: 'moderate' },
+  ref_or_null: { bg: 'var(--color-success-alpha-15)', fg: 'var(--color-success)', level: 'good' },
+  index_merge: {
+    bg: 'var(--color-warning-alpha-15)',
+    fg: 'var(--color-warning)',
+    level: 'moderate',
+  },
+  unique_subquery: {
+    bg: 'var(--color-success-alpha-15)',
+    fg: 'var(--color-success)',
+    level: 'good',
+  },
+  index_subquery: {
+    bg: 'var(--color-warning-alpha-15)',
+    fg: 'var(--color-warning)',
+    level: 'moderate',
+  },
 };
 
 function getRowColor(data: Record<string, unknown>): { bg: string; fg: string } | null {
@@ -678,15 +1028,15 @@ function getRowColor(data: Record<string, unknown>): { bg: string; fg: string } 
   // Check `Extra` column for warning signals
   const extra = typeof data.Extra === 'string' ? data.Extra : '';
   if (/Using filesort|Using temporary/i.test(extra)) {
-    return { bg: '#ffebe9', fg: '#cf222e' };
+    return { bg: 'var(--color-error-alpha-15)', fg: 'var(--color-error)' };
   }
 
   // PostgreSQL: color based on cost (if present)
   if (typeof data['Total Cost'] === 'number') {
     const cost = data['Total Cost'] as number;
-    if (cost < 100) return { bg: '#e6ffed', fg: '#1a7f37' };
-    if (cost < 10000) return { bg: '#fff8c5', fg: '#9a6700' };
-    return { bg: '#ffebe9', fg: '#cf222e' };
+    if (cost < 100) return { bg: 'var(--color-success-alpha-15)', fg: 'var(--color-success)' };
+    if (cost < 10000) return { bg: 'var(--color-warning-alpha-15)', fg: 'var(--color-warning)' };
+    return { bg: 'var(--color-error-alpha-15)', fg: 'var(--color-error)' };
   }
 
   return null;
@@ -699,7 +1049,7 @@ function isMySQLExplain(columns: string[]): boolean {
 
 // Detect PostgreSQL explain output (has `QUERY PLAN` or `query plan` column)
 function isPGExplain(columns: string[]): boolean {
-  return columns.some(c => c.toLowerCase().includes('query plan'));
+  return columns.some((c) => c.toLowerCase().includes('query plan'));
 }
 
 // Compute indent level from MySQL row data
@@ -719,22 +1069,10 @@ function getPGIndent(text: string): number {
   return arrows;
 }
 
-// Dark-mode aware color overrides
-function adjustColor(color: string, isDark: boolean): string {
-  if (!isDark) return color;
-  // Simple dark-mode adjustments
-  const darkMap: Record<string, string> = {
-    '#e6ffed': '#1a3a2a',
-    '#fff8c5': '#3a3520',
-    '#ffebe9': '#3a2020',
-    '#1a7f37': '#56d364',
-    '#9a6700': '#e3b341',
-    '#cf222e': '#f85149',
-  };
-  return darkMap[color] || color;
-}
+// 旧版暗色硬编码映射（adjustColor / darkMap）已随主题令牌化移除：
+// CSS 变量在 data-theme='dark' 下自动取暗色值，无需 JS 层换算。
 
-export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean }) {
+export function ExplainPlanGrid({ data }: { data: any[]; isDark?: boolean }) {
   const { t } = useTranslation();
 
   if (!data || data.length === 0) {
@@ -749,11 +1087,35 @@ export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean
   if (isPG && columns.length === 1) {
     const pgCol = columns[0];
     return (
-      <div style={{ height: '100%', overflow: 'auto', fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace", fontSize: 12 }}>
+      <div
+        style={{
+          height: '100%',
+          overflow: 'auto',
+          fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+          fontSize: 12,
+        }}
+      >
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: 'var(--background-toolbar)', position: 'sticky', top: 0, zIndex: 1 }}>
-              <th style={{ textAlign: 'left', padding: '6px 12px', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 11 }}>{pgCol}</th>
+            <tr
+              style={{
+                background: 'var(--background-toolbar)',
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+              }}
+            >
+              <th
+                style={{
+                  textAlign: 'left',
+                  padding: '6px 12px',
+                  borderBottom: '1px solid var(--border)',
+                  fontWeight: 600,
+                  fontSize: 11,
+                }}
+              >
+                {pgCol}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -762,17 +1124,33 @@ export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean
               const indent = getPGIndent(text);
               const cleanText = text.replace(/^\s*(?:->\s*)*/, '');
               const isPlanLine = /^\s*->/.test(text);
-              const bg = isPlanLine ? (i % 2 === 0 ? 'var(--row-stripe-bg)' : 'transparent') : 'transparent';
+              const bg = isPlanLine
+                ? i % 2 === 0
+                  ? 'var(--row-stripe-bg)'
+                  : 'transparent'
+                : 'transparent';
               return (
                 <tr key={i} style={{ background: bg }}>
-                  <td style={{
-                    padding: '3px 12px 3px ' + (12 + indent * 20) + 'px',
-                    borderBottom: '1px solid var(--border-subtle, #f0f0f0)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    color: isPlanLine ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  }}>
-                    {isPlanLine && <span style={{ color: 'var(--color-primary)', marginRight: 4, userSelect: 'none' }}>→</span>}
+                  <td
+                    style={{
+                      padding: '3px 12px 3px ' + (12 + indent * 20) + 'px',
+                      borderBottom: '1px solid var(--border-subtle, #f0f0f0)',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      color: isPlanLine ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {isPlanLine && (
+                      <span
+                        style={{
+                          color: 'var(--color-primary)',
+                          marginRight: 4,
+                          userSelect: 'none',
+                        }}
+                      >
+                        →
+                      </span>
+                    )}
                     {cleanText}
                   </td>
                 </tr>
@@ -786,27 +1164,59 @@ export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean
 
   // MySQL / generic table-style explain
   // Prioritize important columns first, then the rest
-  const priorityCols = ['id', 'select_type', 'table', 'type', 'possible_keys', 'key', 'key_len', 'ref', 'rows', 'filtered', 'Extra'];
+  const priorityCols = [
+    'id',
+    'select_type',
+    'table',
+    'type',
+    'possible_keys',
+    'key',
+    'key_len',
+    'ref',
+    'rows',
+    'filtered',
+    'Extra',
+  ];
   const orderedCols = isMySQL
-    ? [...priorityCols.filter(c => columns.includes(c)), ...columns.filter(c => !priorityCols.includes(c))]
+    ? [
+        ...priorityCols.filter((c) => columns.includes(c)),
+        ...columns.filter((c) => !priorityCols.includes(c)),
+      ]
     : columns;
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace", fontSize: 12 }}>
+    <div
+      style={{
+        height: '100%',
+        overflow: 'auto',
+        fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+        fontSize: 12,
+      }}
+    >
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ background: 'var(--background-toolbar)', position: 'sticky', top: 0, zIndex: 1 }}>
-            {orderedCols.map(col => (
-              <th key={col} style={{
-                textAlign: 'left',
-                padding: '6px 10px',
-                borderBottom: '1px solid var(--border)',
-                fontWeight: 600,
-                fontSize: 11,
-                whiteSpace: 'nowrap',
-                color: 'var(--text-secondary)',
-                borderRight: '1px solid var(--border-subtle, #f0f0f0)',
-              }}>
+          <tr
+            style={{
+              background: 'var(--background-toolbar)',
+              position: 'sticky',
+              top: 0,
+              zIndex: 1,
+            }}
+          >
+            {orderedCols.map((col) => (
+              <th
+                key={col}
+                style={{
+                  textAlign: 'left',
+                  padding: '6px 10px',
+                  borderBottom: '1px solid var(--border)',
+                  fontWeight: 600,
+                  fontSize: 11,
+                  whiteSpace: 'nowrap',
+                  color: 'var(--text-secondary)',
+                  borderRight: '1px solid var(--border-subtle, #f0f0f0)',
+                }}
+              >
                 {col}
               </th>
             ))}
@@ -816,9 +1226,7 @@ export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean
           {data.map((row, rowIdx) => {
             const color = getRowColor(row as Record<string, unknown>);
             const indent = isMySQL ? getMySQLIndent(row as Record<string, unknown>) : 0;
-            const bg = color
-              ? adjustColor(color.bg, isDark)
-              : (rowIdx % 2 === 0 ? 'transparent' : 'var(--row-stripe-bg)');
+            const bg = color ? color.bg : rowIdx % 2 === 0 ? 'transparent' : 'var(--row-stripe-bg)';
 
             return (
               <tr key={rowIdx} style={{ background: bg }}>
@@ -834,33 +1242,38 @@ export function ExplainPlanGrid({ data, isDark }: { data: any[]; isDark: boolean
                   // Highlight bad signals in Extra
                   let cellColor: string | undefined;
                   if (isTypeCol && color) {
-                    cellColor = adjustColor(color.fg, isDark);
+                    cellColor = color.fg;
                   }
                   if (isExtraCol && /Using filesort|Using temporary/i.test(display)) {
-                    cellColor = adjustColor('#cf222e', isDark);
+                    cellColor = 'var(--color-error)';
                   }
                   if (isKeyCol && display === 'NULL') {
-                    cellColor = adjustColor('#cf222e', isDark);
+                    cellColor = 'var(--color-error)';
                   }
 
                   return (
-                    <td key={col} style={{
-                      padding: '4px 10px',
-                      borderBottom: '1px solid var(--border-subtle, #f0f0f0)',
-                      borderRight: '1px solid var(--border-subtle, #f0f0f0)',
-                      whiteSpace: 'nowrap',
-                      color: isNull ? 'var(--text-tertiary, #999)' : cellColor,
-                      fontStyle: isNull ? 'italic' : 'normal',
-                      paddingLeft: isIndentCol ? (10 + indent * 24) + 'px' : undefined,
-                    }}>
+                    <td
+                      key={col}
+                      style={{
+                        padding: '4px 10px',
+                        borderBottom: '1px solid var(--border-subtle, #f0f0f0)',
+                        borderRight: '1px solid var(--border-subtle, #f0f0f0)',
+                        whiteSpace: 'nowrap',
+                        color: isNull ? 'var(--text-tertiary, #999)' : cellColor,
+                        fontStyle: isNull ? 'italic' : 'normal',
+                        paddingLeft: isIndentCol ? 10 + indent * 24 + 'px' : undefined,
+                      }}
+                    >
                       {isIndentCol && indent > 0 && (
-                        <span style={{
-                          display: 'inline-block',
-                          width: indent * 24,
-                          marginRight: 4,
-                          userSelect: 'none',
-                          color: 'var(--text-tertiary, #999)',
-                        }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            width: indent * 24,
+                            marginRight: 4,
+                            userSelect: 'none',
+                            color: 'var(--text-tertiary, #999)',
+                          }}
+                        >
                           {'└' + '─'.repeat(Math.max(0, indent - 1))}
                         </span>
                       )}

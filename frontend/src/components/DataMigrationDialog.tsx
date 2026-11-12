@@ -4,7 +4,7 @@ import {
   Steps,
   Select,
   Button,
-  message,
+  App,
   Table,
   Space,
   Switch,
@@ -46,6 +46,7 @@ interface MigrationTableResult {
 
 export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const connections = useAppStore((s) => s.connections);
   const [currentStep, setCurrentStep] = useState(0);
   const [sourceConnId, setSourceConnId] = useState('');
@@ -70,14 +71,20 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
   // 加载源数据库列表
   useEffect(() => {
     if (sourceConnId && open) {
-      api.getDatabases(sourceConnId).then(setDatabases).catch(() => setDatabases([]));
+      api
+        .getDatabases(sourceConnId)
+        .then(setDatabases)
+        .catch(() => setDatabases([]));
     }
   }, [sourceConnId, open]);
 
   // 加载目标数据库列表
   useEffect(() => {
     if (targetConnId && open) {
-      api.getDatabases(targetConnId).then(setTargetDatabases).catch(() => setTargetDatabases([]));
+      api
+        .getDatabases(targetConnId)
+        .then(setTargetDatabases)
+        .catch(() => setTargetDatabases([]));
     }
   }, [targetConnId, open]);
 
@@ -145,12 +152,24 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
   const handleMigrate = useCallback(async () => {
     setMigrating(true);
     try {
-      const result = (await api.executeMigration(sourceConnId, targetConnId, sourceDatabase, targetDatabase, selectedTables, {
-        create_table: createTable,
-        drop_existing: dropExisting,
-        truncate_target: truncateTarget,
-        batch_size: batchSize,
-      })) as unknown as { tables: MigrationTableResult[]; total_rows: number; success: boolean; error: string };
+      const result = (await api.executeMigration(
+        sourceConnId,
+        targetConnId,
+        sourceDatabase,
+        targetDatabase,
+        selectedTables,
+        {
+          create_table: createTable,
+          drop_existing: dropExisting,
+          truncate_target: truncateTarget,
+          batch_size: batchSize,
+        }
+      )) as unknown as {
+        tables: MigrationTableResult[];
+        total_rows: number;
+        success: boolean;
+        error: string;
+      };
       setMigrationResult(result.tables);
       if (result.success) {
         message.success(t('common.migration.success'));
@@ -228,7 +247,12 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
             </Button>
           )}
           {currentStep === 2 && (
-            <Button type="primary" disabled={!canProceedStep2} loading={loadingPreview} onClick={handlePreview}>
+            <Button
+              type="primary"
+              disabled={!canProceedStep2}
+              loading={loadingPreview}
+              onClick={handlePreview}
+            >
               {t('common.migration.preview')}
             </Button>
           )}
@@ -246,7 +270,9 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
       {currentStep === 0 && (
         <Space orientation="vertical" style={{ width: '100%' }} size="middle">
           <div>
-            <div style={{ marginBottom: 8, fontWeight: 500 }}>{t('common.migration.sourceConnection')}</div>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>
+              {t('common.migration.sourceConnection')}
+            </div>
             <Select
               placeholder={t('common.migration.selectConnection')}
               style={{ width: '100%' }}
@@ -260,7 +286,9 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
           </div>
           {sourceConnId && (
             <div>
-              <div style={{ marginBottom: 8, fontWeight: 500 }}>{t('common.migration.sourceDatabase')}</div>
+              <div style={{ marginBottom: 8, fontWeight: 500 }}>
+                {t('common.migration.sourceDatabase')}
+              </div>
               <Select
                 placeholder={t('common.migration.selectDatabase')}
                 style={{ width: '100%' }}
@@ -285,7 +313,9 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
             style={{ marginBottom: 8 }}
           />
           <div>
-            <div style={{ marginBottom: 8, fontWeight: 500 }}>{t('common.migration.targetConnection')}</div>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>
+              {t('common.migration.targetConnection')}
+            </div>
             <Select
               placeholder={t('common.migration.selectConnection')}
               style={{ width: '100%' }}
@@ -301,7 +331,9 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
           </div>
           {targetConnId && (
             <div>
-              <div style={{ marginBottom: 8, fontWeight: 500 }}>{t('common.migration.targetDatabase')}</div>
+              <div style={{ marginBottom: 8, fontWeight: 500 }}>
+                {t('common.migration.targetDatabase')}
+              </div>
               <Select
                 placeholder={t('common.migration.selectDatabase')}
                 style={{ width: '100%' }}
@@ -319,9 +351,17 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
       {/* Step 2: 选择表 */}
       {currentStep === 2 && (
         <div>
-          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div
+            style={{
+              marginBottom: 12,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
             <span>
-              {t('common.migration.selectedTables')}: <Tag color="blue">{selectedTables.length}</Tag>
+              {t('common.migration.selectedTables')}:{' '}
+              <Tag color="blue">{selectedTables.length}</Tag>
             </span>
             <Space>
               <Button size="small" onClick={() => setSelectedTables(tables.map((t) => t.name))}>
@@ -363,27 +403,42 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
                   borderRadius: '8px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                >
                   <span>{t('common.migration.createTable')}</span>
                   <Switch checked={createTable} onChange={setCreateTable} />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                >
                   <span>{t('common.migration.dropExisting')}</span>
                   <Switch checked={dropExisting} onChange={setDropExisting} />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                >
                   <span>{t('common.migration.truncateTarget')}</span>
                   <Switch checked={truncateTarget} onChange={setTruncateTarget} />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                >
                   <span>{t('common.migration.batchSize')}</span>
-                  <InputNumber min={100} max={10000} value={batchSize} onChange={(v) => setBatchSize(v ?? 500)} />
+                  <InputNumber
+                    min={100}
+                    max={10000}
+                    value={batchSize}
+                    onChange={(v) => setBatchSize(v ?? 500)}
+                  />
                 </div>
               </div>
 
               {previewData.length > 0 && (
                 <div>
-                  <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('common.migration.previewTitle')}</div>
+                  <div style={{ fontWeight: 500, marginBottom: 8 }}>
+                    {t('common.migration.previewTitle')}
+                  </div>
                   <List
                     size="small"
                     bordered
@@ -394,7 +449,9 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
                           <span>{item.table_name}</span>
                           <Tag>{item.row_count.toLocaleString()} rows</Tag>
                           <Tag color={item.compatible ? 'green' : 'orange'}>
-                            {item.compatible ? t('common.migration.compatible') : t('common.migration.hasWarnings')}
+                            {item.compatible
+                              ? t('common.migration.compatible')
+                              : t('common.migration.hasWarnings')}
                           </Tag>
                         </Space>
                       </List.Item>
@@ -407,9 +464,13 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
             <div>
               <div style={{ marginBottom: 16 }}>
                 <Space>
-                  <Tag color="green">{t('common.migration.success')}: {completedCount}</Tag>
+                  <Tag color="green">
+                    {t('common.migration.success')}: {completedCount}
+                  </Tag>
                   {failedCount > 0 && (
-                    <Tag color="red">{t('common.migration.failed')}: {failedCount}</Tag>
+                    <Tag color="red">
+                      {t('common.migration.failed')}: {failedCount}
+                    </Tag>
                   )}
                 </Space>
               </div>
@@ -419,7 +480,11 @@ export function DataMigrationDialog({ open, onClose }: DataMigrationDialogProps)
                 pagination={false}
                 rowKey="table_name"
                 columns={[
-                  { title: t('common.migration.tableName'), dataIndex: 'table_name', key: 'table_name' },
+                  {
+                    title: t('common.migration.tableName'),
+                    dataIndex: 'table_name',
+                    key: 'table_name',
+                  },
                   {
                     title: t('common.migration.migratedRows'),
                     dataIndex: 'row_count',

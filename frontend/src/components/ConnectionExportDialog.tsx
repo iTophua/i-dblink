@@ -1,10 +1,16 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { Modal, Button, message, Radio, Alert, Segmented, Checkbox, Input } from 'antd';
-import { DownloadOutlined, UploadOutlined, SearchOutlined } from '@ant-design/icons';
+import { Modal, Button, App, Radio, Alert, Segmented, Checkbox, Input } from 'antd';
+import {
+  DatabaseOutlined,
+  DownloadOutlined,
+  UploadOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { useAppStore } from '../stores/appStore';
 import { getErrorMessage } from '../utils/getErrorMessage';
+import { EnhancedEmptyState } from './LoadingStates';
 
 interface Props {
   open: boolean;
@@ -14,6 +20,7 @@ interface Props {
 
 export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const connections = useAppStore((s) => s.connections);
   const [mode, setMode] = useState<'export' | 'import' | 'navicat'>('export');
   const [importOverwrite, setImportOverwrite] = useState(false);
@@ -42,11 +49,6 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
         c.db_type.toLowerCase().includes(lower)
     );
   }, [connections, searchText]);
-
-  const allFilteredIds = useMemo(
-    () => new Set(filteredConnections.map((c) => c.id)),
-    [filteredConnections]
-  );
 
   const isAllSelected =
     filteredConnections.length > 0 && filteredConnections.every((c) => selectedIds.has(c.id));
@@ -97,7 +99,7 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
     } finally {
       setExporting(false);
     }
-  }, [selectedIds, connections.length, t]);
+  }, [selectedIds, connections.length, t, message]);
 
   const handleImport = useCallback(
     async (file: File) => {
@@ -118,7 +120,7 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
         setImporting(false);
       }
     },
-    [importOverwrite, onImported, onClose, t]
+    [importOverwrite, onImported, onClose, t, message]
   );
 
   const handleNavicatImport = useCallback(
@@ -139,7 +141,7 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
         setImporting(false);
       }
     },
-    [importOverwrite, onImported, onClose, t]
+    [importOverwrite, onImported, onClose, t, message]
   );
 
   const renderOverwriteOptions = () => (
@@ -196,15 +198,10 @@ export function ConnectionExportDialog({ open, onClose, onImported }: Props) {
           />
 
           {connections.length === 0 ? (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '24px 0',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              {t('common.connectionExportDialog.noConnections')}
-            </div>
+            <EnhancedEmptyState
+              icon={<DatabaseOutlined />}
+              title={t('common.connectionExportDialog.noConnections')}
+            />
           ) : (
             <>
               <div

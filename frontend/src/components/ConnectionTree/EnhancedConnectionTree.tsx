@@ -1,13 +1,8 @@
 import React, { useRef, useMemo, useEffect, useState, useCallback } from 'react';
-import { Tree, Spin, Dropdown, Menu } from 'antd';
+import { Tree, Spin, Dropdown, Menu, Button } from 'antd';
 // Dropdown 仅用于折叠态侧栏连接菜单（见 collapsed 分支）；空白菜单用手动浮动 div
 import { useTranslation } from 'react-i18next';
-import {
-  DatabaseOutlined,
-  PlusOutlined,
-  FolderOutlined,
-  SearchOutlined,
-} from '@ant-design/icons';
+import { DatabaseOutlined, PlusOutlined, FolderOutlined, SearchOutlined } from '@ant-design/icons';
 import type { Connection } from '../../stores/appStore';
 import { EnhancedEmptyState } from '../LoadingStates';
 import { DatabaseIcon } from '../DatabaseIcon';
@@ -29,17 +24,47 @@ function getDbIcon(dbType: string, connected = true) {
 
 export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   const {
-    connections, groups, selectedId, selectedTableId,
-    onSelect, onTableSelect, onObjectTypeSelect,
-    onTableOpen, onViewOpen, onOpenDesigner, onOpenViewDefinition,
-    onExpand, collapsed, searchText, expandedKeys, onExpandKeys, onClearSearch, onCancelConnect,
-    connectionDatabases, isLoading,
-    onConnect, onDisconnect, onEditConnection, onCopyConnection, onDeleteConnection, onNewQuery,
-    onOpenRoutine, onOpenTrigger,
-    onDatabaseExpand, onDatabaseRefresh, onDatabaseClose, onDatabaseProperties,
-    onLoadDatabases, onTableExpand,
-    onSaveConnection, onSaveGroup, onDeleteGroup,
-    onCreateConnection, onImportConnections, onBatchManage, onRefreshConnections,
+    connections,
+    groups,
+    selectedId,
+    selectedTableId,
+    onSelect,
+    onTableSelect,
+    onObjectTypeSelect,
+    onTableOpen,
+    onViewOpen,
+    onOpenDesigner,
+    onOpenViewDefinition,
+    onExpand,
+    collapsed,
+    searchText,
+    expandedKeys,
+    onExpandKeys,
+    onClearSearch,
+    onCancelConnect,
+    connectionDatabases,
+    isLoading,
+    onConnect,
+    onDisconnect,
+    onEditConnection,
+    onCopyConnection,
+    onDeleteConnection,
+    onNewQuery,
+    onOpenRoutine,
+    onOpenTrigger,
+    onDatabaseExpand,
+    onDatabaseRefresh,
+    onDatabaseClose,
+    onDatabaseProperties,
+    onLoadDatabases,
+    onTableExpand,
+    onSaveConnection,
+    onSaveGroup,
+    onDeleteGroup,
+    onCreateConnection,
+    onImportConnections,
+    onBatchManage,
+    onRefreshConnections,
   } = props;
 
   const { t } = useTranslation();
@@ -117,8 +142,12 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
     return () => document.removeEventListener('keydown', onKey);
   }, [emptyMenuOpen]);
 
-  useEffect(() => { connectionDatabasesRef.current = connectionDatabases; }, [connectionDatabases]);
-  useEffect(() => { expandedKeysRef.current = expandedKeys; }, [expandedKeys]);
+  useEffect(() => {
+    connectionDatabasesRef.current = connectionDatabases;
+  }, [connectionDatabases]);
+  useEffect(() => {
+    expandedKeysRef.current = expandedKeys;
+  }, [expandedKeys]);
 
   // 托盘快速连接后的定位：滚动到目标连接节点（连接后树会异步加载子节点
   // 触发重排，复用双延时补滚策略；幂等无害）
@@ -195,37 +224,18 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
 
   // ── Hooks ──
   const dialogs = useTreeDialogs(onSaveGroup);
-  // 进程管理全局入口监听用：始终指向最新 dialogs（setter 本身是稳定 useState 引用）
-  const dialogsRef = useRef(dialogs);
-  useEffect(() => { dialogsRef.current = dialogs; }, [dialogs]);
-
-  // 进程管理的全局入口（原生菜单/命令面板）：对指定连接打开进程面板
-  useEffect(() => {
-    const onOpenProcessList = (e: Event) => {
-      const { connId, database } = (e as CustomEvent<{ connId: string; database?: string }>).detail;
-      if (!connId) return;
-      dialogsRef.current.setProcessListTarget({ connId, database });
-      dialogsRef.current.setProcessListOpen(true);
-    };
-    window.addEventListener('open-process-list', onOpenProcessList);
-    return () => window.removeEventListener('open-process-list', onOpenProcessList);
-  }, []);
-
-  // 服务器状态的全局入口（原生菜单/命令面板）
-  useEffect(() => {
-    const onOpenServerStatus = (e: Event) => {
-      const { connId } = (e as CustomEvent<{ connId: string }>).detail;
-      if (!connId) return;
-      dialogsRef.current.setServerStatusTarget({ connId });
-      dialogsRef.current.setServerStatusOpen(true);
-    };
-    window.addEventListener('open-server-status', onOpenServerStatus);
-    return () => window.removeEventListener('open-server-status', onOpenServerStatus);
-  }, []);
-  const connectionActions = useConnectionActions(connections, groups, onSaveConnection, onRefreshConnections);
+  const connectionActions = useConnectionActions(
+    connections,
+    groups,
+    onSaveConnection,
+    onRefreshConnections
+  );
 
   const menus = useContextMenuMenus(
-    groups, connections, expandedKeys, groupedConnections,
+    groups,
+    connections,
+    expandedKeys,
+    groupedConnections,
     {
       setGroupDialogOpen: dialogs.setGroupDialogOpen,
       setEditingGroup: dialogs.setEditingGroup,
@@ -241,13 +251,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       setBackupRestoreTarget: dialogs.setBackupRestoreTarget,
       setBackupRestoreMode: dialogs.setBackupRestoreMode,
       setBackupRestoreOpen: dialogs.setBackupRestoreOpen,
-      setUserManagementTarget: dialogs.setUserManagementTarget,
-      setUserManagementOpen: dialogs.setUserManagementOpen,
       setSchemaCompareOpen: dialogs.setSchemaCompareOpen,
-      setProcessListOpen: dialogs.setProcessListOpen,
-      setProcessListTarget: dialogs.setProcessListTarget,
-      setServerStatusOpen: dialogs.setServerStatusOpen,
-      setServerStatusTarget: dialogs.setServerStatusTarget,
       setCreateDatabaseTarget: dialogs.setCreateDatabaseTarget,
       setCreateDatabaseOpen: dialogs.setCreateDatabaseOpen,
       setDataGeneratorTarget: dialogs.setDataGeneratorTarget,
@@ -259,9 +263,21 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       setPropertiesContent: dialogs.setPropertiesContent,
     },
     {
-      onConnect, onDisconnect, onExpand, onEditConnection, onDeleteConnection,
-      onNewQuery, onExpandKeys, onDatabaseRefresh, onDatabaseClose, onDatabaseProperties,
-      onTableOpen, onOpenDesigner, onOpenViewDefinition, onViewOpen, onDeleteGroup,
+      onConnect,
+      onDisconnect,
+      onExpand,
+      onEditConnection,
+      onDeleteConnection,
+      onNewQuery,
+      onExpandKeys,
+      onDatabaseRefresh,
+      onDatabaseClose,
+      onDatabaseProperties,
+      onTableOpen,
+      onOpenDesigner,
+      onOpenViewDefinition,
+      onViewOpen,
+      onDeleteGroup,
       // 复制 = 打开预填的新增连接对话框（由 MainLayout 提供；未传入则空操作）
       handleCopyConnection: (conn) => onCopyConnection?.(conn) ?? Promise.resolve(),
       handleMoveConnection: connectionActions.handleMoveConnection,
@@ -271,7 +287,11 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
 
   // 搜索自动展开/恢复（提前调用以获取 protectConnectionKeys）
   const { protectConnectionKeys } = useSearchExpand(
-    searchText, filteredConnections, connectionDatabases, expandedKeysRef, onExpandKeys
+    searchText,
+    filteredConnections,
+    connectionDatabases,
+    expandedKeysRef,
+    onExpandKeys
   );
 
   // 搜索态下用户展开/双击连接：保护其子树不被恢复收起 + 清空搜索后滚动定位到该连接
@@ -289,42 +309,85 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
 
   const treeHandlers = useTreeHandlers(
     connections,
-    { onExpandKeys, onConnect, onExpand, onDatabaseExpand, onTableExpand, onLoadDatabases, onTableOpen, onViewOpen, onSelect, onTableSelect, onObjectTypeSelect, onClearSearch: handleClearSearchWithScroll },
+    {
+      onExpandKeys,
+      onConnect,
+      onExpand,
+      onDatabaseExpand,
+      onTableExpand,
+      onLoadDatabases,
+      onTableOpen,
+      onViewOpen,
+      onSelect,
+      onTableSelect,
+      onObjectTypeSelect,
+      onClearSearch: handleClearSearchWithScroll,
+    },
     { expandedKeysRef, connectionDatabasesRef }
   );
 
   const handleRenameCommit = (groupId: string) => {
-    if (!dialogs.renameValue.trim()) { dialogs.setRenamingKey(null); return; }
+    if (!dialogs.renameValue.trim()) {
+      dialogs.setRenamingKey(null);
+      return;
+    }
     const group = groups.find((g) => g.id === groupId);
     if (group && group.name !== dialogs.renameValue.trim()) {
-      onSaveGroup({ id: groupId, name: dialogs.renameValue.trim(), icon: group.icon, color: group.color });
+      onSaveGroup({
+        id: groupId,
+        name: dialogs.renameValue.trim(),
+        icon: group.icon,
+        color: group.color,
+      });
     }
     dialogs.setRenamingKey(null);
   };
 
   const { treeData } = useTreeData({
-    groups, groupedConnections, connections, connectionDatabases,
-    expandedKeys, searchText, selectedTableId,
-    renamingKey: dialogs.renamingKey, renameValue: dialogs.renameValue,
-    setRenameValue: dialogs.setRenameValue, menus,
+    groups,
+    groupedConnections,
+    connections,
+    connectionDatabases,
+    expandedKeys,
+    searchText,
+    selectedTableId,
+    renamingKey: dialogs.renamingKey,
+    renameValue: dialogs.renameValue,
+    setRenameValue: dialogs.setRenameValue,
+    menus,
     handlers: {
       handleTableClick: treeHandlers.handleTableClick,
       handleDoubleClick: treeHandlers.handleDoubleClick,
       handleRenameCommit,
-      onTableOpen, onViewOpen, onNewQuery, onOpenRoutine, onOpenTrigger,
+      onTableOpen,
+      onViewOpen,
+      onNewQuery,
+      onOpenRoutine,
+      onOpenTrigger,
       onCancelConnect,
     },
   });
 
   // ── Group dialog cancel helper ──
-  const handleGroupCancel = () => { dialogs.setGroupDialogOpen(false); dialogs.setEditingGroup(null); dialogs.setParentGroupId(null); };
-  const openNewGroup = () => { dialogs.setEditingGroup(null); dialogs.setParentGroupId(null); dialogs.setGroupDialogOpen(true); };
+  const handleGroupCancel = () => {
+    dialogs.setGroupDialogOpen(false);
+    dialogs.setEditingGroup(null);
+    dialogs.setParentGroupId(null);
+  };
+  const openNewGroup = () => {
+    dialogs.setEditingGroup(null);
+    dialogs.setParentGroupId(null);
+    dialogs.setGroupDialogOpen(true);
+  };
 
   // ── Tree drag/drop handler ──
   const handleDrop = (info: any) => {
     const draggedKey = info.dragNode.key as string;
     const dropKey = info.node.key as string;
-    if (dropKey.startsWith('group-')) { connectionActions.handleMoveConnection(draggedKey, dropKey.replace('group-', '')); return; }
+    if (dropKey.startsWith('group-')) {
+      connectionActions.handleMoveConnection(draggedKey, dropKey.replace('group-', ''));
+      return;
+    }
     if (!info.dropToGap) return;
     const draggedConn = connections.find((c) => c.id === draggedKey);
     const dropConn = connections.find((c) => c.id === dropKey);
@@ -338,29 +401,39 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
 
   const isDraggable = (node: any) => {
     const key = node.key.toString();
-    return !key.startsWith('group-') && !key.startsWith('schema::') && !key.startsWith('db::') &&
-      !key.startsWith('table::') && !key.startsWith('view::') && !key.startsWith('tables::') &&
-      !key.startsWith('views::') && !key.startsWith('procedures::') && !key.startsWith('functions::') &&
-      !key.startsWith('init-');
+    return (
+      !key.startsWith('group-') &&
+      !key.startsWith('schema::') &&
+      !key.startsWith('db::') &&
+      !key.startsWith('table::') &&
+      !key.startsWith('view::') &&
+      !key.startsWith('tables::') &&
+      !key.startsWith('views::') &&
+      !key.startsWith('procedures::') &&
+      !key.startsWith('functions::') &&
+      !key.startsWith('init-')
+    );
   };
 
   // ── Empty state ──
-  const emptyState = collapsed ? (
-    <EnhancedEmptyState
-      icon={<DatabaseOutlined />}
-      title={t('common.mainLayout.noConnections')}
-      description={t('common.connectionTreeEmpty')}
-      action={{ label: t('common.newConnection'), onClick: () => onCreateConnection?.(), icon: <PlusOutlined /> }}
-    />
-  ) : (
-    <EnhancedEmptyState
-      icon={<DatabaseOutlined />}
-      title={t('common.mainLayout.noConnections')}
-      description={t('common.connectionTreeEmptyDescription')}
-      action={{ label: t('common.newConnection'), onClick: () => onCreateConnection?.(), icon: <PlusOutlined /> }}
-      secondaryAction={{ label: t('common.importConnections'), onClick: () => onImportConnections?.(), icon: <FolderOutlined /> }}
-      tips={[t('common.connectionTreeTip1'), t('common.connectionTreeTip2'), t('common.connectionTreeTip3')]}
-    />
+  // 侧栏保持安静：只一行说明 + 一个文字入口，所有引导集中在右侧「工作台」页，
+  // 避免同一动作（新建/导入连接）在侧栏和内容区各出现一次、互相抢焦点
+  const emptyState = (
+    <div style={{ padding: '28px 16px', textAlign: 'center' }}>
+      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+        {t('common.mainLayout.noConnections')}
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <Button
+          type="link"
+          size="small"
+          onClick={() => onCreateConnection?.()}
+          style={{ fontSize: 12, padding: 0, height: 20 }}
+        >
+          {t('common.newConnection')}
+        </Button>
+      </div>
+    </div>
   );
 
   // ── Collapsed sidebar ──
@@ -369,15 +442,23 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       <div style={{ padding: '8px 12px' }}>
         {isLoading ? (
           <Spin size="small" />
-        ) : connections.length === 0 ? emptyState : (
+        ) : connections.length === 0 ? (
+          emptyState
+        ) : (
           connections.map((conn) => (
             <Dropdown key={conn.id} menu={menus.getConnectionMenu(conn)} trigger={['contextMenu']}>
               <div
                 onClick={() => onSelect(conn.id)}
                 style={{
-                  padding: '8px', marginBottom: 4, borderRadius: 6, cursor: 'pointer',
+                  padding: '8px',
+                  marginBottom: 4,
+                  borderRadius: 6,
+                  cursor: 'pointer',
                   background: selectedId === conn.id ? 'var(--row-selected-bg)' : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background 0.2s',
                 }}
               >
                 {getDbIcon(conn.db_type, conn.status === 'connected')}
@@ -385,16 +466,40 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
             </Dropdown>
           ))
         )}
-        <div style={{ marginTop: 8, padding: '6px', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--background-hover)', border: '1px dashed var(--border-color)' }} onClick={openNewGroup}>
+        <div
+          style={{
+            marginTop: 8,
+            padding: '6px',
+            borderRadius: 6,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--background-hover)',
+            border: '1px dashed var(--border-color)',
+          }}
+          onClick={openNewGroup}
+        >
           <PlusOutlined style={{ color: 'var(--text-tertiary)' }} />
         </div>
         <ConnectionTreeDialogs
-          groupDialogOpen={dialogs.groupDialogOpen} editingGroup={dialogs.editingGroup}
-          parentGroupId={dialogs.parentGroupId} onGroupDialogCancel={handleGroupCancel}
-          onGroupSave={dialogs.handleGroupSave} connections={connections} connectionDatabases={connectionDatabases}
-          dataGeneratorOpen={dialogs.dataGeneratorOpen} dataGeneratorTarget={dialogs.dataGeneratorTarget}
-          onDataGeneratorCancel={() => { dialogs.setDataGeneratorOpen(false); dialogs.setDataGeneratorTarget(null); }}
-          onDataGeneratorSuccess={() => { dialogs.setDataGeneratorOpen(false); dialogs.setDataGeneratorTarget(null); }}
+          groupDialogOpen={dialogs.groupDialogOpen}
+          editingGroup={dialogs.editingGroup}
+          parentGroupId={dialogs.parentGroupId}
+          onGroupDialogCancel={handleGroupCancel}
+          onGroupSave={dialogs.handleGroupSave}
+          connections={connections}
+          connectionDatabases={connectionDatabases}
+          dataGeneratorOpen={dialogs.dataGeneratorOpen}
+          dataGeneratorTarget={dialogs.dataGeneratorTarget}
+          onDataGeneratorCancel={() => {
+            dialogs.setDataGeneratorOpen(false);
+            dialogs.setDataGeneratorTarget(null);
+          }}
+          onDataGeneratorSuccess={() => {
+            dialogs.setDataGeneratorOpen(false);
+            dialogs.setDataGeneratorTarget(null);
+          }}
         />
       </div>
     );
@@ -403,12 +508,10 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   // ── Full tree ──
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <style>{`
-        .connection-tree-spin-wrapper, .connection-tree-spin-wrapper > .ant-spin-container { height: 100% !important; display: flex !important; flex-direction: column !important; }
-        .connection-tree-spin-wrapper > .ant-spin-container > .ant-tree { flex: 1; min-height: 0; }
-      `}</style>
       <Spin spinning={isLoading} size="small" classNames={{ root: 'connection-tree-spin-wrapper' }}>
-        {connections.length === 0 && !isLoading ? emptyState : searchText.trim() && treeData.length === 0 ? (
+        {connections.length === 0 && !isLoading ? (
+          emptyState
+        ) : searchText.trim() && treeData.length === 0 ? (
           <div
             style={{
               padding: '32px 16px',
@@ -417,7 +520,9 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
               fontSize: 12,
             }}
           >
-            <SearchOutlined style={{ fontSize: 20, display: 'block', marginBottom: 8, opacity: 0.5 }} />
+            <SearchOutlined
+              style={{ fontSize: 20, display: 'block', marginBottom: 8, opacity: 0.5 }}
+            />
             {t('common.connectionTreeNoMatch', { query: searchText.trim() })}
           </div>
         ) : (
@@ -475,16 +580,28 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
                 挂在这里时 ResizeObserver 的 contentRect 已扣除 padding，高度天然对齐。 */}
             <div
               ref={attachTreeContainer}
-              style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 4px 8px' }}
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '0 4px 8px',
+              }}
             >
               <Tree
                 ref={treeRef}
-                showIcon={false} selectedKeys={selectedId ? [selectedId] : []} expandedKeys={expandedKeys}
+                showIcon={false}
+                selectedKeys={selectedId ? [selectedId] : []}
+                expandedKeys={expandedKeys}
                 onExpand={(keys, info) => treeHandlers.handleExpand(keys, info)}
-                onSelect={treeHandlers.handleSelect} treeData={treeData}
-                draggable={isDraggable} onDrop={handleDrop}
+                onSelect={treeHandlers.handleSelect}
+                treeData={treeData}
+                draggable={isDraggable}
+                onDrop={handleDrop}
                 style={{ background: 'transparent', fontSize: 13, userSelect: 'none' }}
-                className="connection-tree" blockNode virtual
+                className="connection-tree"
+                blockNode
+                virtual
                 height={treeHeight > 0 ? treeHeight : undefined}
                 itemHeight={28}
               />
@@ -494,42 +611,97 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
       </Spin>
 
       <PropertiesModal
-        propertiesOpen={dialogs.propertiesOpen} propertiesType={dialogs.propertiesType}
-        propertiesTarget={dialogs.propertiesTarget} propertiesContent={dialogs.propertiesContent}
-        propertiesLoading={dialogs.propertiesLoading} groups={groups}
-        onClose={() => { dialogs.setPropertiesOpen(false); dialogs.setPropertiesTarget(null); dialogs.setPropertiesContent(''); }}
+        propertiesOpen={dialogs.propertiesOpen}
+        propertiesType={dialogs.propertiesType}
+        propertiesTarget={dialogs.propertiesTarget}
+        propertiesContent={dialogs.propertiesContent}
+        propertiesLoading={dialogs.propertiesLoading}
+        groups={groups}
+        onClose={() => {
+          dialogs.setPropertiesOpen(false);
+          dialogs.setPropertiesTarget(null);
+          dialogs.setPropertiesContent('');
+        }}
       />
 
       <ConnectionTreeDialogs
-        groupDialogOpen={dialogs.groupDialogOpen} editingGroup={dialogs.editingGroup}
-        parentGroupId={dialogs.parentGroupId} onGroupDialogCancel={handleGroupCancel}
-        onGroupSave={dialogs.handleGroupSave} connections={connections} connectionDatabases={connectionDatabases}
-        copyDialogOpen={dialogs.copyDialogOpen} copyTarget={dialogs.copyTarget}
-        onCopyDialogCancel={() => { dialogs.setCopyDialogOpen(false); dialogs.setCopyTarget(null); }}
-        onCopyDialogSuccess={() => { dialogs.setCopyDialogOpen(false); const pt = dialogs.copyTarget; dialogs.setCopyTarget(null); if (pt?.database) onDatabaseRefresh?.(pt.connId, pt.database); }}
-        dumpDialogOpen={dialogs.dumpDialogOpen} dumpTarget={dialogs.dumpTarget}
-        onDumpDialogCancel={() => { dialogs.setDumpDialogOpen(false); dialogs.setDumpTarget(null); }}
-        onDumpDialogSuccess={() => { dialogs.setDumpDialogOpen(false); dialogs.setDumpTarget(null); }}
-        runSqlDialogOpen={dialogs.runSqlDialogOpen} runSqlTarget={dialogs.runSqlTarget}
-        onRunSqlDialogCancel={() => { dialogs.setRunSqlDialogOpen(false); dialogs.setRunSqlTarget(null); }}
-        onRunSqlDialogSuccess={() => { dialogs.setRunSqlDialogOpen(false); dialogs.setRunSqlTarget(null); }}
-        backupRestoreOpen={dialogs.backupRestoreOpen} backupRestoreMode={dialogs.backupRestoreMode} backupRestoreTarget={dialogs.backupRestoreTarget}
-        onBackupRestoreCancel={() => { dialogs.setBackupRestoreOpen(false); dialogs.setBackupRestoreTarget(null); }}
-        onBackupRestoreSuccess={() => { dialogs.setBackupRestoreOpen(false); dialogs.setBackupRestoreTarget(null); }}
-        userManagementOpen={dialogs.userManagementOpen} userManagementTarget={dialogs.userManagementTarget}
-        onUserManagementClose={() => { dialogs.setUserManagementOpen(false); dialogs.setUserManagementTarget(null); }}
-        schemaCompareOpen={dialogs.schemaCompareOpen} onSchemaCompareClose={() => dialogs.setSchemaCompareOpen(false)}
-        processListOpen={dialogs.processListOpen} processListTarget={dialogs.processListTarget}
-        onProcessListClose={() => { dialogs.setProcessListOpen(false); dialogs.setProcessListTarget(null); }}
-        serverStatusOpen={dialogs.serverStatusOpen} serverStatusTarget={dialogs.serverStatusTarget}
-        onServerStatusClose={() => { dialogs.setServerStatusOpen(false); dialogs.setServerStatusTarget(null); }}
-        createDatabaseOpen={dialogs.createDatabaseOpen} createDatabaseTarget={dialogs.createDatabaseTarget}
-        onCreateDatabaseCancel={() => { dialogs.setCreateDatabaseOpen(false); dialogs.setCreateDatabaseTarget(null); }}
-        onCreateDatabaseSuccess={() => { dialogs.setCreateDatabaseOpen(false); if (dialogs.createDatabaseTarget?.connId) onLoadDatabases?.(dialogs.createDatabaseTarget.connId); dialogs.setCreateDatabaseTarget(null); }}
+        groupDialogOpen={dialogs.groupDialogOpen}
+        editingGroup={dialogs.editingGroup}
+        parentGroupId={dialogs.parentGroupId}
+        onGroupDialogCancel={handleGroupCancel}
+        onGroupSave={dialogs.handleGroupSave}
+        connections={connections}
+        connectionDatabases={connectionDatabases}
+        copyDialogOpen={dialogs.copyDialogOpen}
+        copyTarget={dialogs.copyTarget}
+        onCopyDialogCancel={() => {
+          dialogs.setCopyDialogOpen(false);
+          dialogs.setCopyTarget(null);
+        }}
+        onCopyDialogSuccess={() => {
+          dialogs.setCopyDialogOpen(false);
+          const pt = dialogs.copyTarget;
+          dialogs.setCopyTarget(null);
+          if (pt?.database) onDatabaseRefresh?.(pt.connId, pt.database);
+        }}
+        dumpDialogOpen={dialogs.dumpDialogOpen}
+        dumpTarget={dialogs.dumpTarget}
+        onDumpDialogCancel={() => {
+          dialogs.setDumpDialogOpen(false);
+          dialogs.setDumpTarget(null);
+        }}
+        onDumpDialogSuccess={() => {
+          dialogs.setDumpDialogOpen(false);
+          dialogs.setDumpTarget(null);
+        }}
+        runSqlDialogOpen={dialogs.runSqlDialogOpen}
+        runSqlTarget={dialogs.runSqlTarget}
+        onRunSqlDialogCancel={() => {
+          dialogs.setRunSqlDialogOpen(false);
+          dialogs.setRunSqlTarget(null);
+        }}
+        onRunSqlDialogSuccess={() => {
+          dialogs.setRunSqlDialogOpen(false);
+          dialogs.setRunSqlTarget(null);
+        }}
+        backupRestoreOpen={dialogs.backupRestoreOpen}
+        backupRestoreMode={dialogs.backupRestoreMode}
+        backupRestoreTarget={dialogs.backupRestoreTarget}
+        onBackupRestoreCancel={() => {
+          dialogs.setBackupRestoreOpen(false);
+          dialogs.setBackupRestoreTarget(null);
+        }}
+        onBackupRestoreSuccess={() => {
+          dialogs.setBackupRestoreOpen(false);
+          dialogs.setBackupRestoreTarget(null);
+        }}
+        schemaCompareOpen={dialogs.schemaCompareOpen}
+        onSchemaCompareClose={() => dialogs.setSchemaCompareOpen(false)}
+        createDatabaseOpen={dialogs.createDatabaseOpen}
+        createDatabaseTarget={dialogs.createDatabaseTarget}
+        onCreateDatabaseCancel={() => {
+          dialogs.setCreateDatabaseOpen(false);
+          dialogs.setCreateDatabaseTarget(null);
+        }}
+        onCreateDatabaseSuccess={() => {
+          dialogs.setCreateDatabaseOpen(false);
+          if (dialogs.createDatabaseTarget?.connId)
+            onLoadDatabases?.(dialogs.createDatabaseTarget.connId);
+          dialogs.setCreateDatabaseTarget(null);
+        }}
         onLoadDatabases={onLoadDatabases}
-        dataGeneratorOpen={dialogs.dataGeneratorOpen} dataGeneratorTarget={dialogs.dataGeneratorTarget}
-        onDataGeneratorCancel={() => { dialogs.setDataGeneratorOpen(false); dialogs.setDataGeneratorTarget(null); }}
-        onDataGeneratorSuccess={() => { dialogs.setDataGeneratorOpen(false); const tgt = dialogs.dataGeneratorTarget; dialogs.setDataGeneratorTarget(null); if (tgt?.database) onDatabaseRefresh?.(tgt.connId, tgt.database); }}
+        dataGeneratorOpen={dialogs.dataGeneratorOpen}
+        dataGeneratorTarget={dialogs.dataGeneratorTarget}
+        onDataGeneratorCancel={() => {
+          dialogs.setDataGeneratorOpen(false);
+          dialogs.setDataGeneratorTarget(null);
+        }}
+        onDataGeneratorSuccess={() => {
+          dialogs.setDataGeneratorOpen(false);
+          const tgt = dialogs.dataGeneratorTarget;
+          dialogs.setDataGeneratorTarget(null);
+          if (tgt?.database) onDatabaseRefresh?.(tgt.connId, tgt.database);
+        }}
       />
     </div>
   );

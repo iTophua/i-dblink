@@ -5,11 +5,8 @@ import { CopyTableDialog } from '../../CopyTableDialog';
 import { DumpDialog } from '../../DumpDialog';
 import { RunSqlFileDialog } from '../../RunSqlFileDialog';
 import { BackupRestoreDialog } from '../../BackupRestoreDialog';
-import { UserManagementDialog } from '../../UserManagementDialog';
 import { SchemaCompareDialog } from '../../SchemaCompareDialog';
 import { CreateDatabaseDialog } from '../CreateDatabaseDialog';
-import { ProcessListPanel } from '../../ProcessListPanel';
-import { ServerStatusPanel } from '../../ServerStatusPanel';
 import { DataGeneratorDialog } from '../../DataGeneratorDialog';
 
 interface ConnectionTreeDialogsProps {
@@ -47,24 +44,9 @@ interface ConnectionTreeDialogsProps {
   onBackupRestoreCancel?: () => void;
   onBackupRestoreSuccess?: () => void;
 
-  // UserManagementDialog (optional)
-  userManagementOpen?: boolean;
-  userManagementTarget?: { connId: string; database?: string } | null;
-  onUserManagementClose?: () => void;
-
   // SchemaCompareDialog (optional)
   schemaCompareOpen?: boolean;
   onSchemaCompareClose?: () => void;
-
-  // ProcessListPanel (optional)
-  processListOpen?: boolean;
-  processListTarget?: { connId: string; database?: string } | null;
-  onProcessListClose?: () => void;
-
-  // ServerStatusPanel (optional)
-  serverStatusOpen?: boolean;
-  serverStatusTarget?: { connId: string } | null;
-  onServerStatusClose?: () => void;
 
   // DataGeneratorDialog (optional)
   dataGeneratorOpen?: boolean;
@@ -107,17 +89,8 @@ export const ConnectionTreeDialogs: React.FC<ConnectionTreeDialogsProps> = ({
   backupRestoreTarget = null,
   onBackupRestoreCancel = noop,
   onBackupRestoreSuccess = noop,
-  userManagementOpen = false,
-  userManagementTarget = null,
-  onUserManagementClose = noop,
   schemaCompareOpen = false,
   onSchemaCompareClose = noop,
-  processListOpen = false,
-  processListTarget = null,
-  onProcessListClose = noop,
-  serverStatusOpen = false,
-  serverStatusTarget = null,
-  onServerStatusClose = noop,
   dataGeneratorOpen = false,
   dataGeneratorTarget = null,
   onDataGeneratorCancel = noop,
@@ -178,30 +151,10 @@ export const ConnectionTreeDialogs: React.FC<ConnectionTreeDialogsProps> = ({
         onSuccess={onBackupRestoreSuccess}
       />
 
-      <UserManagementDialog
-        open={userManagementOpen}
-        connectionId={userManagementTarget?.connId || ''}
-        database={userManagementTarget?.database}
-        onClose={onUserManagementClose}
-      />
-
       <SchemaCompareDialog
         open={schemaCompareOpen}
         connections={connections}
         onClose={onSchemaCompareClose}
-      />
-
-      <ProcessListPanel
-        open={processListOpen}
-        connectionId={processListTarget?.connId || ''}
-        database={processListTarget?.database}
-        onClose={onProcessListClose}
-      />
-
-      <ServerStatusPanel
-        open={serverStatusOpen}
-        connectionId={serverStatusTarget?.connId || ''}
-        onClose={onServerStatusClose}
       />
 
       <DataGeneratorDialog

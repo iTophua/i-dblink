@@ -34,6 +34,7 @@ const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
   themeMode: 'system',
+  // default 预设即 Pro 设计（theme.ts THEMES.default 使用 PRO_* 令牌）
   themePreset: 'default',
   language: 'zh-CN',
   shortcuts: {},

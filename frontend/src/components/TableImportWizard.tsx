@@ -7,7 +7,7 @@ import {
   Select,
   Button,
   Space,
-  message,
+  App,
   Radio,
   Alert,
   Checkbox,
@@ -259,6 +259,7 @@ export function TableImportWizard({
   initialFilePath,
 }: TableImportWizardProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [currentStep, setCurrentStep] = useState(0);
   const [fileType, setFileType] = useState<ImportFileType>('csv');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -296,24 +297,31 @@ export function TableImportWizard({
   useEffect(() => {
     if (!open || !connectionId) return;
     setLoadingTables(true);
-    api.getTables(connectionId, database).then((tables) => {
-      setTableList(tables.map((t) => t.table_name));
-    }).catch(() => {
-      setTableList([]);
-    }).finally(() => {
-      setLoadingTables(false);
-    });
+    api
+      .getTables(connectionId, database)
+      .then((tables) => {
+        setTableList(tables.map((t) => t.table_name));
+      })
+      .catch(() => {
+        setTableList([]);
+      })
+      .finally(() => {
+        setLoadingTables(false);
+      });
   }, [open, connectionId, database]);
 
   const handleSelectTargetTable = useCallback(
     (name: string) => {
       setTargetTableName(name);
       if (name && connectionId) {
-        api.getColumns(connectionId, name, database).then((cols) => {
-          setDynamicColumns(cols);
-        }).catch(() => {
-          setDynamicColumns([]);
-        });
+        api
+          .getColumns(connectionId, name, database)
+          .then((cols) => {
+            setDynamicColumns(cols);
+          })
+          .catch(() => {
+            setDynamicColumns([]);
+          });
       } else {
         setDynamicColumns([]);
       }
@@ -329,7 +337,11 @@ export function TableImportWizard({
 
   const totalSteps = isSqlMode ? 3 : 6;
   const stepLabels = isSqlMode
-    ? [t('common.selectFile'), t('common.importExport.sqlPreview'), t('common.importExport.importTitle')]
+    ? [
+        t('common.selectFile'),
+        t('common.importExport.sqlPreview'),
+        t('common.importExport.importTitle'),
+      ]
     : [
         t('common.selectFile'),
         t('common.importExport.formatSettings'),
@@ -410,7 +422,9 @@ export function TableImportWizard({
         setFieldMapping(autoMapping);
         setSelectedRows(new Set(parsed.rows.map((_, i) => i)));
         setCurrentStep(1);
-        message.success(`${t('common.parsedSuccessfully')} ${parsed.rows.length} ${t('common.rows')}`);
+        message.success(
+          `${t('common.parsedSuccessfully')} ${parsed.rows.length} ${t('common.rows')}`
+        );
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : t('common.fileParseFailed');
         setParseError(msg);
@@ -480,7 +494,9 @@ export function TableImportWizard({
           success++;
         } catch (e: unknown) {
           failed++;
-          errors.push(`[${i + 1}] ${stmts[i].substring(0, 80)}... → ${e instanceof Error ? e.message : String(e)}`);
+          errors.push(
+            `[${i + 1}] ${stmts[i].substring(0, 80)}... → ${e instanceof Error ? e.message : String(e)}`
+          );
           if (sqlExecMode === 'stop') {
             break;
           }
@@ -555,7 +571,17 @@ export function TableImportWizard({
     setProgress((p) => ({ ...p, success, failed, errors, done: true }));
     setImporting(false);
     if (onSuccess) onSuccess();
-  }, [parsedData, selectedRows, fieldMapping, connectionId, database, tableName, importMode, pkColumn, onSuccess]);
+  }, [
+    parsedData,
+    selectedRows,
+    fieldMapping,
+    connectionId,
+    database,
+    tableName,
+    importMode,
+    pkColumn,
+    onSuccess,
+  ]);
 
   const mappedCount = useMemo(
     () => Object.values(fieldMapping).filter(Boolean).length,
@@ -635,15 +661,25 @@ export function TableImportWizard({
         </Radio.Group>
       </div>
       {parseError && (
-        <Alert message={parseError} type="error" showIcon closable onClose={() => setParseError(null)} />
+        <Alert
+          message={parseError}
+          type="error"
+          showIcon
+          closable
+          onClose={() => setParseError(null)}
+        />
       )}
       <Upload.Dragger
         accept={
-          fileType === 'csv' ? '.csv,.txt' :
-          fileType === 'excel' ? '.xlsx,.xls' :
-          fileType === 'json' ? '.json' :
-          fileType === 'xml' ? '.xml' :
-          '.sql'
+          fileType === 'csv'
+            ? '.csv,.txt'
+            : fileType === 'excel'
+              ? '.xlsx,.xls'
+              : fileType === 'json'
+                ? '.json'
+                : fileType === 'xml'
+                  ? '.xml'
+                  : '.sql'
         }
         beforeUpload={handleFileUpload}
         showUploadList={false}
@@ -720,7 +756,9 @@ export function TableImportWizard({
           <Space>
             <Checkbox
               checked={formatOptions.firstRowIsHeader}
-              onChange={(e) => setFormatOptions((o) => ({ ...o, firstRowIsHeader: e.target.checked }))}
+              onChange={(e) =>
+                setFormatOptions((o) => ({ ...o, firstRowIsHeader: e.target.checked }))
+              }
             >
               {t('common.importExport.firstRowIsHeader')}
             </Checkbox>
@@ -733,7 +771,9 @@ export function TableImportWizard({
               type="number"
               min={0}
               value={formatOptions.skipRows}
-              onChange={(e) => setFormatOptions((o) => ({ ...o, skipRows: parseInt(e.target.value) || 0 }))}
+              onChange={(e) =>
+                setFormatOptions((o) => ({ ...o, skipRows: parseInt(e.target.value) || 0 }))
+              }
               style={{ width: 160 }}
             />
           </div>
@@ -743,7 +783,9 @@ export function TableImportWizard({
         <>
           <Checkbox
             checked={formatOptions.firstRowIsHeader}
-            onChange={(e) => setFormatOptions((o) => ({ ...o, firstRowIsHeader: e.target.checked }))}
+            onChange={(e) =>
+              setFormatOptions((o) => ({ ...o, firstRowIsHeader: e.target.checked }))
+            }
           >
             {t('common.importExport.firstRowIsHeader')}
           </Checkbox>
@@ -755,7 +797,9 @@ export function TableImportWizard({
               type="number"
               min={0}
               value={formatOptions.skipRows}
-              onChange={(e) => setFormatOptions((o) => ({ ...o, skipRows: parseInt(e.target.value) || 0 }))}
+              onChange={(e) =>
+                setFormatOptions((o) => ({ ...o, skipRows: parseInt(e.target.value) || 0 }))
+              }
               style={{ width: 160 }}
             />
           </div>
@@ -768,10 +812,7 @@ export function TableImportWizard({
         <Alert message={t('common.importExport.xmlHint')} type="info" showIcon />
       )}
       {selectedFile && (
-        <Button
-          type="primary"
-          onClick={() => handleFileUpload(selectedFile)}
-        >
+        <Button type="primary" onClick={() => handleFileUpload(selectedFile)}>
           {t('common.importExport.applyAndReparse')}
         </Button>
       )}
@@ -789,11 +830,14 @@ export function TableImportWizard({
         onChange={(value) => {
           setTargetTableName(value);
           if (value && connectionId) {
-            api.getColumns(connectionId, value, database).then((cols) => {
-              setDynamicColumns(cols);
-            }).catch(() => {
-              setDynamicColumns([]);
-            });
+            api
+              .getColumns(connectionId, value, database)
+              .then((cols) => {
+                setDynamicColumns(cols);
+              })
+              .catch(() => {
+                setDynamicColumns([]);
+              });
           } else {
             setDynamicColumns([]);
           }
@@ -811,7 +855,9 @@ export function TableImportWizard({
             <div style={{ padding: '0 8px' }}>
               <Input
                 placeholder={t('common.importExport.orCreateNewTable')}
-                value={targetTableName && !tableList.includes(targetTableName) ? targetTableName : ''}
+                value={
+                  targetTableName && !tableList.includes(targetTableName) ? targetTableName : ''
+                }
                 onChange={(e) => setTargetTableName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') e.stopPropagation();
@@ -822,7 +868,9 @@ export function TableImportWizard({
         )}
       >
         {tableList.map((name) => (
-          <Select.Option key={name} value={name}>{name}</Select.Option>
+          <Select.Option key={name} value={name}>
+            {name}
+          </Select.Option>
         ))}
       </Select>
       {targetTableName && dynamicColumns.length > 0 && (
@@ -885,7 +933,15 @@ export function TableImportWizard({
   const renderModeStep = () => (
     <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
-        <Tag style={{ fontSize: 13, padding: '2px 10px', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
+        <Tag
+          style={{
+            fontSize: 13,
+            padding: '2px 10px',
+            background: 'var(--color-primary-alpha-15)',
+            color: 'var(--color-primary)',
+            border: '1px solid var(--color-primary-alpha-30)',
+          }}
+        >
           {t('common.importExport.totalRows')}: {parsedData?.rows.length || 0}
         </Tag>
         <Tag color="green" style={{ fontSize: 13, padding: '2px 10px' }}>
@@ -911,7 +967,9 @@ export function TableImportWizard({
       )}
       <Divider />
       <div>
-        <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('common.importExport.importMode')}</div>
+        <div style={{ fontWeight: 500, marginBottom: 8 }}>
+          {t('common.importExport.importMode')}
+        </div>
         <Radio.Group value={importMode} onChange={(e) => setImportMode(e.target.value)}>
           <Space orientation="vertical">
             <Radio value="append">
@@ -940,7 +998,9 @@ export function TableImportWizard({
             {pkColumn && (
               <Radio value="upsert">
                 {t('common.importExport.upsertMode')}
-                <Tag style={{ marginLeft: 8, fontSize: 11 }}>INSERT ... ON DUPLICATE KEY UPDATE</Tag>
+                <Tag style={{ marginLeft: 8, fontSize: 11 }}>
+                  INSERT ... ON DUPLICATE KEY UPDATE
+                </Tag>
                 <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                   {t('common.importExport.upsertDesc')}
                 </div>
@@ -965,7 +1025,8 @@ export function TableImportWizard({
 
   const renderProgressStep = () => {
     const prog = progress;
-    const percent = prog.total > 0 ? Math.round(((prog.success + prog.failed) / prog.total) * 100) : 0;
+    const percent =
+      prog.total > 0 ? Math.round(((prog.success + prog.failed) / prog.total) * 100) : 0;
     return (
       <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
         {!prog.done && (
@@ -978,16 +1039,30 @@ export function TableImportWizard({
             showIcon
             description={
               <Space size="large">
-                <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{t('common.importExport.total')}: {prog.total}</Tag>
-                <Tag color="green">{t('common.importExport.successCount')}: {prog.success}</Tag>
-                <Tag color="red">{t('common.importExport.failedCount')}: {prog.failed}</Tag>
+                <Tag
+                  style={{
+                    background: 'var(--color-primary-alpha-15)',
+                    color: 'var(--color-primary)',
+                    border: '1px solid var(--color-primary-alpha-30)',
+                  }}
+                >
+                  {t('common.importExport.total')}: {prog.total}
+                </Tag>
+                <Tag color="green">
+                  {t('common.importExport.successCount')}: {prog.success}
+                </Tag>
+                <Tag color="red">
+                  {t('common.importExport.failedCount')}: {prog.failed}
+                </Tag>
               </Space>
             }
           />
         )}
         {prog.errors.length > 0 && (
           <div style={{ marginTop: 8 }}>
-            <div style={{ fontWeight: 500, marginBottom: 4 }}>{t('common.importExport.errorLog')}</div>
+            <div style={{ fontWeight: 500, marginBottom: 4 }}>
+              {t('common.importExport.errorLog')}
+            </div>
             <div
               style={{
                 maxHeight: 200,
@@ -1028,9 +1103,25 @@ export function TableImportWizard({
       )}
       {sqlParseResult && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{t('common.importExport.totalStatements')}: {sqlParseResult.statements.length}</Tag>
+          <Tag
+            style={{
+              background: 'var(--color-primary-alpha-15)',
+              color: 'var(--color-primary)',
+              border: '1px solid var(--color-primary-alpha-30)',
+            }}
+          >
+            {t('common.importExport.totalStatements')}: {sqlParseResult.statements.length}
+          </Tag>
           {sqlParseResult.stats.creates > 0 && (
-            <Tag style={{ background: 'var(--color-info-alpha-15)', color: 'var(--color-info)', border: '1px solid var(--color-info-alpha-30)' }}>CREATE × {sqlParseResult.stats.creates}</Tag>
+            <Tag
+              style={{
+                background: 'var(--color-info-alpha-15)',
+                color: 'var(--color-info)',
+                border: '1px solid var(--color-info-alpha-30)',
+              }}
+            >
+              CREATE × {sqlParseResult.stats.creates}
+            </Tag>
           )}
           {sqlParseResult.stats.inserts > 0 && (
             <Tag color="green">INSERT × {sqlParseResult.stats.inserts}</Tag>
@@ -1042,7 +1133,9 @@ export function TableImportWizard({
             <Tag color="red">DELETE × {sqlParseResult.stats.deletes}</Tag>
           )}
           {sqlParseResult.stats.others > 0 && (
-            <Tag>{t('common.importExport.otherStatements')}: {sqlParseResult.stats.others}</Tag>
+            <Tag>
+              {t('common.importExport.otherStatements')}: {sqlParseResult.stats.others}
+            </Tag>
           )}
         </div>
       )}
@@ -1057,7 +1150,9 @@ export function TableImportWizard({
         </Radio.Group>
       </div>
       <div style={{ marginTop: 8 }}>
-        <div style={{ fontWeight: 500, marginBottom: 4 }}>{t('common.importExport.sqlPreview')}</div>
+        <div style={{ fontWeight: 500, marginBottom: 4 }}>
+          {t('common.importExport.sqlPreview')}
+        </div>
         <Input.TextArea
           value={sqlContent.substring(0, 5000)}
           readOnly
@@ -1115,9 +1210,7 @@ export function TableImportWizard({
             {progress.done ? t('common.close') : t('common.cancel')}
           </Button>
           {currentStep > 0 && !progress.done && !importing && (
-            <Button onClick={() => setCurrentStep((s) => s - 1)}>
-              {t('common.previousStep')}
-            </Button>
+            <Button onClick={() => setCurrentStep((s) => s - 1)}>{t('common.previousStep')}</Button>
           )}
           {currentStep < totalSteps - 1 && (
             <Button

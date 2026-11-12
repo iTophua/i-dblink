@@ -131,7 +131,8 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
                       scrollBeyondLastLine: false,
                       wordWrap: 'on',
                     }}
-                    theme="vs-dark"
+                    // 跟随应用明暗模式：此前硬编码 vs-dark，亮色模式下会出现突兀的黑块
+                    theme={tc.isDark ? 'vs-dark' : 'vs'}
                   />
                 </Card>
               ),

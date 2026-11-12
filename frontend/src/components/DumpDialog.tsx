@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Form, Checkbox, Radio, message } from 'antd';
+import { Modal, Form, Checkbox, Radio, Space, App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { getDialect } from '../utils/sqlDialects';
@@ -38,6 +38,7 @@ export function DumpDialog({
   onSuccess,
 }: DumpDialogProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const dialect = getDialect(dbType);
@@ -117,17 +118,20 @@ export function DumpDialog({
         </Form.Item>
 
         <Form.Item label={t('common.include')}>
-          <Form.Item name="includeDrop" valuePropName="checked" noStyle>
-            <Checkbox>DROP TABLE IF EXISTS</Checkbox>
-          </Form.Item>
-          <br />
-          <Form.Item name="includeCreate" valuePropName="checked" noStyle>
-            <Checkbox>CREATE TABLE</Checkbox>
-          </Form.Item>
-          <br />
-          <Form.Item name="includeData" valuePropName="checked" noStyle>
-            <Checkbox>{t('common.includeData')}</Checkbox>
-          </Form.Item>
+          <Space orientation="vertical" size={6}>
+            <Form.Item name="includeDrop" valuePropName="checked" noStyle>
+              <Checkbox>DROP TABLE IF EXISTS</Checkbox>
+            </Form.Item>
+            <Form.Item name="includeCreate" valuePropName="checked" noStyle>
+              <Checkbox>CREATE TABLE</Checkbox>
+            </Form.Item>
+            <Form.Item name="includeData" valuePropName="checked" noStyle>
+              <Checkbox>{t('common.includeData')}</Checkbox>
+            </Form.Item>
+          </Space>
+          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>
+            {t('common.dumpRowLimit')}
+          </div>
         </Form.Item>
       </Form>
     </Modal>

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { theme, message } from 'antd';
+import { theme, App } from 'antd';
 import { useMenuShortcuts } from '../../../hooks/useMenuShortcuts';
 import type { TableInfo } from '../../../types/api';
 import type { Connection } from '../../../stores/appStore';
@@ -29,7 +29,11 @@ interface UseLayoutActionsParams {
     }[]
   >;
   connections: Connection[];
-  loadDatabaseTables: (connectionId: string, database: string, forceRefresh?: boolean) => Promise<void>;
+  loadDatabaseTables: (
+    connectionId: string,
+    database: string,
+    forceRefresh?: boolean
+  ) => Promise<void>;
   handleConnect: (connectionId: string) => Promise<void>;
   handleDisconnect: (connectionId: string) => void;
   handleNewQuery: (connectionId: string) => Promise<void>;
@@ -52,6 +56,7 @@ export function useLayoutActions({
   setConnectionExportOpen,
 }: UseLayoutActionsParams) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [collapsed, setCollapsed] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -244,22 +249,16 @@ export function useLayoutActions({
             handleConnect(selectedConnectionId);
           }
           break;
-        case 'server-status':
-          // 服务器状态（实例级）：当前选中连接打开面板，经事件转交连接树
+        case 'connection-monitor':
+          // 进程 + 服务器状态合并为「连接监控」Tab；库级入口带上当前库过滤
           if (selectedConnectionId) {
             window.dispatchEvent(
-              new CustomEvent('open-server-status', { detail: { connId: selectedConnectionId } })
-            );
-          } else {
-            message.warning(t('common.pleaseSelectADatabaseConnection'));
-          }
-          break;
-        case 'process-list':
-          // 进程管理：当前选中连接打开面板（面板挂在连接树上，经事件转交）
-          if (selectedConnectionId) {
-            window.dispatchEvent(
-              new CustomEvent('open-process-list', {
-                detail: { connId: selectedConnectionId, database: selectedDatabase },
+              new CustomEvent('tab-action', {
+                detail: {
+                  action: 'open-monitor-tab',
+                  connectionId: selectedConnectionId,
+                  database: selectedDatabase,
+                },
               })
             );
           } else {
@@ -382,7 +381,11 @@ export function useLayoutActions({
 
     // 监听来自 ConnectionTree 右键菜单的 app-action 事件
     const handleAppAction = (event: Event) => {
-      const customEvent = event as CustomEvent<{ action: string; connId?: string; database?: string }>;
+      const customEvent = event as CustomEvent<{
+        action: string;
+        connId?: string;
+        database?: string;
+      }>;
       const { action, connId, database } = customEvent.detail;
       if (action === 'generate-doc' && connId && database) {
         setDocGeneratorConnId(connId);
@@ -413,7 +416,14 @@ export function useLayoutActions({
       window.removeEventListener('app-action', handleAppAction);
       window.removeEventListener('refresh-connection-tree', handleRefreshConnectionTree);
     };
-  }, [selectedConnectionId, selectedDatabase, loadDatabaseTables, handleConnect, handleDisconnect, connectionDatabases]);
+  }, [
+    selectedConnectionId,
+    selectedDatabase,
+    loadDatabaseTables,
+    handleConnect,
+    handleDisconnect,
+    connectionDatabases,
+  ]);
 
   return {
     collapsed,

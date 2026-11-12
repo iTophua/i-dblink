@@ -157,5 +157,9 @@ vi.mock('@wailsio/runtime', () => ({
     Hide: vi.fn(() => Promise.resolve()),
     SetBackgroundColour: vi.fn(() => Promise.resolve()),
   },
+  Dialogs: {
+    OpenFile: vi.fn(() => Promise.resolve('')),
+    SaveFile: vi.fn(() => Promise.resolve('')),
+  },
 }));
 

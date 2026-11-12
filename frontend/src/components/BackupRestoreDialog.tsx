@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Modal, Form, Checkbox, message, Space, Button as AntButton } from 'antd';
+import { Modal, Form, Checkbox, App, Space, Button as AntButton } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { FolderOutlined, DatabaseOutlined, UploadOutlined } from '@ant-design/icons';
@@ -61,6 +61,7 @@ export function BackupRestoreDialog({
   onSuccess,
 }: BackupRestoreDialogProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const tc = useThemeColors();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);

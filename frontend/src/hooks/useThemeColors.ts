@@ -5,6 +5,8 @@ import { getThemeConfig } from '../styles/theme';
 
 export interface ThemeColors {
   isDark: boolean;
+  /** 当前主题预设（pro 预设需要额外的视觉增强分支） */
+  preset: string;
   // 基础色
   primary: string;
   primaryHover: string;
@@ -63,6 +65,7 @@ export function useThemeColors(): ThemeColors {
 
     return {
       isDark,
+      preset: themePreset,
       primary: c.primary,
       primaryHover: c.primaryHover,
       primaryActive: c.primaryActive,

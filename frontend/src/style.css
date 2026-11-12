@@ -6,6 +6,10 @@
 
 /* ==================== CSS 变量定义 ==================== */
 :root {
+  /* 主界面底板色：浅色下与侧栏同色（窗口底色连续铺开，右侧卡片内嵌其上）；
+     深色下再压暗一档，卡片才有可见的浮起高度 */
+  --app-base: var(--background);
+
   /* Fallback values - will be overridden by dynamic theme variables from App.tsx */
   --color-primary: #4A5DD6;
   --color-primary-hover: #5D6EE0;
@@ -29,31 +33,34 @@
   /* 全屏加载遮罩：跟随主题底色，避免暗色模式下出现白色蒙层 */
   --overlay-scrim: color-mix(in srgb, var(--background) 80%, transparent);
 
-  --text-primary: #111111;
-  --text-secondary: #3F3F46;
-  --text-tertiary: #6B7280;
-  --text-disabled: #C7C7CC;
+  --text-primary: #1B1B1A;
+  --text-secondary: #4A4A46;
+  --text-tertiary: #77776F;
+  --text-disabled: #8A93A5;
 
   /* 边框变量统一引用动态 --border（由 App.tsx 从主题注入），
      确保 --border-color 系列也跟随主题/暗色模式变化。
      旧代码大量引用 --border-color，这里做透明转发，零破坏性。 */
-  --border-color: var(--border, #e2e8f0);
-  --border-color-light: var(--border-light, #f1f5f9);
-  --border-color-dark: var(--border-dark, #cbd5e1);
+  --border-color: var(--border, #DDDDD7);
+  --border-color-light: var(--border-light, #E9E9E4);
+  --border-color-dark: var(--border-dark, #C6C6BE);
 
-  --background: #F2F1ED;
-  --background-card: #F8F7F4;
-  --background-toolbar: #EFEEEA;
-  --background-hover: #EBEDF6;
-  --background-active: #E5E9F7;
+  /* 暖中性统一基调：近白侧栏 → 工具栏 → 浅灰工作区 → 纯白卡片/浮层。
+     与 theme.ts 的 DEFAULT_LIGHT_NEUTRAL 保持一致，避免注入前的闪色。 */
+  --background: #FBFBF9;
+  --background-card: #FFFFFF;
+  --background-toolbar: #F7F7F4;
+  --background-hover: #F0F0EC;
+  --background-active: #E7EAF6;
 
-  --row-hover-bg: #EBEDF6;
-  --row-selected-bg: #E0E5F8;
-  --row-stripe-bg: transparent;
-  --header-bg: #F8FAFC;
+  --row-hover-bg: #F4F4F0;
+  --row-selected-bg: #E9ECF8;
+  --row-stripe-bg: rgba(28, 28, 26, 0.02);
+  --header-bg: #F5F5F1;
+  --surface-canvas: #F2F2EF;
   --surface-elevated: #FFFFFF;
-  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --scrollbar-track: rgba(0, 0, 0, 0.03);
+  --scrollbar-thumb: rgba(28, 28, 26, 0.16);
+  --scrollbar-track: rgba(28, 28, 26, 0.03);
 
   --font-family:
     -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei',
@@ -98,11 +105,19 @@
   --radius-surface: 8px;
   --radius-overlay: 12px;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.15);
+  /* 中性暖调方向性阴影：近处收紧、远处弥散，模拟顶部光源。
+     之前这组变量已定义但主布局一次都没引用，界面因此毫无纵深。 */
+  --shadow-sm: 0 1px 2px rgba(28, 28, 26, 0.05);
+  --shadow-md: 0 1px 3px rgba(28, 28, 26, 0.05), 0 6px 16px rgba(28, 28, 26, 0.06);
+  --shadow-lg: 0 2px 6px rgba(28, 28, 26, 0.05), 0 12px 32px rgba(28, 28, 26, 0.09);
   /* 浮层阴影：弹窗、抽屉等高层级表面 */
-  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-overlay: 0 20px 56px rgba(28, 28, 26, 0.14), 0 2px 8px rgba(28, 28, 26, 0.06),
+    0 0 0 1px rgba(28, 28, 26, 0.05);
+  /* 侧栏右缘投影：两侧明度差很小，只需极淡一条 */
+  --shadow-sider: 1px 0 4px rgba(28, 28, 26, 0.04);
+  /* 面板浮起阴影：贴边一层收紧 + 大范围一层柔光。
+     卡片包裹感的主要来源——只靠边框时，深色外壳上几乎看不出层次 */
+  --shadow-panel: 0 1px 2px rgba(20, 24, 45, 0.06), 0 10px 28px rgba(20, 24, 45, 0.09);
 
   --transition-fast: 0.1s;
   --transition-normal: 0.2s;
@@ -468,6 +483,13 @@ tbody tr:hover {
   }
 }
 
+/* Lucide 图标适配层的旋转动画（spin 属性） */
+@keyframes anticon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ==================== 分割线 ==================== */
 .divider {
   height: 1px;
@@ -722,6 +744,22 @@ tbody tr:hover {
   flex-shrink: 0 !important;
 }
 
+/* ==================== 合并行：标签栏兼作窗口拖拽区 ==================== */
+/* mac 通高侧栏下工具栏并入标签栏右侧，nav 空白区域用于拖动窗口，标签与操作按钮除外 */
+.workspace-tabs > .ant-tabs-nav {
+  --wails-draggable: drag;
+  -webkit-app-region: drag;
+}
+
+.workspace-tabs > .ant-tabs-nav .ant-tabs-tab,
+.workspace-tabs > .ant-tabs-nav .ant-tabs-extra-content,
+.workspace-tabs > .ant-tabs-nav .ant-tabs-extra-content *,
+.workspace-tabs > .ant-tabs-nav .ant-tabs-nav-operations,
+.workspace-tabs > .ant-tabs-nav .ant-tabs-nav-operations * {
+  --wails-draggable: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 /* ==================== Wails macOS TitleBarHiddenInset ==================== */
 .wails .toolbar-enhanced {
   --wails-draggable: drag;
@@ -746,6 +784,15 @@ tbody tr:hover {
   overflow: hidden;
 }
 
+/* 深色下底板再压暗一档，右侧卡片才会「浮」起来 */
+[data-theme='dark'] {
+  --app-base: color-mix(in srgb, var(--background) 70%, #000 30%);
+  /* 深色下柔和阴影不可见，改用更大范围的纯黑压暗 + 贴边暗线；
+     顶部 1px 内高光是深色卡片的「受光边」，明度差不够时靠它读边界 */
+  --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.55),
+    0 14px 36px rgba(0, 0, 0, 0.42);
+}
+
 /* ==================== 主题过渡效果 ==================== */
 [data-theme] {
   transition:
@@ -765,4 +812,27 @@ tbody tr:hover {
 .toolbar-no-drag {
   -webkit-app-region: no-drag;
   --wails-draggable: no-drag;
+}
+
+/* 托盘快速连接面板：原生 input 的聚焦环（独立窗口不经过 antd 主题） */
+.conn-picker-search:focus-within {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px var(--color-primary-alpha-15);
+}
+
+/* antd v6 在弹窗获得键盘焦点时，会给整个 .ant-modal 外层画 3px 浅蓝描边；
+   弹窗本身已有 1px 边框和投影，这层外环会看起来像双层边框，去掉 */
+.ant-modal:focus-visible {
+  outline: none !important;
+}
+
+/* 表结构/索引等紧凑表格：单行显示，超长省略 */
+.table-compact .ant-table-row td {
+  padding: 4px 8px !important;
+}
+.table-compact .ant-table-thead th {
+  padding: 4px 8px !important;
+}
+.table-compact .ant-table-cell {
+  white-space: nowrap;
 }

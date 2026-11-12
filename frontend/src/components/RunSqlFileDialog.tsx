@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { Modal, Button, Progress, message } from 'antd';
+import { Modal, Button, Progress, App, Alert } from 'antd';
+import { FileTextOutlined, UploadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { getErrorMessage } from '../utils/getErrorMessage';
@@ -21,9 +22,14 @@ export function RunSqlFileDialog({
   onSuccess,
 }: RunSqlFileDialogProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [totalStatements, setTotalStatements] = useState(0);
+  const [fileName, setFileName] = useState('');
+  const [result, setResult] = useState<{ success: number; failed: number; errors: string[] } | null>(
+    null
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,6 +38,8 @@ export function RunSqlFileDialog({
 
     setLoading(true);
     setProgress(0);
+    setFileName(file.name);
+    setResult(null);
 
     try {
       const content = await file.text();
@@ -54,11 +62,12 @@ export function RunSqlFileDialog({
         setProgress(Math.round(((i + 1) / statements.length) * 100));
       }
 
+      setResult({ success, failed, errors });
+
       if (failed > 0) {
         message.warning(
           `${t('common.executionComplete')}: ${t('common.success')}: ${success}, ${t('common.failed')}: ${failed}`
         );
-        console.error('SQL 执行错误:', errors.slice(0, 10));
       } else {
         message.success(
           `${t('common.executionComplete')}: ${t('common.success')}: ${success} ${t('common.statements')}`
@@ -82,6 +91,7 @@ export function RunSqlFileDialog({
       title={t('common.runSqlFile')}
       open={open}
       onCancel={onCancel}
+      width={600}
       transitionName=""
       maskTransitionName=""
       footer={[
@@ -106,19 +116,87 @@ export function RunSqlFileDialog({
         onChange={handleFileSelect}
       />
 
+      {!loading && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            padding: '24px 16px',
+            borderRadius: 10,
+            border: '1px dashed var(--border)',
+            background: 'var(--background-toolbar)',
+            textAlign: 'center',
+          }}
+        >
+          <UploadOutlined style={{ fontSize: 28, color: 'var(--text-tertiary)' }} />
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            {t('common.clickToSelectSqlFile')}
+          </div>
+          {fileName && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <FileTextOutlined />
+              {fileName}
+              {totalStatements > 0 && ` · ${totalStatements} ${t('common.statements')}`}
+            </div>
+          )}
+        </div>
+      )}
+
       {loading && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 8 }}>
           <Progress percent={progress} />
-          <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+          <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginBottom: 0 }}>
             {t('common.executingStatements', { count: totalStatements })}
           </p>
         </div>
       )}
 
-      {!loading && (
-        <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px 0' }}>
-          {t('common.clickToSelectSqlFile')}
-        </p>
+      {!loading && result && (
+        <div style={{ marginTop: 12 }}>
+          <Alert
+            type={result.failed > 0 ? 'warning' : 'success'}
+            showIcon
+            message={`${t('common.success')}: ${result.success} · ${t('common.failed')}: ${result.failed}`}
+          />
+          {result.errors.length > 0 && (
+            <div
+              style={{
+                marginTop: 8,
+                maxHeight: 160,
+                overflow: 'auto',
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid var(--color-error-alpha-30)',
+                background: 'var(--color-error-alpha-15)',
+              }}
+            >
+              {result.errors.map((error, index) => (
+                <div
+                  key={index}
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                    color: 'var(--color-error)',
+                    fontFamily: 'var(--font-family-code)',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {error}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </Modal>
   );

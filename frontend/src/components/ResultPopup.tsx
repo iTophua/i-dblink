@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Events } from '@wailsio/runtime';
-import { Empty, Tabs, TabsProps } from 'antd';
+import { Button, Spin, Tabs, TabsProps, Tag, Typography } from 'antd';
+import { ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { ResultGrid } from './SQLEditor/ResultGrid';
+import { applyThemeVars } from '../styles/applyTheme';
+import { useSettingsStore } from '../stores/settingsStore';
 import type { DatabaseType } from '../types/api';
 
 /**
@@ -29,35 +33,69 @@ interface PopupPayload {
   results: PopupResultItem[];
 }
 
+const WAIT_TIMEOUT_MS = 3000;
+
 export function ResultPopup() {
+  const { t } = useTranslation();
   const popupId = window.location.hash.replace(/^#popup\//, '');
   const [payload, setPayload] = useState<PopupPayload | null>(null);
   const [isDark, setIsDark] = useState(
-    () => window.matchMedia('(prefers-color-scheme: dark)').matches
+    () => document.documentElement.getAttribute('data-theme') === 'dark'
   );
+  const [timedOut, setTimedOut] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gotDataRef = useRef(false);
+
+  // 主题：复用主窗口的设置与 applyThemeVars，而不是只看系统偏好
+  useEffect(() => {
+    const apply = () => {
+      const { themeMode, themePreset } = useSettingsStore.getState().settings;
+      const { effectiveMode } = applyThemeVars(themeMode, themePreset);
+      setIsDark(effectiveMode === 'dark');
+    };
+    apply();
+    const offHydration = useSettingsStore.persist.onFinishHydration(apply);
+    const unsubscribe = useSettingsStore.subscribe(apply);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onSystemChange = () => {
+      if (useSettingsStore.getState().settings.themeMode === 'system') apply();
+    };
+    mq.addEventListener('change', onSystemChange);
+    return () => {
+      offHydration();
+      unsubscribe();
+      mq.removeEventListener('change', onSystemChange);
+    };
+  }, []);
+
+  const requestData = useCallback(() => {
+    gotDataRef.current = false;
+    setTimedOut(false);
+    setPayload(null);
+    Events.Emit('popup-result:request', popupId).catch(() => {});
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (!gotDataRef.current) setTimedOut(true);
+    }, WAIT_TIMEOUT_MS);
+  }, [popupId]);
 
   useEffect(() => {
-    // 本窗口不运行主界面的完整主题体系，按系统偏好设置基础主题变量
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const applyTheme = () => {
-      setIsDark(mq.matches);
-      document.documentElement.setAttribute('data-theme', mq.matches ? 'dark' : 'light');
-    };
-    applyTheme();
-    mq.addEventListener('change', applyTheme);
-
     const off = Events.On(`popup-result:data:${popupId}`, (ev) => {
       const data = ev.data as PopupPayload | null;
-      if (data && Array.isArray(data.results)) setPayload(data);
+      if (data && Array.isArray(data.results)) {
+        gotDataRef.current = true;
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setTimedOut(false);
+        setPayload(data);
+      }
     });
-    // 向主窗口请求本弹窗的数据快照
-    Events.Emit('popup-result:request', popupId).catch(() => {});
-
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 挂载后向源窗口请求数据快照
+    requestData();
     return () => {
       off();
-      mq.removeEventListener('change', applyTheme);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [popupId]);
+  }, [popupId, requestData]);
 
   if (!payload) {
     return (
@@ -67,31 +105,103 @@ export function ResultPopup() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          background: 'var(--background)',
         }}
       >
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="等待源窗口推送结果…" />
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 10,
+            color: 'var(--text-secondary)',
+            fontSize: 13,
+            textAlign: 'center',
+          }}
+        >
+          {timedOut ? (
+            <>
+              <ExclamationCircleOutlined
+                style={{ fontSize: 24, color: 'var(--color-warning)' }}
+              />
+              <span>{t('common.resultPopup.timeout')}</span>
+              <Button size="small" icon={<ReloadOutlined />} onClick={requestData}>
+                {t('common.resultPopup.retry')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Spin />
+              <span>{t('common.resultPopup.waiting')}</span>
+            </>
+          )}
+        </div>
       </div>
     );
   }
 
-  const tabItems: TabsProps['items'] = payload.results.map((r, i) => ({
-    key: `r-${i}`,
-    label: `结果 ${i + 1} (${r.rows?.length ?? 0} 行)`,
+  const totalRows = payload.results.reduce((sum, result) => sum + (result.rows?.length ?? 0), 0);
+  const tabItems: TabsProps['items'] = payload.results.map((result, index) => ({
+    key: `r-${index}`,
+    label: t('common.resultPopup.resultTab', {
+      index: index + 1,
+      count: result.rows?.length ?? 0,
+    }),
     children: (
-      <div style={{ height: 'calc(100vh - 44px)', padding: '0 8px 8px' }}>
+      <div style={{ height: '100%', minHeight: 0, padding: '0 8px 8px' }}>
         <ResultGrid
-          queryResult={r as never}
+          queryResult={result as never}
           isDark={isDark}
-          executionTime={r.executionTime}
+          executionTime={result.executionTime}
         />
       </div>
     ),
   }));
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'var(--background)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          height: 44,
+          padding: '0 12px',
+          flexShrink: 0,
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--background-toolbar)',
+        }}
+      >
+        <Typography.Text
+          strong
+          ellipsis={{ tooltip: payload.title }}
+          style={{ fontSize: 13, minWidth: 0 }}
+        >
+          {payload.title || t('common.resultPopup.title')}
+        </Typography.Text>
+        <Tag bordered={false} style={{ marginInlineEnd: 0, fontSize: 10 }}>
+          {payload.results.length}
+        </Tag>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          {t('common.resultPopup.totalRows', { count: totalRows })}
+        </span>
+      </div>
+
       {payload.results.length > 1 ? (
-        <Tabs type="card" size="small" style={{ padding: '4px 8px 0' }} items={tabItems} />
+        <Tabs
+          type="card"
+          size="small"
+          style={{ flex: 1, minHeight: 0, padding: '4px 8px 0' }}
+          items={tabItems}
+        />
       ) : (
         <div style={{ flex: 1, minHeight: 0, padding: '4px 8px 8px' }}>
           <ResultGrid

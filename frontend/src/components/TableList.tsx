@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { Tag, Spin, Empty, Button, Space, Tooltip, App, Dropdown } from 'antd';
+import { Tag, Spin, Button, Space, Tooltip, App, Dropdown } from 'antd';
 import { appModal } from '../utils/appModal';
 import { GlobalInput } from './GlobalInput';
 import { TableDetailSidebar } from './TableDetailSidebar';
+import { EnhancedEmptyState } from './LoadingStates';
 import { useTranslation } from 'react-i18next';
 import {
   TableOutlined,
@@ -111,6 +112,18 @@ const TableGridCard = React.memo(
     selected: boolean;
     onClick: () => void;
   }) {
+    const { t } = useTranslation();
+    const meta =
+      table.comment ||
+      [
+        table.row_count !== undefined && table.row_count !== null
+          ? `${table.row_count.toLocaleString()} ${t('common.tableList.rowCount')}`
+          : '',
+        table.engine || '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
     return (
       <div
         data-table-name={table.table_name}
@@ -119,9 +132,9 @@ const TableGridCard = React.memo(
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
-          padding: '6px 10px',
-          borderRadius: 6,
+          gap: 8,
+          padding: '8px 10px',
+          borderRadius: 8,
           userSelect: 'none',
           border: selected ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
           background: selected ? 'var(--row-selected-bg)' : 'var(--background-card)',
@@ -132,20 +145,35 @@ const TableGridCard = React.memo(
         ) : (
           <TableOutlined style={{ fontSize: 16, color: 'var(--color-primary)', flexShrink: 0 }} />
         )}
-        <span
-          title={table.table_name}
-          style={{
-            fontSize: 14,
-            margin: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-          }}
-        >
-          {table.table_name}
-        </span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            title={table.table_name}
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {table.table_name}
+          </div>
+          <div
+            title={meta}
+            style={{
+              fontSize: 11,
+              color: 'var(--text-tertiary)',
+              marginTop: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {meta || (table.table_type === 'VIEW' ? t('common.viewsLabel') : t('common.tablesLabel'))}
+          </div>
+        </div>
       </div>
     );
   },
@@ -1253,7 +1281,7 @@ function TableListComponent({
                 >
                   <Spin size="large" />
                   <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
-                    {t('common.erDiagram.loading')}
+                    {t('common.loading')}
                   </div>
                 </div>
               ) : filteredTables.length === 0 ? (
@@ -1266,14 +1294,30 @@ function TableListComponent({
                   }}
                 >
                   {searchText ? (
-                    <Empty
-                      description={searchText ? t('common.noMatchingTables') : t('common.noTables')}
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    <EnhancedEmptyState
+                      icon={<SearchOutlined />}
+                      title={t('common.noMatchingTables')}
                     />
                   ) : (
-                    <Empty
-                      description={t('common.noTables')}
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    <EnhancedEmptyState
+                      icon={<TableOutlined />}
+                      title={t('common.noTables')}
+                      description={t('common.tableList.emptyHint')}
+                      action={
+                        onTableNew
+                          ? {
+                              label: t('common.tableList.contextMenu.newTable'),
+                              onClick: onTableNew,
+                              icon: <PlusOutlined />,
+                              type: 'primary',
+                            }
+                          : undefined
+                      }
+                      secondaryAction={{
+                        label: t('common.refresh'),
+                        onClick: refreshTablesRef,
+                        icon: <ReloadOutlined />,
+                      }}
                     />
                   )}
                 </div>

@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Spin, App, Tooltip } from 'antd';
-import { CopyOutlined, TableOutlined, EyeOutlined } from '@ant-design/icons';
+import { App, Descriptions, Segmented, Skeleton, Tooltip, Button } from 'antd';
+import {
+  CopyOutlined,
+  TableOutlined,
+  EyeOutlined,
+  ReloadOutlined,
+  InfoCircleOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { useDatabase } from '../hooks/useApi';
 import { DDLViewer } from './DDLViewer';
+import { EnhancedEmptyState } from './LoadingStates';
 
 interface TableDetailSidebarProps {
   connectionId: string;
@@ -13,6 +21,29 @@ interface TableDetailSidebarProps {
   tableComment?: string;
   width: number;
   onWidthChange: (width: number) => void;
+}
+
+interface SidebarTableInfo {
+  engine?: string;
+  row_count?: number;
+  data_length?: number;
+  index_length?: number;
+  collation?: string;
+  create_time?: string;
+  update_time?: string;
+  comment?: string;
+}
+
+function formatBytes(bytes?: number): string {
+  if (!bytes) return '-';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`;
 }
 
 export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
@@ -26,9 +57,13 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
 }) => {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const { getTableInfo } = useDatabase();
   const [ddl, setDdl] = useState('');
+  const [info, setInfo] = useState<SidebarTableInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  const [view, setView] = useState<'ddl' | 'info'>('ddl');
   const isMountedRef = useRef(true);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -37,29 +72,35 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    if (!tableName) return;
-    let cancelled = false;
+  const loadDetail = useCallback(async () => {
+    if (!tableName) {
+      setDdl('');
+      setInfo(null);
+      return;
+    }
+    const requestId = ++requestIdRef.current;
     setLoading(true);
-    api
-      .getTableDDL(connectionId, tableName, database)
-      .then((ddlResult) => {
-        if (cancelled || !isMountedRef.current) return;
-        setDdl(Array.isArray(ddlResult) ? ddlResult.join('\n') : String(ddlResult));
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled || !isMountedRef.current) return;
-        setDdl('');
-        setLoading(false);
-        message.error(typeof err === 'string' ? err : err?.message || '获取 DDL 失败');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connectionId, database, tableName]);
+    const [ddlResult, infoResult] = await Promise.all([
+      api.getTableDDL(connectionId, tableName, database).catch((err) => {
+        if (requestId === requestIdRef.current && isMountedRef.current) {
+          message.error(typeof err === 'string' ? err : err?.message || '获取 DDL 失败');
+        }
+        return '';
+      }),
+      getTableInfo(connectionId, tableName, database).catch(() => null),
+    ]);
+    if (requestId !== requestIdRef.current || !isMountedRef.current) return;
+    setDdl(Array.isArray(ddlResult) ? ddlResult.join('\n') : String(ddlResult || ''));
+    setInfo((infoResult as SidebarTableInfo | null) ?? null);
+    setLoading(false);
+  }, [connectionId, database, tableName, getTableInfo, message]);
 
-  const displayDdl = tableName ? ddl : '';
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 切换表后重新加载 DDL 与表信息
+    loadDetail().catch(() => {
+      if (isMountedRef.current) setLoading(false);
+    });
+  }, [loadDetail]);
 
   const isDraggingRef = useRef(false);
 
@@ -86,7 +127,7 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
     },
-    [width, onWidthChange],
+    [width, onWidthChange]
   );
 
   const handleCopy = useCallback(
@@ -95,8 +136,30 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
         message.success(t('common.copied'));
       });
     },
-    [message, t],
+    [message, t]
   );
+
+  const displayDdl = tableName ? ddl : '';
+
+  const infoItems = info
+    ? [
+        { key: 'engine', label: t('common.engine'), children: info.engine || '-' },
+        {
+          key: 'rows',
+          label: t('common.tableList.rowCount'),
+          children: info.row_count?.toLocaleString() || '-',
+        },
+        { key: 'dataSize', label: t('common.dataSize'), children: formatBytes(info.data_length) },
+        { key: 'indexSize', label: t('common.indexSize'), children: formatBytes(info.index_length) },
+        {
+          key: 'collation',
+          label: t('common.databaseProperties.collation'),
+          children: info.collation || '-',
+        },
+        { key: 'createTime', label: t('common.createTime'), children: info.create_time || '-' },
+        { key: 'updateTime', label: t('common.updateTime'), children: info.update_time || '-' },
+      ]
+    : [];
 
   return (
     <>
@@ -129,31 +192,15 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
           // 面板必须有实心背景：表列表的列头在窄窗口下会溢出到本区域，
           // 透明底会让两处文字叠在一起（表的列头从面板上方透出来）
           background: 'var(--background-card)',
+          borderLeft: '1px solid var(--border)',
         }}
       >
         {!tableName ? (
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-tertiary)',
-              fontSize: 12,
-            }}
-          >
-            {t('common.pleaseSelectATable')}
-          </div>
-        ) : loading ? (
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Spin size="small" />
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <EnhancedEmptyState
+              icon={<TableOutlined />}
+              title={t('common.pleaseSelectATable')}
+            />
           </div>
         ) : (
           <>
@@ -179,6 +226,7 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
                   title={tableName}
                   style={{
                     fontSize: 12,
+                    fontWeight: 600,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -187,15 +235,23 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
                 >
                   {tableName}
                 </span>
+                <Tooltip title={t('common.refresh')}>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    loading={loading}
+                    onClick={loadDetail}
+                    style={{ color: 'var(--text-tertiary)' }}
+                  />
+                </Tooltip>
                 <Tooltip title={t('common.copy')}>
-                  <CopyOutlined
-                    style={{
-                      fontSize: 12,
-                      color: 'var(--text-tertiary)',
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                    }}
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CopyOutlined />}
                     onClick={() => handleCopy(tableName)}
+                    style={{ color: 'var(--text-tertiary)' }}
                   />
                 </Tooltip>
               </div>
@@ -204,7 +260,28 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
                   {tableComment}
                 </div>
               )}
+              <div style={{ marginTop: 8 }}>
+                <Segmented
+                  block
+                  size="small"
+                  value={view}
+                  onChange={(value) => setView(value as 'ddl' | 'info')}
+                  options={[
+                    { value: 'ddl', label: t('common.ddl') },
+                    {
+                      value: 'info',
+                      label: (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <InfoCircleOutlined />
+                          {t('common.info')}
+                        </span>
+                      ),
+                    },
+                  ]}
+                />
+              </div>
             </div>
+
             <div
               style={{
                 flex: 1,
@@ -213,27 +290,28 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
                 minWidth: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                background: 'transparent',
               }}
             >
-              {displayDdl ? (
-                <DDLViewer
-                  ddl={displayDdl}
-                  connectionId={connectionId}
-                  style={{ flex: 1, minHeight: 0 }}
-                />
-              ) : (
-                <div
-                  style={{
-                    padding: '8px 12px',
-                    fontSize: 12,
-                    color: 'var(--text-tertiary)',
-                    flex: 1,
-                    background: 'transparent',
-                  }}
-                >
-                  {t('common.noData')}
+              {loading ? (
+                <div style={{ padding: '10px 12px' }}>
+                  <Skeleton active title={false} paragraph={{ rows: 6 }} />
                 </div>
+              ) : view === 'ddl' ? (
+                displayDdl ? (
+                  <DDLViewer
+                    ddl={displayDdl}
+                    connectionId={connectionId}
+                    style={{ flex: 1, minHeight: 0 }}
+                  />
+                ) : (
+                  <EnhancedEmptyState title={t('common.noData')} />
+                )
+              ) : info ? (
+                <div style={{ flex: 1, overflow: 'auto', padding: '8px 12px 12px' }}>
+                  <Descriptions column={1} size="small" bordered items={infoItems} />
+                </div>
+              ) : (
+                <EnhancedEmptyState title={t('common.noTableInfo')} />
               )}
             </div>
           </>

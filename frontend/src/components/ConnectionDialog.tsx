@@ -5,21 +5,18 @@ import {
   Form,
   InputNumber,
   Select,
-  message,
+  App,
   Space,
   Switch,
   Button as AntButton,
   Row,
   Col,
-  Divider,
-  Input,
   ColorPicker,
 } from 'antd';
 import {
   UploadOutlined,
   ThunderboltOutlined,
   DatabaseOutlined,
-  CloudServerOutlined,
   SafetyCertificateOutlined,
   KeyOutlined,
   SettingOutlined,
@@ -30,37 +27,9 @@ import {
 import { GlobalInput, GlobalInputPassword } from './GlobalInput';
 import { DatabaseIcon } from './DatabaseIcon';
 import { DB_TYPE_COLORS } from '../styles/theme';
-import type { FormInstance } from 'antd';
 import { api } from '../api';
 import i18n from '../i18n';
 import { getErrorMessage } from '../utils/getErrorMessage';
-
-interface FileInputConfig {
-  form: FormInstance;
-  fieldName: string;
-  accept: string;
-}
-
-const createFileInput = (config: FileInputConfig) => {
-  const { form, fieldName, accept } = config;
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = accept;
-  input.style.display = 'none';
-  input.onchange = (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) {
-      const path = (file as any).path || file.name;
-      form.setFieldValue(fieldName, path);
-      message.success(`${i18n.t('common.fileSelected')}: ${file.name}`);
-    } else {
-      form.setFieldValue(fieldName, undefined);
-    }
-  };
-  document.body.appendChild(input);
-  input.click();
-  document.body.removeChild(input);
-};
 
 export interface ConnectionFormData {
   id?: string;
@@ -172,8 +141,34 @@ interface FullFormValues {
   ssl_client_key?: string;
 }
 
-export function ConnectionDialog({ open, editingData, onCancel, onSave }: ConnectionDialogProps) {  const { t } = useTranslation();
+export function ConnectionDialog({ open, editingData, onCancel, onSave }: ConnectionDialogProps) {
+  const { t } = useTranslation();
+  const { message } = App.useApp();
   const [form] = Form.useForm();
+
+  // 选择本地文件（SSL 证书 / SSH 私钥 / SQLite 文件），回填到表单字段
+  const browseFile = useCallback(
+    (fieldName: string, accept: string) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = accept;
+      input.style.display = 'none';
+      input.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          const path = (file as any).path || file.name;
+          form.setFieldValue(fieldName, path);
+          message.success(`${t('common.fileSelected')}: ${file.name}`);
+        } else {
+          form.setFieldValue(fieldName, undefined);
+        }
+      };
+      document.body.appendChild(input);
+      input.click();
+      document.body.removeChild(input);
+    },
+    [form, message, t]
+  );
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   // 测试连接内联结果（toast 一闪而过，内联常驻直到表单再次修改）
@@ -301,7 +296,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
               ssl_key_path: all.ssl_client_key,
               ssl_skip_verify: false,
             }
-          : undefined,
+          : undefined
       );
 
       if (testCancelledRef.current) return;
@@ -422,13 +417,15 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       className="connection-dialog-modal"
       data-testid="connection-dialog"
     >
-      <div style={{ display: 'flex', height: 520 }}>
-        {/* 左侧数据库类型选择 */}
+      <div style={{ display: 'flex', gap: 8, height: 520 }}>
+        {/* 左侧数据库类型选择：独立圆角卡片，不再平铺贴到弹窗边缘 */}
         <div
           style={{
             width: 220,
+            flexShrink: 0,
             backgroundColor: 'var(--background-toolbar)',
-            borderRight: '1px solid var(--border)',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -518,7 +515,15 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         </div>
 
         {/* 右侧配置区域 */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
           {/* 头部信息 */}
           <div
             style={{
@@ -562,7 +567,13 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
               <AntButton onClick={handleCancel} size="small">
                 {t('common.cancel')}
               </AntButton>
-              <AntButton type="primary" onClick={handleOk} loading={saving} size="small" data-testid="conn-save-btn">
+              <AntButton
+                type="primary"
+                onClick={handleOk}
+                loading={saving}
+                size="small"
+                data-testid="conn-save-btn"
+              >
                 {editingData ? t('common.save') : t('common.create')}
               </AntButton>
             </div>
@@ -582,9 +593,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                   ? 'var(--color-success-alpha-15)'
                   : 'var(--color-error-alpha-15)',
                 borderBottom: `1px solid ${
-                  testResult.ok
-                    ? 'var(--color-success-alpha-30)'
-                    : 'var(--color-error-alpha-30)'
+                  testResult.ok ? 'var(--color-success-alpha-30)' : 'var(--color-error-alpha-30)'
                 }`,
                 color: testResult.ok ? 'var(--color-success)' : 'var(--color-error)',
               }}
@@ -674,7 +683,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     rules={[{ required: true, message: t('common.pleaseEnterConnectionName') }]}
                     style={{ marginBottom: 16 }}
                   >
-                    <GlobalInput placeholder={t('common.connectionNamePlaceholder')} data-testid="conn-name-input" />
+                    <GlobalInput
+                      placeholder={t('common.connectionNamePlaceholder')}
+                      data-testid="conn-name-input"
+                    />
                   </Form.Item>
 
                   {dbType === 'sqlite' ? (
@@ -688,13 +700,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                         <GlobalInput placeholder={t('common.exampleDatabasePath')} />
                         <AntButton
                           icon={<FolderOutlined />}
-                          onClick={() =>
-                            createFileInput({
-                              form,
-                              fieldName: 'host',
-                              accept: '.db,.sqlite,.sqlite3,.db3',
-                            })
-                          }
+                          onClick={() => browseFile('host', '.db,.sqlite,.sqlite3,.db3')}
                         >
                           {t('common.browse')}
                         </AntButton>
@@ -712,7 +718,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                             ]}
                             style={{ marginBottom: 16 }}
                           >
-                            <GlobalInput placeholder={t('common.exampleLocalhost')} data-testid="conn-host-input" />
+                            <GlobalInput
+                              placeholder={t('common.exampleLocalhost')}
+                              data-testid="conn-host-input"
+                            />
                           </Form.Item>
                         </Col>
                         <Col span={6}>
@@ -722,7 +731,12 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                             rules={[{ required: true, message: t('common.pleaseEnterPort') }]}
                             style={{ marginBottom: 16 }}
                           >
-                            <InputNumber min={1} max={65535} style={{ width: '100%' }} data-testid="conn-port-input" />
+                            <InputNumber
+                              min={1}
+                              max={65535}
+                              style={{ width: '100%' }}
+                              data-testid="conn-port-input"
+                            />
                           </Form.Item>
                         </Col>
                       </Row>
@@ -742,7 +756,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                         ]}
                         style={{ marginBottom: 16 }}
                       >
-                        <GlobalInput placeholder={t('common.exampleRoot')} data-testid="conn-username-input" />
+                        <GlobalInput
+                          placeholder={t('common.exampleRoot')}
+                          data-testid="conn-username-input"
+                        />
                       </Form.Item>
                     </Col>
                     <Col span={12}>
@@ -775,7 +792,10 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     label={t('common.databaseName')}
                     style={{ marginBottom: 16 }}
                   >
-                    <GlobalInput placeholder={t('common.exampleMydbOptional')} data-testid="conn-database-input" />
+                    <GlobalInput
+                      placeholder={t('common.exampleMydbOptional')}
+                      data-testid="conn-database-input"
+                    />
                   </Form.Item>
 
                   <Form.Item
@@ -818,13 +838,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                       <AntButton
                         icon={<UploadOutlined />}
                         size="small"
-                        onClick={() =>
-                          createFileInput({
-                            form,
-                            fieldName: 'ssl_ca_cert',
-                            accept: '.crt,.pem,.ca',
-                          })
-                        }
+                        onClick={() => browseFile('ssl_ca_cert', '.crt,.pem,.ca')}
                       />
                     </Space.Compact>
                   </Form.Item>
@@ -841,13 +855,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                           <AntButton
                             icon={<UploadOutlined />}
                             size="small"
-                            onClick={() =>
-                              createFileInput({
-                                form,
-                                fieldName: 'ssl_client_cert',
-                                accept: '.crt,.pem,.cert',
-                              })
-                            }
+                            onClick={() => browseFile('ssl_client_cert', '.crt,.pem,.cert')}
                           />
                         </Space.Compact>
                       </Form.Item>
@@ -863,13 +871,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                           <AntButton
                             icon={<UploadOutlined />}
                             size="small"
-                            onClick={() =>
-                              createFileInput({
-                                form,
-                                fieldName: 'ssl_client_key',
-                                accept: '.key,.pem',
-                              })
-                            }
+                            onClick={() => browseFile('ssl_client_key', '.key,.pem')}
                           />
                         </Space.Compact>
                       </Form.Item>
@@ -949,13 +951,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                       <AntButton
                         icon={<UploadOutlined />}
                         size="small"
-                        onClick={() =>
-                          createFileInput({
-                            form,
-                            fieldName: 'ssh_key_path',
-                            accept: '.pem,.key,.ppk',
-                          })
-                        }
+                        onClick={() => browseFile('ssh_key_path', '.pem,.key,.ppk')}
                       />
                     </Space.Compact>
                   </Form.Item>

@@ -6,7 +6,7 @@ interface ParamDialogProps {
   open: boolean;
   params: string[];
   onCancel: () => void;
-  onExecute: (values: Record<string, string>) => void;
+  onExecute: (values: Record<string, string>) => void | Promise<void>;
 }
 
 export function ParamDialog({ open, params, onCancel, onExecute }: ParamDialogProps) {
@@ -18,7 +18,7 @@ export function ParamDialog({ open, params, onCancel, onExecute }: ParamDialogPr
     try {
       const values = await form.validateFields();
       setLoading(true);
-      onExecute(values);
+      await onExecute(values);
     } finally {
       setLoading(false);
     }

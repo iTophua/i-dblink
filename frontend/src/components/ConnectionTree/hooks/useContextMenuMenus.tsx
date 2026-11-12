@@ -18,7 +18,6 @@ import {
   MinusOutlined,
   InfoCircleOutlined,
   DashboardOutlined,
-  CloudServerOutlined,
   ExperimentOutlined,
 } from '@ant-design/icons';
 import React from 'react';
@@ -41,13 +40,7 @@ interface DialogSetters {
   setBackupRestoreTarget: (target: { connId: string; database: string } | null) => void;
   setBackupRestoreMode: (mode: 'backup' | 'restore') => void;
   setBackupRestoreOpen: (open: boolean) => void;
-  setUserManagementTarget: (target: { connId: string; database?: string } | null) => void;
-  setUserManagementOpen: (open: boolean) => void;
   setSchemaCompareOpen: (open: boolean) => void;
-  setProcessListOpen: (open: boolean) => void;
-  setProcessListTarget: (target: { connId: string; database?: string } | null) => void;
-  setServerStatusOpen: (open: boolean) => void;
-  setServerStatusTarget: (target: { connId: string } | null) => void;
   setCreateDatabaseTarget: (target: { connId: string; dbType?: string } | null) => void;
   setCreateDatabaseOpen: (open: boolean) => void;
   setDataGeneratorTarget: (target: { connId: string; database?: string; tableName?: string } | null) => void;
@@ -125,14 +118,9 @@ export function useContextMenuMenus(
                 icon: <DatabaseOutlined />,
               },
               {
-                key: 'process-list',
-                label: t('common.processList.title'),
+                key: 'connection-monitor',
+                label: t('common.connectionMonitor'),
                 icon: <DashboardOutlined />,
-              },
-              {
-                key: 'server-status',
-                label: t('common.serverStatus.title'),
-                icon: <CloudServerOutlined />,
               },
               { type: 'divider' },
               {
@@ -248,15 +236,13 @@ export function useContextMenuMenus(
             dbType: connInfo?.db_type,
           });
           dialogSetters.setCreateDatabaseOpen(true);
-        } else if (key === 'process-list') {
-          // 连接级入口：不指定 database，展示整个实例的进程
-          dialogSetters.setProcessListTarget({ connId: conn.id });
-          dialogSetters.setProcessListOpen(true);
-        } else if (key === 'server-status') {
-          // 服务器状态本就是实例级信息（版本/uptime/连接数/缓存命中率），
-          // 挂在连接级；库级菜单不再提供
-          dialogSetters.setServerStatusTarget({ connId: conn.id });
-          dialogSetters.setServerStatusOpen(true);
+        } else if (key === 'connection-monitor') {
+          // 连接级入口：不指定 database，展示整个实例；Tab 内可切换库过滤
+          window.dispatchEvent(
+            new CustomEvent('tab-action', {
+              detail: { action: 'open-monitor-tab', connectionId: conn.id },
+            })
+          );
         } else if (key === 'connection-properties') {
           dialogSetters.setPropertiesType('connection');
           dialogSetters.setPropertiesTarget({ connId: conn.id, name: conn.name, data: conn });
@@ -369,7 +355,7 @@ export function useContextMenuMenus(
         { key: 'restore-db', label: t('common.restoreDatabaseMenu') },
         { key: 'user-management', label: t('common.userPrivileges') },
         { key: 'schema-compare', label: t('common.schemaCompare') },
-        { key: 'process-list', label: t('common.processList.title'), icon: <DashboardOutlined /> },
+        { key: 'connection-monitor', label: t('common.connectionMonitor'), icon: <DashboardOutlined /> },
         { type: 'divider' },
         { key: 'run-sql-file', label: t('common.runSqlFile') },
         { key: 'generate-doc', label: t('common.docGenerator.title') },
@@ -409,13 +395,21 @@ export function useContextMenuMenus(
           dialogSetters.setBackupRestoreMode('restore');
           dialogSetters.setBackupRestoreOpen(true);
         } else if (key === 'user-management') {
-          dialogSetters.setUserManagementTarget({ connId, database: dbName });
-          dialogSetters.setUserManagementOpen(true);
+          // 用户权限改为工作区 Tab（按连接 + 库）
+          window.dispatchEvent(
+            new CustomEvent('tab-action', {
+              detail: { action: 'open-users-tab', connectionId: connId, database: dbName },
+            })
+          );
         } else if (key === 'schema-compare') {
           dialogSetters.setSchemaCompareOpen(true);
-        } else if (key === 'process-list') {
-          dialogSetters.setProcessListTarget({ connId, database: dbName });
-          dialogSetters.setProcessListOpen(true);
+        } else if (key === 'connection-monitor') {
+          // 进程 + 服务器状态合并为一个「连接监控」Tab，库级入口带库过滤
+          window.dispatchEvent(
+            new CustomEvent('tab-action', {
+              detail: { action: 'open-monitor-tab', connectionId: connId, database: dbName },
+            })
+          );
         } else if (key === 'run-sql-file') {
           dialogSetters.setRunSqlTarget({ connId, database: dbName });
           dialogSetters.setRunSqlDialogOpen(true);

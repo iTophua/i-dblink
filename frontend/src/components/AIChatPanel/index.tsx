@@ -1,5 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Drawer, Select, Checkbox, Button, Input, Space, Tooltip, Collapse, Tag, Empty, App } from 'antd';
+import {
+  Drawer,
+  Select,
+  Checkbox,
+  Button,
+  Input,
+  Space,
+  Tooltip,
+  Collapse,
+  Tag,
+  Popconfirm,
+  App,
+} from 'antd';
 import {
   RobotOutlined,
   PauseCircleOutlined,
@@ -9,6 +21,9 @@ import {
   DeleteOutlined,
   LoadingOutlined,
   UserOutlined,
+  CopyOutlined,
+  BulbOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { Connection } from '../../stores/appStore';
@@ -67,12 +82,21 @@ export function AIChatPanel({
   const checkStatus = useAIStore((s) => s.checkStatus);
 
   const [input, setInput] = useState('');
+  const [statusChecking, setStatusChecking] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const nearBottomRef = useRef(true);
 
   // 应用启动时检查 AI 状态
   useEffect(() => {
-    checkStatus();
+    let cancelled = false;
+    checkStatus().finally(() => {
+      if (!cancelled) setStatusChecking(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [checkStatus]);
 
   // 面板打开时自动跟随连接树选中项（仅首次或连接变化时）
@@ -89,10 +113,18 @@ export function AIChatPanel({
     }
   }, [panelVisible, selectedConnectionId, connectionDatabases, setConnection, setSelectedDatabases]);
 
-  // 流式输出时自动滚动到底部
+  // 流式输出时只有用户本来就在底部才自动滚动，避免打断向上翻看
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (nearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [chatMessages]);
+
+  const handleMessageListScroll = useCallback(() => {
+    const el = messageListRef.current;
+    if (!el) return;
+    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
 
   // 当前连接信息
   const currentConn = connections.find((c) => c.id === connectionId);
@@ -103,8 +135,8 @@ export function AIChatPanel({
     ? (connectionDatabases[connectionId] || []).filter((d) => d.loaded).map((d) => d.database)
     : [];
 
-  const handleSend = useCallback(async () => {
-    const trimmed = input.trim();
+  const sendPrompt = useCallback(async (raw: string) => {
+    const trimmed = raw.trim();
     if (!trimmed || streaming) return;
 
     if (!ready) {
@@ -149,10 +181,19 @@ export function AIChatPanel({
       finalizeAssistantMessage();
     }
   }, [
-    input, streaming, ready, connectionId, selectedDatabases, currentDbType,
+    streaming, ready, connectionId, selectedDatabases, currentDbType,
     chatMessages, addUserMessage, startAssistantMessage, appendAssistantChunk,
     finalizeAssistantMessage, setInput, message, t,
   ]);
+
+  const handleSend = useCallback(() => {
+    sendPrompt(input);
+  }, [input, sendPrompt]);
+
+  const handleRetry = useCallback(() => {
+    const lastUser = [...chatMessages].reverse().find((m) => m.role === 'user');
+    if (lastUser) sendPrompt(lastUser.content);
+  }, [chatMessages, sendPrompt]);
 
   const handleApplySQL = useCallback(
     (sql: string) => {
@@ -162,11 +203,21 @@ export function AIChatPanel({
     [onApplySQL, message, t]
   );
 
+  const handleCopyMessage = useCallback(
+    (text: string) => {
+      navigator.clipboard.writeText(text).then(
+        () => message.success(t('common.copiedToClipboard')),
+        () => message.error(t('common.copyFailed'))
+      );
+    },
+    [message, t]
+  );
+
   const handleStop = useCallback(() => {
     if (!abortRef.current) return;
-    appendAssistantChunk('\n\n（已停止）');
+    appendAssistantChunk(`\n\n${t('common.aiChat.stopped')}`);
     abortRef.current.abort(); // streamChat 以已完成部分 resolve，随后正常 finalize
-  }, [appendAssistantChunk]);
+  }, [appendAssistantChunk, t]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -180,33 +231,70 @@ export function AIChatPanel({
   return (
     <Drawer
       title={
-        <Space size={6}>
-          <RobotOutlined />
-          <span>{t('common.ai')}</span>
-          {currentConn && <Tag bordered={false} style={{ fontSize: 10 }}>{dbTypeLabel}</Tag>}
+        <Space size={8}>
+          <span
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: 8,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--color-primary-alpha-15)',
+              color: 'var(--color-primary)',
+            }}
+          >
+            <RobotOutlined />
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{t('common.ai')}</span>
+          {currentConn && (
+            <Tag bordered={false} style={{ fontSize: 10 }}>
+              {dbTypeLabel}
+            </Tag>
+          )}
         </Space>
       }
       placement="right"
-      width={480}
+      width={496}
+      mask={false}
       onClose={() => setPanelVisible(false)}
       open={panelVisible}
       className="ai-chat-drawer"
       styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
       extra={
         chatMessages.length > 0 && (
-          <Tooltip title={t('common.aiChat.clearHistory')}>
+          <Popconfirm
+            title={t('common.aiChat.clearHistory')}
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
+            onConfirm={() => clearMessages()}
+          >
             <Button
               size="small"
               type="text"
+              aria-label={t('common.aiChat.clearHistory')}
               icon={<DeleteOutlined />}
-              onClick={() => clearMessages()}
             />
-          </Tooltip>
+          </Popconfirm>
         )
       }
     >
-      {/* ── 未配置提示 ── */}
-      {(!enabled || !ready) ? (
+      {statusChecking ? (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            color: 'var(--text-tertiary)',
+            fontSize: 12,
+          }}
+        >
+          <LoadingOutlined />
+          {t('common.aiChat.checking')}
+        </div>
+      ) : !enabled || !ready ? (
         <div
           style={{
             flex: 1,
@@ -214,26 +302,47 @@ export function AIChatPanel({
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 12,
-            color: 'var(--text-secondary)',
+            gap: 10,
+            padding: '0 32px',
+            textAlign: 'center',
           }}
         >
-          <RobotOutlined style={{ fontSize: 40, color: 'var(--text-tertiary)' }} />
-          <div style={{ fontSize: 13 }}>{t('common.aiSettings.notConfigured')}</div>
-          <Button
-            type="primary"
-            ghost
-            size="small"
-            icon={<SettingOutlined />}
-            onClick={onOpenSettings}
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 14,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--color-primary-alpha-15)',
+              color: 'var(--color-primary)',
+              fontSize: 22,
+            }}
           >
+            <RobotOutlined />
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>
+            {t('common.aiSettings.notConfigured')}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+            {t('common.aiChat.notConfiguredHint')}
+          </div>
+          <Button type="primary" icon={<SettingOutlined />} onClick={onOpenSettings}>
             {t('common.aiSettings.goToSettings')}
           </Button>
         </div>
       ) : (
         <>
           {/* ── 上下文配置区 ── */}
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div
+            style={{
+              padding: '10px 12px 6px',
+              borderBottom: '1px solid var(--border)',
+              background: 'var(--background-toolbar)',
+              flexShrink: 0,
+            }}
+          >
             {/* 连接选择 */}
             <Select
               value={connectionId || undefined}
@@ -313,50 +422,139 @@ export function AIChatPanel({
           </div>
 
           {/* ── 消息列表 ── */}
-          <div style={{ flex: 1, overflow: 'auto', padding: '8px 12px' }}>
+          <div
+            ref={messageListRef}
+            onScroll={handleMessageListScroll}
+            style={{ flex: 1, overflow: 'auto', padding: '14px 14px 8px' }}
+          >
             {chatMessages.length === 0 ? (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={t('common.aiChat.emptyHint')}
-                style={{ marginTop: 40 }}
-              />
+              <div
+                style={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 12px',
+                  textAlign: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'var(--color-primary-alpha-15)',
+                    color: 'var(--color-primary)',
+                    fontSize: 20,
+                  }}
+                >
+                  <RobotOutlined />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>
+                  {t('common.aiChat.emptyTitle')}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                  {t('common.aiChat.emptyHint')}
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    width: '100%',
+                    marginTop: 16,
+                  }}
+                >
+                  {(['suggestExplain', 'suggestOptimize', 'suggestDdl'] as const).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className="ai-chat-suggestion"
+                      onClick={() => setInput(t(`common.aiChat.${key}`))}
+                    >
+                      <BulbOutlined />
+                      <span>{t(`common.aiChat.${key}`)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : (
               chatMessages.map((msg) => (
-                <MessageBubble key={msg.id} msg={msg} onApplySQL={handleApplySQL} />
+                <MessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  onApplySQL={handleApplySQL}
+                  onCopy={handleCopyMessage}
+                  onRetry={handleRetry}
+                />
               ))
             )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* ── 输入区 ── */}
-          <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-            <Space.Compact style={{ width: '100%' }}>
+          <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: 8,
+                padding: '6px 6px 6px 10px',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                background: 'var(--surface-elevated)',
+                transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+              }}
+            >
               <TextArea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={t('common.aiChat.inputPlaceholder')}
                 autoSize={{ minRows: 1, maxRows: 4 }}
-                size="small"
-                disabled={streaming}
-                style={{ borderRadius: '6px 0 0 6px' }}
+                variant="borderless"
+                style={{
+                  flex: 1,
+                  fontSize: 13,
+                  padding: '4px 0',
+                  resize: 'none',
+                  background: 'transparent',
+                }}
               />
               {streaming && (
                 <Button
+                  type="text"
+                  danger
+                  size="small"
                   icon={<PauseCircleOutlined />}
                   onClick={handleStop}
                   title={t('common.aiChat.stopGeneration')}
-                  style={{ height: 'auto' }}
                 />
               )}
               <Button
                 type="primary"
+                shape="circle"
+                size="small"
                 icon={streaming ? <LoadingOutlined /> : <SendOutlined />}
                 onClick={handleSend}
                 disabled={streaming || !input.trim()}
-                style={{ height: 'auto' }}
+                aria-label={t('common.aiChat.send')}
               />
-            </Space.Compact>
+            </div>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 11,
+                color: 'var(--text-tertiary)',
+                textAlign: 'right',
+              }}
+            >
+              {t('common.aiChat.disclaimer')}
+            </div>
           </div>
         </>
       )}
@@ -364,80 +562,121 @@ export function AIChatPanel({
   );
 }
 
-/** 单条消息气泡 */
+/** 单条消息：用户=淡主色气泡；助手=无气泡正文 + 复制/重试操作 */
 function MessageBubble({
   msg,
   onApplySQL,
+  onCopy,
+  onRetry,
 }: {
   msg: { role: 'user' | 'assistant'; content: string; streaming?: boolean; sqlBlocks?: string[] };
   onApplySQL: (sql: string) => void;
+  onCopy: (text: string) => void;
+  onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   const isUser = msg.role === 'user';
+  const hasError = !isUser && /\[Error\]/.test(msg.content);
 
   return (
     <div
       style={{
         display: 'flex',
-        flexDirection: 'column',
-        alignItems: isUser ? 'flex-end' : 'flex-start',
-        marginBottom: 12,
+        gap: 8,
+        alignItems: 'flex-start',
+        flexDirection: isUser ? 'row-reverse' : 'row',
+        marginBottom: 14,
+        maxWidth: '100%',
       }}
     >
+      {/* 头像 */}
       <div
         style={{
+          width: 24,
+          height: 24,
+          borderRadius: 8,
+          flexShrink: 0,
           display: 'flex',
-          gap: 6,
-          alignItems: 'flex-start',
-          flexDirection: isUser ? 'row-reverse' : 'row',
-          maxWidth: '100%',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: isUser ? 'var(--color-primary)' : 'var(--color-primary-alpha-15)',
+          color: isUser ? 'var(--surface-elevated)' : 'var(--color-primary)',
+          fontSize: 12,
         }}
       >
-        {/* 头像 */}
-        <div
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: isUser ? 'var(--color-primary)' : 'var(--background-hover)',
-            color: isUser ? '#fff' : 'var(--text-secondary)',
-            fontSize: 11,
-          }}
-        >
-          {isUser ? <UserOutlined /> : <RobotOutlined />}
-        </div>
-        {/* 内容：demo 气泡语言 — 用户=淡主色染+主色细边，AI=卡片底+发丝边 */}
-        <div
-          style={{
-            background: isUser
-              ? 'var(--color-primary-alpha-15)'
-              : 'var(--background-card)',
-            border: `1px solid ${isUser ? 'var(--color-primary-alpha-30)' : 'var(--border)'}`,
-            color: 'var(--text-primary)',
-            padding: '6px 10px',
-            borderRadius: isUser ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
-            fontSize: 13,
-            lineHeight: 1.5,
-            maxWidth: 'calc(100% - 30px)',
-            overflow: 'hidden',
-          }}
-        >
-          {isUser ? (
-            <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-          ) : (
-            <>
+        {isUser ? <UserOutlined /> : <RobotOutlined />}
+      </div>
+
+      <div
+        style={{
+          minWidth: 0,
+          maxWidth: 'calc(100% - 34px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: isUser ? 'flex-end' : 'flex-start',
+        }}
+      >
+        {isUser ? (
+          <div
+            style={{
+              background: 'var(--color-primary-alpha-15)',
+              border: '1px solid var(--color-primary-alpha-30)',
+              color: 'var(--text-primary)',
+              padding: '6px 10px',
+              borderRadius: '12px 2px 12px 12px',
+              fontSize: 13,
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {msg.content}
+          </div>
+        ) : (
+          <>
+            <div
+              style={{
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: hasError ? 'var(--color-error)' : 'var(--text-primary)',
+                overflowWrap: 'anywhere',
+                maxWidth: '100%',
+                minWidth: 0,
+              }}
+            >
               <MarkdownRenderer content={msg.content || ''} onApplySQL={onApplySQL} />
               {msg.streaming && (
                 <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                   <LoadingOutlined /> ...
                 </span>
               )}
-            </>
-          )}
-        </div>
+            </div>
+            {!msg.streaming && msg.content && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 4 }}>
+                <Tooltip title={t('common.aiChat.copyMessage')}>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CopyOutlined />}
+                    style={{ fontSize: 11, color: 'var(--text-tertiary)' }}
+                    onClick={() => onCopy(msg.content)}
+                  />
+                </Tooltip>
+                {hasError && (
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    style={{ fontSize: 11, color: 'var(--color-primary)' }}
+                    onClick={onRetry}
+                  >
+                    {t('common.aiChat.retry')}
+                  </Button>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

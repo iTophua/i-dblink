@@ -5,7 +5,7 @@
  */
 
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type ThemePreset = 'default' | 'modern' | 'ink';
+export type ThemePreset = 'default' | 'modern' | 'ink' | 'pro';
 
 export interface ThemeColorScheme {
   primary: string;
@@ -50,6 +50,8 @@ export interface NeutralColors {
   rowSelectedBg: string;
   rowStripeBg: string;
   headerBg: string;
+  /** 工作区画布：介于深窗口底与纯白卡片之间，让卡片能真正「浮」在画布上 */
+  surfaceCanvas: string;
   surfaceElevated: string;
   scrollbarThumb: string;
   scrollbarTrack: string;
@@ -703,69 +705,75 @@ const DEFAULT_DARK: ThemeColorScheme = {
   infoGradient: 'linear-gradient(135deg, #60A5FA 0%, #93C5FD 100%)',
 };
 
+// 暖中性统一基调：近白侧栏 + 浅灰工作区 + 纯白卡片。
+// 关键取舍：侧栏与它内部的容器几乎同色（1.04:1），彻底消除「白卡贴深色侧栏」
+// 的补丁感；区域层次交给 1px 边框（对白卡 1.36:1）与极淡阴影，而不是大面积色块。
+// 冷蓝灰侧栏实测在 WKWebView 下左右割裂、久看发硬，已弃用。
 const DEFAULT_LIGHT_NEUTRAL: NeutralColors = {
-  textPrimary: '#111111',
-  textSecondary: '#3F3F46',
-  textTertiary: '#6B7280',
-  textDisabled: '#C7C7CC',
-  border: '#E3E2DC',
-  borderLight: '#EFEDE8',
-  borderDark: '#D0CEC7',
-  // 护眼米色：极淡暖调（R≈G 略 > B），长时间盯看不刺眼但不显黄
-  background: '#F2F1ED',
-  backgroundCard: '#F8F7F4',
-  backgroundToolbar: '#EFEEEA',
-  backgroundHover: '#EBEDF6',
-  backgroundActive: '#E5E9F7',
-  mask: 'rgba(0, 0, 0, 0.3)',
-  windowBackground: '#F2F1ED',
-  // hover/选中态染上极淡靛蓝，让「当前选中」一眼可辨（米色基底保留）
-  rowHoverBg: '#EBEDF6',
-  rowSelectedBg: '#E0E5F8',
-  rowStripeBg: 'rgba(0, 0, 0, 0.015)',
-  headerBg: '#F1F0EC',
-  surfaceElevated: '#FBFAF7',
-  scrollbarThumb: 'rgba(0, 0, 0, 0.12)',
-  scrollbarTrack: 'rgba(0, 0, 0, 0.02)',
-  level1: '#EFEEEA',
-  level2: '#FBFAF7',
-  level3: '#FBFAF7',
-  level4: '#FBFAF7',
-  borderSubtle: '#EFEDE8',
-  borderEmphasis: '#D0CEC7',
+  textPrimary: '#1B1B1A',
+  textSecondary: '#4A4A46',
+  textTertiary: '#77776F',
+  // 禁用文本对白卡 ≈3.1:1（旧值 #C7C7CC 仅 1.68:1，需靠 !important 补丁补救）
+  textDisabled: '#8A93A5',
+  border: '#DDDDD7',
+  borderLight: '#E9E9E4',
+  borderDark: '#C6C6BE',
+  background: '#FBFBF9',
+  backgroundCard: '#FFFFFF',
+  backgroundToolbar: '#F7F7F4',
+  backgroundHover: '#F0F0EC',
+  backgroundActive: '#E7EAF6',
+  mask: 'rgba(28, 28, 26, 0.32)',
+  windowBackground: '#FBFBF9',
+  rowHoverBg: '#F4F4F0',
+  rowSelectedBg: '#E9ECF8',
+  rowStripeBg: 'rgba(28, 28, 26, 0.02)',
+  headerBg: '#F5F5F1',
+  surfaceCanvas: '#F2F2EF',
+  surfaceElevated: '#FFFFFF',
+  scrollbarThumb: 'rgba(28, 28, 26, 0.16)',
+  scrollbarTrack: 'rgba(28, 28, 26, 0.03)',
+  // 四级仍然分档，但跨度收敛，避免又变回强色块
+  level1: '#F2F2EF',
+  level2: '#F7F7F4',
+  level3: '#FBFBF9',
+  level4: '#FFFFFF',
+  borderSubtle: '#EAEAE5',
+  borderEmphasis: '#C6C6BE',
   borderActive: '#4A5DD6',
 };
 
 const DEFAULT_DARK_NEUTRAL: NeutralColors = {
   textPrimary: '#E4E4E7',
   textSecondary: '#A1A1AA',
-  textTertiary: '#7C8087',
-  textDisabled: '#4A4D55',
+  textTertiary: '#8A909B',
+  textDisabled: '#6E7686',
   // 边框 — 可见但不生硬，让卡片有清晰边界
-  border: '#2E323A',
-  borderLight: '#252932',
-  borderDark: '#3A4049',
-  // 背景层次 — Linear 风：深蓝灰基底，卡片/工具栏/悬浮逐级浮起
-  background: '#1A1D23',
+  border: '#363B45',
+  borderLight: '#2A2F38',
+  borderDark: '#454B56',
+  // 背景层次 — 深蓝灰基底，画布 → 卡片 → 浮层逐级浮起
+  background: '#16191F',
   backgroundCard: '#23262E',
   backgroundToolbar: '#1F2228',
   backgroundHover: '#2B3044',
   backgroundActive: '#333B58',
   mask: 'rgba(0, 0, 0, 0.6)',
-  windowBackground: '#1A1D23',
+  windowBackground: '#16191F',
   // hover/选中态染上靛蓝，与主色呼应
   rowHoverBg: '#2B3044',
   rowSelectedBg: '#2E3757',
-  rowStripeBg: 'rgba(255, 255, 255, 0.015)',
+  rowStripeBg: 'rgba(255, 255, 255, 0.02)',
   headerBg: '#1F2228',
+  surfaceCanvas: '#1A1D23',
   surfaceElevated: '#2A2D35',
-  scrollbarThumb: 'rgba(255, 255, 255, 0.14)',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.16)',
   scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
-  level1: '#1A1D23',
-  level2: '#23262E',
+  level1: '#16191F',
+  level2: '#1F2228',
   level3: '#2A2D35',
   level4: '#343740',
-  borderSubtle: '#22262E',
+  borderSubtle: '#252A33',
   borderEmphasis: '#454B55',
   borderActive: '#7186F5',
 };
@@ -927,38 +935,36 @@ const MODERN_DARK: ThemeColorScheme = {
   infoGradient: 'linear-gradient(135deg, #38BDF8 0%, #7DD3FC 100%)',
 };
 
+// Modern：与 default 相同的暖中性骨架，仅极轻微偏冷青，选中态保留青碧染色
 const MODERN_LIGHT_NEUTRAL: NeutralColors = {
-  // 文本 — Apple-style 层次：近黑 → 中灰 → 浅灰 → 禁用灰
-  textPrimary: '#1D1D1F',
-  textSecondary: '#6E6E73',
-  textTertiary: '#86868B',
-  textDisabled: '#C7C7CC',
-  // 边框 — 极淡，擦着存在感的边（暖调）
-  border: '#E9E8E2',
-  borderLight: '#EFEDE8',
-  borderDark: '#D6D4CE',
-  // 背景层级 — 护眼米色基调（同 default 策略），青碧色调的激活/选中态
-  background: '#F1F0EC',
-  backgroundCard: '#F7F6F3',
-  backgroundToolbar: '#EEEEE9',
-  backgroundHover: '#EAE9E4',
+  textPrimary: '#1B1F21',
+  textSecondary: '#485055',
+  textTertiary: '#757D80',
+  textDisabled: '#8A97A5',
+  border: '#D9DEDD',
+  borderLight: '#E7EBEA',
+  borderDark: '#C2CAC8',
+  background: '#FAFCFB',
+  backgroundCard: '#FFFFFF',
+  backgroundToolbar: '#F5F8F7',
+  backgroundHover: '#EEF3F1',
   backgroundActive: '#DCEFEB',
-  mask: 'rgba(0, 0, 0, 0.25)',
-  windowBackground: '#F1F0EC',
-  rowHoverBg: '#EAE9E4',
+  mask: 'rgba(20, 32, 30, 0.32)',
+  windowBackground: '#FAFCFB',
+  rowHoverBg: '#EEF3F1',
   rowSelectedBg: '#DCEFEB',
-  rowStripeBg: 'rgba(0, 0, 0, 0.01)',
-  headerBg: '#EFEEE9',
-  surfaceElevated: '#FBFAF7',
-  scrollbarThumb: 'rgba(0, 0, 0, 0.09)',
-  scrollbarTrack: 'rgba(0, 0, 0, 0.014)',
-  // 层级过渡 — 侧边栏明显深于内容区，模拟物理阴影落在边缘
-  level1: '#E5E4DF',
-  level2: '#FBFAF7',
-  level3: '#FBFAF7',
-  level4: '#FBFAF7',
-  borderSubtle: '#EFEDE8',
-  borderEmphasis: '#D6D4CE',
+  rowStripeBg: 'rgba(20, 32, 30, 0.02)',
+  headerBg: '#F3F7F5',
+  surfaceCanvas: '#F1F4F2',
+  surfaceElevated: '#FFFFFF',
+  scrollbarThumb: 'rgba(20, 32, 30, 0.16)',
+  scrollbarTrack: 'rgba(20, 32, 30, 0.03)',
+  level1: '#F1F4F2',
+  level2: '#F5F8F7',
+  level3: '#FAFCFB',
+  level4: '#FFFFFF',
+  borderSubtle: '#E8EDEB',
+  borderEmphasis: '#C2CAC8',
   borderActive: '#077E6F',
 };
 
@@ -966,8 +972,8 @@ const MODERN_DARK_NEUTRAL: NeutralColors = {
   // 文本 — 暖白 + 渐进灰，避免刺眼的纯白
   textPrimary: '#F2F2F4',
   textSecondary: '#A0A0A6',
-  textTertiary: '#74777A',
-  textDisabled: '#4A4D50',
+  textTertiary: '#8A8E93',
+  textDisabled: '#6E757C',
   // 边框 — 可见但不生硬，让卡片有清晰边界
   border: '#2D3034',
   borderLight: '#25282B',
@@ -984,8 +990,9 @@ const MODERN_DARK_NEUTRAL: NeutralColors = {
   rowSelectedBg: '#1A3A35',
   rowStripeBg: 'rgba(255, 255, 255, 0.012)',
   headerBg: '#202328',
+  surfaceCanvas: '#1B1E22',
   surfaceElevated: '#2B2E33',
-  scrollbarThumb: 'rgba(255, 255, 255, 0.12)',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.16)',
   scrollbarTrack: 'rgba(255, 255, 255, 0.025)',
   // 层级过渡 — 底层到卡片跃升，之后逐级收敛
   level1: '#1B1E22',
@@ -1048,37 +1055,36 @@ const INK_DARK: ThemeColorScheme = {
   infoGradient: 'linear-gradient(135deg, #999999 0%, #BBBBBB 100%)',
 };
 
+// Ink：纯中性灰阶，同样用近白侧栏 + 浅灰工作区，避免深色块破坏极简感
 const INK_LIGHT_NEUTRAL: NeutralColors = {
-  // 文本 — 极简灰阶：墨黑 → 深灰 → 中灰 → 禁用
   textPrimary: '#1A1A1A',
-  textSecondary: '#3D3D3D',
-  textTertiary: '#6E6E6E',
-  textDisabled: '#B0B0B0',
-  // 边框 — 淡灰，极简但清晰
-  border: '#D8D8D8',
-  borderLight: '#E8E8E8',
-  borderDark: '#C2C2C2',
-  // 背景层级 — 柔和灰白（非纯白），长时间盯看不刺眼
-  background: '#EDEDED',
-  backgroundCard: '#F4F4F4',
-  backgroundToolbar: '#EAEAEA',
-  backgroundHover: '#E4E4E4',
-  backgroundActive: '#DCDCDC',
-  mask: 'rgba(0, 0, 0, 0.35)',
-  windowBackground: '#EDEDED',
-  rowHoverBg: '#E4E4E4',
-  rowSelectedBg: '#D5D5D5',
-  rowStripeBg: 'rgba(0, 0, 0, 0.015)',
-  headerBg: '#E9E9E9',
-  surfaceElevated: '#F8F8F8',
-  scrollbarThumb: 'rgba(0, 0, 0, 0.14)',
+  textSecondary: '#444444',
+  textTertiary: '#717171',
+  textDisabled: '#8C8C8C',
+  border: '#D6D6D6',
+  borderLight: '#E6E6E6',
+  borderDark: '#BEBEBE',
+  background: '#FBFBFB',
+  backgroundCard: '#FFFFFF',
+  backgroundToolbar: '#F6F6F6',
+  backgroundHover: '#EFEFEF',
+  backgroundActive: '#E2E2E2',
+  mask: 'rgba(0, 0, 0, 0.32)',
+  windowBackground: '#FBFBFB',
+  rowHoverBg: '#F2F2F2',
+  rowSelectedBg: '#E6E6E6',
+  rowStripeBg: 'rgba(0, 0, 0, 0.02)',
+  headerBg: '#F4F4F4',
+  surfaceCanvas: '#F1F1F1',
+  surfaceElevated: '#FFFFFF',
+  scrollbarThumb: 'rgba(0, 0, 0, 0.16)',
   scrollbarTrack: 'rgba(0, 0, 0, 0.03)',
-  level1: '#E4E4E4',
-  level2: '#F8F8F8',
-  level3: '#F8F8F8',
-  level4: '#F8F8F8',
-  borderSubtle: '#E8E8E8',
-  borderEmphasis: '#C2C2C2',
+  level1: '#F1F1F1',
+  level2: '#F6F6F6',
+  level3: '#FBFBFB',
+  level4: '#FFFFFF',
+  borderSubtle: '#E9E9E9',
+  borderEmphasis: '#BEBEBE',
   borderActive: '#1A1A1A',
 };
 
@@ -1086,8 +1092,8 @@ const INK_DARK_NEUTRAL: NeutralColors = {
   // 文本 — 暖白 + 渐进灰，避免纯白的刺眼
   textPrimary: '#EDEDED',
   textSecondary: '#B8B8B8',
-  textTertiary: '#828282',
-  textDisabled: '#525252',
+  textTertiary: '#929292',
+  textDisabled: '#6E6E6E',
   // 边框 — 深灰，极简但可见
   border: '#2E2E2E',
   borderLight: '#252525',
@@ -1104,8 +1110,9 @@ const INK_DARK_NEUTRAL: NeutralColors = {
   rowSelectedBg: '#303030',
   rowStripeBg: 'rgba(255, 255, 255, 0.012)',
   headerBg: '#1A1A1A',
+  surfaceCanvas: '#161616',
   surfaceElevated: '#242424',
-  scrollbarThumb: 'rgba(255, 255, 255, 0.12)',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.16)',
   scrollbarTrack: 'rgba(255, 255, 255, 0.025)',
   level1: '#161616',
   level2: '#1E1E1E',
@@ -1164,19 +1171,184 @@ const INK_SHADOWS = {
   glowPrimaryStrong: '0 0 40px rgba(224,90,78,0.16), 0 0 80px rgba(224,90,78,0.06)',
 };
 
+// ==================== Pro 主题（Linear / Warp 式：环境光 + 靛紫渐变 + 玻璃质感）====================
+// 设计语言：高级感来自「光」而非面板颜色——环境辉光、渐变品牌标、发光选中态。
+// 浅色是冷白微紫（区别于 default 的暖米灰），深色是近黑玻璃。
+// 配套的视觉增强在 styles/pro-theme.css（ambient / gradient / glow），此处只负责令牌。
+
+const PRO_LIGHT: ThemeColorScheme = {
+  primary: '#6366F1',
+  primaryHover: '#818CF8',
+  primaryActive: '#4F46E5',
+  primaryGradient: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+  success: '#10B981',
+  successHover: '#34D399',
+  successActive: '#059669',
+  successGradient: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+  warning: '#F59E0B',
+  warningHover: '#FBBF24',
+  warningActive: '#D97706',
+  warningGradient: 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
+  error: '#EF4444',
+  errorHover: '#F87171',
+  errorActive: '#DC2626',
+  errorGradient: 'linear-gradient(135deg, #EF4444 0%, #F87171 100%)',
+  info: '#3B82F6',
+  infoHover: '#60A5FA',
+  infoActive: '#2563EB',
+  infoGradient: 'linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)',
+};
+
+const PRO_DARK: ThemeColorScheme = {
+  primary: '#818CF8',
+  primaryHover: '#A5B4FC',
+  primaryActive: '#6366F1',
+  primaryGradient: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+  success: '#34D399',
+  successHover: '#6EE7B7',
+  successActive: '#10B981',
+  successGradient: 'linear-gradient(135deg, #34D399 0%, #6EE7B7 100%)',
+  warning: '#FBBF24',
+  warningHover: '#FCD34D',
+  warningActive: '#F59E0B',
+  warningGradient: 'linear-gradient(135deg, #FBBF24 0%, #FCD34D 100%)',
+  error: '#F87171',
+  errorHover: '#FCA5A5',
+  errorActive: '#EF4444',
+  errorGradient: 'linear-gradient(135deg, #F87171 0%, #FCA5A5 100%)',
+  info: '#60A5FA',
+  infoHover: '#93C5FD',
+  infoActive: '#3B82F6',
+  infoGradient: 'linear-gradient(135deg, #60A5FA 0%, #93C5FD 100%)',
+};
+
+const PRO_LIGHT_NEUTRAL: NeutralColors = {
+  textPrimary: '#191B23',
+  textSecondary: '#4A4E5C',
+  textTertiary: '#858B9B',
+  textDisabled: '#A0A6B4',
+  border: '#E3E5EE',
+  borderLight: '#EDEEF4',
+  borderDark: '#C9CDDC',
+  background: '#F2F3F8',
+  backgroundCard: '#FFFFFF',
+  backgroundToolbar: '#F4F5FA',
+  backgroundHover: '#ECEDF4',
+  backgroundActive: '#E4E6F6',
+  mask: 'rgba(20, 22, 35, 0.4)',
+  windowBackground: '#F6F7FB',
+  rowHoverBg: '#F2F3F9',
+  rowSelectedBg: '#E9EBFA',
+  rowStripeBg: 'rgba(24, 28, 45, 0.02)',
+  headerBg: '#F5F6FA',
+  surfaceCanvas: '#F6F7FB',
+  surfaceElevated: '#FFFFFF',
+  scrollbarThumb: 'rgba(24, 28, 45, 0.18)',
+  scrollbarTrack: 'rgba(24, 28, 45, 0.03)',
+  level1: '#F2F3F8',
+  level2: '#F6F7FB',
+  level3: '#FAFBFD',
+  level4: '#FFFFFF',
+  borderSubtle: '#ECEEF4',
+  borderEmphasis: '#C9CDDC',
+  borderActive: '#6366F1',
+};
+
+const PRO_DARK_NEUTRAL: NeutralColors = {
+  textPrimary: '#E8EAF2',
+  textSecondary: '#A4AAB9',
+  textTertiary: '#6E7484',
+  textDisabled: '#565D6E',
+  border: 'rgba(255, 255, 255, 0.09)',
+  borderLight: 'rgba(255, 255, 255, 0.06)',
+  borderDark: 'rgba(255, 255, 255, 0.14)',
+  background: '#101118',
+  backgroundCard: '#12141B',
+  backgroundToolbar: '#14161E',
+  backgroundHover: 'rgba(255, 255, 255, 0.05)',
+  backgroundActive: 'rgba(99, 102, 241, 0.16)',
+  mask: 'rgba(0, 0, 0, 0.65)',
+  windowBackground: '#0C0D12',
+  rowHoverBg: 'rgba(255, 255, 255, 0.03)',
+  rowSelectedBg: 'rgba(99, 102, 241, 0.18)',
+  rowStripeBg: 'rgba(255, 255, 255, 0.015)',
+  headerBg: '#14161E',
+  surfaceCanvas: '#0C0D12',
+  surfaceElevated: '#1A1D26',
+  scrollbarThumb: 'rgba(255, 255, 255, 0.16)',
+  scrollbarTrack: 'rgba(255, 255, 255, 0.03)',
+  level1: '#0C0D12',
+  level2: '#12141B',
+  level3: '#1A1D26',
+  level4: '#22262F',
+  borderSubtle: 'rgba(255, 255, 255, 0.045)',
+  borderEmphasis: 'rgba(255, 255, 255, 0.14)',
+  borderActive: '#818CF8',
+};
+
+const PRO_GLASS_LIGHT: GlassEffect = {
+  glassBackground: 'rgba(255, 255, 255, 0.82)',
+  glassBorder: 'rgba(99, 102, 241, 0.12)',
+  glassBlur: 'blur(20px)',
+  glassShadow: '0 8px 32px rgba(99, 102, 241, 0.10), 0 0 0 0.5px rgba(24, 28, 45, 0.05)',
+  glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+  glassHighlight: 'linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 35%)',
+};
+
+const PRO_GLASS_DARK: GlassEffect = {
+  glassBackground: 'rgba(18, 20, 27, 0.78)',
+  glassBorder: 'rgba(255, 255, 255, 0.07)',
+  glassBlur: 'blur(24px)',
+  glassShadow: '0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.04)',
+  glassInnerGlow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+  glassHighlight: 'linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 35%)',
+};
+
+const PRO_FOCUS_LIGHT: FocusStyle = {
+  focusRingColor: 'rgba(99, 102, 241, 0.4)',
+  focusRingWidth: 2,
+  focusRingOffset: 2,
+  focusRingShadow: '0 0 0 3px rgba(99, 102, 241, 0.14)',
+};
+
+const PRO_FOCUS_DARK: FocusStyle = {
+  focusRingColor: 'rgba(129, 140, 248, 0.5)',
+  focusRingWidth: 2,
+  focusRingOffset: 2,
+  focusRingShadow: '0 0 0 3px rgba(99, 102, 241, 0.18), 0 0 16px rgba(99, 102, 241, 0.12)',
+};
+
+const PRO_SHADOWS = {
+  ...SHADOWS,
+  shadowSm: '0 1px 2px rgba(20, 24, 45, 0.04)',
+  shadowMd: '0 1px 2px rgba(20, 24, 45, 0.04), 0 4px 16px rgba(20, 24, 45, 0.06)',
+  shadowLg: '0 2px 4px rgba(20, 24, 45, 0.05), 0 8px 28px rgba(20, 24, 45, 0.08)',
+  shadowXl: '0 4px 8px rgba(20, 24, 45, 0.06), 0 16px 48px rgba(20, 24, 45, 0.10)',
+  shadow2xl: '0 8px 16px rgba(20, 24, 45, 0.08), 0 24px 72px rgba(20, 24, 45, 0.14)',
+  cardShadowLight: '0 1px 2px rgba(20, 24, 45, 0.03), 0 4px 16px rgba(20, 24, 45, 0.05)',
+  headerShadowLight: '0 1px 2px rgba(20, 24, 45, 0.04)',
+  cardShadowDark: '0 2px 8px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.3)',
+  headerShadowDark: '0 2px 6px rgba(0, 0, 0, 0.4)',
+  glowPrimary: '0 0 24px rgba(99, 102, 241, 0.18)',
+  glowPrimarySoft: '0 0 36px rgba(99, 102, 241, 0.12), 0 0 72px rgba(99, 102, 241, 0.05)',
+  glowPrimaryStrong: '0 0 48px rgba(99, 102, 241, 0.26), 0 0 96px rgba(99, 102, 241, 0.10)',
+};
+
 // ==================== 导出所有主题配置 ====================
 
 export const THEMES = {
+  // default 即 Pro 设计（环境光 + 靛紫渐变 + 玻璃质感），无需切换主题开箱即是；
+  // 旧 DEFAULT_* 暖米灰令牌保留在文件内仅作历史参考，不再被任何预设引用
   default: {
-    light: createThemeConfig('Default', '默认主题', 'light', DEFAULT_LIGHT, DEFAULT_LIGHT_NEUTRAL, {
-      glassEffect: DEFAULT_GLASS_LIGHT,
-      focusStyle: DEFAULT_FOCUS_LIGHT,
-      shadows: DEFAULT_SHADOWS,
+    light: createThemeConfig('Pro', 'Pro 浅色', 'light', PRO_LIGHT, PRO_LIGHT_NEUTRAL, {
+      glassEffect: PRO_GLASS_LIGHT,
+      focusStyle: PRO_FOCUS_LIGHT,
+      shadows: PRO_SHADOWS,
     }),
-    dark: createThemeConfig('Default', '默认主题', 'dark', DEFAULT_DARK, DEFAULT_DARK_NEUTRAL, {
-      glassEffect: DEFAULT_GLASS_DARK,
-      focusStyle: DEFAULT_FOCUS_DARK,
-      shadows: DEFAULT_SHADOWS,
+    dark: createThemeConfig('Pro', 'Pro 深色', 'dark', PRO_DARK, PRO_DARK_NEUTRAL, {
+      glassEffect: PRO_GLASS_DARK,
+      focusStyle: PRO_FOCUS_DARK,
+      shadows: PRO_SHADOWS,
     }),
   },
   modern: {
@@ -1203,6 +1375,19 @@ export const THEMES = {
       shadows: INK_SHADOWS,
     }),
   },
+  // 兼容别名：本开发周期内曾以独立 'pro' 预设发布，保留映射避免已选用户失效
+  pro: {
+    light: createThemeConfig('Pro', 'Pro 浅色', 'light', PRO_LIGHT, PRO_LIGHT_NEUTRAL, {
+      glassEffect: PRO_GLASS_LIGHT,
+      focusStyle: PRO_FOCUS_LIGHT,
+      shadows: PRO_SHADOWS,
+    }),
+    dark: createThemeConfig('Pro', 'Pro 深色', 'dark', PRO_DARK, PRO_DARK_NEUTRAL, {
+      glassEffect: PRO_GLASS_DARK,
+      focusStyle: PRO_FOCUS_DARK,
+      shadows: PRO_SHADOWS,
+    }),
+  },
 } as const;
 
 export function getThemeConfig(mode: ThemeMode, preset?: ThemePreset): ThemeConfig {
@@ -1215,11 +1400,14 @@ export function getThemeConfig(mode: ThemeMode, preset?: ThemePreset): ThemeConf
   if (themeName === 'ink') {
     return THEMES.ink[effectiveMode];
   }
+  if (themeName === 'pro') {
+    return THEMES.pro[effectiveMode];
+  }
   return THEMES.default[effectiveMode];
 }
 
 export const THEME_PRESETS_LIST = [
-  { value: 'default' as ThemePreset, label: '默认主题', description: '高端质感，中性灰蓝专业风格' },
+  { value: 'default' as ThemePreset, label: '默认主题', description: '环境光与靛紫渐变，Linear / Warp 式高级质感' },
   { value: 'modern' as ThemePreset, label: '现代主题', description: '清新简约，Teal 青碧风格' },
   { value: 'ink' as ThemePreset, label: '墨色主题', description: '浓墨淡彩，朱砂红点缀的东方美学' },
 ];

@@ -120,21 +120,22 @@ export function FindReplaceBar({
   if (!visible) return null;
 
   const matchCount = matches.length;
-  const matchLabel = matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : t('common.findReplace.noResults', 'No results');
+  const matchLabel = matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : t('common.findReplaceBar.noResults', 'No results');
 
   return (
     <div
       style={{
         height: 'auto',
-        minHeight: 32,
-        padding: '4px 8px',
-        background: tc.backgroundToolbar,
-        borderBottom: `1px solid ${tc.border}`,
+        padding: '6px 8px',
+        background: tc.backgroundCard,
+        border: `1px solid ${tc.border}`,
+        borderRadius: 8,
+        boxShadow: tc.isDark
+          ? '0 12px 32px rgba(0, 0, 0, 0.55)'
+          : '0 8px 24px rgba(0, 0, 0, 0.12)',
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
-        flexShrink: 0,
-        zIndex: 10,
       }}
       onKeyDown={handleKeyDown}
     >
@@ -143,7 +144,7 @@ export function FindReplaceBar({
         <Input
           ref={searchRef}
           size="small"
-          placeholder={t('common.findReplace.find', 'Find...')}
+          placeholder={t('common.findReplaceBar.find', 'Find...')}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -160,7 +161,7 @@ export function FindReplaceBar({
           }
         />
         <Space size={2} style={{ flexShrink: 0 }}>
-          <Tooltip title={t('common.findReplace.previous', 'Previous (Shift+Enter)')} placement="bottom">
+          <Tooltip title={t('common.findReplaceBar.previous', 'Previous (Shift+Enter)')} placement="bottom">
             <Button
               size="small"
               type="text"
@@ -170,7 +171,7 @@ export function FindReplaceBar({
               style={{ height: 22, width: 22, padding: 0, fontSize: 10 }}
             />
           </Tooltip>
-          <Tooltip title={t('common.findReplace.next', 'Next (Enter)')} placement="bottom">
+          <Tooltip title={t('common.findReplaceBar.next', 'Next (Enter)')} placement="bottom">
             <Button
               size="small"
               type="text"
@@ -183,12 +184,12 @@ export function FindReplaceBar({
         </Space>
         <div style={{ width: 1, height: 16, background: tc.borderLight, margin: '0 2px' }} />
         <Space size={2} style={{ flexShrink: 0 }}>
-          {toggleButton(caseSensitive, 'Aa', t('common.findReplace.caseSensitive', 'Case Sensitive'), () => setCaseSensitive(!caseSensitive))}
-          {toggleButton(useRegex, '.*', t('common.findReplace.useRegex', 'Use Regex'), () => setUseRegex(!useRegex))}
-          {toggleButton(wholeWord, 'W', t('common.findReplace.wholeWord', 'Whole Word'), () => setWholeWord(!wholeWord))}
+          {toggleButton(caseSensitive, 'Aa', t('common.findReplaceBar.caseSensitive', 'Case Sensitive'), () => setCaseSensitive(!caseSensitive))}
+          {toggleButton(useRegex, '.*', t('common.findReplaceBar.useRegex', 'Use Regex'), () => setUseRegex(!useRegex))}
+          {toggleButton(wholeWord, 'W', t('common.findReplaceBar.wholeWord', 'Whole Word'), () => setWholeWord(!wholeWord))}
         </Space>
         <div style={{ width: 1, height: 16, background: tc.borderLight, margin: '0 2px' }} />
-        <Tooltip title={replaceVisible ? t('common.findReplace.hideReplace', 'Hide Replace') : t('common.findReplace.showReplace', 'Show Replace')} placement="bottom">
+        <Tooltip title={replaceVisible ? t('common.findReplaceBar.hideReplace', 'Hide Replace') : t('common.findReplaceBar.showReplace', 'Show Replace')} placement="bottom">
           <Button
             size="small"
             type="text"
@@ -197,7 +198,7 @@ export function FindReplaceBar({
             style={{ height: 22, width: 22, padding: 0, fontSize: 10 }}
           />
         </Tooltip>
-        <Tooltip title={t('common.findReplace.close', 'Close (Escape)')} placement="bottom">
+        <Tooltip title={t('common.findReplaceBar.close', 'Close (Escape)')} placement="bottom">
           <Button
             size="small"
             type="text"
@@ -213,7 +214,7 @@ export function FindReplaceBar({
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <Input
             size="small"
-            placeholder={t('common.findReplace.replace', 'Replace...')}
+            placeholder={t('common.findReplaceBar.replace', 'Replace...')}
             value={replaceText}
             onChange={(e) => setReplaceText(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -225,7 +226,7 @@ export function FindReplaceBar({
             }}
           />
           <Space size={2} style={{ flexShrink: 0 }}>
-            <Tooltip title={t('common.findReplace.replaceCurrent', 'Replace Current Match')} placement="bottom">
+            <Tooltip title={t('common.findReplaceBar.replaceCurrent', 'Replace Current Match')} placement="bottom">
               <Button
                 size="small"
                 type="text"
@@ -237,10 +238,10 @@ export function FindReplaceBar({
                 disabled={matchCount === 0}
                 style={{ height: 22, fontSize: 11, padding: '0 6px' }}
               >
-                {t('common.findReplace.replaceBtn', 'Replace')}
+                {t('common.findReplaceBar.replaceBtn', 'Replace')}
               </Button>
             </Tooltip>
-            <Tooltip title={t('common.findReplace.replaceAll', 'Replace All Matches')} placement="bottom">
+            <Tooltip title={t('common.findReplaceBar.replaceAll', 'Replace All Matches')} placement="bottom">
               <Button
                 size="small"
                 type="text"
@@ -248,7 +249,7 @@ export function FindReplaceBar({
                 disabled={matchCount === 0}
                 style={{ height: 22, fontSize: 11, padding: '0 6px' }}
               >
-                {t('common.findReplace.all', 'All')}
+                {t('common.findReplaceBar.all', 'All')}
               </Button>
             </Tooltip>
           </Space>

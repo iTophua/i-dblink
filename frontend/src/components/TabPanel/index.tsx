@@ -6,6 +6,7 @@ import React, {
   forwardRef,
   useImperativeHandle,
   useMemo,
+  memo,
 } from 'react';
 import { Tabs, Breadcrumb, Menu, App, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +25,8 @@ import {
   ColumnWidthOutlined,
   ColumnHeightOutlined,
   StopOutlined,
+  DashboardOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
 import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
@@ -36,13 +39,16 @@ import { parseSqlStatements } from '../../utils/parseSql';
 import { TableExportWizard } from '../TableExportWizard';
 import { DumpDialog } from '../DumpDialog';
 import { CopyTableDialog } from '../CopyTableDialog';
-import { EnhancedEmptyState } from '../LoadingStates';
+import { QuickStartGuide, type RecentDatabaseItem } from '../LoadingStates';
+import { ConnectionMonitorPanel } from '../ConnectionMonitor/ConnectionMonitorPanel';
+import { UserManagementPanel } from '../UserManagementPanel';
 import type { TableInfo, DatabaseType, ColumnInfo } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAppStore } from '../../stores/appStore';
 import { api } from '../../api';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import { SplitView } from './SplitView';
+import { KeyboardShortcutsModal } from '../../utils/uxEnhancements';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
@@ -61,8 +67,18 @@ interface TabPanelProps {
   onQueryStatusChange?: (isQuerying: boolean) => void;
   /** 查询 Tab 内切换连接时，确保目标连接已连接并加载数据库列表 */
   onEnsureConnectionReady?: (connectionId: string) => void;
+  /** 首页「最近使用」点击：建连并展开目标库 */
+  onOpenRecentDatabase?: (connectionId: string, database: string) => void;
+  /** 首页「打开 SQL 文件」：弹出文件选择并打开 */
+  onOpenSqlFile?: () => void;
+  /** 打开监控/权限 Tab 时同步连接树选中态与状态栏 */
+  onActivateConnection?: (connectionId: string, database?: string) => void;
   /** 分页大小 */
   pageSize?: number;
+  /** 合并行模式：视图控制（左）与文档动作（右）分别挂在标签栏两侧 */
+  tabBarExtra?: { left?: React.ReactNode; right?: React.ReactNode };
+  /** 标签栏左侧留白（侧栏折叠时需避让 macOS 红绿灯） */
+  tabBarInsetLeft?: number;
   /** 当前连接的数据库列表 */
   connectionDatabases?: Record<
     string,
@@ -88,6 +104,46 @@ interface OpenedTable {
   createdAt: number;
 }
 
+/**
+ * 数据浏览 Tab 的稳定包装层。
+ *
+ * DataTable 是 memo 组件，但此前 onDirtyChange 在 TabPanel 每次渲染时都会新建，
+ * 导致关闭/切换任意 Tab 时所有已打开的数据表格全部重渲染（大结果集下明显卡顿）。
+ * 这里把回调按 Tab 固定下来，DataTable 的 props 在无关状态变化时保持不变。
+ */
+const DataTabView = memo(function DataTabView({
+  tabKey,
+  tableName,
+  connectionId,
+  database,
+  pageSize,
+  onDirtyChange,
+}: {
+  tabKey: string;
+  tableName: string;
+  connectionId: string;
+  database?: string;
+  pageSize?: number;
+  onDirtyChange: (tabKey: string, isDirty: boolean) => void;
+}) {
+  const handleDirtyChange = useCallback(
+    (isDirty: boolean) => onDirtyChange(tabKey, isDirty),
+    [onDirtyChange, tabKey]
+  );
+
+  return (
+    <div style={{ height: '100%' }} data-testid={`data-tab-${tableName}`}>
+      <DataTable
+        tableName={tableName}
+        connectionId={connectionId}
+        database={database}
+        pageSize={pageSize}
+        onDirtyChange={handleDirtyChange}
+      />
+    </div>
+  );
+});
+
 interface OpenedSqlTab {
   key: string;
   title: string;
@@ -98,6 +154,8 @@ interface OpenedSqlTab {
   isFloating?: boolean;
   floatingWindowId?: string;
   pinned?: boolean;
+  /** SQL 文本或结果集编辑未保存 */
+  isDirty?: boolean;
   createdAt: number;
 }
 
@@ -122,8 +180,25 @@ interface OpenedViewDefTab {
   createdAt: number;
 }
 
+interface OpenedMonitorTab {
+  key: string;
+  connectionId: string;
+  connectionName?: string;
+  database?: string;
+  initialView: 'process' | 'server';
+  createdAt: number;
+}
+
+interface OpenedUsersTab {
+  key: string;
+  connectionId: string;
+  connectionName?: string;
+  database?: string;
+  createdAt: number;
+}
+
 export interface ActiveTabInfo {
-  type: 'objects' | 'data' | 'sql' | 'designer';
+  type: 'objects' | 'data' | 'sql' | 'designer' | 'monitor' | 'users';
   title: string;
   connectionId?: string;
   database?: string;
@@ -143,9 +218,14 @@ export interface TabPanelRef {
   hasConnectionTabs: (connectionId: string) => boolean;
   hasDatabaseTabs: (connectionId: string, database: string) => boolean;
   closeConnectionTabs: (connectionId: string) => void;
+  /** 断开连接时静默关闭该连接的监控/权限 Tab */
+  closeMonitorTabs: (connectionId: string) => void;
   closeDatabaseTabs: (connectionId: string, database: string) => void;
   getConnectionTabInfo: (connectionId: string) => { dataTabCount: number; sqlTabCount: number };
-  getDatabaseTabInfo: (connectionId: string, database: string) => { dataTabCount: number; sqlTabCount: number };
+  getDatabaseTabInfo: (
+    connectionId: string,
+    database: string
+  ) => { dataTabCount: number; sqlTabCount: number };
   getActiveTabInfo: () => ActiveTabInfo;
   openImportWizard: (filePath?: string) => void;
   getQueryStatus: () => { resultRows?: number; executionTime?: number };
@@ -164,7 +244,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     onActiveTabChange,
     onQueryStatusChange,
     onEnsureConnectionReady,
+    onOpenRecentDatabase,
+    onOpenSqlFile,
+    onActivateConnection,
     pageSize,
+    tabBarExtra,
+    tabBarInsetLeft = 10,
     connectionDatabases,
   },
   ref
@@ -172,6 +257,25 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const { t } = useTranslation();
   const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
+  // 首页「最近使用」：取最近库记录，只保留仍存在的连接，并补齐类型/名称/在线状态
+  const recentDatabases = useWorkspaceStore((state) => state.recentDatabases);
+  const recentForHome = useMemo<RecentDatabaseItem[]>(() => {
+    const byId = new Map(connections.map((c) => [c.id, c]));
+    const items: RecentDatabaseItem[] = [];
+    for (const entry of recentDatabases || []) {
+      const conn = byId.get(entry.connectionId);
+      if (!conn) continue;
+      items.push({
+        connectionId: entry.connectionId,
+        database: entry.database,
+        connectionName: conn.name,
+        dbType: conn.db_type,
+        connected: conn.status === 'connected',
+        lastUsed: entry.lastUsed,
+      });
+    }
+    return items.sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 5);
+  }, [recentDatabases, connections]);
   const getDbType = useCallback(
     (connectionId: string | undefined | null): DatabaseType | undefined => {
       if (!connectionId) return undefined;
@@ -195,6 +299,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const [openedDesignerTabs, setOpenedDesignerTabs] = useState<OpenedDesignerTab[]>([]);
   // 视图定义 Tab 列表
   const [openedViewDefTabs, setOpenedViewDefTabs] = useState<OpenedViewDefTab[]>([]);
+  // 连接监控 Tab（进程 + 服务器状态）与用户权限 Tab
+  const [openedMonitorTabs, setOpenedMonitorTabs] = useState<OpenedMonitorTab[]>([]);
+  const [openedUsersTabs, setOpenedUsersTabs] = useState<OpenedUsersTab[]>([]);
   const [activeKey, setActiveKey] = useState('objects');
   const isRestoredRef = useRef(false);
 
@@ -217,6 +324,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const [exportWizardOpen, setExportWizardOpen] = useState(false);
   const [dumpDialogOpen, setDumpDialogOpen] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [wizardTableName, setWizardTableName] = useState('');
   const [wizardColumns, setWizardColumns] = useState<ColumnInfo[]>([]);
   const [wizardInitialFile, setWizardInitialFile] = useState<string | undefined>(undefined);
@@ -258,9 +366,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         ws.openedTables.map((t) => ({ ...t, isDirty: false, createdAt: Date.now() }))
       );
       setOpenedSqlTabs(restoredSqlTabs);
-      setOpenedDesignerTabs(
-        ws.openedDesignerTabs.map((t) => ({ ...t, createdAt: Date.now() }))
-      );
+      setOpenedDesignerTabs(ws.openedDesignerTabs.map((t) => ({ ...t, createdAt: Date.now() })));
       // 只有当 activeKey 对应的 tab 存在时才激活，否则默认 objects
       const validKeys = new Set([
         'objects',
@@ -292,7 +398,16 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       });
     }, 500);
     return () => clearTimeout(timer);
-  }, [openedTables, openedSqlTabs, openedDesignerTabs, activeKey, splitMode, splitRatio, secondaryActiveKey, secondaryTabKeys]);
+  }, [
+    openedTables,
+    openedSqlTabs,
+    openedDesignerTabs,
+    activeKey,
+    splitMode,
+    splitRatio,
+    secondaryActiveKey,
+    secondaryTabKeys,
+  ]);
 
   // 清理 secondaryTabKeys 中已关闭的标签
   useEffect(() => {
@@ -311,7 +426,15 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         setActivePane('primary');
       }
     }
-  }, [openedTables, openedSqlTabs, openedDesignerTabs, openedViewDefTabs, secondaryTabKeys, secondaryActiveKey, getDataTabKey]);
+  }, [
+    openedTables,
+    openedSqlTabs,
+    openedDesignerTabs,
+    openedViewDefTabs,
+    secondaryTabKeys,
+    secondaryActiveKey,
+    getDataTabKey,
+  ]);
 
   // 键盘快捷键：Cmd+\ 切换分屏，Cmd+Shift+\ 切换方向
   useEffect(() => {
@@ -391,16 +514,27 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     closeConnectionTabs: (connectionId: string) => {
       const tablesToClose = openedTables.filter((t) => t.connectionId === connectionId);
       const sqlTabsToClose = openedSqlTabs.filter((t) => t.connectionId === connectionId);
-      const closedDataKeys = new Set(tablesToClose.map((t) => getDataTabKey(t)));
-      const closedSqlKeys = new Set(sqlTabsToClose.map((t) => t.key));
+      const closedKeys = new Set<string>([
+        ...tablesToClose.map((t) => getDataTabKey(t)),
+        ...sqlTabsToClose.map((t) => t.key),
+        ...openedMonitorTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
+        ...openedUsersTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
+      ]);
       setOpenedTables((prev) => prev.filter((t) => t.connectionId !== connectionId));
       setOpenedSqlTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
-      setActiveKey((current) => {
-        if (closedDataKeys.has(current) || closedSqlKeys.has(current)) {
-          return 'objects';
-        }
-        return current;
-      });
+      setOpenedMonitorTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
+      setOpenedUsersTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
+      setActiveKey((current) => (closedKeys.has(current) ? 'objects' : current));
+    },
+    closeMonitorTabs: (connectionId: string) => {
+      // 断开连接时静默关闭监控/权限 Tab（无未保存内容）
+      const closedKeys = new Set<string>([
+        ...openedMonitorTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
+        ...openedUsersTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
+      ]);
+      setOpenedMonitorTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
+      setOpenedUsersTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
+      setActiveKey((current) => (closedKeys.has(current) ? 'objects' : current));
     },
     closeDatabaseTabs: (connectionId: string, database: string) => {
       const tablesToClose = openedTables.filter(
@@ -409,20 +543,23 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       const sqlTabsToClose = openedSqlTabs.filter(
         (t) => t.connectionId === connectionId && t.database === database
       );
-      const closedDataKeys = new Set(tablesToClose.map((t) => getDataTabKey(t)));
-      const closedSqlKeys = new Set(sqlTabsToClose.map((t) => t.key));
+      const closedKeys = new Set<string>([
+        ...tablesToClose.map((t) => getDataTabKey(t)),
+        ...sqlTabsToClose.map((t) => t.key),
+        ...openedUsersTabs
+          .filter((t) => t.connectionId === connectionId && t.database === database)
+          .map((t) => t.key),
+      ]);
       setOpenedTables((prev) =>
         prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
       );
       setOpenedSqlTabs((prev) =>
         prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
       );
-      setActiveKey((current) => {
-        if (closedDataKeys.has(current) || closedSqlKeys.has(current)) {
-          return 'objects';
-        }
-        return current;
-      });
+      setOpenedUsersTabs((prev) =>
+        prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
+      );
+      setActiveKey((current) => (closedKeys.has(current) ? 'objects' : current));
     },
     getConnectionTabInfo: (connectionId: string) => ({
       dataTabCount: openedTables.filter((t) => t.connectionId === connectionId).length,
@@ -485,6 +622,24 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             database: viewDef.database,
           };
         }
+      }
+      const monitorTab = openedMonitorTabs.find((t) => t.key === activeKey);
+      if (monitorTab) {
+        return {
+          type: 'monitor' as const,
+          title: t('common.connectionMonitor'),
+          connectionId: monitorTab.connectionId,
+          database: monitorTab.database,
+        };
+      }
+      const usersTab = openedUsersTabs.find((t) => t.key === activeKey);
+      if (usersTab) {
+        return {
+          type: 'users' as const,
+          title: t('common.userPrivilegeManagement'),
+          connectionId: usersTab.connectionId,
+          database: usersTab.database,
+        };
       }
       const sqlTab = openedSqlTabs.find((t) => t.key === activeKey);
       if (sqlTab) {
@@ -549,6 +704,24 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           };
         }
       }
+      const monitorTab = openedMonitorTabs.find((t) => t.key === activeKey);
+      if (monitorTab) {
+        return {
+          type: 'monitor' as const,
+          title: t('common.connectionMonitor'),
+          connectionId: monitorTab.connectionId,
+          database: monitorTab.database,
+        };
+      }
+      const usersTab = openedUsersTabs.find((t) => t.key === activeKey);
+      if (usersTab) {
+        return {
+          type: 'users' as const,
+          title: t('common.userPrivilegeManagement'),
+          connectionId: usersTab.connectionId,
+          database: usersTab.database,
+        };
+      }
       const sqlTab = openedSqlTabs.find((t) => t.key === activeKey);
       if (sqlTab) {
         return {
@@ -567,7 +740,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     openedSqlTabs,
     openedDesignerTabs,
     openedViewDefTabs,
+    openedMonitorTabs,
+    openedUsersTabs,
     onActiveTabChange,
+    t,
   ]);
 
   // 右键菜单状态
@@ -672,13 +848,35 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   // 关闭保护：数据 tab 脏状态经事件上移，由 MainLayout 与 SQL dirty 聚合后统一上报
   const hasDirtyDataTabs = openedTables.some((t) => t.isDirty);
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('data-dirty-change', { detail: { dirty: hasDirtyDataTabs } }));
+    window.dispatchEvent(
+      new CustomEvent('data-dirty-change', { detail: { dirty: hasDirtyDataTabs } })
+    );
   }, [hasDirtyDataTabs]);
+
+  // SQL 编辑器的未保存状态按 tabKey 回填到 tab 标签：关闭 tab 时确认、标签上显示 *
+  useEffect(() => {
+    const onSqlDirty = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { tabKey?: string; dirty?: boolean }
+        | undefined;
+      if (!detail?.tabKey) return;
+      setOpenedSqlTabs((prev) =>
+        prev.map((tab) => (tab.key === detail.tabKey ? { ...tab, isDirty: !!detail.dirty } : tab))
+      );
+    };
+    window.addEventListener('sql-dirty-change', onSqlDirty);
+    return () => window.removeEventListener('sql-dirty-change', onSqlDirty);
+  }, []);
 
   // 监听 tab-action 事件（来自菜单或工具栏）
   useEffect(() => {
     const handleTabAction = (
-      event: CustomEvent<{ action: string; connectionId?: string; database?: string }>
+      event: CustomEvent<{
+        action: string;
+        connectionId?: string;
+        database?: string;
+        view?: 'process' | 'server';
+      }>
     ) => {
       const { action, connectionId: eventConnId, database: eventDb } = event.detail;
       if (action === 'new-sql-tab') {
@@ -701,6 +899,64 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           },
         ]);
         setActiveKey(newSqlKey);
+      } else if (action === 'open-monitor-tab') {
+        // 连接监控：一个连接一个 Tab；再次打开时更新库过滤/默认子页并聚焦
+        const connId = eventConnId || selectedConnectionId;
+        if (!connId) return;
+        const connName = connections.find((c) => c.id === connId)?.name;
+        const key = `monitor-${connId}`;
+        const view = event.detail.view || 'process';
+        setOpenedMonitorTabs((prev) => {
+          const existing = prev.find((tab) => tab.key === key);
+          if (existing) {
+            return prev.map((tab) =>
+              tab.key === key
+                ? {
+                    ...tab,
+                    connectionName: connName || tab.connectionName,
+                    database: eventDb ?? tab.database,
+                    initialView: view,
+                  }
+                : tab
+            );
+          }
+          return [
+            ...prev,
+            {
+              key,
+              connectionId: connId,
+              connectionName: connName,
+              database: eventDb,
+              initialView: view,
+              createdAt: Date.now(),
+            },
+          ];
+        });
+        setActiveKey(key);
+        onActivateConnection?.(connId, eventDb);
+      } else if (action === 'open-users-tab') {
+        // 用户权限按「连接 + 库」开 Tab
+        const connId = eventConnId || selectedConnectionId;
+        const dbName = eventDb || selectedDatabase;
+        if (!connId || !dbName) return;
+        const connName = connections.find((c) => c.id === connId)?.name;
+        const key = `users-${connId}-${dbName}`;
+        setOpenedUsersTabs((prev) =>
+          prev.some((tab) => tab.key === key)
+            ? prev
+            : [
+                ...prev,
+                {
+                  key,
+                  connectionId: connId,
+                  connectionName: connName,
+                  database: dbName,
+                  createdAt: Date.now(),
+                },
+              ]
+        );
+        setActiveKey(key);
+        onActivateConnection?.(connId, dbName);
       } else if (action === 'close-tab') {
         if (activeKey.startsWith('sql-')) {
           const keyToClose = activeKey;
@@ -714,7 +970,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     return () => {
       window.removeEventListener('tab-action', handleTabAction as EventListener);
     };
-  }, [activeKey, selectedConnectionId, selectedDatabase]);
+  }, [activeKey, selectedConnectionId, selectedDatabase, connections, onActivateConnection, t]);
 
   // 双击表时调用（来自树或表列表），打开新的数据浏览 Tab
   const openTableTab = useCallback(
@@ -748,23 +1004,6 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       setActiveKey(dataTabKey);
     },
     [selectedConnectionId, selectedConnectionName, openedTables, getDataTabKey]
-  );
-
-  // 将 SQL 标签页浮动到独立窗口
-  const floatSqlTab = useCallback(
-    async (sqlTabKey: string) => {
-      const sqlTab = openedSqlTabs.find((t) => t.key === sqlTabKey);
-      if (!sqlTab) return;
-
-      try {
-        message.info(t('common.floatingWindowNotSupported'));
-        console.log('Float window requested for:', sqlTabKey, sqlTab.title);
-      } catch (error) {
-        console.error('Failed to create floating window:', error);
-        message.error(t('common.createFloatingWindowFailed'));
-      }
-    },
-    [openedSqlTabs, message]
   );
 
   // 打开表设计器 Tab
@@ -850,9 +1089,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const handleTableDirtyChange = useCallback(
     (tabKey: string, isDirty: boolean) => {
       setOpenedTables((prev) =>
-        prev.map((t) =>
-          getDataTabKey(t) === tabKey ? { ...t, isDirty } : t
-        )
+        prev.map((t) => (getDataTabKey(t) === tabKey ? { ...t, isDirty } : t))
       );
     },
     [getDataTabKey]
@@ -863,9 +1100,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     (key: string) => {
       if (key.endsWith('-data')) {
         setOpenedTables((prev) =>
-          prev.map((t) =>
-            getDataTabKey(t) === key ? { ...t, pinned: !t.pinned } : t
-          )
+          prev.map((t) => (getDataTabKey(t) === key ? { ...t, pinned: !t.pinned } : t))
         );
       } else if (key.startsWith('sql-')) {
         setOpenedSqlTabs((prev) =>
@@ -927,9 +1162,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             transitionName: '',
             maskTransitionName: '',
             onOk: () => {
-              setOpenedTables((prev) =>
-                prev.filter((t) => getDataTabKey(t) !== key)
-              );
+              setOpenedTables((prev) => prev.filter((t) => getDataTabKey(t) !== key));
               if (activeKey === key) {
                 setActiveKey('objects');
               }
@@ -939,14 +1172,31 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         }
 
         // 没有未保存的更改，直接关闭
-        setOpenedTables((prev) =>
-          prev.filter((t) => getDataTabKey(t) !== key)
-        );
+        setOpenedTables((prev) => prev.filter((t) => getDataTabKey(t) !== key));
         if (activeKey === key) {
           setActiveKey('objects');
         }
       } else if (key.startsWith('sql-')) {
-        // 关闭 SQL 查询 Tab
+        // 关闭 SQL 查询 Tab：有未保存的 SQL 文本或结果集编辑时先确认
+        const sqlTab = openedSqlTabs.find((tab) => tab.key === key);
+        if (sqlTab?.isDirty) {
+          appModal.confirm({
+            title: t('common.unsavedChangesTitle'),
+            content: t('common.unsavedChangesContent'),
+            okText: t('common.close'),
+            okType: 'danger',
+            cancelText: t('common.cancel'),
+            transitionName: '',
+            maskTransitionName: '',
+            onOk: () => {
+              setOpenedSqlTabs((prev) => prev.filter((tab) => tab.key !== key));
+              if (activeKey === key) {
+                setActiveKey('objects');
+              }
+            },
+          });
+          return;
+        }
         setOpenedSqlTabs((prev) => prev.filter((tab) => tab.key !== key));
         if (activeKey === key) {
           setActiveKey('objects');
@@ -963,9 +1213,19 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (activeKey === key) {
           setActiveKey('objects');
         }
+      } else if (key.startsWith('monitor-')) {
+        setOpenedMonitorTabs((prev) => prev.filter((tab) => tab.key !== key));
+        if (activeKey === key) {
+          setActiveKey('objects');
+        }
+      } else if (key.startsWith('users-')) {
+        setOpenedUsersTabs((prev) => prev.filter((tab) => tab.key !== key));
+        if (activeKey === key) {
+          setActiveKey('objects');
+        }
       }
     },
-    [activeKey, openedTables, isTabPinned]
+    [activeKey, openedTables, openedSqlTabs, isTabPinned, t]
   );
 
   // 右键菜单处理
@@ -996,6 +1256,27 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [contextMenu.visible]);
 
+  // 批量关闭（其他/右侧/全部）也要走未保存确认，不能绕过单个关闭的 dirty 保护
+  const confirmCloseTabs = useCallback(
+    (dirty: boolean, doClose: () => void) => {
+      if (!dirty) {
+        doClose();
+        return;
+      }
+      appModal.confirm({
+        title: t('common.unsavedChangesTitle'),
+        content: t('common.unsavedChangesContent'),
+        okText: t('common.close'),
+        okType: 'danger',
+        cancelText: t('common.cancel'),
+        transitionName: '',
+        maskTransitionName: '',
+        onOk: doClose,
+      });
+    },
+    [t]
+  );
+
   // 右键菜单操作
   const handleContextMenuAction = useCallback(
     (action: string, tabKey: string) => {
@@ -1010,65 +1291,106 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           handleCloseTab(tabKey);
           break;
 
-        case 'closeOthers':
+        case 'closeOthers': {
           // 关闭其他所有 Tab（保留固定标签）
-          setOpenedTables((prev) =>
-            prev.filter((t) => getDataTabKey(t) === tabKey || t.pinned)
+          const closingData = openedTables.filter((t) => getDataTabKey(t) !== tabKey && !t.pinned);
+          const closingSql = openedSqlTabs.filter((t) => t.key !== tabKey && !t.pinned);
+          const doClose = () => {
+            setOpenedTables((prev) => prev.filter((t) => getDataTabKey(t) === tabKey || t.pinned));
+            setOpenedSqlTabs((prev) => prev.filter((t) => t.key === tabKey || t.pinned));
+            setOpenedDesignerTabs((prev) => prev.filter((t) => t.key === tabKey || t.pinned));
+            setOpenedViewDefTabs((prev) => prev.filter((t) => t.key === tabKey || t.pinned));
+            setOpenedMonitorTabs((prev) => prev.filter((t) => t.key === tabKey));
+            setOpenedUsersTabs((prev) => prev.filter((t) => t.key === tabKey));
+            setActiveKey(tabKey);
+            message.success(t('common.closeOtherTabs'));
+          };
+          confirmCloseTabs(
+            closingData.some((t) => t.isDirty) || closingSql.some((t) => t.isDirty),
+            doClose
           );
-          setOpenedSqlTabs((prev) =>
-            prev.filter((t) => t.key === tabKey || t.pinned)
-          );
-          setOpenedDesignerTabs((prev) =>
-            prev.filter((t) => t.key === tabKey || t.pinned)
-          );
-          setOpenedViewDefTabs((prev) =>
-            prev.filter((t) => t.key === tabKey || t.pinned)
-          );
-          setActiveKey(tabKey);
-          message.success(t('common.closeOtherTabs'));
           break;
+        }
 
         case 'closeRight': {
           // 关闭右侧所有 Tab（保留固定标签）
           const allItems: { key: string; createdAt: number; pinned: boolean }[] = [
-            ...openedTables.map((t) => ({ key: getDataTabKey(t), createdAt: t.createdAt, pinned: !!t.pinned })),
-            ...openedSqlTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: !!t.pinned })),
-            ...openedDesignerTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: !!t.pinned })),
-            ...openedViewDefTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: !!t.pinned })),
+            ...openedTables.map((t) => ({
+              key: getDataTabKey(t),
+              createdAt: t.createdAt,
+              pinned: !!t.pinned,
+            })),
+            ...openedSqlTabs.map((t) => ({
+              key: t.key,
+              createdAt: t.createdAt,
+              pinned: !!t.pinned,
+            })),
+            ...openedDesignerTabs.map((t) => ({
+              key: t.key,
+              createdAt: t.createdAt,
+              pinned: !!t.pinned,
+            })),
+            ...openedViewDefTabs.map((t) => ({
+              key: t.key,
+              createdAt: t.createdAt,
+              pinned: !!t.pinned,
+            })),
+            ...openedMonitorTabs.map((t) => ({
+              key: t.key,
+              createdAt: t.createdAt,
+              pinned: false,
+            })),
+            ...openedUsersTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: false })),
           ].sort((a, b) => a.createdAt - b.createdAt);
 
           const currentIdx = allItems.findIndex((i) => i.key === tabKey);
           if (currentIdx >= 0) {
             const keysToClose = new Set(
-              allItems.slice(currentIdx + 1).filter((i) => !i.pinned).map((i) => i.key)
+              allItems
+                .slice(currentIdx + 1)
+                .filter((i) => !i.pinned)
+                .map((i) => i.key)
             );
-            setOpenedTables((prev) =>
-              prev.filter((t) => !keysToClose.has(getDataTabKey(t)))
+            const doClose = () => {
+              setOpenedTables((prev) => prev.filter((t) => !keysToClose.has(getDataTabKey(t))));
+              setOpenedSqlTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
+              setOpenedDesignerTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
+              setOpenedViewDefTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
+              setOpenedMonitorTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
+              setOpenedUsersTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
+              setActiveKey(tabKey);
+              message.success(t('common.closeRightTabs'));
+            };
+            confirmCloseTabs(
+              openedTables.some((t) => keysToClose.has(getDataTabKey(t)) && t.isDirty) ||
+                openedSqlTabs.some((t) => keysToClose.has(t.key) && t.isDirty),
+              doClose
             );
-            setOpenedSqlTabs((prev) =>
-              prev.filter((t) => !keysToClose.has(t.key))
-            );
-            setOpenedDesignerTabs((prev) =>
-              prev.filter((t) => !keysToClose.has(t.key))
-            );
-            setOpenedViewDefTabs((prev) =>
-              prev.filter((t) => !keysToClose.has(t.key))
-            );
+          } else {
+            setActiveKey(tabKey);
           }
-          setActiveKey(tabKey);
-          message.success(t('common.closeRightTabs'));
           break;
         }
 
-        case 'closeAll':
+        case 'closeAll': {
           // 关闭所有 Tab（保留固定标签）
-          setOpenedTables((prev) => prev.filter((t) => t.pinned));
-          setOpenedSqlTabs((prev) => prev.filter((t) => t.pinned));
-          setOpenedDesignerTabs((prev) => prev.filter((t) => t.pinned));
-          setOpenedViewDefTabs((prev) => prev.filter((t) => t.pinned));
-          setActiveKey('objects');
-          message.success(t('common.closeAllTabs'));
+          const doClose = () => {
+            setOpenedTables((prev) => prev.filter((t) => t.pinned));
+            setOpenedSqlTabs((prev) => prev.filter((t) => t.pinned));
+            setOpenedDesignerTabs((prev) => prev.filter((t) => t.pinned));
+            setOpenedViewDefTabs((prev) => prev.filter((t) => t.pinned));
+            setOpenedMonitorTabs([]);
+            setOpenedUsersTabs([]);
+            setActiveKey('objects');
+            message.success(t('common.closeAllTabs'));
+          };
+          confirmCloseTabs(
+            openedTables.some((t) => !t.pinned && t.isDirty) ||
+              openedSqlTabs.some((t) => !t.pinned && t.isDirty),
+            doClose
+          );
           break;
+        }
 
         case 'copySql': {
           // 复制 SQL Tab 的初始内容到剪贴板（编辑器内当前内容需用 Ctrl+A/Ctrl+C）
@@ -1105,7 +1427,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             const newKey = `sql-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             setOpenedSqlTabs((prev) => [
               ...prev,
-              { ...src, key: newKey, title: `${src.title} ${t('common.copySuffix')}`, createdAt: Date.now() },
+              {
+                ...src,
+                key: newKey,
+                title: `${src.title} ${t('common.copySuffix')}`,
+                createdAt: Date.now(),
+              },
             ]);
             setActiveKey(newKey);
           }
@@ -1147,7 +1474,19 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           break;
       }
     },
-    [handleCloseTab, openedTables, openedSqlTabs, toggleTabPin, secondaryTabKeys, secondaryActiveKey]
+    [
+      handleCloseTab,
+      confirmCloseTabs,
+      openedTables,
+      openedSqlTabs,
+      openedDesignerTabs,
+      openedViewDefTabs,
+      openedMonitorTabs,
+      openedUsersTabs,
+      toggleTabPin,
+      secondaryTabKeys,
+      secondaryActiveKey,
+    ]
   );
 
   // 关闭 Tab
@@ -1246,7 +1585,14 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 }}
               >
                 {table.pinned && (
-                  <PushpinFilled style={{ marginRight: 2, flexShrink: 0, fontSize: 10, color: 'var(--color-primary)' }} />
+                  <PushpinFilled
+                    style={{
+                      marginRight: 2,
+                      flexShrink: 0,
+                      fontSize: 10,
+                      color: 'var(--color-primary)',
+                    }}
+                  />
                 )}
                 {table.isView ? (
                   <EyeOutlined
@@ -1269,15 +1615,14 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             </Tooltip>
           ),
           children: (
-            <div style={{ height: '100%' }} data-testid={`data-tab-${table.name}`}>
-              <DataTable
-                tableName={table.name}
-                connectionId={table.connectionId}
-                database={table.database}
-                pageSize={pageSize}
-                onDirtyChange={(isDirty) => handleTableDirtyChange(dataTabKey, isDirty)}
-              />
-            </div>
+            <DataTabView
+              tabKey={dataTabKey}
+              tableName={table.name}
+              connectionId={table.connectionId}
+              database={table.database}
+              pageSize={pageSize}
+              onDirtyChange={handleTableDirtyChange}
+            />
           ),
           closable: !table.pinned,
           _createdAt: table.createdAt ?? 0,
@@ -1328,16 +1673,22 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               }}
             >
               {sqlTab.pinned && (
-                <PushpinFilled style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }} />
+                <PushpinFilled
+                  style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }}
+                />
               )}
               <DatabaseOutlined style={{ marginRight: 4 }} />
               {sqlTab.title}
+              {sqlTab.isDirty && (
+                <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>*</span>
+              )}
             </span>
           </Tooltip>
         ),
         children: (
           <div style={{ height: '100%' }} data-testid={`sql-tab-${sqlTab.key}`}>
             <SQLEditor
+              tabKey={sqlTab.key}
               connectionId={sqlTab.connectionId || selectedConnectionId}
               database={sqlTab.database}
               defaultQuery={sqlTab.defaultQuery}
@@ -1389,7 +1740,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
         >
           {designerTab.pinned && (
-            <PushpinFilled style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }} />
+            <PushpinFilled
+              style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }}
+            />
           )}
           <TableOutlined style={{ marginRight: 4 }} />
           {designerTab.title}
@@ -1408,11 +1761,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 // 避免简单 split(';') 破坏 DEFAULT 'a;b' 或触发器体
                 const { statements } = parseSqlStatements(sql);
                 for (const stmt of statements) {
-                  await api.executeDDL(
-                    designerTab.connectionId,
-                    stmt,
-                    designerTab.database
-                  );
+                  await api.executeDDL(designerTab.connectionId, stmt, designerTab.database);
                 }
                 message.success(
                   designerTab.isNewTable
@@ -1449,7 +1798,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
         >
           {viewDefTab.pinned && (
-            <PushpinFilled style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }} />
+            <PushpinFilled
+              style={{ marginRight: 2, fontSize: 10, color: 'var(--color-primary)' }}
+            />
           )}
           <EyeOutlined style={{ marginRight: 4 }} />
           {viewDefTab.title}
@@ -1467,6 +1818,88 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       closable: !viewDefTab.pinned,
       _createdAt: viewDefTab.createdAt ?? 0,
       _pinned: !!viewDefTab.pinned,
+    })),
+    ...openedMonitorTabs.map((tab) => ({
+      key: tab.key,
+      label: (
+        <Tooltip
+          title={`${t('common.connectionMonitor')} · ${tab.connectionName || tab.connectionId}${
+            tab.database ? ` · ${tab.database}` : ''
+          }`}
+          placement="bottom"
+        >
+          <span
+            onContextMenu={(e) => handleTabContextMenu(e, tab.key)}
+            style={{
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              maxWidth: 200,
+            }}
+          >
+            <DashboardOutlined style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {t('common.connectionMonitor')} · {tab.connectionName || tab.connectionId}
+            </span>
+          </span>
+        </Tooltip>
+      ),
+      children: (
+        <div style={{ height: '100%' }}>
+          <ConnectionMonitorPanel
+            key={`${tab.key}:${tab.database ?? ''}:${tab.initialView}`}
+            connectionId={tab.connectionId}
+            connectionName={tab.connectionName}
+            database={tab.database}
+            databases={(connectionDatabases?.[tab.connectionId] || []).map((d) => d.database)}
+            initialView={tab.initialView}
+          />
+        </div>
+      ),
+      closable: true,
+      _createdAt: tab.createdAt,
+      _pinned: false,
+    })),
+    ...openedUsersTabs.map((tab) => ({
+      key: tab.key,
+      label: (
+        <Tooltip
+          title={`${t('common.userPrivilegeManagement')} · ${tab.database || ''} @ ${
+            tab.connectionName || tab.connectionId
+          }`}
+          placement="bottom"
+        >
+          <span
+            onContextMenu={(e) => handleTabContextMenu(e, tab.key)}
+            style={{
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              maxWidth: 190,
+            }}
+          >
+            <SafetyOutlined style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {t('common.userPrivilegeManagement')}
+              {tab.database ? ` · ${tab.database}` : ''}
+            </span>
+          </span>
+        </Tooltip>
+      ),
+      children: (
+        <div style={{ height: '100%' }}>
+          <UserManagementPanel
+            connectionId={tab.connectionId}
+            connectionName={tab.connectionName}
+            database={tab.database}
+          />
+        </div>
+      ),
+      closable: true,
+      _createdAt: tab.createdAt,
+      _pinned: false,
     })),
   ].sort((a: any, b: any) => {
     // 固定标签排前面
@@ -1583,12 +2016,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                   setWizardTableName(tableName);
                   setDumpDialogOpen(true);
                 }}
-                onImport={(tableName, db) => {
+                onImport={(tableName) => {
                   setWizardTableName(tableName);
                   setWizardColumns([]);
                   setImportWizardOpen(true);
                 }}
-                onExport={(tableName, db) => {
+                onExport={(tableName) => {
                   setWizardTableName(tableName);
                   setWizardColumns([]);
                   setExportWizardOpen(true);
@@ -1596,10 +2029,36 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               />
             )
           ) : (
-            <EnhancedEmptyState
-              icon={<AppstoreOutlined style={{ fontSize: 40, color: 'var(--color-primary)' }} />}
-              title={t('common.pleaseSelectConnection')}
-            />
+            // 首屏即工作台首页（左对齐两栏），不再是居中营销页；
+            // CTA 只在这里出现一次，侧栏空状态收敛为一行静默占位
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflow: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '8px 0',
+              }}
+            >
+              <QuickStartGuide
+                connectionCount={connections.length}
+                recentDatabases={recentForHome}
+                onOpenRecentDatabase={onOpenRecentDatabase}
+                onOpenSqlFile={onOpenSqlFile}
+                onCreateConnection={() =>
+                  window.dispatchEvent(
+                    new CustomEvent('menu-action', { detail: { action: 'new-connection' } })
+                  )
+                }
+                onImportConnection={() =>
+                  window.dispatchEvent(
+                    new CustomEvent('menu-action', { detail: { action: 'import-connections' } })
+                  )
+                }
+                onShowShortcuts={() => setShortcutsOpen(true)}
+              />
+            </div>
           )}
         </div>
       ),
@@ -1612,20 +2071,22 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const isSecondaryTabKey = new Set(secondaryTabKeys);
   const primaryTabItems =
     splitMode !== 'none'
-      ? tabItems.filter(
-          (item) => !isSecondaryTabKey.has(item.key as string)
-        )
+      ? tabItems.filter((item) => !isSecondaryTabKey.has(item.key as string))
       : tabItems;
   const secondaryTabItems =
     splitMode !== 'none'
-      ? tabItems.filter((item) =>
-          isSecondaryTabKey.has(item.key as string)
-        )
+      ? tabItems.filter((item) => isSecondaryTabKey.has(item.key as string))
       : [];
 
   const renderPrimaryPane = (
     <div
-      style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
       onClick={() => setActivePane('primary')}
     >
       <Tabs
@@ -1633,7 +2094,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         size="small"
         className="workspace-tabs"
         activeKey={activeKey}
-        onChange={(key) => { setActivePane('primary'); setActiveKey(key); }}
+        onChange={(key) => {
+          setActivePane('primary');
+          setActiveKey(key);
+        }}
         hideAdd
         style={{
           flex: 1,
@@ -1644,7 +2108,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         }}
         tabBarStyle={{
           margin: 0,
-          padding: '0 10px',
+          padding: `0 10px 0 ${tabBarInsetLeft}px`,
           background: 'var(--background-toolbar)',
           borderBottom: '1px solid var(--border)',
           flexShrink: 0,
@@ -1653,6 +2117,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         items={primaryTabItems}
         onEdit={handleTabEdit}
         renderTabBar={renderDraggableTabBar}
+        tabBarExtraContent={tabBarExtra}
         data-testid="tab-panel-primary"
       />
     </div>
@@ -1661,7 +2126,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const renderSecondaryPane =
     secondaryTabItems.length > 0 ? (
       <div
-        style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          overflow: 'hidden',
+        }}
         onClick={() => setActivePane('secondary')}
       >
         <Tabs
@@ -1669,7 +2140,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           size="small"
           className="workspace-tabs"
           activeKey={secondaryActiveKey}
-          onChange={(key) => { setActivePane('secondary'); setSecondaryActiveKey(key); }}
+          onChange={(key) => {
+            setActivePane('secondary');
+            setSecondaryActiveKey(key);
+          }}
           hideAdd
           style={{
             flex: 1,
@@ -1747,15 +2221,30 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         >
           <Menu
             items={[
+              // 监控/权限 Tab 不可固定，隐藏 pin 项
+              ...(contextMenu.tabKey.startsWith('monitor-') ||
+              contextMenu.tabKey.startsWith('users-')
+                ? []
+                : [
+                    {
+                      key: 'pin',
+                      label: isTabPinned(contextMenu.tabKey)
+                        ? t('common.unpinTab')
+                        : t('common.pinTab'),
+                      icon: isTabPinned(contextMenu.tabKey) ? (
+                        <PushpinOutlined />
+                      ) : (
+                        <PushpinFilled />
+                      ),
+                    },
+                    { type: 'divider' as const },
+                  ]),
               {
-                key: 'pin',
-                label: isTabPinned(contextMenu.tabKey)
-                  ? t('common.unpinTab')
-                  : t('common.pinTab'),
-                icon: isTabPinned(contextMenu.tabKey) ? <PushpinOutlined /> : <PushpinFilled />,
+                key: 'close',
+                label: t('common.closeTabMenu'),
+                icon: <CloseOutlined />,
+                disabled: isTabPinned(contextMenu.tabKey),
               },
-              { type: 'divider' },
-              { key: 'close', label: t('common.closeTabMenu'), icon: <CloseOutlined />, disabled: isTabPinned(contextMenu.tabKey) },
               { key: 'closeOthers', label: t('common.closeOthersTabMenu') },
               { key: 'closeRight', label: t('common.closeRightTabMenu') },
               { type: 'divider' },
@@ -1763,14 +2252,22 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               ...(contextMenu.tabKey.startsWith('sql-')
                 ? [
                     { key: 'copySql', label: t('common.copySqlContent'), icon: <CopyOutlined /> },
-                    { key: 'duplicateSql', label: t('common.duplicateTab'), icon: <CopyOutlined /> },
+                    {
+                      key: 'duplicateSql',
+                      label: t('common.duplicateTab'),
+                      icon: <CopyOutlined />,
+                    },
                     { type: 'divider' as const },
                   ]
                 : []),
               // data Tab 专属：复制表名
               ...(contextMenu.tabKey.endsWith('-data')
                 ? [
-                    { key: 'copyTableName', label: t('common.copyTableName'), icon: <CopyOutlined /> },
+                    {
+                      key: 'copyTableName',
+                      label: t('common.copyTableName'),
+                      icon: <CopyOutlined />,
+                    },
                     { type: 'divider' as const },
                   ]
                 : []),
@@ -1780,8 +2277,16 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                     { type: 'divider' as const },
                     ...(splitMode === 'none'
                       ? [
-                          { key: 'splitHorizontal', label: t('common.splitHorizontal'), icon: <ColumnWidthOutlined /> },
-                          { key: 'splitVertical', label: t('common.splitVertical'), icon: <ColumnHeightOutlined /> },
+                          {
+                            key: 'splitHorizontal',
+                            label: t('common.splitHorizontal'),
+                            icon: <ColumnWidthOutlined />,
+                          },
+                          {
+                            key: 'splitVertical',
+                            label: t('common.splitVertical'),
+                            icon: <ColumnHeightOutlined />,
+                          },
                         ]
                       : [
                           {
@@ -1843,9 +2348,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         sourceDatabase={selectedDatabase}
         connectionId={selectedConnectionId || ''}
         dbType={getDbType(selectedConnectionId)}
-        databases={
-          connectionDatabases?.[selectedConnectionId || '']?.map((d) => d.database) || []
-        }
+        databases={connectionDatabases?.[selectedConnectionId || '']?.map((d) => d.database) || []}
         onCancel={() => setCopyDialogOpen(false)}
         onSuccess={() => {
           setCopyDialogOpen(false);
@@ -1856,6 +2359,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           );
         }}
       />
+      <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 });

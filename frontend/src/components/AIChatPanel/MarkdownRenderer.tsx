@@ -130,7 +130,7 @@ function CodeBlock({
   };
 
   return (
-    <div style={{ position: 'relative', margin: '6px 0' }}>
+    <div style={{ position: 'relative', margin: '6px 0', maxWidth: '100%', overflow: 'hidden' }}>
       <SyntaxHighlighter
         language={language}
         // 语法主题跟随明暗（浅色模式不再白气泡里嵌深色代码岛），
@@ -143,6 +143,8 @@ function CodeBlock({
           padding: '10px 12px',
           background: 'var(--background)',
           border: '1px solid var(--border)',
+          maxWidth: '100%',
+          overflowX: 'auto',
         }}
         codeTagProps={{ style: { fontFamily: 'var(--font-family-code, monospace)' } }}
       >

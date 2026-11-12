@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Modal,
   Select,
+  Input,
   InputNumber,
   Table,
   Button,
@@ -73,6 +74,7 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
   // Reset on open
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 每次打开弹窗重置向导状态
       setCurrentStep(0);
       setSelectedTable(initialTable);
       setRowCount(100);
@@ -94,6 +96,7 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
   // Fetch columns when table changes
   useEffect(() => {
     if (!selectedTable || !open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 切换表后加载列配置
     setLoadingColumns(true);
     api.getColumns(connectionId, selectedTable, database).then((cols) => {
       setColumns(cols);
@@ -245,10 +248,30 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
       open={open}
       onCancel={onCancel}
       width={900}
-      footer={null}
       destroyOnHidden
       transitionName=""
       maskTransitionName=""
+      footer={
+        <Space size={8}>
+          {currentStep === 1 && (
+            <Button onClick={handleBack} disabled={generating}>
+              {t('common.back')}
+            </Button>
+          )}
+          <Button onClick={onCancel} disabled={generating}>
+            {t('common.cancel')}
+          </Button>
+          {currentStep === 0 ? (
+            <Button type="primary" onClick={handleNext} disabled={!selectedTable}>
+              {t('common.next')}
+            </Button>
+          ) : (
+            <Button type="primary" onClick={handleGenerate} loading={generating}>
+              {t('common.dataGenerator.generate')}
+            </Button>
+          )}
+        </Space>
+      }
     >
       <Steps
         current={currentStep}
@@ -262,12 +285,14 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
 
       {currentStep === 0 && (
         <div>
-          <Space style={{ marginBottom: 16 }} wrap>
+          <Space style={{ marginBottom: 16 }} wrap align="end" size={12}>
             <div>
-              <div style={{ fontSize: 12, marginBottom: 4 }}>{t('common.dataGenerator.tableSelector')}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                {t('common.dataGenerator.tableSelector')}
+              </div>
               <Select
                 showSearch
-                style={{ width: 240 }}
+                style={{ width: 260 }}
                 placeholder={t('common.dataGenerator.selectTable')}
                 value={selectedTable}
                 onChange={setSelectedTable}
@@ -279,7 +304,9 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
               />
             </div>
             <div>
-              <div style={{ fontSize: 12, marginBottom: 4 }}>{t('common.dataGenerator.rowCount')}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                {t('common.dataGenerator.rowCount')}
+              </div>
               <InputNumber
                 min={1}
                 max={10000}
@@ -392,18 +419,12 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
                   if (cfg?.genType !== 'fixedValue') return null;
                   return (
                     <Tooltip title={t('common.dataGenerator.enterFixedValue')}>
-                      <input
-                        style={{
-                          width: '100%',
-                          padding: '2px 4px',
-                          border: '1px solid var(--border)',
-                          borderRadius: 4,
-                          background: 'var(--background)',
-                          color: 'var(--text-primary)',
-                          fontSize: 12,
-                        }}
+                      <Input
+                        size="small"
                         value={cfg?.fixedValue ?? ''}
-                        onChange={(e) => updateColumnConfig(record.columnName, { fixedValue: e.target.value })}
+                        onChange={(e) =>
+                          updateColumnConfig(record.columnName, { fixedValue: e.target.value })
+                        }
                         placeholder={t('common.dataGenerator.enterFixedValue')}
                       />
                     </Tooltip>
@@ -413,14 +434,6 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
             ]}
           />
 
-          <div style={{ textAlign: 'right', marginTop: 16 }}>
-            <Button onClick={onCancel} style={{ marginRight: 8 }}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="primary" onClick={handleNext} disabled={!selectedTable}>
-              {t('common.next')}
-            </Button>
-          </div>
         </div>
       )}
 
@@ -448,17 +461,6 @@ export const DataGeneratorDialog: React.FC<DataGeneratorDialogProps> = ({
             </div>
           )}
 
-          <div style={{ textAlign: 'right', marginTop: 16 }}>
-            <Button onClick={handleBack} disabled={generating} style={{ marginRight: 8 }}>
-              {t('common.back')}
-            </Button>
-            <Button onClick={onCancel} disabled={generating} style={{ marginRight: 8 }}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="primary" onClick={handleGenerate} loading={generating}>
-              {t('common.dataGenerator.generate')}
-            </Button>
-          </div>
         </div>
       )}
     </Modal>

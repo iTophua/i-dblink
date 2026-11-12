@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Events, Window as WailsWindow } from '@wailsio/runtime';
-import { Layout, Form, Input, Modal, Tooltip, message } from 'antd';
+import { Events, Dialogs, Window as WailsWindow } from '@wailsio/runtime';
+import { Layout, Form, Input, Modal, Tooltip, App } from 'antd';
 import {
   ReloadOutlined,
   AppstoreOutlined,
@@ -15,14 +15,15 @@ import {
   BookOutlined,
   HistoryOutlined,
   DashboardOutlined,
-  CloudServerOutlined,
 } from '@ant-design/icons';
 import { GlobalInput } from './GlobalInput';
 import { GlobalSearch } from './GlobalSearch';
 import { Favorites } from './Favorites';
 import { CommandPalette, type Command } from './CommandPalette';
 import { useInitApp } from '../hooks/useApi';
-import { Toolbar } from './Toolbar';
+import { Toolbar, ToolbarBrand, SidebarAppControls } from './Toolbar';
+import { isMacOS } from '../constants/menuShortcuts';
+import { PanelLeft } from 'lucide-react';
 
 import { EnhancedConnectionTree } from './ConnectionTree/EnhancedConnectionTree';
 import { TabPanel, type TabPanelRef } from './TabPanel';
@@ -49,6 +50,12 @@ const { Sider, Content } = Layout;
 
 function MainLayoutComponent() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
+  const isMac = isMacOS();
+  const isWailsEnv =
+    typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>)._wails;
+  // mac 通高侧栏布局：工具栏合并进标签栏右侧，省掉一整行高度
+  const mergedRow = isMac;
 
   useInitApp();
 
@@ -88,7 +95,8 @@ function MainLayoutComponent() {
     const parts: string[] = [];
     if (connectionName) parts.push(connectionName);
     if (tabMgr.activeTabInfo.database) parts.push(tabMgr.activeTabInfo.database);
-    if (tabMgr.activeTabInfo.title && tabMgr.activeTabInfo.type !== 'objects') parts.push(tabMgr.activeTabInfo.title);
+    if (tabMgr.activeTabInfo.title && tabMgr.activeTabInfo.type !== 'objects')
+      parts.push(tabMgr.activeTabInfo.title);
     const title = parts.length > 0 ? `${parts.join(' > ')} - iDBLink` : 'iDBLink';
     document.title = title;
 
@@ -177,34 +185,70 @@ function MainLayoutComponent() {
     return () => window.removeEventListener('palette-inject-sql', onInject);
   }, [handleInjectSQL]);
 
-  // ── 双击 .sql / 拖放文件打开（Wails v3 文件能力）──
-  useEffect(() => {
-    let cancelled = false;
-    const openSqlFile = (path: string) => {
+  // ── 首页「打开 SQL 文件」/ 双击 .sql / 拖放文件打开（Wails v3 文件能力）──
+  // 路径打开逻辑抽成稳定回调：文件选择、双击、拖放三条入口共用
+  const openSqlFileByPath = useCallback(
+    (path: string) => {
       const name = path.split(/[\\/]/).pop() || 'query.sql';
       api
         .readSqlFile(path)
-        .then((content) => {
-          if (cancelled) return;
-          tabPanelRef.current?.openSqlTab({ title: name, defaultQuery: content });
-        })
+        .then((content) => tabPanelRef.current?.openSqlTab({ title: name, defaultQuery: content }))
         .catch((err) => {
           message.error(`${t('common.mainLayout.openSqlFileFailed')}: ${getErrorMessage(err)}`);
         });
-    };
+    },
+    [t]
+  );
+
+  // 首页「打开 SQL 文件」：系统文件选择框 → 读文件 → 开 SQL Tab
+  const handlePickSqlFile = useCallback(async () => {
+    try {
+      const picked = await Dialogs.OpenFile({
+        Title: t('common.openSqlFile'),
+        CanChooseFiles: true,
+        CanChooseDirectories: false,
+        AllowsMultipleSelection: false,
+        Filters: [{ DisplayName: 'SQL', Pattern: '*.sql' }],
+      });
+      const path = Array.isArray(picked) ? picked[0] : picked;
+      if (path) openSqlFileByPath(path);
+    } catch {
+      // 用户取消选择或平台不支持：静默
+    }
+  }, [t, openSqlFileByPath]);
+
+  // 首页「最近使用」：建连（含密码弹框兜底）→ 选中并展开目标库
+  const { handleConnect: connMgrConnect, handleDatabaseExpand: connMgrExpandDatabase } = connMgr;
+  const handleOpenRecentDatabase = useCallback(
+    async (connectionId: string, database: string) => {
+      try {
+        await connMgrConnect(connectionId);
+      } catch {
+        return;
+      }
+      // 密码弹框/连接失败路径不抛错，但状态仍是 disconnected —— 不做后续动作
+      const conn = useAppStore.getState().connections.find((c) => c.id === connectionId);
+      if (!conn || conn.status !== 'connected') return;
+      await connMgrExpandDatabase(connectionId, database);
+    },
+    [connMgrConnect, connMgrExpandDatabase]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
     // 冷启动：双击 .sql 拉起应用，启动后取待打开路径
     api
       .takePendingOpenFile()
       .then((p) => {
-        if (p && !cancelled) openSqlFile(p);
+        if (p && !cancelled) openSqlFileByPath(p);
       })
       .catch(() => {});
     // 已运行实例：双击 .sql（单实例转发）与窗口拖放经事件推送
-    const offOpen = EventsOn('open-sql-file', (path: string) => openSqlFile(path));
+    const offOpen = EventsOn('open-sql-file', (path: string) => openSqlFileByPath(path));
     const offDrop = EventsOn('files-dropped', (files: string[]) => {
       const list = files || [];
       const sqlFiles = list.filter((f) => /\.sql$/i.test(f));
-      sqlFiles.forEach((f) => openSqlFile(f));
+      sqlFiles.forEach((f) => openSqlFileByPath(f));
       // 导入文件 → 当前数据表的导入向导（无数据表时提示）
       const importFiles = list.filter((f) => /\.(csv|xlsx|xls|json|xml|txt)$/i.test(f));
       if (importFiles.length > 0) {
@@ -225,8 +269,7 @@ function MainLayoutComponent() {
       offOpen();
       offDrop();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [openSqlFileByPath, t]);
 
   // ── 托盘「快速连接」面板的数据源：应答其请求，返回连接+分组快照 ──
   useEffect(() => {
@@ -314,22 +357,14 @@ function MainLayoutComponent() {
         action: () => dispatch('options'),
       },
       {
-        id: 'act-process-list',
-        label: t('common.processList.title'),
+        id: 'act-connection-monitor',
+        label: t('common.connectionMonitor'),
         description: connMgr.selectedConnectionId
-          ? `${t('common.processList.title')} · ${activeConnName}`
+          ? `${t('common.connectionMonitor')} · ${activeConnName}`
           : undefined,
         category: t('common.commands'),
         icon: <DashboardOutlined />,
-        action: () => dispatch('process-list'),
-      },
-      {
-        id: 'act-server-status',
-        label: t('common.serverStatus.title'),
-        description: connMgr.selectedConnectionId ? activeConnName : undefined,
-        category: t('common.commands'),
-        icon: <CloudServerOutlined />,
-        action: () => dispatch('server-status'),
+        action: () => dispatch('connection-monitor'),
       },
     ];
 
@@ -375,7 +410,9 @@ function MainLayoutComponent() {
         category: t('common.snippets'),
         icon: <BookOutlined />,
         action: () => {
-          window.dispatchEvent(new CustomEvent('palette-inject-sql', { detail: { sql: s.sql_text || '' } }));
+          window.dispatchEvent(
+            new CustomEvent('palette-inject-sql', { detail: { sql: s.sql_text || '' } })
+          );
         },
       });
     }
@@ -398,27 +435,84 @@ function MainLayoutComponent() {
   }, [connMgr.connections, connMgr.connectionDatabases, paletteSnippets, paletteHistory]);
 
   return (
-    <Layout style={layout.styles.root} data-file-drop-target="main">
-      <Toolbar
-        sidebarCollapsed={layout.collapsed}
-        onToggleSidebar={() => layout.setCollapsed(!layout.collapsed)}
-      />
-
-      <Layout style={layout.styles.mainLayout}>
-        <Sider
-          collapsible
-          collapsed={layout.collapsed}
-          onCollapse={(value) => layout.setCollapsed(value)}
-          width={320}
-          collapsedWidth={0}
-          trigger={null}
-          style={{ ...layout.styles.sider }}
-          className="sidebar-enhanced"
-        >
-          <div style={layout.styles.siderContent} className="sidebar-content">
-            {!layout.collapsed && (
+    <Layout
+      hasSider
+      className="app-shell"
+      style={{
+        ...layout.styles.root,
+        // 左侧底板 + 右侧卡片：侧栏不再是独立卡片，它和窗口底色连成同一块
+        // 「底板」，右侧内容作为卡片内嵌在底板里（四周留 8px 缝，圆角 + 投影）
+        background: 'var(--app-base)',
+        padding: 8,
+        // 侧栏贴左，底板色从窗口左缘连续铺开；收起侧栏后补回左边距
+        paddingLeft: layout.collapsed ? 8 : 0,
+        gap: layout.collapsed ? 0 : 8,
+        boxSizing: 'border-box',
+      }}
+      data-file-drop-target="main"
+    >
+      {/* 通高侧栏：贯穿整个窗口高度，macOS 红绿灯落在侧栏顶部拖拽条上 */}
+      <Sider
+        theme="light"
+        collapsible
+        collapsed={layout.collapsed}
+        onCollapse={(value) => layout.setCollapsed(value)}
+        width={320}
+        collapsedWidth={0}
+        trigger={null}
+        style={{
+          ...layout.styles.sider,
+          // 侧栏是底板的一部分：不要圆角/描边/投影，底板色与窗口底色无缝相接
+          borderRadius: 0,
+          border: 'none',
+          boxShadow: 'none',
+          overflow: 'hidden',
+        }}
+        className="sidebar-enhanced"
+      >
+        <div style={layout.styles.siderContent} className="sidebar-content">
+          {!layout.collapsed && (
+            <>
+              {/* 拖拽条：可拖动窗口；mac 左侧避让红绿灯，品牌区紧随其后，
+                  折叠按钮放在面板内部的右端（收起后由标签栏左槽接管） */}
               <div
-                style={{ ...layout.styles.searchContainer, display: 'flex', alignItems: 'center', gap: 4 }}
+                className="toolbar-drag-region"
+                style={{
+                  height: 44,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  paddingLeft: isMac && isWailsEnv ? 82 : 14,
+                  paddingRight: 8,
+                }}
+              >
+                <ToolbarBrand />
+                <span
+                  className="toolbar-no-drag hoverable"
+                  onClick={() => layout.setCollapsed(true)}
+                  title={t('common.collapse')}
+                  style={{
+                    marginLeft: 'auto',
+                    width: 26,
+                    height: 26,
+                    borderRadius: 6,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-tertiary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <PanelLeft size="1em" strokeWidth={1.8} />
+                </span>
+              </div>
+              <div
+                style={{
+                  ...layout.styles.searchContainer,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
                 className="search-container"
               >
                 <GlobalInput
@@ -485,94 +579,190 @@ function MainLayoutComponent() {
                   </Tooltip>
                 )}
               </div>
-            )}
+            </>
+          )}
 
-             <div style={layout.styles.connectionTreeContainer} className="connection-tree-container">
-               <EnhancedConnectionTree
-                 connections={connMgr.connections}
-                 groups={connMgr.groups}
-                 selectedId={connMgr.selectedConnectionId}
-                 selectedTableId={connMgr.selectedTable}
-                  onSelect={(id) => {
-                    connMgr.setSelectedConnectionId(id);
-                    connMgr.setSelectedTable(null);
-                    connMgr.setSelectedSchema(undefined);
-                  }}
-                 onTableSelect={(table, database) => {
-                   connMgr.setSelectedTable(table);
-                   connMgr.setSelectedDatabase(database);
-                 }}
-                  onObjectTypeSelect={(objectType, _database, schema) => {
-                    tabMgr.setSelectedObjectType(objectType);
-                    connMgr.setSelectedSchema(schema);
-                  }}
-                 onTableOpen={(tableName, database) => {
-                   tabMgr.setTableToOpen(null);
-                   setTimeout(() => {
-                     tabMgr.setTableToOpen({ name: tableName, database });
-                   }, 0);
-                 }}
-                  onOpenDesigner={(tableName) => {
-                    tabPanelRef.current?.openDesignerTab(tableName);
-                  }}
-                  onViewOpen={(viewName, database) => {
-                    tabMgr.setTableToOpen(null);
-                    setTimeout(() => {
-                      tabMgr.setTableToOpen({ name: viewName, database, isView: true });
-                    }, 0);
-                  }}
-                  onExpand={(connectionId, expanded) => {
-                   if (expanded) {
-                     connMgr.setExpandedKeys((prev) => [...prev, connectionId]);
-                   } else {
-                     connMgr.setExpandedKeys((prev) => prev.filter((k) => k !== connectionId));
-                   }
-                 }}
-                 collapsed={layout.collapsed}
-                 searchText={layout.debouncedSearch}
-                 onClearSearch={() => layout.handleSearchChange('')}
-                 expandedKeys={connMgr.expandedKeys}
-                 onExpandKeys={connMgr.setExpandedKeys}
-                 connectionDatabases={connMgr.connectionDatabases}
-                 isLoading={connMgr.isLoading}
-                 onConnect={connMgr.handleConnect}
-                 onCancelConnect={connMgr.cancelConnect}
-                 onDisconnect={connMgr.handleDisconnect}
-                 onEditConnection={connMgr.handleEditConnection}
-                 onCopyConnection={connMgr.handleCopyConnection}
-                 onDeleteConnection={connMgr.handleDeleteConnection}
-                 onNewQuery={connMgr.handleNewQuery}
-                 onDatabaseExpand={connMgr.handleDatabaseExpand}
-                 onDatabaseRefresh={connMgr.handleDatabaseRefresh}
-                 onDatabaseClose={connMgr.handleDatabaseClose}
-                 onDatabaseProperties={connMgr.handleDatabaseProperties}
-                 onLoadDatabases={connMgr.handleLoadDatabases}
-                 onTableExpand={connMgr.handleTableExpand}
-                 onSaveConnection={async (data: any) => {
-                   await connMgr.saveConnection(data);
-                 }}
-                 onSaveGroup={connMgr.saveGroup}
-                 onDeleteGroup={connMgr.deleteGroup}
-                  onCreateConnection={() => connMgr.setConnectionDialogOpen(true)}
-                   onImportConnections={() => connMgr.setConnectionExportOpen(true)}
-                   onBatchManage={() => connMgr.setBatchManageOpen(true)}
-                   onRefreshConnections={() => {
-                     const currentConns = useAppStore.getState().connections;
-                     const statusMap = new Map(currentConns.map((c) => [c.id, c.status]));
-                     api.getConnections().then((conns) => {
-                       useAppStore.getState().setConnections(
-                         conns.map((c) => ({
-                           ...c,
-                           status: statusMap.get(c.id) || ('disconnected' as const),
-                         }))
-                       );
-                     });
-                   }}
-             />
-           </div>
+          {/* 连接分区头：给密集连接列表一个结构起点（标题 + 数量 + 新建） */}
+          {!layout.collapsed && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '2px 16px 4px',
+                flexShrink: 0,
+                fontSize: 11,
+                letterSpacing: '0.3px',
+                color: 'var(--text-tertiary)',
+                userSelect: 'none',
+              }}
+            >
+              {t('common.connections')}
+              <span
+                style={{
+                  fontFamily: 'var(--font-family-code)',
+                  fontSize: 10,
+                  color: 'var(--text-disabled)',
+                }}
+              >
+                {connMgr.connections.length}
+              </span>
+              <span
+                className="toolbar-no-drag"
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent('menu-action', { detail: { action: 'new-connection' } })
+                  )
+                }
+                style={{
+                  marginLeft: 'auto',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '1px 7px',
+                  borderRadius: 5,
+                  border: '1px solid var(--border-color)',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  fontSize: 10.5,
+                  lineHeight: '16px',
+                }}
+                title={t('common.newConnection')}
+              >
+                <PlusOutlined style={{ fontSize: 10 }} />
+                {t('common.newConnection')}
+              </span>
+            </div>
+          )}
+
+          <div style={layout.styles.connectionTreeContainer} className="connection-tree-container">
+            <EnhancedConnectionTree
+              connections={connMgr.connections}
+              groups={connMgr.groups}
+              selectedId={connMgr.selectedConnectionId}
+              selectedTableId={connMgr.selectedTable}
+              onSelect={(id) => {
+                connMgr.setSelectedConnectionId(id);
+                connMgr.setSelectedTable(null);
+                connMgr.setSelectedSchema(undefined);
+              }}
+              onTableSelect={(table, database) => {
+                connMgr.setSelectedTable(table);
+                connMgr.setSelectedDatabase(database);
+              }}
+              onObjectTypeSelect={(objectType, _database, schema) => {
+                tabMgr.setSelectedObjectType(objectType);
+                connMgr.setSelectedSchema(schema);
+              }}
+              onTableOpen={(tableName, database) => {
+                tabMgr.setTableToOpen(null);
+                setTimeout(() => {
+                  tabMgr.setTableToOpen({ name: tableName, database });
+                }, 0);
+              }}
+              onOpenDesigner={(tableName) => {
+                tabPanelRef.current?.openDesignerTab(tableName);
+              }}
+              onViewOpen={(viewName, database) => {
+                tabMgr.setTableToOpen(null);
+                setTimeout(() => {
+                  tabMgr.setTableToOpen({ name: viewName, database, isView: true });
+                }, 0);
+              }}
+              onExpand={(connectionId, expanded) => {
+                if (expanded) {
+                  connMgr.setExpandedKeys((prev) => [...prev, connectionId]);
+                } else {
+                  connMgr.setExpandedKeys((prev) => prev.filter((k) => k !== connectionId));
+                }
+              }}
+              collapsed={layout.collapsed}
+              searchText={layout.debouncedSearch}
+              onClearSearch={() => layout.handleSearchChange('')}
+              expandedKeys={connMgr.expandedKeys}
+              onExpandKeys={connMgr.setExpandedKeys}
+              connectionDatabases={connMgr.connectionDatabases}
+              isLoading={connMgr.isLoading}
+              onConnect={connMgr.handleConnect}
+              onCancelConnect={connMgr.cancelConnect}
+              onDisconnect={connMgr.handleDisconnect}
+              onEditConnection={connMgr.handleEditConnection}
+              onCopyConnection={connMgr.handleCopyConnection}
+              onDeleteConnection={connMgr.handleDeleteConnection}
+              onNewQuery={connMgr.handleNewQuery}
+              onDatabaseExpand={connMgr.handleDatabaseExpand}
+              onDatabaseRefresh={connMgr.handleDatabaseRefresh}
+              onDatabaseClose={connMgr.handleDatabaseClose}
+              onDatabaseProperties={connMgr.handleDatabaseProperties}
+              onLoadDatabases={connMgr.handleLoadDatabases}
+              onTableExpand={connMgr.handleTableExpand}
+              onSaveConnection={async (data: any) => {
+                await connMgr.saveConnection(data);
+              }}
+              onSaveGroup={connMgr.saveGroup}
+              onDeleteGroup={connMgr.deleteGroup}
+              onCreateConnection={() => connMgr.setConnectionDialogOpen(true)}
+              onImportConnections={() => connMgr.setConnectionExportOpen(true)}
+              onBatchManage={() => connMgr.setBatchManageOpen(true)}
+              onRefreshConnections={() => {
+                const currentConns = useAppStore.getState().connections;
+                const statusMap = new Map(currentConns.map((c) => [c.id, c.status]));
+                api.getConnections().then((conns) => {
+                  useAppStore.getState().setConnections(
+                    conns.map((c) => ({
+                      ...c,
+                      status: statusMap.get(c.id) || ('disconnected' as const),
+                    }))
+                  );
+                });
+              }}
+            />
           </div>
-        </Sider>
+          {!layout.collapsed && (
+            <div
+              style={{
+                flexShrink: 0,
+                // 与顶部品牌条同高（44），侧栏上下两条栏形成对称节奏
+                height: 44,
+                borderTop: '1px solid var(--border-color)',
+                // 不再铺工具栏底色：侧栏现在是底板的一部分，四按钮直接坐在底板上
+                background: 'transparent',
+                // 2px 容器内边距 + 按钮自身 8px = 10px，与搜索框左右边缘严格对齐
+                padding: '0 2px',
+                display: 'flex',
+                alignItems: 'center',
+                color: 'var(--text-tertiary)',
+                fontSize: 12,
+              }}
+            >
+              {/* 全局偏好工具条：带文字的四个入口（AI / 快捷键 / 主题 / 设置） */}
+              <SidebarAppControls />
+            </div>
+          )}
+        </div>
+      </Sider>
 
+      {/* 右列：工具栏（非 mac）+ 内容区 + 状态栏 —— 第二块圆角面板 */}
+      <Layout
+        className="app-panel"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          background: 'var(--background-card)',
+          borderRadius: 14,
+          border: '1px solid var(--border-color)',
+          boxShadow: 'var(--shadow-panel)',
+        }}
+      >
+        {!mergedRow && (
+          <Toolbar
+            sidebarCollapsed={layout.collapsed}
+            onToggleSidebar={() => layout.setCollapsed(!layout.collapsed)}
+          />
+        )}
         <Content style={layout.styles.content}>
           <div style={layout.styles.tabPanelContainer}>
             <TabPanel
@@ -600,24 +790,54 @@ function MainLayoutComponent() {
                   });
                 }
               }}
+              onOpenRecentDatabase={handleOpenRecentDatabase}
+              onOpenSqlFile={handlePickSqlFile}
+              onActivateConnection={(connectionId, database) => {
+                connMgr.setSelectedConnectionId(connectionId);
+                connMgr.setSelectedDatabase(database);
+                connMgr.setActiveConnection(connectionId);
+              }}
               pageSize={useSettingsStore.getState().settings.pageSize}
               connectionDatabases={connMgr.connectionDatabases}
+              tabBarExtra={
+                mergedRow
+                  ? {
+                      // 折叠后才在标签栏左侧接管开关（展开时开关在面板内部）
+                      left: layout.collapsed ? (
+                        <Toolbar
+                          variant="inline"
+                          slot="left"
+                          sidebarCollapsed
+                          onToggleSidebar={() => layout.setCollapsed(false)}
+                        />
+                      ) : undefined,
+                      right: (
+                        <Toolbar
+                          variant="inline"
+                          slot="right"
+                          sidebarCollapsed={layout.collapsed}
+                          onToggleSidebar={() => layout.setCollapsed(!layout.collapsed)}
+                        />
+                      ),
+                    }
+                  : undefined
+              }
+              tabBarInsetLeft={mergedRow && layout.collapsed ? 84 : 10}
             />
           </div>
         </Content>
+        <StatusBar
+          selectedConnectionId={connMgr.selectedConnectionId}
+          connections={connMgr.connections}
+          selectedTable={connMgr.selectedTable}
+          selectedDatabase={connMgr.selectedDatabase}
+          transactionActive={tabMgr.transactionActive}
+          transactionStartTime={useAppStore.getState().transactionStartTime}
+          resultRows={tabMgr.currentResultRows}
+          executionTime={tabMgr.currentExecutionTime}
+          isQuerying={tabMgr.isQuerying}
+        />
       </Layout>
-
-      <StatusBar
-        selectedConnectionId={connMgr.selectedConnectionId}
-        connections={connMgr.connections}
-        selectedTable={connMgr.selectedTable}
-        selectedDatabase={connMgr.selectedDatabase}
-        transactionActive={tabMgr.transactionActive}
-        transactionStartTime={useAppStore.getState().transactionStartTime}
-        resultRows={tabMgr.currentResultRows}
-        executionTime={tabMgr.currentExecutionTime}
-        isQuerying={tabMgr.isQuerying}
-      />
 
       {/* 全局 AI 聊天面板（独立于 tab，全局可用） */}
       <AIChatPanel
@@ -625,7 +845,9 @@ function MainLayoutComponent() {
         selectedConnectionId={connMgr.selectedConnectionId}
         connectionDatabases={connMgr.connectionDatabases}
         onApplySQL={handleInjectSQL}
-        onOpenSettings={() => window.dispatchEvent(new CustomEvent('menu-action', { detail: { action: 'options' } }))}
+        onOpenSettings={() =>
+          window.dispatchEvent(new CustomEvent('menu-action', { detail: { action: 'options' } }))
+        }
       />
 
       <ConnectionDialog
@@ -641,7 +863,10 @@ function MainLayoutComponent() {
         }}
       />
 
-      <SettingsDialog open={layout.settingsDialogOpen} onCancel={() => layout.setSettingsDialogOpen(false)} />
+      <SettingsDialog
+        open={layout.settingsDialogOpen}
+        onCancel={() => layout.setSettingsDialogOpen(false)}
+      />
 
       {/* 工具菜单 备份/恢复数据库（与连接树右键同一对话框） */}
       <BackupRestoreDialog
@@ -746,9 +971,15 @@ function MainLayoutComponent() {
         </Form>
       </Modal>
 
-      <OperationLog open={layout.operationLogOpen} onClose={() => layout.setOperationLogOpen(false)} />
+      <OperationLog
+        open={layout.operationLogOpen}
+        onClose={() => layout.setOperationLogOpen(false)}
+      />
 
-      <UpdateDialog open={layout.updateDialogOpen} onClose={() => layout.setUpdateDialogOpen(false)} />
+      <UpdateDialog
+        open={layout.updateDialogOpen}
+        onClose={() => layout.setUpdateDialogOpen(false)}
+      />
 
       {layout.docGeneratorOpen && layout.docGeneratorConnId && layout.docGeneratorDatabase && (
         <DocGeneratorDialog

@@ -5,6 +5,8 @@ import { ResultPopup } from './components/ResultPopup';
 import { ConnPicker } from './components/ConnPicker';
 import './style.css';
 import './styles/theme-enhancements.css';
+import './styles/polish.css';
+import './styles/pro-theme.css';
 import './i18n';
 
 // 临时 workaround：抑制 antd 在 React 19 下的 element.ref 废弃警告

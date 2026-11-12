@@ -26,7 +26,7 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
         alignItems: 'center',
         justifyContent: 'center',
         // 跟随主题底色（浅色用户不再闪深色底），与主界面无缝衔接
-        background: 'var(--background, #F2F1ED)',
+        background: 'var(--surface-canvas, #F2F2EF)',
         zIndex: 9999,
         transition: 'opacity 0.4s ease-out',
         opacity: fadeOut ? 0 : 1,

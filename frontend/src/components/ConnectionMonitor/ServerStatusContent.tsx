@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Drawer,
   Descriptions,
   Progress,
   Button,
@@ -24,8 +23,8 @@ import {
   HddOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
-import { api } from '../api';
-import { getErrorMessage } from '../utils/getErrorMessage';
+import { api } from '../../api';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 const { Text } = Typography;
 
@@ -51,17 +50,8 @@ interface ServerStatusData {
   error?: string;
 }
 
-interface ServerStatusPanelProps {
-  open: boolean;
-  connectionId: string;
-  onClose: () => void;
-}
-
-export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
-  open,
-  connectionId,
-  onClose,
-}) => {
+/** 连接监控 · 服务器状态（Tab 内容，非抽屉） */
+export const ServerStatusContent: React.FC<{ connectionId: string }> = ({ connectionId }) => {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const [status, setStatus] = useState<ServerStatusData | null>(null);
@@ -79,27 +69,25 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
       }
       setStatus(result);
     } catch (err: unknown) {
-      const errMsg = getErrorMessage(err);
-      message.error(t('common.serverStatus.fetchFailed') + ': ' + errMsg);
+      message.error(t('common.serverStatus.fetchFailed') + ': ' + getErrorMessage(err));
     } finally {
       setLoading(false);
     }
   }, [connectionId, message, t]);
 
   useEffect(() => {
-    if (open) {
-      fetchStatus();
-    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 首屏加载服务器状态（含 loading 状态）
+    if (connectionId) fetchStatus();
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [open, fetchStatus]);
+  }, [connectionId, fetchStatus]);
 
   useEffect(() => {
-    if (autoRefresh && open) {
+    if (autoRefresh) {
       intervalRef.current = setInterval(fetchStatus, 10000);
     } else if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -111,7 +99,7 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
         intervalRef.current = null;
       }
     };
-  }, [autoRefresh, open, fetchStatus]);
+  }, [autoRefresh, fetchStatus]);
 
   const connectionPercent =
     status && status.connections.max > 0
@@ -126,42 +114,38 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
         : 'var(--color-success)';
 
   return (
-    <Drawer
-      title={
-        <Space>
-          <CloudServerOutlined />
-          <span>{t('common.serverStatus.title')}</span>
-        </Space>
-      }
-      open={open}
-      onClose={onClose}
-      width={560}
-      extra={
-        <Space>
-          <Switch
-            checked={autoRefresh}
-            onChange={setAutoRefresh}
-            checkedChildren={<SyncOutlined spin />}
-            unCheckedChildren={<SyncOutlined />}
-            size="small"
-          />
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {t('common.serverStatus.autoRefresh')}
-          </Text>
-        </Space>
-      }
-      footer={
-        <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-          <Button icon={<ReloadOutlined />} onClick={fetchStatus} loading={loading}>
-            {t('common.refresh')}
-          </Button>
-          <Button onClick={onClose}>{t('common.close')}</Button>
-        </Space>
-      }
-    >
+    <div style={{ height: '100%', overflow: 'auto', padding: '0 16px 16px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '10px 0',
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          background: 'var(--background-card)',
+        }}
+      >
+        <span style={{ flex: 1 }} />
+        <Switch
+          checked={autoRefresh}
+          onChange={setAutoRefresh}
+          checkedChildren={<SyncOutlined spin />}
+          unCheckedChildren={<SyncOutlined />}
+          size="small"
+        />
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {t('common.serverStatus.autoRefresh')}
+        </Text>
+        <Button size="small" icon={<ReloadOutlined />} onClick={fetchStatus} loading={loading}>
+          {t('common.refresh')}
+        </Button>
+      </div>
+
       <Spin spinning={loading && !status}>
         {status ? (
-          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={16} style={{ width: '100%', maxWidth: 900 }}>
             {/* 基本信息 */}
             <Card
               size="small"
@@ -195,12 +179,15 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
               <div style={{ marginBottom: 8 }}>
                 <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                   <Text>
-                    {t('common.serverStatus.current')}: <Text strong>{status.connections.current}</Text>
+                    {t('common.serverStatus.current')}:{' '}
+                    <Text strong>{status.connections.current}</Text>
                     {' / '}
                     {t('common.serverStatus.max')}: <Text strong>{status.connections.max}</Text>
                   </Text>
                   <Tag
-                    color={connectionPercent > 80 ? 'error' : connectionPercent > 50 ? 'warning' : 'success'}
+                    color={
+                      connectionPercent > 80 ? 'error' : connectionPercent > 50 ? 'warning' : 'success'
+                    }
                   >
                     {connectionPercent}%
                   </Tag>
@@ -226,35 +213,36 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
             </Card>
 
             {/* 内存 */}
-            {status.memory && (status.memory.total || status.memory.used || status.memory.bufferPool) && (
-              <Card
-                size="small"
-                title={
-                  <Space>
-                    <HddOutlined />
-                    <span>{t('common.serverStatus.memory')}</span>
-                  </Space>
-                }
-              >
-                <Descriptions column={1} size="small">
-                  {status.memory.used && (
-                    <Descriptions.Item label={t('common.serverStatus.memoryUsed')}>
-                      {status.memory.used}
-                    </Descriptions.Item>
-                  )}
-                  {status.memory.total && (
-                    <Descriptions.Item label={t('common.serverStatus.memoryTotal')}>
-                      {status.memory.total}
-                    </Descriptions.Item>
-                  )}
-                  {status.memory.bufferPool && (
-                    <Descriptions.Item label={t('common.serverStatus.bufferPool')}>
-                      {status.memory.bufferPool}
-                    </Descriptions.Item>
-                  )}
-                </Descriptions>
-              </Card>
-            )}
+            {status.memory &&
+              (status.memory.total || status.memory.used || status.memory.bufferPool) && (
+                <Card
+                  size="small"
+                  title={
+                    <Space>
+                      <HddOutlined />
+                      <span>{t('common.serverStatus.memory')}</span>
+                    </Space>
+                  }
+                >
+                  <Descriptions column={1} size="small">
+                    {status.memory.used && (
+                      <Descriptions.Item label={t('common.serverStatus.memoryUsed')}>
+                        {status.memory.used}
+                      </Descriptions.Item>
+                    )}
+                    {status.memory.total && (
+                      <Descriptions.Item label={t('common.serverStatus.memoryTotal')}>
+                        {status.memory.total}
+                      </Descriptions.Item>
+                    )}
+                    {status.memory.bufferPool && (
+                      <Descriptions.Item label={t('common.serverStatus.bufferPool')}>
+                        {status.memory.bufferPool}
+                      </Descriptions.Item>
+                    )}
+                  </Descriptions>
+                </Card>
+              )}
 
             {/* 关键变量 */}
             {status.variables && Object.keys(status.variables).length > 0 && (
@@ -269,7 +257,7 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
               >
                 <div
                   style={{
-                    maxHeight: 240,
+                    maxHeight: 320,
                     overflowY: 'auto',
                     fontFamily: 'monospace',
                     fontSize: 12,
@@ -283,11 +271,15 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
                         style={{
                           display: 'flex',
                           justifyContent: 'space-between',
+                          gap: 12,
                           padding: '2px 0',
                           borderBottom: '1px solid var(--border)',
                         }}
                       >
-                        <Text type="secondary" style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                        <Text
+                          type="secondary"
+                          style={{ fontSize: 12, fontFamily: 'monospace' }}
+                        >
                           {key}
                         </Text>
                         <Text style={{ fontSize: 12, fontFamily: 'monospace' }}>{value}</Text>
@@ -305,6 +297,6 @@ export const ServerStatusPanel: React.FC<ServerStatusPanelProps> = ({
           )
         )}
       </Spin>
-    </Drawer>
+    </div>
   );
 };

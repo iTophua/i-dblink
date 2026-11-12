@@ -69,8 +69,12 @@ export function useQueryExecution({
   }, [getUseTransaction]);
   const highlightErrorRef = useRef(highlightError);
   const clearErrorMarkersRef = useRef(clearErrorMarkers);
-  useEffect(() => { highlightErrorRef.current = highlightError; }, [highlightError]);
-  useEffect(() => { clearErrorMarkersRef.current = clearErrorMarkers; }, [clearErrorMarkers]);
+  useEffect(() => {
+    highlightErrorRef.current = highlightError;
+  }, [highlightError]);
+  useEffect(() => {
+    clearErrorMarkersRef.current = clearErrorMarkers;
+  }, [clearErrorMarkers]);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResultWithTiming | null>(null);
@@ -95,307 +99,329 @@ export function useQueryExecution({
   const paramDialogParams: string[] = [];
   const [pendingSql, setPendingSql] = useState<string>('');
 
-  const handleExecuteQuery = useCallback(async (explicitSql?: string) => {
-    // 收起建议列表
-    editorRef?.current?.getAction('editor.action.hideSuggestWidget')?.run();
+  const handleExecuteQuery = useCallback(
+    async (explicitSql?: string) => {
+      // 收起建议列表
+      editorRef?.current?.getAction('editor.action.hideSuggestWidget')?.run();
 
-    let sqlToExecute: string;
-    if (explicitSql) {
-      sqlToExecute = explicitSql;
-    } else {
-      const selectedSql = editorRef?.current
-        ?.getModel()
-        ?.getValueInRange(editorRef.current.getSelection())
-        ?.trim();
-      sqlToExecute = selectedSql || sql;
-    }
-
-    if (!sqlToExecute.trim()) {
-      message.warning(t('common.pleaseEnterSqlStatement'));
-      return;
-    }
-
-    if (!connectionId) {
-      message.warning(t('common.pleaseSelectADatabaseConnection'));
-      return;
-    }
-
-    if (!database) {
-      message.warning(t('common.pleaseSelectADatabase'));
-      return;
-    }
-
-    // 执行前钩子（手动事务模式借此确保事务开启）；失败已由钩子自行提示，静默中止
-    try {
-      await onBeforeExecute?.();
-    } catch {
-      return;
-    }
-
-    // 参数化查询已禁用（extractParams 始终返回 []），相关弹窗逻辑已移除。
-    if (pendingSql) {
-      sqlToExecute = pendingSql;
-      setPendingSql('');
-    }
-
-    requestStartTimeRef.current = Date.now();
-    returnedRowsRef.current = 0;
-    setExecElapsed(0);
-    // 启动实时计时器（每 100ms 更新已用时间）
-    if (execTimerRef.current) clearInterval(execTimerRef.current);
-    execTimerRef.current = setInterval(() => {
-      setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
-    }, 100);
-    try {
-      setLoading(true);
-      setMessages([]);
-
-      setResults([]);
-      setExplainPlan([]);
-      clearErrorMarkersRef.current();
-      
-      // 取消之前的请求
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      let sqlToExecute: string;
+      if (explicitSql) {
+        sqlToExecute = explicitSql;
+      } else {
+        const selectedSql = editorRef?.current
+          ?.getModel()
+          ?.getValueInRange(editorRef.current.getSelection())
+          ?.trim();
+        sqlToExecute = selectedSql || sql;
       }
-      abortControllerRef.current = new AbortController();
-      
-      onQueryStatusChange?.(true);
 
-      // 检测是否多语句（按分号分割，忽略字符串内的分号）
-      const statements = splitSqlStatements(sqlToExecute);
-      const isMultiStatement = statements.length > 1;
+      if (!sqlToExecute.trim()) {
+        message.warning(t('common.pleaseEnterSqlStatement'));
+        return;
+      }
 
-      if (isMultiStatement) {
-        const multiResults: QueryResultWithTiming[] = [];
-        const msgs: string[] = [];
-        let totalErrors = 0;
-        let totalSuccess = 0;
-        const maxRows = useSettingsStore.getState().settings.maxResultRows;
-        let hasTruncated = false;
+      if (!connectionId) {
+        message.warning(t('common.pleaseSelectADatabaseConnection'));
+        return;
+      }
 
-        // 批量执行：整个脚本一次绑定调用，后端顺序逐条执行（语句间依赖保序），
-        // 省去逐语句 IPC 往返/前端渲染churn/逐条历史提交；stop 可在语句间真正停止
-        const cancelToken =
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `script-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        scriptTokenRef.current = cancelToken;
-        const useTx = getUseTransactionRef.current?.();
-        const scriptResult = await api.executeScriptBatch(
-          connectionId,
-          statements,
-          database,
-          abortControllerRef.current?.signal,
-          { useTransaction: useTx, maxRows, cancelToken }
-        );
-        scriptTokenRef.current = null;
+      if (!database) {
+        message.warning(t('common.pleaseSelectADatabase'));
+        return;
+      }
 
-        scriptResult.results.forEach((queryResult, i) => {
-          const stmt = statements[i];
-          const executionTime = queryResult.execution_time_ms ?? 0;
+      // 执行前钩子（手动事务模式借此确保事务开启）；失败已由钩子自行提示，静默中止
+      try {
+        await onBeforeExecute?.();
+      } catch {
+        return;
+      }
 
-          // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
-          const rows = queryResult.rows ?? [];
-          const truncated = rows.length > maxRows || queryResult.truncated === true;
-          if (rows.length > maxRows) {
-            queryResult.rows = rows.slice(0, maxRows);
+      // 参数化查询已禁用（extractParams 始终返回 []），相关弹窗逻辑已移除。
+      if (pendingSql) {
+        sqlToExecute = pendingSql;
+        setPendingSql('');
+      }
+
+      requestStartTimeRef.current = Date.now();
+      returnedRowsRef.current = 0;
+      setExecElapsed(0);
+      // 启动实时计时器（每 100ms 更新已用时间）
+      if (execTimerRef.current) clearInterval(execTimerRef.current);
+      execTimerRef.current = setInterval(() => {
+        setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
+      }, 100);
+      try {
+        setLoading(true);
+        setMessages([]);
+
+        setResults([]);
+        setExplainPlan([]);
+        clearErrorMarkersRef.current();
+
+        // 取消之前的请求
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
+
+        onQueryStatusChange?.(true);
+
+        // 检测是否多语句（按分号分割，忽略字符串内的分号）
+        const statements = splitSqlStatements(sqlToExecute);
+        const isMultiStatement = statements.length > 1;
+
+        if (isMultiStatement) {
+          const multiResults: QueryResultWithTiming[] = [];
+          const msgs: string[] = [];
+          let totalErrors = 0;
+          let totalSuccess = 0;
+          const maxRows = useSettingsStore.getState().settings.maxResultRows;
+          let hasTruncated = false;
+
+          // 批量执行：整个脚本一次绑定调用，后端顺序逐条执行（语句间依赖保序），
+          // 省去逐语句 IPC 往返/前端渲染churn/逐条历史提交；stop 可在语句间真正停止
+          const cancelToken =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : `script-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          scriptTokenRef.current = cancelToken;
+          const useTx = getUseTransactionRef.current?.();
+          const scriptResult = await api.executeScriptBatch(
+            connectionId,
+            statements,
+            database,
+            abortControllerRef.current?.signal,
+            { useTransaction: useTx, maxRows, cancelToken }
+          );
+          scriptTokenRef.current = null;
+
+          scriptResult.results.forEach((queryResult, i) => {
+            const stmt = statements[i];
+            const executionTime = queryResult.execution_time_ms ?? 0;
+
+            // 防御性处理：后端 omitempty 可能导致 rows/columns 为 undefined
+            const rows = queryResult.rows ?? [];
+            const truncated = rows.length > maxRows || queryResult.truncated === true;
+            if (rows.length > maxRows) {
+              queryResult.rows = rows.slice(0, maxRows);
+            } else {
+              queryResult.rows = rows;
+            }
+            if (queryResult.truncated === true) {
+              hasTruncated = true;
+            }
+
+            if (queryResult.error) {
+              msgs.push(t('common.statementFailed', { index: i + 1, error: queryResult.error }));
+              totalErrors++;
+              highlightErrorRef.current(queryResult.error);
+              window.__sqlHistoryApi?.addHistory({
+                sql: stmt,
+                success: false,
+                duration: executionTime,
+              });
+            } else {
+              const rowCount = queryResult.rows.length;
+              const affectedRows = queryResult.rows_affected || 0;
+              if (rowCount > 0) {
+                let msg = t('common.statementSuccess', {
+                  index: i + 1,
+                  count: rowCount,
+                  time: executionTime,
+                });
+                if (truncated) msg += t('common.truncatedTo', { count: maxRows });
+                msgs.push(msg);
+              } else if (affectedRows > 0) {
+                msgs.push(
+                  t('common.statementAffected', {
+                    index: i + 1,
+                    count: affectedRows,
+                    time: executionTime,
+                  })
+                );
+              } else {
+                msgs.push(t('common.statementExecuted', { index: i + 1, time: executionTime }));
+              }
+              totalSuccess++;
+              window.__sqlHistoryApi?.addHistory({
+                sql: stmt,
+                success: true,
+                duration: executionTime,
+                rowCount: rowCount > 0 ? rowCount : affectedRows,
+              });
+            }
+            multiResults.push({ ...queryResult, executionTime });
+          });
+
+          if (scriptResult.cancelled) {
+            msgs.push('⚠ ' + t('common.queryStopped'));
+          }
+
+          if (hasTruncated) {
+            message.warning(
+              `${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`
+            );
+          }
+
+          setResults(multiResults);
+          setMessages(msgs);
+
+          if (totalErrors === 0) {
+            message.success(
+              `${t('common.allExecutedSuccessfully')}: ${totalSuccess} ${t('common.statements')}`
+            );
+            // 全部语句都没有结果集（DDL/DML）时，消息里的影响行数才有意义
+            setActiveTab(
+              multiResults.some((r) => (r.rows?.length ?? 0) > 0) ? 'result' : 'messages'
+            );
           } else {
-            queryResult.rows = rows;
+            message.error(
+              `${t('common.partialExecutionFailed')}: ${totalSuccess} ${t('common.success')}, ${totalErrors} ${t('common.failed')}`
+            );
+            setActiveTab('messages');
           }
-          if (queryResult.truncated === true) {
-            hasTruncated = true;
+        } else {
+          // 单语句执行（含连接断开自动重试）。
+          // 与脚本共用批量通道（一条语句的"脚本"）：同一取消令牌机制，
+          // stop 可中断正在执行的长查询（驱动 ctx 关闭查询），而非只弃 UI 等待
+          const isConnectionError = (msg: string) => {
+            const lower = msg.toLowerCase();
+            return (
+              lower.includes('connection') ||
+              lower.includes('closed') ||
+              lower.includes('eof') ||
+              lower.includes('broken pipe') ||
+              lower.includes('reset by peer') ||
+              lower.includes('bad connection')
+            );
+          };
+
+          const useTx = getUseTransactionRef.current?.();
+          const maxRows = useSettingsStore.getState().settings.maxResultRows;
+          const cancelToken =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : `script-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          scriptTokenRef.current = cancelToken;
+          // 限行随语句下推：后端扫描到 maxRows 即停（truncated=true），不再整表拉回
+          const runSingle = async (): Promise<QueryResult> => {
+            const sr = await api.executeScriptBatch(
+              connectionId,
+              [sqlToExecute],
+              database,
+              abortControllerRef.current?.signal,
+              { useTransaction: useTx, maxRows, cancelToken }
+            );
+            // 后端确认被取消：与 UI 侧 abort 走同一条"已停止"路径
+            if (sr.cancelled) {
+              throw new DOMException('Aborted', 'AbortError');
+            }
+            return sr.results[0] ?? { columns: [], rows: [] };
+          };
+
+          let queryResult = await runSingle();
+          // 如果查询因连接问题失败，等待 1 秒后重试一次
+          if (queryResult.error && isConnectionError(queryResult.error)) {
+            message.info(
+              t('common.connectionLostReconnecting', {
+                defaultValue: 'Connection lost, attempting to reconnect...',
+              })
+            );
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            queryResult = await runSingle();
           }
+          scriptTokenRef.current = null;
+
+          const executionTime = queryResult.execution_time_ms ?? 0;
+          const totalTime = Date.now() - requestStartTimeRef.current;
 
           if (queryResult.error) {
-            msgs.push(t('common.statementFailed', { index: i + 1, error: queryResult.error }));
-            totalErrors++;
+            setMessages([`✗ ${t('common.error')}: ${queryResult.error}`]);
+            setActiveTab('messages');
+            message.error(`${t('common.sqlExecutionFailed')}: ${queryResult.error}`);
             highlightErrorRef.current(queryResult.error);
+            setResult({ ...queryResult, executionTime, totalTime, executedSql: sqlToExecute });
             window.__sqlHistoryApi?.addHistory({
-              sql: stmt,
+              sql: sqlToExecute,
               success: false,
               duration: executionTime,
             });
           } else {
-            const rowCount = queryResult.rows.length;
+            const allRows = queryResult.rows ?? [];
+            // 截断可能来自后端（maxRows 下推后停止扫描，truncated=true），
+            // 也保留前端裁剪兜底（防御 maxRows 未生效的路径）
+            const truncated = allRows.length > maxRows || queryResult.truncated === true;
+            const truncatedRows =
+              truncated && allRows.length > maxRows ? allRows.slice(0, maxRows) : allRows;
+            const rowCount = truncatedRows.length;
             const affectedRows = queryResult.rows_affected || 0;
+
+            setResult({
+              ...queryResult,
+              rows: truncatedRows,
+              executionTime,
+              totalTime,
+              executedSql: sqlToExecute,
+            });
+
+            clearErrorMarkersRef.current();
+
             if (rowCount > 0) {
-              let msg = t('common.statementSuccess', {
-                index: i + 1,
-                count: rowCount,
-                time: executionTime,
-              });
-              if (truncated) msg += t('common.truncatedTo', { count: maxRows });
-              msgs.push(msg);
+              let msg = `✓ ${t('common.querySuccess')}, ${rowCount} ${t('common.records')}, ${t('common.executionTime')} ${executionTime}ms`;
+              if (truncated) {
+                msg += `（${t('common.resultSetTruncated')}, ${t('common.onlyShowingFirst')}${maxRows} ${t('common.rows')}）`;
+                message.warning(
+                  `${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`
+                );
+              }
+              setMessages([msg]);
             } else if (affectedRows > 0) {
-              msgs.push(
-                t('common.statementAffected', {
-                  index: i + 1,
-                  count: affectedRows,
-                  time: executionTime,
-                })
-              );
+              setMessages([
+                `${t('common.executionSuccess')}, ${affectedRows} ${t('common.rowsAffected')}, ${t('common.executionTime')} ${executionTime}ms`,
+              ]);
             } else {
-              msgs.push(t('common.statementExecuted', { index: i + 1, time: executionTime }));
+              setMessages([
+                `${t('common.executionSuccess')}, ${t('common.executionTime')} ${executionTime}ms`,
+              ]);
             }
-            totalSuccess++;
+
+            // 无结果集（UPDATE/DELETE/DDL）时切到消息，避免停在空白网格上
+            setActiveTab(rowCount > 0 ? 'result' : 'messages');
             window.__sqlHistoryApi?.addHistory({
-              sql: stmt,
+              sql: sqlToExecute,
               success: true,
               duration: executionTime,
               rowCount: rowCount > 0 ? rowCount : affectedRows,
             });
           }
-          multiResults.push({ ...queryResult, executionTime });
-        });
-
-        if (scriptResult.cancelled) {
-          msgs.push('⚠ ' + t('common.queryStopped'));
+        }
+      } catch (error: unknown) {
+        // 检查是否是取消操作
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setMessages((prev) => [...prev, '⚠ ' + t('common.queryStopped')]);
+          return;
         }
 
-        if (hasTruncated) {
-          message.warning(
-            `${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`
-          );
+        console.error('SQL execution error:', error);
+        setMessages([`✗ ${t('common.error')}: ${getErrorMessage(error)}`]);
+        setActiveTab('messages');
+        message.error(`${t('common.sqlExecutionFailed')}: ${getErrorMessage(error)}`);
+        highlightErrorRef.current(getErrorMessage(error));
+      } finally {
+        setLoading(false);
+        abortControllerRef.current = null;
+        onQueryStatusChange?.(false);
+        // 停止执行计时器
+        if (execTimerRef.current) {
+          clearInterval(execTimerRef.current);
+          execTimerRef.current = null;
         }
-
-        setResults(multiResults);
-        setMessages(msgs);
-
-        if (totalErrors === 0) {
-          message.success(
-            `${t('common.allExecutedSuccessfully')}: ${totalSuccess} ${t('common.statements')}`
-          );
-          setActiveTab('result');
-        } else {
-          message.error(
-            `${t('common.partialExecutionFailed')}: ${totalSuccess} ${t('common.success')}, ${totalErrors} ${t('common.failed')}`
-          );
-          setActiveTab('messages');
-        }
-      } else {
-        // 单语句执行（含连接断开自动重试）。
-        // 与脚本共用批量通道（一条语句的"脚本"）：同一取消令牌机制，
-        // stop 可中断正在执行的长查询（驱动 ctx 关闭查询），而非只弃 UI 等待
-        const isConnectionError = (msg: string) => {
-          const lower = msg.toLowerCase();
-          return lower.includes('connection') || lower.includes('closed') ||
-            lower.includes('eof') || lower.includes('broken pipe') ||
-            lower.includes('reset by peer') || lower.includes('bad connection');
-        };
-
-        const useTx = getUseTransactionRef.current?.();
-        const maxRows = useSettingsStore.getState().settings.maxResultRows;
-        const cancelToken =
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `script-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        scriptTokenRef.current = cancelToken;
-        // 限行随语句下推：后端扫描到 maxRows 即停（truncated=true），不再整表拉回
-        const runSingle = async (): Promise<QueryResult> => {
-          const sr = await api.executeScriptBatch(
-            connectionId,
-            [sqlToExecute],
-            database,
-            abortControllerRef.current?.signal,
-            { useTransaction: useTx, maxRows, cancelToken }
-          );
-          // 后端确认被取消：与 UI 侧 abort 走同一条"已停止"路径
-          if (sr.cancelled) {
-            throw new DOMException('Aborted', 'AbortError');
-          }
-          return sr.results[0] ?? { columns: [], rows: [] };
-        };
-
-        let queryResult = await runSingle();
-        // 如果查询因连接问题失败，等待 1 秒后重试一次
-        if (queryResult.error && isConnectionError(queryResult.error)) {
-          message.info(t('common.connectionLostReconnecting', { defaultValue: 'Connection lost, attempting to reconnect...' }));
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          queryResult = await runSingle();
-        }
-        scriptTokenRef.current = null;
-
-        const executionTime = queryResult.execution_time_ms ?? 0;
-        const totalTime = Date.now() - requestStartTimeRef.current;
-
-        if (queryResult.error) {
-          setMessages([`✗ ${t('common.error')}: ${queryResult.error}`]);
-          setActiveTab('messages');
-          message.error(`${t('common.sqlExecutionFailed')}: ${queryResult.error}`);
-          highlightErrorRef.current(queryResult.error);
-          setResult({ ...queryResult, executionTime, totalTime, executedSql: sqlToExecute });
-          window.__sqlHistoryApi?.addHistory({
-            sql: sqlToExecute,
-            success: false,
-            duration: executionTime,
-          });
-        } else {
-          const allRows = queryResult.rows ?? [];
-          // 截断可能来自后端（maxRows 下推后停止扫描，truncated=true），
-          // 也保留前端裁剪兜底（防御 maxRows 未生效的路径）
-          const truncated = allRows.length > maxRows || queryResult.truncated === true;
-          const truncatedRows = truncated && allRows.length > maxRows ? allRows.slice(0, maxRows) : allRows;
-          const rowCount = truncatedRows.length;
-          const affectedRows = queryResult.rows_affected || 0;
-
-          setResult({ ...queryResult, rows: truncatedRows, executionTime, totalTime, executedSql: sqlToExecute });
-
-          clearErrorMarkersRef.current();
-
-          if (rowCount > 0) {
-            let msg = `✓ ${t('common.querySuccess')}, ${rowCount} ${t('common.records')}, ${t('common.executionTime')} ${executionTime}ms`;
-            if (truncated) {
-              msg += `（${t('common.resultSetTruncated')}, ${t('common.onlyShowingFirst')}${maxRows} ${t('common.rows')}）`;
-              message.warning(
-                `${t('common.queryResultsExceeded')} ${maxRows} ${t('common.rowsTruncated')}`
-              );
-            }
-            setMessages([msg]);
-          } else if (affectedRows > 0) {
-            setMessages([
-              `${t('common.executionSuccess')}, ${affectedRows} ${t('common.rowsAffected')}, ${t('common.executionTime')} ${executionTime}ms`,
-            ]);
-          } else {
-            setMessages([
-              `${t('common.executionSuccess')}, ${t('common.executionTime')} ${executionTime}ms`,
-            ]);
-          }
-
-          setActiveTab('result');
-          window.__sqlHistoryApi?.addHistory({
-            sql: sqlToExecute,
-            success: true,
-            duration: executionTime,
-            rowCount: rowCount > 0 ? rowCount : affectedRows,
-          });
-        }
+        setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
       }
-    } catch (error: unknown) {
-      // 检查是否是取消操作
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        console.log('Query was aborted');
-        setMessages((prev) => [...prev, '⚠ ' + t('common.queryStopped')]);
-        return;
-      }
-      
-      console.error('SQL execution error:', error);
-      setMessages([`✗ ${t('common.error')}: ${getErrorMessage(error)}`]);
-      setActiveTab('messages');
-      message.error(`${t('common.sqlExecutionFailed')}: ${getErrorMessage(error)}`);
-      highlightErrorRef.current(getErrorMessage(error));
-    } finally {
-      setLoading(false);
-      abortControllerRef.current = null;
-      onQueryStatusChange?.(false);
-      // 停止执行计时器
-      if (execTimerRef.current) {
-        clearInterval(execTimerRef.current);
-        execTimerRef.current = null;
-      }
-      setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
-    }
-  }, [sql, connectionId, database, executeQueryApi, pendingSql]);
+    },
+    [sql, connectionId, database, executeQueryApi, pendingSql]
+  );
 
   const stopQuery = useCallback(() => {
     if (abortControllerRef.current) {
@@ -450,7 +476,12 @@ export function useQueryExecution({
         // SQL Server SHOWPLAN_XML returns plan as XML in result rows;
         // if no rows, the plan may be in messages — show a notice.
         if (planRows.length === 0) {
-          message.info(t('common.explainPlanGenerated') + ': ' + (t('common.noExplainPlanData') || 'No tabular data returned (XML plan may be in messages).'));
+          message.info(
+            t('common.explainPlanGenerated') +
+              ': ' +
+              (t('common.noExplainPlanData') ||
+                'No tabular data returned (XML plan may be in messages).')
+          );
         }
         setExplainPlan(planRows as unknown[]);
         setActiveTab('explain');

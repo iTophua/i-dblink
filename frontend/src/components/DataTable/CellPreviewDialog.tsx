@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Modal, Tabs, Input, Image, Button, Space, message } from 'antd';
+import { Modal, Tabs, Input, Image, Button, Space, App } from 'antd';
 import { CopyOutlined, SaveOutlined, EyeOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { MenuItemConfig, MenuContext } from '../ContextMenu/types';
@@ -43,8 +43,15 @@ function getImageSrc(val: string): string | null {
   return null;
 }
 
-export function CellPreviewDialog({ open, onClose, value, columnName, onSave }: CellPreviewDialogProps) {
+export function CellPreviewDialog({
+  open,
+  onClose,
+  value,
+  columnName,
+  onSave,
+}: CellPreviewDialogProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const strVal = value == null ? '' : String(value);
   const [editVal, setEditVal] = useState(strVal);
   const isImage = isBase64Image(strVal);
@@ -129,9 +136,11 @@ export function CellPreviewDialog({ open, onClose, value, columnName, onSave }: 
 }
 
 export function createPreviewCellItem(
-  ctx: MenuContext & { onPreviewCell?: (value: unknown, colName: string, row?: number, col?: number) => void },
+  ctx: MenuContext & {
+    onPreviewCell?: (value: unknown, colName: string, row?: number, col?: number) => void;
+  },
   t: (key: string) => string,
-  onClose: () => void,
+  onClose: () => void
 ): MenuItemConfig {
   return {
     key: 'preview-cell',

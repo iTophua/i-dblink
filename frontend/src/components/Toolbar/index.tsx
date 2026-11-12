@@ -38,9 +38,18 @@ interface ToolbarProps {
   sidebarCollapsed?: boolean;
   /** 点击折叠/展开按钮的回调 */
   onToggleSidebar?: () => void;
+  /** bar：独立工具栏（非 mac）；inline：合并进标签栏（mac 通高侧栏布局） */
+  variant?: 'bar' | 'inline';
+  /** inline 变体的挂载位：left 放视图控制（侧栏开关），right 放文档动作 */
+  slot?: 'left' | 'right';
 }
 
-export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}): JSX.Element {
+export function Toolbar({
+  sidebarCollapsed,
+  onToggleSidebar,
+  variant = 'bar',
+  slot = 'right',
+}: ToolbarProps = {}): JSX.Element {
   const tc = useThemeColors();
   const isDarkMode = tc.isDark;
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
@@ -69,9 +78,8 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
     // 工具栏用比卡片深半档的 toolbar 底色，和内容区拉开「窗口骨架」层次
     background: 'var(--background-toolbar)',
     borderBottom: '1px solid var(--border-color)',
-    // macOS 隐藏标题栏后，左侧留出红绿灯空间（红绿灯 ~52px + 较大安全边距，避免按钮紧贴）
-    // 非 macOS 不需要留红绿灯空间，正常 padding
-    padding: isMac ? '0 12px 0 92px' : '0 12px',
+    // 通高侧栏布局下，红绿灯落在侧栏上，工具栏仅在侧栏折叠时才需要避让
+    padding: isMac && sidebarCollapsed ? '0 12px 0 92px' : '0 12px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -197,60 +205,76 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
     color: 'var(--text-secondary)',
   };
 
+  // 品牌区已移至通高侧栏顶部（MainLayout 的拖拽条），工具栏只保留操作按钮
+  // 视图控制：侧栏显隐（合并行时挂在标签栏最左，紧邻它控制的对象）
+  const renderSidebarToggle = () =>
+    onToggleSidebar ? (
+      <Tooltip title={sidebarCollapsed ? t('common.expand') : t('common.collapse')}>
+        <Button
+          type="text"
+          size="small"
+          icon={<LayoutOutlined />}
+          onClick={onToggleSidebar}
+          data-testid="toolbar-toggle-sidebar"
+          style={{
+            borderRadius: 6,
+            color: sidebarCollapsed ? 'var(--text-tertiary)' : 'var(--color-primary)',
+          }}
+        />
+      </Tooltip>
+    ) : null;
+
+  // 连接管理：属于侧栏职责，独立工具栏（非 mac）保留，合并行模式不放标签栏
+  const renderNewConnection = () => (
+    <Button
+      type="primary"
+      size="small"
+      icon={<PlusOutlined />}
+      onClick={() => handleMenuAction('new-connection')}
+      data-testid="toolbar-new-connection"
+      style={{
+        borderRadius: 6,
+        fontWeight: 500,
+        fontSize: 12,
+        height: 26,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      {t('common.newConnectionBtn')}
+    </Button>
+  );
+
+  // 文档级主操作：合并行时是标签栏里唯一的实心按钮
+  const renderNewQuery = (primary: boolean) => (
+    <Button
+      type={primary ? 'primary' : 'text'}
+      size="small"
+      icon={<ConsoleSqlOutlined />}
+      onClick={() => handleMenuAction('new-query')}
+      data-testid="toolbar-new-query"
+      className={primary ? undefined : 'toolbar-btn'}
+      style={{
+        borderRadius: 6,
+        fontWeight: 500,
+        fontSize: 12,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        ...(primary ? { height: 26 } : null),
+      }}
+    >
+      {t('common.newQueryBtn')}
+    </Button>
+  );
+
+  // 独立工具栏（非 mac）：视图 + 连接 + 文档三个动作横向排列
   const renderToolbarButtons = () => (
     <>
-      {/* 侧边栏显隐按钮：固定用 LayoutOutlined，颜色区分状态（展开=primary 强调，隐藏=弱化） */}
-      {onToggleSidebar && (
-        <Tooltip title={sidebarCollapsed ? t('common.expand') : t('common.collapse')}>
-          <Button
-            type="text"
-            size="small"
-            icon={<LayoutOutlined />}
-            onClick={onToggleSidebar}
-            data-testid="toolbar-toggle-sidebar"
-            style={{
-              borderRadius: 6,
-              color: sidebarCollapsed ? 'var(--text-tertiary)' : 'var(--color-primary)',
-            }}
-          />
-        </Tooltip>
-      )}
-      <Button
-        type="text"
-        size="small"
-        icon={<DatabaseOutlined style={{ color: 'var(--color-primary)' }} />}
-        onClick={() => handleMenuAction('new-connection')}
-        data-testid="toolbar-new-connection"
-        className="toolbar-btn"
-        style={{
-          borderRadius: 7,
-          fontWeight: 500,
-          fontSize: 12.5,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-        }}
-      >
-        {t('common.newConnectionBtn')}
-      </Button>
-      <Button
-        type="text"
-        size="small"
-        icon={<ConsoleSqlOutlined />}
-        onClick={() => handleMenuAction('new-query')}
-        data-testid="toolbar-new-query"
-        className="toolbar-btn"
-        style={{
-          borderRadius: 7,
-          fontWeight: 500,
-          fontSize: 12.5,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-        }}
-      >
-        {t('common.newQueryBtn')}
-      </Button>
+      {renderSidebarToggle()}
+      {renderNewConnection()}
+      {renderNewQuery(false)}
     </>
   );
 
@@ -302,6 +326,17 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
       </Tooltip>
     </>
   );
+
+  // inline 变体：合并行模式只保留文档级操作（侧栏开关 / 新建连接 / 新建查询）；
+  // 设置、明暗、快捷键等全局偏好移到侧栏底部（SidebarAppControls）
+  if (variant === 'inline') {
+    // 左槽：紧跟标签之前的视图控制；右槽：标签栏唯一的文档级主操作
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: slot === 'left' ? 6 : 0 }}>
+        {slot === 'left' ? renderSidebarToggle() : renderNewQuery(true)}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -384,3 +419,167 @@ export function Toolbar({ sidebarCollapsed, onToggleSidebar }: ToolbarProps = {}
 }
 
 export default Toolbar;
+
+/** 侧栏底部全局偏好按钮：AI / 快捷键 / 明暗 / 设置
+ *  带文字标签的 40px 工具条——纯图标太弱，看不出是常驻功能入口 */
+export function SidebarAppControls(): JSX.Element {
+  const { t } = useTranslation();
+  const tc = useThemeColors();
+  const isDarkMode = tc.isDark;
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const aiReady = useAIStore((s) => s.ready);
+  const setChatPanelVisible = useAIChatStore((s) => s.setPanelVisible);
+
+  const dispatch = (action: string) =>
+    window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
+
+  const itemStyle: React.CSSProperties = {
+    height: 30,
+    padding: '0 8px',
+    borderRadius: 7,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    color: 'var(--text-secondary)',
+    // 与侧栏搜索框/树文本统一 12px，11px 在 44px 栏里显得发虚
+    fontSize: 12,
+    cursor: 'pointer',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    transition: 'background 0.15s ease, color 0.15s ease',
+  };
+
+  const items = [
+    {
+      key: 'ai',
+      icon: <RobotOutlined />,
+      label: t('common.ai'),
+      onClick: () => setChatPanelVisible(true),
+      title: aiReady ? t('common.ai') : t('common.aiSettings.notConfigured'),
+      active: aiReady,
+      testId: 'sidebar-ai',
+    },
+    {
+      key: 'shortcuts',
+      icon: <KeyOutlined />,
+      label: t('common.shortcutsTitle'),
+      onClick: () => setShortcutsModalOpen(true),
+      title: t('common.shortcutsTitle'),
+      testId: 'sidebar-shortcuts',
+    },
+    {
+      key: 'theme',
+      icon: isDarkMode ? <SunOutlined /> : <MoonOutlined />,
+      // 标签用两字短词（深色/浅色），与「设置」等宽，四字会撑开右侧按钮组
+      label: isDarkMode ? t('common.themeLightShort') : t('common.themeDarkShort'),
+      onClick: () => dispatch('toggle-theme'),
+      title: isDarkMode ? t('common.lightMode') : t('common.darkMode'),
+      testId: 'sidebar-theme-toggle',
+    },
+    {
+      key: 'settings',
+      icon: <SettingOutlined />,
+      label: t('common.settingsLabel'),
+      onClick: () => dispatch('options'),
+      title: t('common.options'),
+      testId: 'sidebar-settings',
+    },
+  ];
+
+  const renderItem = (it: (typeof items)[number]) => (
+    <Tooltip key={it.key} title={it.title}>
+      <span
+        className="hoverable"
+        onClick={it.onClick}
+        data-testid={it.testId}
+        style={{
+          ...itemStyle,
+          color: it.active ? 'var(--color-primary)' : 'var(--text-secondary)',
+        }}
+      >
+        <span style={{ fontSize: 15, display: 'inline-flex' }}>{it.icon}</span>
+        {it.label}
+      </span>
+    </Tooltip>
+  );
+
+  return (
+    <div
+      className="toolbar-no-drag"
+      style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}
+    >
+      {/* 左侧「助手/帮助」，右侧「外观/设置」：两组各自紧凑排列，
+          内容宽度自适应，图标与侧栏搜索框同一缩进，不再被均分槽位拉散 */}
+      {items.slice(0, 2).map(renderItem)}
+      <span style={{ flex: 1 }} />
+      {items.slice(2).map(renderItem)}
+      <KeyboardShortcutsModal
+        open={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
+    </div>
+  );
+}
+
+/** 品牌区（logo + iDBLink）：挂在通高侧栏顶部的拖拽条内，红绿灯右侧 */
+export function ToolbarBrand(): JSX.Element {
+  return (
+    <div
+      className="toolbar-no-drag"
+      style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}
+    >
+      <div
+        className="brand-mark"
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 6,
+          background: 'var(--color-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M12 2L2 7L12 12L22 7L12 2Z"
+            stroke="white"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.95"
+          />
+          <path
+            d="M2 17L12 22L22 17"
+            stroke="white"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.7"
+          />
+          <path
+            d="M2 12L12 17L22 12"
+            stroke="white"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.5"
+          />
+        </svg>
+      </div>
+      <span
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          letterSpacing: 0.2,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        iDBLink
+      </span>
+    </div>
+  );
+}

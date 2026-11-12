@@ -17,6 +17,7 @@ import type { Connection, ConnectionGroup } from '../../../stores/appStore';
 import type { TableInfo } from '../../../types/api';
 import { GlobalInput } from '../../GlobalInput';
 import { DatabaseIcon } from '../../DatabaseIcon';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { isBaseTable, isView } from '../utils/tableTypeHelpers';
 import { matchesConnection } from '../utils/searchUtils';
 import { TableNode } from '../components/TableNode';
@@ -26,6 +27,24 @@ import type { ChangeEvent, MouseEvent } from 'react';
 
 function getConnIcon(dbType: string, connected = true) {
   return <DatabaseIcon type={dbType} size={16} grayscale={!connected} />;
+}
+
+// Pro 预设：数据库类型渐变徽标（18px 小尺寸，不撑高 24px 树行）
+const PRO_BADGE_TEXT: Record<string, string> = {
+  mysql: 'My',
+  postgresql: 'Pg',
+  kingbase: 'Pg',
+  highgo: 'Pg',
+  vastbase: 'Pg',
+  oracle: 'Or',
+  sqlserver: 'Ms',
+  sqlite: 'Lt',
+  dameng: 'Dm',
+};
+
+function getProBadgeClass(dbType: string): string {
+  const known = Object.keys(PRO_BADGE_TEXT);
+  return `pro-db-badge sm pro-db-${known.includes(dbType) ? dbType : 'default'}`;
 }
 
 interface MenuGetters {
@@ -88,6 +107,9 @@ export function useTreeData({
   handlers,
 }: TreeDataProps) {
   const { t } = useTranslation();
+  const preset = useSettingsStore((s) => s.settings.themePreset);
+  // default 即 Pro 设计；'pro' 为兼容别名
+  const isPro = preset === 'default' || preset === 'pro';
 
   const treeData = useMemo(() => {
     const q = searchText.trim().toLowerCase();
@@ -882,16 +904,59 @@ export function useTreeData({
         >
           <Dropdown menu={menus.getConnectionMenu(conn)} trigger={['contextMenu']}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
-              {getConnIcon(conn.db_type, conn.status === 'connected')}
+              {isPro ? (
+                <span className={getProBadgeClass(conn.db_type)}>
+                  {PRO_BADGE_TEXT[conn.db_type] || 'Db'}
+                </span>
+              ) : (
+                getConnIcon(conn.db_type, conn.status === 'connected')
+              )}
               <span
                 style={{
-                  color: conn.status === 'connected' ? 'var(--color-primary)' : undefined,
-                  fontWeight: conn.status === 'connected' ? 700 : undefined,
+                  // Pro 下连接名用正文色 + 500 字重：主色 700 粗字叠在渐变底上会显「一块色块」
+                  color: isPro
+                    ? 'var(--text-primary)'
+                    : conn.status === 'connected'
+                      ? 'var(--color-primary)'
+                      : undefined,
+                  fontWeight: isPro ? 500 : conn.status === 'connected' ? 700 : undefined,
                   userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  flex: 1,
+                  minWidth: 0,
                 }}
               >
-                {conn.name && <HighlightText text={conn.name} query={searchText} />}
-                {conn.color && (
+                {conn.name && (
+                  <span
+                    style={
+                      isPro
+                        ? {
+                            // Pro 下长名称省略号，完整地址在副行 mono 显示
+                            maxWidth: 200,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap' as const,
+                            flexShrink: 1,
+                            minWidth: 0,
+                          }
+                        : undefined
+                    }
+                  >
+                    <HighlightText text={conn.name} query={searchText} />
+                  </span>
+                )}
+                {/* 状态点固定在行右端：名称长短不一时不会左右跳动 */}
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    marginLeft: 'auto',
+                    flexShrink: 0,
+                  }}
+                >
+              {conn.color && (
                   <span
                     style={{
                       width: 8,
@@ -959,6 +1024,7 @@ export function useTreeData({
                     </Tooltip>
                   </>
                 )}
+                </span>
               </span>
               {conn.database && (
                 <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
@@ -967,6 +1033,21 @@ export function useTreeData({
               )}
             </div>
           </Dropdown>
+          {isPro && conn.host && (
+            <div
+              style={{
+                marginLeft: 26,
+                marginTop: -1,
+                fontFamily: 'var(--font-family-code)',
+                fontSize: 10.5,
+                lineHeight: 1.5,
+                color: 'var(--text-tertiary)',
+                userSelect: 'none',
+              }}
+            >
+              {conn.host}:{conn.port}
+            </div>
+          )}
         </div>
       );
 
@@ -1088,6 +1169,7 @@ export function useTreeData({
     handlers,
     menus,
     setRenameValue,
+    isPro,
   ]);
 
   return { treeData };

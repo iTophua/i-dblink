@@ -6,19 +6,37 @@
  */
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
-  Modal, Button, Space, message, Tag, Select,
-  Tooltip, Input, Divider, DatePicker, Checkbox, Popover, Dropdown, AutoComplete,
+  Button,
+  Space,
+  App,
+  Tag,
+  Select,
+  Tooltip,
+  Input,
+  Checkbox,
+  Popover,
+  Dropdown,
+  AutoComplete,
 } from 'antd';
 import {
-  DownloadOutlined, PlusOutlined, DeleteOutlined,
-  FilterOutlined, CopyOutlined,
-  EyeInvisibleOutlined, SearchOutlined,
-  ReloadOutlined, SaveOutlined, UndoOutlined,
-  CloseOutlined, CodeOutlined, TableOutlined,
+  DownloadOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  FilterOutlined,
+  CopyOutlined,
+  EyeInvisibleOutlined,
+  ReloadOutlined,
+  SaveOutlined,
+  UndoOutlined,
+  CloseOutlined,
+  CodeOutlined,
+  TableOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../hooks/useApi';
-import { useThemeColors } from '../hooks/useThemeColors';
 import { useAppStore } from '../stores/appStore';
 import type { ColumnInfo } from '../types/api';
 import {
@@ -36,8 +54,12 @@ import {
 import { useEditHistory } from '../hooks/useEditHistory';
 import { getDialect } from '../utils/sqlDialects';
 import { exportToExcel } from '../utils/exportUtils';
-import { GlideDataTable, type GlideRow, type GlideColumn } from './DataTable/GlideDataTable';
-import { rowsToGlideRows, tableRowStatus, tableCellModified } from './DataTable/adapters/tableAdapter';
+import { GlideDataTable, type GlideRow } from './DataTable/GlideDataTable';
+import {
+  rowsToGlideRows,
+  tableRowStatus,
+  tableCellModified,
+} from './DataTable/adapters/tableAdapter';
 import { useContextMenu } from './ContextMenu';
 import { DataTableContextMenu } from './DataTable/DataTableContextMenu';
 import { CellPreviewDialog } from './DataTable/CellPreviewDialog';
@@ -61,13 +83,100 @@ interface PendingSqlItem {
   source: string;
 }
 
+interface SortCondition {
+  id: string;
+  field: string;
+  direction: 'ASC' | 'DESC';
+}
+
+const SQL_KEYWORDS = new Set([
+  'SELECT',
+  'FROM',
+  'WHERE',
+  'ORDER',
+  'BY',
+  'GROUP',
+  'HAVING',
+  'LIMIT',
+  'OFFSET',
+  'INSERT',
+  'INTO',
+  'VALUES',
+  'UPDATE',
+  'SET',
+  'DELETE',
+  'AND',
+  'OR',
+  'NOT',
+  'NULL',
+  'IS',
+  'IN',
+  'LIKE',
+  'ASC',
+  'DESC',
+  'AS',
+  'JOIN',
+  'LEFT',
+  'RIGHT',
+  'INNER',
+  'OUTER',
+  'ON',
+  'COUNT',
+  'SUM',
+  'AVG',
+  'MIN',
+  'MAX',
+  'DISTINCT',
+]);
+
+// 匹配顺序：字符串 > 标识符 > 数字 > 关键字。用 split 保留分隔出的 token。
+const SQL_TOKEN_RE =
+  /('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`[^`]*`|\b\d+(?:\.\d+)?\b|\b(?:SELECT|FROM|WHERE|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|INSERT|INTO|VALUES|UPDATE|SET|DELETE|AND|OR|NOT|NULL|IS|IN|LIKE|ASC|DESC|AS|JOIN|LEFT|RIGHT|INNER|OUTER|ON|COUNT|SUM|AVG|MIN|MAX|DISTINCT)\b)/gi;
+
+/** 按数据类型给出更合理的默认列宽（用户拖拽后的宽度优先） */
+function defaultColumnWidth(dataType?: string): number {
+  const t = (dataType || '').toLowerCase();
+  if (/(date|time|timestamp|year)/.test(t)) return 168;
+  if (/^(tinyint|smallint|mediumint|int|integer|bigint|serial)/.test(t)) return 150;
+  if (/(decimal|numeric|number|float|double|real|money)/.test(t)) return 110;
+  if (/(text|json|jsonb|blob|clob)/.test(t)) return 200;
+  if (/(char|varchar|string|enum|set|uuid)/.test(t)) return 164;
+  return 130;
+}
+
+/** SQL 着色文本：关键字/字符串/数字/标识符分别取主题色，深浅色自动适配 */
+const SqlText = memo(function SqlText({ sql }: { sql: string }) {
+  if (!sql) return null;
+  const parts = sql.split(SQL_TOKEN_RE);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (!part) return null;
+        let cls = 'sql-token-plain';
+        if (part.startsWith("'") || part.startsWith('"')) cls = 'sql-token-string';
+        else if (part.startsWith('`')) cls = 'sql-token-ident';
+        else if (/^\d/.test(part)) cls = 'sql-token-number';
+        else if (SQL_KEYWORDS.has(part.toUpperCase())) cls = 'sql-token-keyword';
+        return (
+          <span key={i} className={cls}>
+            {part}
+          </span>
+        );
+      })}
+    </>
+  );
+});
+
 export const DataTable = memo(function DataTable({
-  connectionId, tableName, database, pageSize: propPageSize,
-  onDirtyChange: _onDirtyChange,
+  connectionId,
+  tableName,
+  database,
+  pageSize: propPageSize,
+  onDirtyChange,
 }: DataTableProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const dbType = useAppStore((s) => s.connections.find((c) => c.id === connectionId)?.db_type);
-  const tc = useThemeColors();
   const { getColumns, executeQuery } = useDatabase();
 
   // ── State ──
@@ -83,19 +192,31 @@ export const DataTable = memo(function DataTable({
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
-  const [quickFilter, setQuickFilter] = useState('');
   const [pageInput, setPageInput] = useState('1');
   const [goToRowValue, setGoToRowValue] = useState('');
   const [whereClause, setWhereClause] = useState('');
   const [orderByClause, setOrderByClause] = useState('');
-  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [showColVisibility, setShowColVisibility] = useState(false);
+  const [findVisible, setFindVisible] = useState(false);
   const [currentSql, setCurrentSql] = useState('');
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
-  const [cellPreview, setCellPreview] = useState<{ open: boolean; value: unknown; columnName: string; rowIndex?: number; colIndex?: number }>({ open: false, value: null, columnName: '' });
+  const [cellPreview, setCellPreview] = useState<{
+    open: boolean;
+    value: unknown;
+    columnName: string;
+    rowIndex?: number;
+    colIndex?: number;
+  }>({ open: false, value: null, columnName: '' });
 
-  const { record: recordEdit, undo: handleUndo, clear: clearEditHistory, removeByRowId: removeEditHistoryByRowId, hasHistory: hasEditHistory } = useEditHistory({
+  const {
+    record: recordEdit,
+    undo: handleUndo,
+    clear: clearEditHistory,
+    removeByRowId: removeEditHistoryByRowId,
+    hasHistory: hasEditHistory,
+  } = useEditHistory({
     onRestore: useCallback((cells: Array<{ rowId: string; colId: string; value: unknown }>) => {
       // 撤销时区分三种情况：
       // 1. colId === '__row__'    → 被删除的新增行重新插回 rowData
@@ -131,8 +252,12 @@ export const DataTable = memo(function DataTable({
           for (const [col, oldVal] of restores) {
             const orig = updated.__original_data__?.[col];
             const cur = oldVal;
-            const isSame = (orig == null && cur == null) || (orig != null && String(orig) === String(cur ?? ''));
-            if (!isSame) { allOriginal = false; break; }
+            const isSame =
+              (orig == null && cur == null) || (orig != null && String(orig) === String(cur ?? ''));
+            if (!isSame) {
+              allOriginal = false;
+              break;
+            }
           }
           if (allOriginal && updated.__status__ === 'modified') updated.__status__ = undefined;
           return updated;
@@ -158,24 +283,163 @@ export const DataTable = memo(function DataTable({
   // ── Range Edit ──
   // ── Filter Panel ──
   // enabled !== false 的条件才参与 WHERE 拼接（面板勾选框控制，取消勾选保留配置）
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([
     { id: 'filter-1', field: '', operator: 'equals', value: '', logic: 'AND', enabled: true },
   ]);
-  const loadDataRef = useRef<((opts?: { page?: number; where?: string; orderBy?: string }) => Promise<void>) | undefined>(undefined);
-  const clearFilter = useCallback(() => {
-    setFilterConditions([{ id: `filter-${Date.now()}`, field: '', operator: 'equals', value: '', logic: 'AND', enabled: true }]);
+  // 排序条件构建器（筛选面板右侧），生成 ORDER BY 子句
+  const [sortConditions, setSortConditions] = useState<SortCondition[]>([]);
+  const loadDataRef = useRef<
+    ((opts?: { page?: number; where?: string; orderBy?: string }) => Promise<void>) | undefined
+  >(undefined);
+  const buildSortClause = useCallback(
+    (sorts: SortCondition[]) => {
+      const dialect = getDialect(dbType);
+      return sorts
+        .filter((s) => s.field)
+        .map((s) => `${dialect.escapeIdentifier(s.field)} ${s.direction}`)
+        .join(', ');
+    },
+    [dbType]
+  );
+  const resetFilters = useCallback(() => {
+    setFilterConditions([
+      {
+        id: `filter-${Date.now()}`,
+        field: '',
+        operator: 'equals',
+        value: '',
+        logic: 'AND',
+        enabled: true,
+      },
+    ]);
+    setSortConditions([]);
     setWhereClause('');
+    setOrderByClause('');
     setCurrentPage(1);
-    loadDataRef.current?.({ where: '', page: 1 });
+    loadDataRef.current?.({ where: '', orderBy: '', page: 1 });
   }, []);
+  // 条件构建器与快捷输入互通：面板里配置了条件/排序就用生成的子句，
+  // 没配置的那一半沿用顶部快捷输入（WHERE / ORDER BY 可来自任意一边）
+  const panelWhere = buildWhereClause(filterConditions, dbType);
+  const panelOrderBy = buildSortClause(sortConditions);
+  const hasPanelConditions = filterConditions.some((c) => !!c.field);
+  const hasPanelSorts = sortConditions.some((s) => !!s.field);
+  const effectiveWhere = hasPanelConditions ? panelWhere : whereClause;
+  const effectiveOrderBy = hasPanelSorts ? panelOrderBy : orderByClause;
   const applyFilter = useCallback(() => {
-    const sql = buildWhereClause(filterConditions, dbType);
-    setWhereClause(sql);
+    setWhereClause(effectiveWhere);
+    setOrderByClause(effectiveOrderBy);
     setCurrentPage(1);
-    loadDataRef.current?.({ where: sql, page: 1 });
-  }, [filterConditions, dbType]);
+    setShowFilterPanel(false);
+    loadDataRef.current?.({ where: effectiveWhere, orderBy: effectiveOrderBy, page: 1 });
+  }, [effectiveWhere, effectiveOrderBy]);
+  const applyWhereInput = useCallback(() => {
+    setCurrentPage(1);
+    loadDataRef.current?.({ where: whereClause, orderBy: orderByClause, page: 1 });
+  }, [whereClause, orderByClause]);
+  // 筛选面板底部的实时 SQL（条件/排序变更即时反映，可直接复制）
+  const liveFilterSql = useMemo(() => {
+    const lines: string[] = [];
+    if (effectiveWhere) lines.push(`WHERE ${effectiveWhere}`);
+    if (effectiveOrderBy) lines.push(`ORDER BY ${effectiveOrderBy}`);
+    return lines.join('\n');
+  }, [effectiveWhere, effectiveOrderBy]);
+  const copyFilterSql = useCallback(() => {
+    if (!liveFilterSql) return;
+    navigator.clipboard.writeText(liveFilterSql);
+    message.success(t('common.sqlCopied'));
+  }, [liveFilterSql, t]);
+  const addSortCondition = useCallback(() => {
+    setSortConditions((prev) => [
+      ...prev,
+      { id: `sort-${Date.now()}`, field: '', direction: 'ASC' },
+    ]);
+  }, []);
+  const updateSortCondition = useCallback((id: string, updates: Partial<SortCondition>) => {
+    setSortConditions((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+  }, []);
+  const removeSortCondition = useCallback((id: string) => {
+    setSortConditions((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+  const moveSortCondition = useCallback((id: string, offset: number) => {
+    setSortConditions((prev) => {
+      const idx = prev.findIndex((s) => s.id === id);
+      const target = idx + offset;
+      if (idx < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  }, []);
   const updateFilterCondition = useCallback((id: string, updates: Partial<FilterCondition>) => {
     setFilterConditions((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+  }, []);
+  // 在指定条件后插入「同级条件」或「条件组（括号）」
+  const insertSiblingCondition = useCallback((idx: number, cond: FilterCondition) => {
+    setFilterConditions((prev) => {
+      const next = [...prev];
+      next.splice(idx + 1, 0, {
+        id: `filter-${Date.now()}`,
+        field: '',
+        operator: 'equals',
+        value: '',
+        logic: 'AND',
+        enabled: true,
+        level: cond.level ?? 0,
+      });
+      return next;
+    });
+  }, []);
+  const insertGroupCondition = useCallback((idx: number, cond: FilterCondition) => {
+    setFilterConditions((prev) => {
+      const next = [...prev];
+      const currentLevel = (cond.level ?? 0) + 1;
+      const ts = Date.now();
+      next.splice(
+        idx + 1,
+        0,
+        {
+          id: `filter-${ts}-start`,
+          field: '',
+          operator: '',
+          value: '',
+          logic: 'AND',
+          enabled: true,
+          isGroupStart: true,
+          level: cond.level ?? 0,
+        },
+        {
+          id: `filter-${ts}-a`,
+          field: '',
+          operator: 'equals',
+          value: '',
+          logic: 'AND',
+          enabled: true,
+          level: currentLevel,
+        },
+        {
+          id: `filter-${ts}-b`,
+          field: '',
+          operator: 'equals',
+          value: '',
+          logic: 'AND',
+          enabled: true,
+          level: currentLevel,
+        },
+        {
+          id: `filter-${ts}-end`,
+          field: '',
+          operator: '',
+          value: '',
+          logic: 'AND',
+          enabled: true,
+          isGroupEnd: true,
+          level: cond.level ?? 0,
+        }
+      );
+      return next;
+    });
   }, []);
   const removeFilterCondition = useCallback((id: string) => {
     setFilterConditions((prev) => {
@@ -186,74 +450,128 @@ export const DataTable = memo(function DataTable({
       newConditions.splice(idx, 1);
       // If removing a group start, also remove its corresponding end
       if (prev[idx]?.isGroupStart) {
-        const endIdx = newConditions.findIndex((c) => c.isGroupEnd && (c.level ?? 0) === (prev[idx].level ?? 0));
+        const endIdx = newConditions.findIndex(
+          (c) => c.isGroupEnd && (c.level ?? 0) === (prev[idx].level ?? 0)
+        );
         if (endIdx >= 0) newConditions.splice(endIdx, 1);
       }
       // If removing a group end, also remove its corresponding start
       if (prev[idx]?.isGroupEnd) {
-        const startIdx = newConditions.findIndex((c) => c.isGroupStart && (c.level ?? 0) === (prev[idx].level ?? 0));
+        const startIdx = newConditions.findIndex(
+          (c) => c.isGroupStart && (c.level ?? 0) === (prev[idx].level ?? 0)
+        );
         if (startIdx >= 0) newConditions.splice(startIdx, 1);
       }
       return newConditions;
     });
   }, []);
-  const [showFilterPanel, setShowFilterPanel] = useState(false);
-
   // ── Refs ──
   const loadingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const reqIdRef = useRef(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Cmd+F 打开页内查找/替换条：焦点不在网格里（例如刚点过筛选输入框）时也能触发。
+  // 用 offsetParent 判断当前 DataTable 是否可见，避免非激活 Tab 同时响应。
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'f') return;
+      if (!rootRef.current || rootRef.current.offsetParent === null) return;
+      e.preventDefault();
+      setFindVisible(true);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   // ── Data Loading ──
   // opts 允许调用方（applyFilter 等）在同一事件内显式传入新值，
   // 绕开 setState 后闭包仍捕获旧 whereClause/page 的时序问题
-  const loadData = useCallback(async (opts?: { page?: number; where?: string; orderBy?: string }) => {
-    if (!connectionId || !tableName || loadingRef.current) return;
-    const requestId = ++reqIdRef.current;
-    if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
-    try {
-      loadingRef.current = true; setLoading(true);
-      const query = buildQuery(opts?.page ?? currentPage, pageSize, tableName, database, dbType, undefined, opts?.where ?? whereClause, opts?.orderBy ?? orderByClause, undefined, undefined);
-      setCurrentSql(query);
-      // useTransaction:false —— 表数据浏览读的是已提交数据，绝不能被
-      // 别处（如查询 Tab 的手动事务）的活跃事务捕获后随其回滚
-      const [colResult, dataResult] = await Promise.all([
-        getColumns(connectionId, tableName, database),
-        executeQuery(connectionId, query, database || '', undefined, { useTransaction: false }),
-      ]);
-      if (abortRef.current.signal.aborted || requestId !== reqIdRef.current) return;
-      if (dataResult.error) {
-        message.error(`${t('common.failedToLoadData')}: ${dataResult.error}`);
-        setColumns([]); setRowData([]);
-      } else {
-        const rows = dataResult.rows || [];
-        const cols = colResult || [];
-        let idCounter = 0;
-        const data: RowData[] = rows.map((row) => {
-          const r: RowData = { __row_id__: `row-${++idCounter}` };
-          const orig: Record<string, unknown> = {};
-          for (let i = 0; i < dataResult.columns.length; i++) {
-            const colName = dataResult.columns[i];
-            r[colName] = row[i];
-            orig[colName] = row[i];
-          }
-          r.__original_data__ = orig;
-          return r;
-        });
-        setColumns(cols);
-        setQueryColumns(dataResult.columns);
-        setRowData(data);
+  const loadData = useCallback(
+    async (opts?: { page?: number; where?: string; orderBy?: string }) => {
+      if (!connectionId || !tableName) return;
+      // 新请求抢占旧请求：翻页/筛选/刷新若被 loading 锁直接丢弃，会出现
+      // 「页码变了但数据没变」或「筛选条件没生效」，这里先中断旧请求再发新请求
+      if (abortRef.current) abortRef.current.abort();
+      abortRef.current = new AbortController();
+      loadingRef.current = true;
+      const requestId = ++reqIdRef.current;
+      try {
+        setLoading(true);
+        // 新请求开始即清掉上一次的错误态，避免重试时旧错误一直压在网格上
+        setLoadError(null);
+        setFindVisible(false);
+        const query = buildQuery(
+          opts?.page ?? currentPage,
+          pageSize,
+          tableName,
+          database,
+          dbType,
+          undefined,
+          opts?.where ?? whereClause,
+          opts?.orderBy ?? orderByClause,
+          undefined,
+          undefined
+        );
+        setCurrentSql(query);
+        // useTransaction:false —— 表数据浏览读的是已提交数据，绝不能被
+        // 别处（如查询 Tab 的手动事务）的活跃事务捕获后随其回滚
+        const [colResult, dataResult] = await Promise.all([
+          getColumns(connectionId, tableName, database),
+          executeQuery(connectionId, query, database || '', undefined, { useTransaction: false }),
+        ]);
+        if (abortRef.current.signal.aborted || requestId !== reqIdRef.current) return;
+        if (dataResult.error) {
+          // 错误不再只弹 toast：网格区会显示内联错误态 + 重试，
+          // 避免加载失败后只剩一片空白被误认为「没有数据」
+          setLoadError(dataResult.error);
+          setHasLoaded(true);
+        } else {
+          const rows = dataResult.rows || [];
+          const cols = colResult || [];
+          let idCounter = 0;
+          const data: RowData[] = rows.map((row) => {
+            const r: RowData = { __row_id__: `row-${++idCounter}` };
+            const orig: Record<string, unknown> = {};
+            for (let i = 0; i < dataResult.columns.length; i++) {
+              const colName = dataResult.columns[i];
+              r[colName] = row[i];
+              orig[colName] = row[i];
+            }
+            r.__original_data__ = orig;
+            return r;
+          });
+          setColumns(cols);
+          setQueryColumns(dataResult.columns);
+          setRowData(data);
+          setLoadError(null);
+          setHasLoaded(true);
+        }
+      } catch (err: unknown) {
+        if (requestId !== reqIdRef.current) return;
+        setLoadError(getErrorMessage(err));
         setHasLoaded(true);
+      } finally {
+        if (requestId === reqIdRef.current) {
+          setLoading(false);
+          loadingRef.current = false;
+          abortRef.current = null;
+        }
       }
-    } catch (err: unknown) {
-      if (requestId !== reqIdRef.current) return;
-      message.error(`${t('common.failedToLoadData')}: ${getErrorMessage(err)}`);
-      setColumns([]); setRowData([]); setHasLoaded(true);
-    } finally {
-      if (requestId === reqIdRef.current) { setLoading(false); loadingRef.current = false; abortRef.current = null; }
-    }
-  }, [connectionId, tableName, database, currentPage, pageSize, dbType, whereClause, orderByClause, getColumns, executeQuery, t]);
+    },
+    [
+      connectionId,
+      tableName,
+      database,
+      currentPage,
+      pageSize,
+      dbType,
+      whereClause,
+      orderByClause,
+      getColumns,
+      executeQuery,
+    ]
+  );
 
   // Assign loadData to ref for use in callbacks declared before it
   loadDataRef.current = loadData;
@@ -267,164 +585,268 @@ export const DataTable = memo(function DataTable({
     if (!r.error && r.rows.length > 0) setTotalCount(Number(r.rows[0][0]));
   }, [connectionId, tableName, database, dbType, executeQuery]);
 
-  useEffect(() => { setHasLoaded(false); loadData(); loadCount(); }, [connectionId, tableName, database]);
-  useEffect(() => { if (hasLoaded && currentPage > 0) loadData(); }, [hasLoaded, currentPage, pageSize]);
-  useEffect(() => { setPageInput(String(currentPage)); }, [currentPage]);
+  // 切表/切库/翻页共用同一个加载入口：scope 变化时先把页码复位到 1，
+  // 由下一次 effect 触发加载。此前两个 effect 会在切换表时先按旧页码查一次、
+  // 加载完成后再查一次，既多一次查询也会让错误态瞬间被自动重试覆盖。
+  const scopeRef = useRef('');
+  useEffect(() => {
+    const scope = `${connectionId}|${database ?? ''}|${tableName}`;
+    const scopeChanged = scopeRef.current !== scope;
+    scopeRef.current = scope;
+    if (scopeChanged) {
+      setHasLoaded(false);
+      setLoadError(null);
+      loadCount();
+      if (currentPage !== 1) {
+        setCurrentPage(1);
+        return;
+      }
+    }
+    loadData();
+    // loadData/loadCount 由 connectionId/tableName/database 派生，放进依赖会每次渲染重查
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionId, tableName, database, currentPage, pageSize]);
+  useEffect(() => {
+    setPageInput(String(currentPage));
+  }, [currentPage]);
 
-  // ── Quick Filter ──
-  // 支持多条件：空格分隔多个关键字，每个关键字都要命中（任一列包含即可），AND 语义。
-  // 例如 "张三 销售" 匹配同时包含"张三"和"销售"的行
-  const filteredRows = useMemo(() => {
-    const keywords = quickFilter.toLowerCase().split(/\s+/).filter(Boolean);
-    if (keywords.length === 0) return rowData;
-    return rowData.filter((r) =>
-      keywords.every((q) => {
-        for (const col of columns) {
-          if (String(r[col.column_name] ?? '').toLowerCase().includes(q)) return true;
+  // ── 列布局持久化（列序 / 列宽 / 隐藏列）──
+  // 以 连接 + 库 + 表 为键，切换 tab、重开表都能恢复用户调过的布局。
+  const layoutStorageKey = useMemo(
+    () => `idblink:table-layout:v1:${connectionId}:${database ?? ''}:${tableName}`,
+    [connectionId, database, tableName]
+  );
+
+  useEffect(() => {
+    setColumnOrder(null);
+    setColWidths({});
+    setHiddenColumns(new Set());
+    try {
+      const raw = localStorage.getItem(layoutStorageKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Record<string, unknown>;
+      if (Array.isArray(saved.columnOrder)) {
+        setColumnOrder(saved.columnOrder.filter((n): n is string => typeof n === 'string'));
+      }
+      if (saved.colWidths && typeof saved.colWidths === 'object') {
+        const widths: Record<string, number> = {};
+        for (const [name, w] of Object.entries(saved.colWidths as Record<string, unknown>)) {
+          if (typeof w === 'number' && Number.isFinite(w) && w > 0) widths[name] = w;
         }
-        return false;
-      })
-    );
-  }, [rowData, quickFilter, columns]);
+        setColWidths(widths);
+      }
+      if (Array.isArray(saved.hiddenColumns)) {
+        setHiddenColumns(
+          new Set(saved.hiddenColumns.filter((n): n is string => typeof n === 'string'))
+        );
+      }
+    } catch {
+      // 布局数据损坏时按默认布局显示，不影响表格使用
+    }
+  }, [layoutStorageKey]);
+
+  // 拖拽列宽会高频触发 onColumnResized，延迟落盘避免每个 mousemove 都写；
+  // hasLoaded 守卫防止挂载初期用空布局覆盖已保存的配置。
+  useEffect(() => {
+    if (!hasLoaded) return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          layoutStorageKey,
+          JSON.stringify({ columnOrder, colWidths, hiddenColumns: [...hiddenColumns] })
+        );
+      } catch {
+        // 存储不可用（隐私模式/配额满）时静默降级，不影响功能
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [layoutStorageKey, columnOrder, colWidths, hiddenColumns, hasLoaded]);
+
+  // 页内查找统一走 Glide 的查找/替换条（Cmd+F），不再维护一份隐藏行的本地过滤，
+  // 避免和查找条语义重叠（查找=高亮定位，过滤=服务端 WHERE）
+  const filteredRows = rowData;
 
   // ── 获取可见列名列表（与 GlideDataTable 同步，过滤隐藏列）──
   const getVisibleColumns = useCallback(() => {
     let cols = queryColumns;
-    if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => queryColumns.includes(n)), ...queryColumns.filter((n) => !s.has(n))]; }
+    if (columnOrder) {
+      const s = new Set(columnOrder);
+      cols = [
+        ...columnOrder.filter((n) => queryColumns.includes(n)),
+        ...queryColumns.filter((n) => !s.has(n)),
+      ];
+    }
     if (hiddenColumns.size > 0) cols = cols.filter((n) => !hiddenColumns.has(n));
     return cols;
   }, [queryColumns, columnOrder, hiddenColumns]);
 
   // ── Core edit: apply + record history (single cell, creates its own history entry) ──
   // 必须在 setRowData 之前用 rowDataRef 同步读取旧值，避免在 setState updater 内做 side effect。
-  const applyEdit = useCallback((rowId: string, colId: string, newValue: unknown) => {
-    const prev = rowDataRef.current;
-    const target = prev.find((r) => r.__row_id__ === rowId);
-    if (!target) return;
-    if (target.__status__ === 'deleted') return;
-    const capturedOld = target[colId];
-    // 值未真正变化则不入栈、不改 status（避免双击进入编辑模式未改动却标记为可撤销）。
-    // 与撤销逻辑（见 onRestore 的 isSame）保持一致的规范化比较。
-    if (isSameEditValue(capturedOld, newValue)) return;
-    setRowData((rows) => rows.map((r) => {
-      if (r.__row_id__ !== rowId) return r;
-      return { ...r, [colId]: newValue, __status__: r.__status__ === 'new' ? 'new' : 'modified' };
-    }));
-    recordEdit([{ rowId, colId, oldValue: capturedOld, newValue }]);
-  }, [recordEdit]);
+  const applyEdit = useCallback(
+    (rowId: string, colId: string, newValue: unknown) => {
+      const prev = rowDataRef.current;
+      const target = prev.find((r) => r.__row_id__ === rowId);
+      if (!target) return;
+      if (target.__status__ === 'deleted') return;
+      const capturedOld = target[colId];
+      // 值未真正变化则不入栈、不改 status（避免双击进入编辑模式未改动却标记为可撤销）。
+      // 与撤销逻辑（见 onRestore 的 isSame）保持一致的规范化比较。
+      if (isSameEditValue(capturedOld, newValue)) return;
+      setRowData((rows) =>
+        rows.map((r) => {
+          if (r.__row_id__ !== rowId) return r;
+          return {
+            ...r,
+            [colId]: newValue,
+            __status__: r.__status__ === 'new' ? 'new' : 'modified',
+          };
+        })
+      );
+      recordEdit([{ rowId, colId, oldValue: capturedOld, newValue }]);
+    },
+    [recordEdit]
+  );
 
   // ── Batch edit: apply multiple cells as one atomic history entry ──
   // 同样用 rowDataRef 同步读取旧值；不在 setState updater 内 push cells 数组。
   // 用 Map 索引避免 O(n×m) 的嵌套查找（paste/范围填充可能传入大量 edits）。
-  const applyBatchEdit = useCallback((edits: ReadonlyArray<{ rowId: string; colId: string; value: unknown }>) => {
-    if (edits.length === 0) return;
-    const prev = rowDataRef.current;
-    const prevByRowId = new Map<string, RowData>();
-    for (const r of prev) {
-      const rid = r.__row_id__;
-      if (rid) prevByRowId.set(rid, r);
-    }
-    const editsByRow = new Map<string, Array<{ colId: string; oldValue: unknown; newValue: unknown }>>();
-    for (const e of edits) {
-      const target = prevByRowId.get(e.rowId);
-      if (!target) continue;
-      if (target.__status__ === 'deleted') continue;
-      const oldValue = target[e.colId];
-      // 值未真正变化则跳过（批量编辑同样避免无改动入栈）
-      if (isSameEditValue(oldValue, e.value)) continue;
-      if (!editsByRow.has(e.rowId)) editsByRow.set(e.rowId, []);
-      editsByRow.get(e.rowId)!.push({ colId: e.colId, oldValue, newValue: e.value });
-    }
-    if (editsByRow.size === 0) return;
-    setRowData((rows) => rows.map((r) => {
-      const rid = r.__row_id__;
-      if (!rid) return r;
-      const rowEdits = editsByRow.get(rid);
-      if (!rowEdits || rowEdits.length === 0) return r;
-      if (r.__status__ === 'deleted') return r;
-      const updated = { ...r };
-      for (const e of rowEdits) {
-        updated[e.colId] = e.newValue;
+  const applyBatchEdit = useCallback(
+    (edits: ReadonlyArray<{ rowId: string; colId: string; value: unknown }>) => {
+      if (edits.length === 0) return;
+      const prev = rowDataRef.current;
+      const prevByRowId = new Map<string, RowData>();
+      for (const r of prev) {
+        const rid = r.__row_id__;
+        if (rid) prevByRowId.set(rid, r);
       }
-      updated.__status__ = r.__status__ === 'new' ? 'new' : 'modified';
-      return updated;
-    }));
-    const historyCells: Array<{ rowId: string; colId: string; oldValue: unknown; newValue: unknown }> = [];
-    for (const [rowId, rowEdits] of editsByRow) {
-      for (const e of rowEdits) {
-        historyCells.push({ rowId, colId: e.colId, oldValue: e.oldValue, newValue: e.newValue });
+      const editsByRow = new Map<
+        string,
+        Array<{ colId: string; oldValue: unknown; newValue: unknown }>
+      >();
+      for (const e of edits) {
+        const target = prevByRowId.get(e.rowId);
+        if (!target) continue;
+        if (target.__status__ === 'deleted') continue;
+        const oldValue = target[e.colId];
+        // 值未真正变化则跳过（批量编辑同样避免无改动入栈）
+        if (isSameEditValue(oldValue, e.value)) continue;
+        if (!editsByRow.has(e.rowId)) editsByRow.set(e.rowId, []);
+        editsByRow.get(e.rowId)!.push({ colId: e.colId, oldValue, newValue: e.value });
       }
-    }
-    if (historyCells.length > 0) recordEdit(historyCells);
-  }, [recordEdit]);
+      if (editsByRow.size === 0) return;
+      setRowData((rows) =>
+        rows.map((r) => {
+          const rid = r.__row_id__;
+          if (!rid) return r;
+          const rowEdits = editsByRow.get(rid);
+          if (!rowEdits || rowEdits.length === 0) return r;
+          if (r.__status__ === 'deleted') return r;
+          const updated = { ...r };
+          for (const e of rowEdits) {
+            updated[e.colId] = e.newValue;
+          }
+          updated.__status__ = r.__status__ === 'new' ? 'new' : 'modified';
+          return updated;
+        })
+      );
+      const historyCells: Array<{
+        rowId: string;
+        colId: string;
+        oldValue: unknown;
+        newValue: unknown;
+      }> = [];
+      for (const [rowId, rowEdits] of editsByRow) {
+        for (const e of rowEdits) {
+          historyCells.push({ rowId, colId: e.colId, oldValue: e.oldValue, newValue: e.newValue });
+        }
+      }
+      if (historyCells.length > 0) recordEdit(historyCells);
+    },
+    [recordEdit]
+  );
 
   // ── Edit (inline) ──
-  const handleCellEdited = useCallback((col: number, row: number, newValue: string) => {
-    const visibleCols = getVisibleColumns();
-    const colId = visibleCols[col];
-    if (!colId) return;
+  const handleCellEdited = useCallback(
+    (col: number, row: number, newValue: string) => {
+      const visibleCols = getVisibleColumns();
+      const colId = visibleCols[col];
+      if (!colId) return;
 
-    const glideRow = filteredRows[row];
-    if (!glideRow) return;
-    const targetRowId = glideRow.__row_id__ as string | undefined;
-    if (!targetRowId) return;
+      const glideRow = filteredRows[row];
+      if (!glideRow) return;
+      const targetRowId = glideRow.__row_id__ as string | undefined;
+      if (!targetRowId) return;
 
-    let resolvedValue: unknown;
-    if (newValue === 'NULL') resolvedValue = null;
-    else if (newValue === 'DEFAULT') resolvedValue = DEFAULT_MARKER;
-    else resolvedValue = newValue;
-    applyEdit(targetRowId, colId, resolvedValue);
-  }, [getVisibleColumns, filteredRows, applyEdit]);
+      let resolvedValue: unknown;
+      if (newValue === 'NULL') resolvedValue = null;
+      else if (newValue === 'DEFAULT') resolvedValue = DEFAULT_MARKER;
+      else resolvedValue = newValue;
+      applyEdit(targetRowId, colId, resolvedValue);
+    },
+    [getVisibleColumns, filteredRows, applyEdit]
+  );
 
   // ── Edit (range) ──
-  const handleCellsEdited = useCallback((edits: Array<{ col: number; row: number; value: string }>) => {
-    const batch: Array<{ rowId: string; colId: string; value: unknown }> = [];
-    for (const edit of edits) {
-      const colId = getVisibleColumns()[edit.col];
-      if (!colId) continue;
-      const glideRow = filteredRows[edit.row];
-      if (!glideRow) continue;
-      const targetRowId = glideRow.__row_id__ as string | undefined;
-      if (!targetRowId) continue;
-      let resolved: unknown;
-      if (edit.value === 'NULL') resolved = null;
-      else if (edit.value === 'DEFAULT') resolved = DEFAULT_MARKER;
-      else resolved = edit.value;
-      batch.push({ rowId: targetRowId, colId, value: resolved });
-    }
-    if (batch.length > 0) applyBatchEdit(batch);
-  }, [getVisibleColumns, filteredRows, applyBatchEdit]);
-
-  // ── Paste (Ctrl+V) ──
-  const handlePaste = useCallback((target: readonly [number, number], values: readonly (readonly string[])[]): boolean => {
-    const visibleCols = getVisibleColumns();
-    const batch: Array<{ rowId: string; colId: string; value: unknown }> = [];
-    for (let r = 0; r < values.length; r++) {
-      const rowIndex = target[1] + r;
-      const glideRow = filteredRows[rowIndex];
-      if (!glideRow) continue;
-      const targetRowId = glideRow.__row_id__ as string | undefined;
-      if (!targetRowId) continue;
-      for (let c = 0; c < values[r].length; c++) {
-        const colIndex = target[0] + c;
-        const colId = visibleCols[colIndex];
+  const handleCellsEdited = useCallback(
+    (edits: Array<{ col: number; row: number; value: string }>) => {
+      const batch: Array<{ rowId: string; colId: string; value: unknown }> = [];
+      for (const edit of edits) {
+        const colId = getVisibleColumns()[edit.col];
         if (!colId) continue;
+        const glideRow = filteredRows[edit.row];
+        if (!glideRow) continue;
+        const targetRowId = glideRow.__row_id__ as string | undefined;
+        if (!targetRowId) continue;
         let resolved: unknown;
-        if (values[r][c] === 'NULL') resolved = null;
-        else if (values[r][c] === 'DEFAULT') resolved = DEFAULT_MARKER;
-        else resolved = values[r][c];
+        if (edit.value === 'NULL') resolved = null;
+        else if (edit.value === 'DEFAULT') resolved = DEFAULT_MARKER;
+        else resolved = edit.value;
         batch.push({ rowId: targetRowId, colId, value: resolved });
       }
-    }
-    if (batch.length > 0) applyBatchEdit(batch);
-    return true;
-  }, [getVisibleColumns, filteredRows, applyBatchEdit]);
+      if (batch.length > 0) applyBatchEdit(batch);
+    },
+    [getVisibleColumns, filteredRows, applyBatchEdit]
+  );
+
+  // ── Paste (Ctrl+V) ──
+  const handlePaste = useCallback(
+    (target: readonly [number, number], values: readonly (readonly string[])[]): boolean => {
+      const visibleCols = getVisibleColumns();
+      const batch: Array<{ rowId: string; colId: string; value: unknown }> = [];
+      for (let r = 0; r < values.length; r++) {
+        const rowIndex = target[1] + r;
+        const glideRow = filteredRows[rowIndex];
+        if (!glideRow) continue;
+        const targetRowId = glideRow.__row_id__ as string | undefined;
+        if (!targetRowId) continue;
+        for (let c = 0; c < values[r].length; c++) {
+          const colIndex = target[0] + c;
+          const colId = visibleCols[colIndex];
+          if (!colId) continue;
+          let resolved: unknown;
+          if (values[r][c] === 'NULL') resolved = null;
+          else if (values[r][c] === 'DEFAULT') resolved = DEFAULT_MARKER;
+          else resolved = values[r][c];
+          batch.push({ rowId: targetRowId, colId, value: resolved });
+        }
+      }
+      if (batch.length > 0) applyBatchEdit(batch);
+      return true;
+    },
+    [getVisibleColumns, filteredRows, applyBatchEdit]
+  );
 
   // ── Add Row ──
   const [scrollToRowIndex, setScrollToRowIndex] = useState<number | undefined>(undefined);
   const handleAddRow = useCallback(() => {
-    const nr: RowData = { __row_id__: `new-${Date.now()}`, __status__: 'new', __original_data__: {} };
-    columns.forEach((col) => { nr[col.column_name] = null; });
+    const nr: RowData = {
+      __row_id__: `new-${Date.now()}`,
+      __status__: 'new',
+      __original_data__: {},
+    };
+    columns.forEach((col) => {
+      nr[col.column_name] = null;
+    });
     setRowData((prev) => {
       const next = [...prev, nr];
       // 新增行在末尾，下一帧滚动到它
@@ -439,26 +861,46 @@ export const DataTable = memo(function DataTable({
   const deletedRows = useMemo(() => rowData.filter((r) => r.__status__ === 'deleted'), [rowData]);
   const hasChanges = newRows.length > 0 || modifiedRows.length > 0 || deletedRows.length > 0;
 
+  // ── 脏状态上报 ──
+  // TabPanel 依赖它显示 tab 未保存圆点、关闭 tab 时二次确认，并聚合到
+  // data-dirty-change 供 MainLayout 做整窗关闭保护。回调身份变化不应误报，
+  // 因此经 ref 调用；卸载时补一次 false，避免 tab 已关还留着脏标记。
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
   useEffect(() => {
-    if (hasChanges) setShowSqlPanel(true);
+    onDirtyChangeRef.current?.(hasChanges);
   }, [hasChanges]);
+  useEffect(() => () => onDirtyChangeRef.current?.(false), []);
 
   // ── Delete ──
   // 标记已有行为 'deleted' 或移除新增行，同时记录撤销历史：
   // - 新增行：记录 '__row__' → 完整行数据，撤销时重新插回
   // - 已有行：记录 '__status__' → 原 status，撤销时恢复
   const handleDeleteRows = useCallback(() => {
-    if (selectedRows.length === 0) { message.warning(t('common.pleaseSelectRowsToDelete')); return; }
+    if (selectedRows.length === 0) {
+      message.warning(t('common.pleaseSelectRowsToDelete'));
+      return;
+    }
     const selIds = new Set(selectedRows.map((r) => r.__row_id__));
     const prev = rowDataRef.current;
-    const historyCells: Array<{ rowId: string; colId: string; oldValue: unknown; newValue: unknown }> = [];
+    const historyCells: Array<{
+      rowId: string;
+      colId: string;
+      oldValue: unknown;
+      newValue: unknown;
+    }> = [];
     for (const r of prev) {
       const rid = r.__row_id__;
       if (!rid || !selIds.has(rid)) continue;
       if (r.__status__ === 'new') {
         historyCells.push({ rowId: rid, colId: '__row__', oldValue: { ...r }, newValue: null });
       } else {
-        historyCells.push({ rowId: rid, colId: '__status__', oldValue: r.__status__, newValue: 'deleted' });
+        historyCells.push({
+          rowId: rid,
+          colId: '__status__',
+          oldValue: r.__status__,
+          newValue: 'deleted',
+        });
       }
     }
     setRowData((rows) => {
@@ -515,7 +957,13 @@ export const DataTable = memo(function DataTable({
       if (cols.length === 0) continue;
       const vals = [cols.map((c) => row[c])];
       const sqls = dialect.buildInsert(tableRef, cols, vals);
-      if (sqls.length > 0) items.push({ id: `ins-${row.__row_id__}`, sql: sqls[0] + ';', type: 'insert', source: row.__row_id__ || '' });
+      if (sqls.length > 0)
+        items.push({
+          id: `ins-${row.__row_id__}`,
+          sql: sqls[0] + ';',
+          type: 'insert',
+          source: row.__row_id__ || '',
+        });
     }
 
     for (const row of modifiedRows) {
@@ -524,13 +972,19 @@ export const DataTable = memo(function DataTable({
       for (const c of visibleCols) {
         const orig = row.__original_data__?.[c];
         const cur = row[c];
-        const isSame = (orig == null && cur == null) || (orig != null && String(orig) === String(cur ?? ''));
+        const isSame =
+          (orig == null && cur == null) || (orig != null && String(orig) === String(cur ?? ''));
         if (!isSame) setters[c] = cur;
       }
       if (Object.keys(setters).length === 0) continue;
       const where = rowWhere(row);
       if (!where) continue;
-      items.push({ id: `upd-${row.__row_id__}`, sql: dialect.buildUpdate(tableRef, setters, where) + ';', type: 'update', source: row.__row_id__ || '' });
+      items.push({
+        id: `upd-${row.__row_id__}`,
+        sql: dialect.buildUpdate(tableRef, setters, where) + ';',
+        type: 'update',
+        source: row.__row_id__ || '',
+      });
     }
 
     for (const row of deletedRows) {
@@ -538,11 +992,21 @@ export const DataTable = memo(function DataTable({
       // 同 UPDATE：行上可能带着未提交的主键修改，删除必须按原始主键定位
       const where = rowWhere(row);
       if (!where) continue;
-      items.push({ id: `del-${row.__row_id__}`, sql: dialect.buildDelete(tableRef, where) + ';', type: 'delete', source: row.__row_id__ || '' });
+      items.push({
+        id: `del-${row.__row_id__}`,
+        sql: dialect.buildDelete(tableRef, where) + ';',
+        type: 'delete',
+        source: row.__row_id__ || '',
+      });
     }
 
     return items;
   }, [newRows, modifiedRows, deletedRows, columns, queryColumns, tableName, dbType, database]);
+
+  // 待提交 SQL 清空（撤销/提交完成）时自动收起抽屉，避免留下空面板
+  useEffect(() => {
+    if (pendingSqls.length === 0) setShowSqlPanel(false);
+  }, [pendingSqls.length]);
 
   // 无主键时 modified/deleted 行无法生成 SQL，单独提示避免用户困惑
   const noPkWarning = useMemo(() => {
@@ -552,27 +1016,34 @@ export const DataTable = memo(function DataTable({
 
   // ── Remove single pending SQL (revert that row's changes) ──
   // 只移除该行相关的历史条目（保留其他行的撤销栈），不调用 clearEditHistory。
-  const handleRemovePendingSql = useCallback((sqlId: string) => {
-    const item = pendingSqls.find((s) => s.id === sqlId);
-    if (!item) return;
-    if (item.type === 'insert') {
-      setRowData((prev) => prev.filter((r) => r.__row_id__ !== item.source));
-      removeEditHistoryByRowId(item.source);
-    } else if (item.type === 'update') {
-      setRowData((prev) => prev.map((r) => {
-        if (r.__row_id__ !== item.source) return r;
-        const restored = { ...r, ...r.__original_data__, __status__: undefined };
-        return restored;
-      }));
-      removeEditHistoryByRowId(item.source);
-    } else if (item.type === 'delete') {
-      setRowData((prev) => prev.map((r) => {
-        if (r.__row_id__ !== item.source) return r;
-        return { ...r, __status__: undefined };
-      }));
-      removeEditHistoryByRowId(item.source);
-    }
-  }, [pendingSqls, removeEditHistoryByRowId]);
+  const handleRemovePendingSql = useCallback(
+    (sqlId: string) => {
+      const item = pendingSqls.find((s) => s.id === sqlId);
+      if (!item) return;
+      if (item.type === 'insert') {
+        setRowData((prev) => prev.filter((r) => r.__row_id__ !== item.source));
+        removeEditHistoryByRowId(item.source);
+      } else if (item.type === 'update') {
+        setRowData((prev) =>
+          prev.map((r) => {
+            if (r.__row_id__ !== item.source) return r;
+            const restored = { ...r, ...r.__original_data__, __status__: undefined };
+            return restored;
+          })
+        );
+        removeEditHistoryByRowId(item.source);
+      } else if (item.type === 'delete') {
+        setRowData((prev) =>
+          prev.map((r) => {
+            if (r.__row_id__ !== item.source) return r;
+            return { ...r, __status__: undefined };
+          })
+        );
+        removeEditHistoryByRowId(item.source);
+      }
+    },
+    [pendingSqls, removeEditHistoryByRowId]
+  );
 
   // ── Commit all ──
   // 按顺序执行 pending SQL。成功/失败都 await loadData 把数据库真实状态同步回 UI，
@@ -580,9 +1051,12 @@ export const DataTable = memo(function DataTable({
   // 含 DELETE 时弹二次确认（防止误按 Cmd+S 删数据）。
   const committingRef = useRef(false);
   const handleCommit = useCallback(async () => {
-    if (committingRef.current) return;  // 防止 Cmd+S 或快速点击重复触发
+    if (committingRef.current) return; // 防止 Cmd+S 或快速点击重复触发
     if (pendingSqls.length === 0) return;
-    if (!columns.find((c) => c.column_key === 'PRI') && (modifiedRows.length > 0 || deletedRows.length > 0)) {
+    if (
+      !columns.find((c) => c.column_key === 'PRI') &&
+      (modifiedRows.length > 0 || deletedRows.length > 0)
+    ) {
       message.warning(t('common.dataGrid.noPrimaryKeyWarning'));
       return;
     }
@@ -629,7 +1103,9 @@ export const DataTable = memo(function DataTable({
       if (errMsg) {
         message.error(`${t('common.dataGrid.updateFailed')}: ${errMsg}`);
       } else {
-        message.success(`${t('common.dataGrid.updateSuccess')} ${pendingSqls.length} ${t('common.rows')}`);
+        message.success(
+          `${t('common.dataGrid.updateSuccess')} ${pendingSqls.length} ${t('common.rows')}`
+        );
       }
 
       // 已落库的行不可再撤销
@@ -650,7 +1126,20 @@ export const DataTable = memo(function DataTable({
       committingRef.current = false;
       setLoading(false);
     }
-  }, [pendingSqls, modifiedRows, deletedRows, columns, connectionId, database, executeQuery, loadData, loadCount, t, clearEditHistory, removeEditHistoryByRowId]);
+  }, [
+    pendingSqls,
+    modifiedRows,
+    deletedRows,
+    columns,
+    connectionId,
+    database,
+    executeQuery,
+    loadData,
+    loadCount,
+    t,
+    clearEditHistory,
+    removeEditHistoryByRowId,
+  ]);
 
   // ── Cmd+S / Ctrl+S commit ──
   useEffect(() => {
@@ -676,13 +1165,16 @@ export const DataTable = memo(function DataTable({
       maskTransitionName: '',
       centered: true,
       onOk: () => {
-        setRowData((prev) => prev
-          .filter((r) => r.__status__ !== 'new')
-          .map((r): RowData => {
-            if (r.__status__ === 'modified') return { ...r, ...r.__original_data__, __status__: undefined };
-            if (r.__status__ === 'deleted') return { ...r, __status__: undefined };
-            return r;
-          }));
+        setRowData((prev) =>
+          prev
+            .filter((r) => r.__status__ !== 'new')
+            .map((r): RowData => {
+              if (r.__status__ === 'modified')
+                return { ...r, ...r.__original_data__, __status__: undefined };
+              if (r.__status__ === 'deleted') return { ...r, __status__: undefined };
+              return r;
+            })
+        );
         clearEditHistory();
         message.info(t('common.allChangesRevoked'));
       },
@@ -690,56 +1182,89 @@ export const DataTable = memo(function DataTable({
   }, [t]);
 
   // ── Selection ──
-  const handleSelectionChange = useCallback((rows: GlideRow[], _selection: any) => {
-    setSelectedRows(rows as unknown as RowData[]);
-    if (menuState.visible) closeMenu();
-  }, [menuState.visible, closeMenu]);
+  const handleSelectionChange = useCallback(
+    (rows: GlideRow[], _selection: any) => {
+      setSelectedRows(rows as unknown as RowData[]);
+      if (menuState.visible) closeMenu();
+    },
+    [menuState.visible, closeMenu]
+  );
 
   // ── Context Menu ──
-  const handleCellContextMenu = useCallback((col: number, row: number, bounds: { x: number; y: number }) => {
-    if (row >= 0 && filteredRows[row]) {
-      const clickedRow = filteredRows[row];
-      const isInSelection = selectedRows.some((r) => r.__row_id__ === clickedRow.__row_id__);
-      if (!isInSelection) {
-        setSelectedRows([clickedRow]);
+  const handleCellContextMenu = useCallback(
+    (col: number, row: number, bounds: { x: number; y: number }) => {
+      if (row >= 0 && filteredRows[row]) {
+        const clickedRow = filteredRows[row];
+        const isInSelection = selectedRows.some((r) => r.__row_id__ === clickedRow.__row_id__);
+        if (!isInSelection) {
+          setSelectedRows([clickedRow]);
+        }
       }
-    }
-    const colId = getVisibleColumns()[col];
-    openMenu(bounds.x, bounds.y, {
-      row,
-      col,
-      cellValue: row >= 0 && colId ? filteredRows[row]?.[colId] : undefined,
-      colName: colId,
-      rowData: row >= 0 ? filteredRows[row] : undefined,
-    });
-  }, [filteredRows, selectedRows, getVisibleColumns, openMenu]);
+      const colId = getVisibleColumns()[col];
+      openMenu(bounds.x, bounds.y, {
+        row,
+        col,
+        cellValue: row >= 0 && colId ? filteredRows[row]?.[colId] : undefined,
+        colName: colId,
+        rowData: row >= 0 ? filteredRows[row] : undefined,
+      });
+    },
+    [filteredRows, selectedRows, getVisibleColumns, openMenu]
+  );
 
   // ── Header Context Menu (hide column) ──
-  const handleHeaderContextMenu = useCallback((colIndex: number, bounds: { x: number; y: number }) => {
-    const colId = getVisibleColumns()[colIndex];
-    if (!colId) return;
-    openMenu(bounds.x, bounds.y, {
-      col: colIndex,
-      row: -1,
-      colName: colId,
-    });
-  }, [getVisibleColumns, openMenu]);
+  const handleHeaderContextMenu = useCallback(
+    (colIndex: number, bounds: { x: number; y: number }) => {
+      const colId = getVisibleColumns()[colIndex];
+      if (!colId) return;
+      openMenu(bounds.x, bounds.y, {
+        col: colIndex,
+        row: -1,
+        colName: colId,
+      });
+    },
+    [getVisibleColumns, openMenu]
+  );
 
   // ── Export ──
-  const exportColNames = useMemo(() => columns.filter((c) => !hiddenColumns.has(c.column_name)).map((c) => c.column_name), [columns, hiddenColumns]);
+  const exportColNames = useMemo(
+    () => columns.filter((c) => !hiddenColumns.has(c.column_name)).map((c) => c.column_name),
+    [columns, hiddenColumns]
+  );
   const handleExportCsv = useCallback(() => {
-    if (rowData.length === 0) { message.warning(t('common.noDataToExport')); return; }
-    const esc = (v: string) => { if (v.includes(',') || v.includes('"') || v.includes('\n')) return `"${v.replace(/"/g, '""')}"`; return v; };
+    if (rowData.length === 0) {
+      message.warning(t('common.noDataToExport'));
+      return;
+    }
+    const esc = (v: string) => {
+      if (v.includes(',') || v.includes('"') || v.includes('\n'))
+        return `"${v.replace(/"/g, '""')}"`;
+      return v;
+    };
     const header = exportColNames.join(',');
-    const body = rowData.map((r) => exportColNames.map((n) => esc(r[n] == null ? '' : String(r[n]))).join(',')).join('\n');
+    const body = rowData
+      .map((r) => exportColNames.map((n) => esc(r[n] == null ? '' : String(r[n]))).join(','))
+      .join('\n');
     const blob = new Blob(['\ufeff' + header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${tableName}.csv`; a.click();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${tableName}.csv`;
+    a.click();
     message.success(t('common.importExport.exportSuccess'));
   }, [rowData, exportColNames, tableName, message, t]);
 
   const handleExportExcel = useCallback(() => {
-    if (rowData.length === 0) { message.warning(t('common.noDataToExport')); return; }
-    const data = rowData.map((r) => { const o: Record<string, any> = {}; exportColNames.forEach((n) => { o[n] = r[n]; }); return o; });
+    if (rowData.length === 0) {
+      message.warning(t('common.noDataToExport'));
+      return;
+    }
+    const data = rowData.map((r) => {
+      const o: Record<string, any> = {};
+      exportColNames.forEach((n) => {
+        o[n] = r[n];
+      });
+      return o;
+    });
     const cols = exportColNames.map((n) => ({ field: n, headerName: n }));
     exportToExcel(data, cols, { filename: `${tableName}.xlsx`, sheetName: tableName });
     message.success(t('common.importExport.exportSuccess'));
@@ -752,27 +1277,29 @@ export const DataTable = memo(function DataTable({
     const pkSet = new Set(columns.filter((c) => c.column_key === 'PRI').map((c) => c.column_name));
     // queryColumns 可能为空（查询无数据时），用 columns 元数据兜底
     let cols = queryColumns.length > 0 ? queryColumns : columns.map((c) => c.column_name);
-    if (columnOrder) { const s = new Set(columnOrder); cols = [...columnOrder.filter((n) => cols.includes(n)), ...cols.filter((n) => !s.has(n))]; }
+    if (columnOrder) {
+      const s = new Set(columnOrder);
+      cols = [...columnOrder.filter((n) => cols.includes(n)), ...cols.filter((n) => !s.has(n))];
+    }
     return cols.map((name) => ({
       id: name,
       // title 编码: name|type|isPK|comment（comment 供 hover tooltip 读取）
       title: `${name}|${typeMap.get(name) || ''}|${pkSet.has(name) ? '1' : '0'}|${commentMap.get(name) || ''}`,
-      width: colWidths[name] || undefined,
+      width: colWidths[name] || defaultColumnWidth(typeMap.get(name)),
     }));
   }, [queryColumns, columnOrder, colWidths, columns]);
 
   const glideRows = useMemo(() => rowsToGlideRows(filteredRows, columns), [filteredRows, columns]);
 
   // ── Column Resize ──
-  const onColumnResized = useCallback((col: any, newWidth: number, colIndex: number) => {
-    const colId = glideCols[colIndex]?.id;
+  // 用 col.id 而不是索引：GlideDataTable 会先过滤隐藏列，它回调里的可见索引
+  // 与 glideCols 的原始索引并不同源，按索引写会把宽度落到错误的列上。
+  const onColumnResized = useCallback((col: { id?: unknown }, newWidth: number) => {
+    const colId = typeof col.id === 'string' ? col.id : null;
     if (colId) {
       setColWidths((prev) => ({ ...prev, [colId]: newWidth }));
     }
-  }, [glideCols]);
-
-  const startRow = (currentPage - 1) * pageSize + 1;
-  const endRow = Math.min(currentPage * pageSize, totalCount);
+  }, []);
 
   const copySql = useCallback(() => {
     navigator.clipboard.writeText(currentSql);
@@ -788,285 +1315,532 @@ export const DataTable = memo(function DataTable({
     setScrollToRowIndex(rowNum - 1);
   }, [goToRowValue, filteredRows.length, t]);
 
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const applyPageInput = useCallback(() => {
+    const v = parseInt(pageInput);
+    if (!isNaN(v) && v > 0 && v <= pageCount) setCurrentPage(v);
+    else setPageInput(String(currentPage));
+  }, [pageInput, pageCount, currentPage]);
+  const applyPageSize = useCallback((val: string) => {
+    const n = parseInt(val);
+    if (!Number.isFinite(n) || n <= 0) return;
+    setPageSizeState(Math.min(n, 10000));
+    setCurrentPage(1);
+  }, []);
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--background-card)' }}>
-      {/* ═══ Toolbar ═══ */}
-      <div className="data-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, minHeight: 28 }}>
-        <Space size={4} split={<Divider type="vertical" style={{ height: 14, margin: '0 4px', background: 'var(--border-color)' }} />}>
-          <Button icon={<PlusOutlined />} onClick={handleAddRow} type="primary" size="small" className="data-toolbar-btn">{t('common.addRowLabel')}</Button>
-          <Button icon={<DeleteOutlined />} onClick={handleDeleteRows} disabled={selectedRows.length === 0} danger size="small" className="data-toolbar-btn">{t('common.delete')}</Button>
-          {hasChanges && (
+    <div
+      ref={rootRef}
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'var(--background-card)',
+      }}
+    >
+      {/* ═══ Toolbar + Filter（同一容器两行）═══ */}
+      <div className="data-toolbar data-toolbar-merged">
+        {/* 第一行：行操作、提交撤销、搜索与工具 */}
+        <div className="data-toolbar-row">
+          <div className="data-toolbar-group">
+            <Button
+              icon={<PlusOutlined />}
+              onClick={handleAddRow}
+              type="primary"
+              size="small"
+              className="data-toolbar-btn"
+            >
+              {t('common.addRowLabel')}
+            </Button>
+            <Button
+              icon={<DeleteOutlined />}
+              onClick={handleDeleteRows}
+              disabled={selectedRows.length === 0}
+              danger
+              size="small"
+              className="data-toolbar-btn"
+            >
+              {t('common.delete')}
+            </Button>
+            {hasChanges && (
+              <>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<SaveOutlined />}
+                  onClick={handleCommit}
+                  loading={loading}
+                  className="data-toolbar-btn"
+                >
+                  {t('common.submit')} ({pendingSqls.length})
+                </Button>
+                <Tooltip title={t('common.dataGrid.undoStep')}>
+                  <Button
+                    size="small"
+                    icon={<UndoOutlined />}
+                    onClick={handleUndo}
+                    disabled={!hasEditHistory}
+                    className="data-toolbar-btn"
+                  />
+                </Tooltip>
+                <Tooltip title={t('common.dataGrid.undoAllTip')}>
+                  <Button
+                    size="small"
+                    danger
+                    icon={<CloseOutlined />}
+                    onClick={handleUndoAll}
+                    className="data-toolbar-btn"
+                  />
+                </Tooltip>
+              </>
+            )}
+            <Tooltip title={t('common.refreshLabel')}>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => loadData()}
+                loading={loading}
+                size="small"
+                className="data-toolbar-btn"
+              />
+            </Tooltip>
+            <Popover
+              content={
+                <Space orientation="vertical" size={2} style={{ maxHeight: 200, overflow: 'auto' }}>
+                  {columns.map((col) => (
+                    <label
+                      key={col.column_name}
+                      style={{
+                        fontSize: 11,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!hiddenColumns.has(col.column_name)}
+                        onChange={() =>
+                          setHiddenColumns((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(col.column_name)) n.delete(col.column_name);
+                            else n.add(col.column_name);
+                            return new Set(n);
+                          })
+                        }
+                      />
+                      {col.column_name}
+                    </label>
+                  ))}
+                </Space>
+              }
+              trigger="click"
+              open={showColVisibility}
+              onOpenChange={setShowColVisibility}
+            >
+              <Tooltip title={t('common.columnVisibility')}>
+                <Button icon={<EyeInvisibleOutlined />} size="small" className="data-toolbar-btn" />
+              </Tooltip>
+            </Popover>
+            <Dropdown
+              menu={{
+                items: [
+                  { key: 'csv', label: t('common.exportCsv'), onClick: handleExportCsv },
+                  { key: 'xlsx', label: t('common.exportExcel'), onClick: handleExportExcel },
+                ],
+              }}
+            >
+              <Tooltip title={t('common.export')}>
+                <Button icon={<DownloadOutlined />} size="small" className="data-toolbar-btn" />
+              </Tooltip>
+            </Dropdown>
+            <span className="data-toolbar-divider" />
+            <Tooltip title={t('common.dataGrid.filterConditions')}>
+              <Button
+                icon={<FilterOutlined />}
+                onClick={() => setShowFilterPanel(!showFilterPanel)}
+                type={showFilterPanel || whereClause || orderByClause ? 'primary' : 'default'}
+                size="small"
+                className="data-toolbar-btn"
+              />
+            </Tooltip>
+          </div>
+
+          {/* 条件输入与行操作同排；筛选面板展开时由面板接管，隐藏输入 */}
+          {!showFilterPanel && (
             <>
-              <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} loading={loading} className="data-toolbar-btn">
-                {t('common.submit')} ({pendingSqls.length})
-              </Button>
-              <Tooltip title={t('common.dataGrid.undoStep')}>
-                <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} disabled={!hasEditHistory} className="data-toolbar-btn">
-                  {t('common.undo')}
+              <span className="data-toolbar-divider" />
+              <div className="data-toolbar-filter-inline">
+                <SqlInput
+                  className="data-sql-input"
+                  value={whereClause}
+                  onChange={(val) => setWhereClause(val)}
+                  placeholder={t('common.dataGrid.filterPlaceholder')}
+                  size="middle"
+                  style={{ height: 26, fontSize: 12 }}
+                  columns={columns.map((c) => ({
+                    column_name: c.column_name,
+                    data_type: c.data_type,
+                  }))}
+                  dbType={dbType}
+                  onPressEnter={applyWhereInput}
+                />
+                <SqlInput
+                  className="data-sql-input"
+                  value={orderByClause}
+                  onChange={(val) => setOrderByClause(val)}
+                  placeholder={t('common.dataGrid.orderBy') + ' ASC/DESC ...'}
+                  size="middle"
+                  style={{ height: 26, fontSize: 12 }}
+                  columns={columns.map((c) => ({
+                    column_name: c.column_name,
+                    data_type: c.data_type,
+                  }))}
+                  dbType={dbType}
+                  onPressEnter={applyWhereInput}
+                />
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={applyWhereInput}
+                  className="data-toolbar-btn"
+                >
+                  {t('common.applyLabel')}
                 </Button>
-              </Tooltip>
-              <Tooltip title={t('common.dataGrid.undoAllTip')}>
-                <Button size="small" danger icon={<CloseOutlined />} onClick={handleUndoAll} className="data-toolbar-btn">
-                  {t('common.undoAll')}
-                </Button>
-              </Tooltip>
+                {(whereClause || orderByClause) && (
+                  <Button
+                    size="small"
+                    type="text"
+                    onClick={resetFilters}
+                    className="data-toolbar-btn data-toolbar-clear-btn"
+                  >
+                    {t('common.dataGrid.clearShort')}
+                  </Button>
+                )}
+              </div>
             </>
           )}
-          <Tooltip title={t('common.refreshLabel')}><Button icon={<ReloadOutlined />} onClick={() => loadData()} loading={loading} size="small" className="data-toolbar-btn" /></Tooltip>
-          <Tooltip title={t('common.dataGrid.filter')}><Button icon={<FilterOutlined />} onClick={() => setShowFilterPanel(!showFilterPanel)} type={showFilterPanel || whereClause ? 'primary' : 'default'} size="small" className="data-toolbar-btn" /></Tooltip>
-          <Popover content={
-            <Space orientation="vertical" size={2} style={{ maxHeight: 200, overflow: 'auto' }}>
-              {columns.map((col) => (
-                <label key={col.column_name} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={!hiddenColumns.has(col.column_name)} onChange={() => setHiddenColumns((prev) => { const n = new Set(prev); if (n.has(col.column_name)) n.delete(col.column_name); else n.add(col.column_name); return new Set(n); })} />{col.column_name}
-                </label>
-              ))}
-            </Space>
-          } trigger="click" open={showColVisibility} onOpenChange={setShowColVisibility}>
-            <Tooltip title={t('common.columnVisibility')}><Button icon={<EyeInvisibleOutlined />} size="small" className="data-toolbar-btn" /></Tooltip>
-          </Popover>
-          <Dropdown menu={{ items: [
-            { key: 'csv', label: t('common.exportCsv'), onClick: handleExportCsv },
-            { key: 'xlsx', label: t('common.exportExcel'), onClick: handleExportExcel },
-          ]}}>
-            <Button icon={<DownloadOutlined />} size="small" className="data-toolbar-btn">{t('common.export')}</Button>
-          </Dropdown>
-        </Space>
-        <Space size={4}>
-          <Input prefix={<SearchOutlined style={{ fontSize: 12, color: 'var(--text-tertiary)' }} />} value={quickFilter} onChange={(e) => setQuickFilter(e.target.value)} placeholder={t('common.searchMultiPlaceholder')} size="small" className="data-toolbar-input" style={{ width: 160 }} />
-          <Tag className="data-toolbar-tag" style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>{tableName}</Tag>
-          <Tag color="blue" className="data-toolbar-tag">{totalCount.toLocaleString()} {t('common.rows')}</Tag>
-          {selectedRows.length > 0 && <Tag color="orange" className="data-toolbar-tag">{selectedRows.length} {t('common.rows')}</Tag>}
-        </Space>
-      </div>
 
-      {/* ═══ Filter Bar ═══ */}
-      {!showFilterPanel && (
-        <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-color)', flexShrink: 0, display: 'flex', gap: 12, alignItems: 'center', background: 'var(--background-card)' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{t('common.dataGrid.filter')}</span>
-          <SqlInput value={whereClause} onChange={(val) => setWhereClause(val)} placeholder={t('common.dataGrid.filterPlaceholder')} size="middle" style={{ flex: 1, height: 28, fontSize: 13 }}
-            columns={columns.map((c) => ({ column_name: c.column_name, data_type: c.data_type }))}
-            dbType={dbType}
-            onPressEnter={() => { setCurrentPage(1); loadData(); }} />
-          <Divider type="vertical" style={{ height: 18, margin: 0, background: 'var(--border-color)' }} />
-          <span style={{ fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{t('common.dataGrid.orderBy')}</span>
-          <SqlInput value={orderByClause} onChange={(val) => setOrderByClause(val)} placeholder={t('common.dataGrid.orderBy') + ' ASC/DESC ...'} size="middle" style={{ flex: 1, height: 28, fontSize: 13 }}
-            columns={columns.map((c) => ({ column_name: c.column_name, data_type: c.data_type }))}
-            dbType={dbType}
-            onPressEnter={() => { setCurrentPage(1); loadData(); }} />
-          <Button size="small" type="primary" onClick={() => { setCurrentPage(1); loadData(); }} style={{ fontSize: 12, height: 28 }}>{t('common.applyFilter')}</Button>
-          <Button size="small" onClick={() => { setWhereClause(''); setOrderByClause(''); setCurrentPage(1); loadData({ where: '', orderBy: '', page: 1 }); }} style={{ fontSize: 12, height: 28 }}>{t('common.clearFilter')}</Button>
-          <Divider type="vertical" style={{ height: 18, margin: '0 4px', background: 'var(--border-color)' }} />
-          <Input size="small" placeholder={t('common.goToRow')} value={goToRowValue} onChange={(e) => setGoToRowValue(e.target.value)} onPressEnter={handleGoToRow} style={{ width: 72, fontSize: 12, textAlign: 'center', padding: '0 4px', height: 28 }} />
+          {selectedRows.length > 0 && (
+            <>
+              <span className="data-toolbar-divider" style={{ marginLeft: 'auto' }} />
+              <Tag
+                className="data-toolbar-tag"
+                style={{
+                  background: 'var(--color-warning-alpha-15)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--color-warning-alpha-30)',
+                }}
+              >
+                {selectedRows.length} {t('common.rows')}
+              </Tag>
+            </>
+          )}
         </div>
-      )}
-      {/* ═══ Filter Panel（展开）═══ */}
+      </div>
+      {/* ═══ Filter Panel（条件 + 排序）═══ */}
       {showFilterPanel && (
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-color)', background: 'var(--background-card)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>{t('common.dataGrid.filterConditions')}</span>
-            <div style={{ flex: 1 }} />
-            <Button
-              size="small"
-              onClick={() => {
-                const sql = buildWhereClause(filterConditions, dbType);
-                appModal.info({
-                  title: t('common.importExport.sqlPreview'),
-                  transitionName: '',
-                  maskTransitionName: '',
-                  content: sql ? (
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>WHERE {sql}</pre>
-                  ) : (
-                    t('common.noFilterConditions')
-                  ),
-                });
-              }}
-              style={{ fontSize: 11, height: 20 }}
-            >
-              {t('common.previewSql')}
-            </Button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
-            {filterConditions.map((cond, idx) => {
-              const prevCond = idx > 0 ? filterConditions[idx - 1] : null;
-              const showLogic = idx > 0 && !cond.isGroupStart && !prevCond?.isGroupStart;
-              return (
-                <div
-                  key={cond.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    paddingLeft: (cond.level ?? 0) * 16,
-                  }}
-                >
-                  {cond.isGroupStart && (
-                    <span style={{ fontSize: 14, fontWeight: 'bold', color: 'var(--color-info)', marginRight: 4 }}>(</span>
-                  )}
-                  {showLogic && (
-                    <Select
-                      value={cond.logic}
-                      onChange={(val) => updateFilterCondition(cond.id, { logic: val })}
-                      size="small"
-                      style={{ width: 64, fontSize: 11 }}
-                      options={[
-                        { label: 'AND', value: 'AND' },
-                        { label: 'OR', value: 'OR' },
-                      ]}
-                    />
-                  )}
-                  {!showLogic && !cond.isGroupStart && !cond.isGroupEnd && <span style={{ width: 64 }} />}
-                  {!cond.isGroupStart && !cond.isGroupEnd && (
-                    <>
-                      {/* 勾选框：停用条件而不删除，配置保留以便再次启用 */}
-                      <Checkbox
-                        checked={cond.enabled !== false}
-                        onChange={(e) =>
-                          updateFilterCondition(cond.id, { enabled: e.target.checked })
-                        }
-                        title={t('common.filterConditionEnable')}
-                        style={{ flexShrink: 0 }}
+        <div className="data-filter-panel">
+          <div className="data-filter-panel-inner">
+            {/* 左：筛选条件 */}
+            <div className="data-filter-section">
+              <div className="data-filter-section-head">
+                <FilterOutlined style={{ fontSize: 12, color: 'var(--color-primary)' }} />
+                <span>{t('common.dataGrid.filterConditions')}</span>
+              </div>
+              <div className="data-filter-condition-list">
+                {filterConditions.map((cond, idx) => {
+                  const prevCond = idx > 0 ? filterConditions[idx - 1] : null;
+                  const showLogic = idx > 0 && !cond.isGroupStart && !prevCond?.isGroupStart;
+                  return (
+                    <div
+                      key={cond.id}
+                      className="data-filter-condition-row"
+                      style={{ paddingLeft: (cond.level ?? 0) * 16 }}
+                    >
+                      {cond.isGroupStart && (
+                        <span
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 'bold',
+                            color: 'var(--color-info)',
+                            marginRight: 4,
+                          }}
+                        >
+                          (
+                        </span>
+                      )}
+                      {showLogic && (
+                        <Select
+                          value={cond.logic}
+                          onChange={(val) => updateFilterCondition(cond.id, { logic: val })}
+                          size="small"
+                          style={{ width: 64, fontSize: 11 }}
+                          options={[
+                            { label: 'AND', value: 'AND' },
+                            { label: 'OR', value: 'OR' },
+                          ]}
+                        />
+                      )}
+                      {!showLogic && !cond.isGroupStart && !cond.isGroupEnd && (
+                        <span style={{ width: 64 }} />
+                      )}
+                      {!cond.isGroupStart && !cond.isGroupEnd && (
+                        <>
+                          {/* 勾选框：停用条件而不删除，配置保留以便再次启用 */}
+                          <Checkbox
+                            checked={cond.enabled !== false}
+                            onChange={(e) =>
+                              updateFilterCondition(cond.id, { enabled: e.target.checked })
+                            }
+                            title={t('common.filterConditionEnable')}
+                            style={{ flexShrink: 0 }}
+                          />
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              flex: 1,
+                              minWidth: 0,
+                              opacity: cond.enabled === false ? 0.45 : 1,
+                              transition: 'opacity 0.2s',
+                            }}
+                          >
+                            <Select
+                              placeholder={t('common.fieldPlaceholder')}
+                              value={cond.field || undefined}
+                              onChange={(val) => updateFilterCondition(cond.id, { field: val })}
+                              size="small"
+                              style={{ minWidth: 140, fontSize: 11 }}
+                              showSearch
+                              filterOption={(input, option) =>
+                                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                              }
+                              options={columns.map((col) => ({
+                                label: col.column_name,
+                                value: col.column_name,
+                              }))}
+                            />
+                            <Select
+                              value={cond.operator}
+                              onChange={(val) => updateFilterCondition(cond.id, { operator: val })}
+                              size="small"
+                              style={{ width: 110, fontSize: 11 }}
+                              options={OPERATOR_OPTIONS}
+                            />
+                            {RANGE_OPERATORS.includes(cond.operator) && (
+                              <>
+                                <Input
+                                  placeholder={t('common.dataGrid.rangeMin')}
+                                  value={cond.value}
+                                  onChange={(e) =>
+                                    updateFilterCondition(cond.id, { value: e.target.value })
+                                  }
+                                  size="small"
+                                  style={{ flex: 1, fontSize: 11, minWidth: 60 }}
+                                />
+                                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                                  ～
+                                </span>
+                                <Input
+                                  placeholder={t('common.dataGrid.rangeMax')}
+                                  value={cond.value2 ?? ''}
+                                  onChange={(e) =>
+                                    updateFilterCondition(cond.id, { value2: e.target.value })
+                                  }
+                                  size="small"
+                                  style={{ flex: 1, fontSize: 11, minWidth: 60 }}
+                                />
+                              </>
+                            )}
+                            {!RANGE_OPERATORS.includes(cond.operator) &&
+                              !NO_VALUE_OPERATORS.includes(cond.operator) && (
+                                <Input
+                                  placeholder={t('common.valuePlaceholder')}
+                                  value={cond.value}
+                                  onChange={(e) =>
+                                    updateFilterCondition(cond.id, { value: e.target.value })
+                                  }
+                                  size="small"
+                                  style={{ flex: 1, fontSize: 11, minWidth: 60 }}
+                                />
+                              )}
+                            {NO_VALUE_OPERATORS.includes(cond.operator) && (
+                              <span
+                                style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)' }}
+                              >
+                                —
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      {cond.isGroupEnd && (
+                        <span
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 'bold',
+                            color: 'var(--color-info)',
+                            marginLeft: 4,
+                          }}
+                        >
+                          )
+                        </span>
+                      )}
+                      {!cond.isGroupEnd && (
+                        <Dropdown
+                          trigger={['click']}
+                          menu={{
+                            items: [
+                              {
+                                key: 'sibling',
+                                label: t('common.addSibling'),
+                                onClick: () => insertSiblingCondition(idx, cond),
+                              },
+                              {
+                                key: 'group',
+                                label: t('common.addBracket'),
+                                onClick: () => insertGroupCondition(idx, cond),
+                              },
+                            ],
+                          }}
+                        >
+                          <Tooltip title={t('common.dataGrid.addCondition')}>
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<PlusOutlined />}
+                              className="data-filter-icon-btn"
+                            />
+                          </Tooltip>
+                        </Dropdown>
+                      )}
+                      <Button
+                        type="text"
+                        danger
+                        size="small"
+                        onClick={() => removeFilterCondition(cond.id)}
+                        className="data-filter-icon-btn"
+                        icon={<DeleteOutlined />}
+                        disabled={filterConditions.length === 1}
                       />
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          flex: 1,
-                          minWidth: 0,
-                          opacity: cond.enabled === false ? 0.45 : 1,
-                          transition: 'opacity 0.2s',
-                        }}
-                      >
-                        <Select
-                          placeholder={t('common.fieldPlaceholder')}
-                          value={cond.field || undefined}
-                          onChange={(val) => updateFilterCondition(cond.id, { field: val })}
-                          size="small"
-                          style={{ minWidth: 140, fontSize: 11 }}
-                          showSearch
-                          filterOption={(input, option) =>
-                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                          }
-                          options={columns.map((col) => ({
-                            label: col.column_name,
-                            value: col.column_name,
-                          }))}
-                        />
-                        <Select
-                          value={cond.operator}
-                          onChange={(val) => updateFilterCondition(cond.id, { operator: val })}
-                          size="small"
-                          style={{ width: 110, fontSize: 11 }}
-                          options={OPERATOR_OPTIONS}
-                        />
-                        {RANGE_OPERATORS.includes(cond.operator) && (
-                          <>
-                            <Input
-                              placeholder="最小值"
-                              value={cond.value}
-                              onChange={(e) =>
-                                updateFilterCondition(cond.id, { value: e.target.value })
-                              }
-                              size="small"
-                              style={{ flex: 1, fontSize: 11, minWidth: 60 }}
-                            />
-                            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>～</span>
-                            <Input
-                              placeholder="最大值"
-                              value={cond.value2 ?? ''}
-                              onChange={(e) =>
-                                updateFilterCondition(cond.id, { value2: e.target.value })
-                              }
-                              size="small"
-                              style={{ flex: 1, fontSize: 11, minWidth: 60 }}
-                            />
-                          </>
-                        )}
-                        {!RANGE_OPERATORS.includes(cond.operator) &&
-                          !NO_VALUE_OPERATORS.includes(cond.operator) && (
-                            <Input
-                              placeholder={t('common.valuePlaceholder')}
-                              value={cond.value}
-                              onChange={(e) =>
-                                updateFilterCondition(cond.id, { value: e.target.value })
-                              }
-                              size="small"
-                              style={{ flex: 1, fontSize: 11, minWidth: 60 }}
-                            />
-                          )}
-                        {NO_VALUE_OPERATORS.includes(cond.operator) && (
-                          <span style={{ flex: 1, fontSize: 11, color: 'var(--text-tertiary)' }}>
-                            —
-                          </span>
-                        )}
-                      </div>
-                    </>
-                  )}
-                  {cond.isGroupEnd && (
-                    <span style={{ fontSize: 14, fontWeight: 'bold', color: 'var(--color-info)', marginLeft: 4 }}>)</span>
-                  )}
-                  {!cond.isGroupEnd && (
-                    <>
-                      <Button
-                        type="link"
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 右：排序条件构建（生成 ORDER BY） */}
+            <div className="data-filter-section">
+              <div className="data-filter-section-head">
+                <ArrowUpOutlined style={{ fontSize: 11, color: 'var(--color-primary)' }} />
+                <span>{t('common.dataGrid.sortConditions')}</span>
+                <div style={{ flex: 1 }} />
+                <Button
+                  type="link"
+                  size="small"
+                  className="data-filter-link-btn"
+                  icon={<PlusOutlined />}
+                  onClick={addSortCondition}
+                >
+                  {t('common.dataGrid.addSort')}
+                </Button>
+              </div>
+              <div className="data-filter-sort-list">
+                {sortConditions.length === 0 ? (
+                  <div className="data-filter-sort-empty">{t('common.dataGrid.sortEmpty')}</div>
+                ) : (
+                  sortConditions.map((sort, idx) => (
+                    <div key={sort.id} className="data-filter-sort-row">
+                      <Select
+                        placeholder={t('common.fieldPlaceholder')}
+                        value={sort.field || undefined}
+                        onChange={(val) => updateSortCondition(sort.id, { field: val })}
                         size="small"
-                        onClick={() => {
-                          const newConditions = [...filterConditions];
-                          const insertIndex = idx + 1;
-                          newConditions.splice(insertIndex, 0, {
-                            id: `filter-${Date.now()}`,
-                            field: '',
-                            operator: 'equals',
-                            value: '',
-                            logic: 'AND',
-                            enabled: true,
-                            level: cond.level ?? 0,
-                          });
-                          setFilterConditions(newConditions);
-                        }}
-                        style={{ fontSize: 10, padding: '0 2px', height: 16, color: 'var(--color-primary)' }}
-                      >
-                        +{t('common.addSibling')}
-                      </Button>
-                      <Button
-                        type="link"
+                        style={{ flex: 1, minWidth: 0, fontSize: 11 }}
+                        showSearch
+                        popupMatchSelectWidth={false}
+                        filterOption={(input, option) =>
+                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        }
+                        options={columns.map((col) => ({
+                          label: col.column_name,
+                          value: col.column_name,
+                        }))}
+                      />
+                      <Select
+                        value={sort.direction}
+                        onChange={(val) => updateSortCondition(sort.id, { direction: val })}
                         size="small"
-                        onClick={() => {
-                          const newConditions = [...filterConditions];
-                          const insertIndex = idx + 1;
-                          const currentLevel = (cond.level ?? 0) + 1;
-                          const ts = Date.now();
-                          newConditions.splice(insertIndex, 0,
-                            { id: `filter-${ts}-start`, field: '', operator: '', value: '', logic: 'AND', enabled: true, isGroupStart: true, level: cond.level ?? 0 },
-                            { id: `filter-${ts}-a`, field: '', operator: 'equals', value: '', logic: 'AND', enabled: true, level: currentLevel },
-                            { id: `filter-${ts}-b`, field: '', operator: 'equals', value: '', logic: 'AND', enabled: true, level: currentLevel },
-                            { id: `filter-${ts}-end`, field: '', operator: '', value: '', logic: 'AND', enabled: true, isGroupEnd: true, level: cond.level ?? 0 }
-                          );
-                          setFilterConditions(newConditions);
-                        }}
-                        style={{ fontSize: 10, padding: '0 2px', height: 16, color: 'var(--color-info)' }}
-                      >
-                        +{t('common.addBracket')}
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    type="text"
-                    danger
-                    size="small"
-                    onClick={() => removeFilterCondition(cond.id)}
-                    style={{ height: 20, padding: '0 4px', fontSize: 11 }}
-                    icon={<DeleteOutlined />}
-                    disabled={filterConditions.length === 1}
-                  />
-                </div>
-              );
-            })}
+                        style={{ width: 102, fontSize: 11 }}
+                        options={[
+                          { label: t('common.dataGrid.sortAsc'), value: 'ASC' },
+                          { label: t('common.dataGrid.sortDesc'), value: 'DESC' },
+                        ]}
+                      />
+                      <Tooltip title={t('common.dataGrid.sortMoveUp')}>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<ArrowUpOutlined />}
+                          disabled={idx === 0}
+                          onClick={() => moveSortCondition(sort.id, -1)}
+                          style={{ width: 20, height: 20, padding: 0, fontSize: 10 }}
+                        />
+                      </Tooltip>
+                      <Tooltip title={t('common.dataGrid.sortMoveDown')}>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<ArrowDownOutlined />}
+                          disabled={idx === sortConditions.length - 1}
+                          onClick={() => moveSortCondition(sort.id, 1)}
+                          style={{ width: 20, height: 20, padding: 0, fontSize: 10 }}
+                        />
+                      </Tooltip>
+                      <Button
+                        type="text"
+                        danger
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={() => removeSortCondition(sort.id)}
+                        style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <Button size="small" onClick={clearFilter} style={{ fontSize: 11, height: 20 }}>{t('common.clearLabel')}</Button>
-            <Button type="primary" size="small" onClick={applyFilter} style={{ fontSize: 11, height: 20 }}>{t('common.applyLabel')}</Button>
+
+          {/* 实时 SQL：条件/排序变更即时生成，可一键复制 */}
+          <div className="data-filter-sql-live">
+            <CodeOutlined style={{ fontSize: 11, color: 'var(--color-primary)', flexShrink: 0 }} />
+            <code className="data-filter-sql-live-text">
+              {liveFilterSql ? (
+                <SqlText sql={liveFilterSql} />
+              ) : (
+                <span className="is-empty">{t('common.noFilterConditions')}</span>
+              )}
+            </code>
+            <Tooltip title={t('common.copySql')}>
+              <Button
+                type="text"
+                size="small"
+                icon={<CopyOutlined />}
+                disabled={!liveFilterSql}
+                onClick={copyFilterSql}
+                className="data-filter-copy"
+              />
+            </Tooltip>
+            <span className="data-toolbar-divider" />
+            <Button size="small" className="data-toolbar-btn" onClick={resetFilters}>
+              {t('common.clearLabel')}
+            </Button>
+            <Button type="primary" size="small" className="data-toolbar-btn" onClick={applyFilter}>
+              {t('common.applyLabel')}
+            </Button>
           </div>
         </div>
       )}
@@ -1078,15 +1852,76 @@ export const DataTable = memo(function DataTable({
             <TableDataSkeleton />
           </div>
         )}
+        {loadError && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 20,
+              background: 'var(--background-card)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              padding: 24,
+              textAlign: 'center',
+            }}
+          >
+            <ExclamationCircleOutlined style={{ fontSize: 28, color: 'var(--color-error)' }} />
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+              {t('common.failedToLoadData')}
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: 'var(--text-tertiary)',
+                maxWidth: 'min(560px, 90%)',
+                maxHeight: 120,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                fontFamily: 'var(--font-family-code)',
+                lineHeight: 1.5,
+              }}
+            >
+              {loadError}
+            </div>
+            <Button
+              type="primary"
+              size="small"
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => {
+                setLoadError(null);
+                loadData();
+                loadCount();
+              }}
+            >
+              {t('common.dataGrid.retry')}
+            </Button>
+          </div>
+        )}
         {hasLoaded && glideCols.length > 0 ? (
-          <GlideDataTable columns={glideCols} rows={glideRows} hiddenColumns={hiddenColumns}
-            rowStatus={tableRowStatus} isCellModified={tableCellModified}
+          <GlideDataTable
+            columns={glideCols}
+            rows={glideRows}
+            hiddenColumns={hiddenColumns}
+            rowStatus={tableRowStatus}
+            isCellModified={tableCellModified}
             scrollToRowIndex={scrollToRowIndex}
             onSelectionChange={handleSelectionChange}
-            onColumnMoved={(start, end) => {
+            onColumnOrderChange={(visibleOrder) => {
               setColumnOrder((prev) => {
-                const cur = prev ? [...prev] : [...queryColumns];
-                const [m] = cur.splice(start, 1); cur.splice(end, 0, m); return cur;
+                const full = prev ? [...prev] : [...queryColumns];
+                // 可见列按新顺序回填原槽位，隐藏列保持不动
+                const visibleSet = new Set(visibleOrder);
+                let i = 0;
+                const merged = full.map((id) => (visibleSet.has(id) ? visibleOrder[i++] : id));
+                for (const id of visibleOrder) {
+                  if (!merged.includes(id)) merged.push(id);
+                }
+                return merged;
               });
             }}
             onColumnResized={onColumnResized}
@@ -1095,8 +1930,12 @@ export const DataTable = memo(function DataTable({
             onCellContextMenu={handleCellContextMenu}
             onPaste={handlePaste}
             onHeaderContextMenu={handleHeaderContextMenu}
-            headerHeight={44} rowHeight={28} editable={true}
+            headerHeight={46}
+            rowHeight={30}
+            editable={true}
             enableFindReplace
+            findReplaceVisible={findVisible}
+            onFindReplaceVisibleChange={setFindVisible}
           />
         ) : hasLoaded ? (
           <EnhancedEmptyState
@@ -1120,10 +1959,15 @@ export const DataTable = memo(function DataTable({
           hiddenColumns,
           isEditable: true,
           onCopyToClipboard: (text) => navigator.clipboard.writeText(text),
-          onSetWhereClause: (where) => { setWhereClause(where); setCurrentPage(1); loadData({ where, page: 1 }); },
+          onSetWhereClause: (where) => {
+            setWhereClause(where);
+            setCurrentPage(1);
+            loadData({ where, page: 1 });
+          },
           onHideColumn: (colName) => setHiddenColumns((prev) => new Set([...prev, colName])),
           onCellEdited: handleCellEdited,
-          onPreviewCell: (value, colName, rowIndex, colIndex) => setCellPreview({ open: true, value, columnName: colName, rowIndex, colIndex }),
+          onPreviewCell: (value, colName, rowIndex, colIndex) =>
+            setCellPreview({ open: true, value, columnName: colName, rowIndex, colIndex }),
         }}
         onClose={closeMenu}
       />
@@ -1141,34 +1985,100 @@ export const DataTable = memo(function DataTable({
         }}
       />
 
-      {/* ═══ SQL Preview Panel ═══ */}
-      {hasChanges && showSqlPanel && (
-        <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-card)', flexShrink: 0, maxHeight: 160, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--border-color)', background: 'var(--background-card)' }}>
-            <CodeOutlined style={{ fontSize: 11, color: 'var(--color-primary)' }} />
-            <span style={{ fontSize: 11, fontWeight: 500 }}>{t('common.dataGrid.pendingSql')} ({pendingSqls.length})</span>
+      {/* ═══ 待提交 SQL 抽屉（底部滑出）═══ */}
+      {hasChanges && (
+        <div
+          className={`pending-sql-drawer${showSqlPanel ? ' is-open' : ''}`}
+          aria-hidden={!showSqlPanel}
+          inert={!showSqlPanel}
+        >
+          <div className="pending-sql-drawer-head">
+            <span className="pending-sql-drawer-title">
+              <CodeOutlined style={{ fontSize: 12, color: 'var(--color-primary)' }} />
+              {t('common.dataGrid.pendingSqlTitle')}
+              <Tag
+                className="data-toolbar-tag"
+                style={{
+                  background: 'var(--color-primary-alpha-15)',
+                  color: 'var(--color-primary)',
+                  border: '1px solid var(--color-primary-alpha-30)',
+                }}
+              >
+                {pendingSqls.length}
+              </Tag>
+            </span>
             <div style={{ flex: 1 }} />
-            <Space size={4}>
-              <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleCommit} loading={loading} style={{ fontSize: 11, height: 20 }}>{t('common.submit')}</Button>
-              <Button size="small" icon={<UndoOutlined />} onClick={handleUndo} disabled={!hasEditHistory} style={{ fontSize: 11, height: 20 }}>{t('common.undo')}</Button>
-            </Space>
-            <Button size="small" type="text" icon={<CloseOutlined />} onClick={() => setShowSqlPanel(false)} style={{ height: 18, width: 18, fontSize: 10 }} />
+            <Button
+              type="primary"
+              size="small"
+              icon={<SaveOutlined />}
+              onClick={handleCommit}
+              loading={loading}
+              className="data-toolbar-btn"
+            >
+              {t('common.submit')}
+            </Button>
+            <Button
+              size="small"
+              icon={<UndoOutlined />}
+              onClick={handleUndo}
+              disabled={!hasEditHistory}
+              className="data-toolbar-btn"
+            >
+              {t('common.undo')}
+            </Button>
+            <Button
+              size="small"
+              icon={<ArrowDownOutlined />}
+              onClick={() => setShowSqlPanel(false)}
+              className="pending-sql-collapse"
+            >
+              {t('common.collapse')}
+            </Button>
           </div>
-          <div style={{ flex: 1, overflow: 'auto', padding: '4px 8px' }}>
-            {pendingSqls.map((item, idx) => (
-              <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '1px 0', borderBottom: idx < pendingSqls.length - 1 ? '1px solid var(--border-color)' : undefined }}>
-                <Tag color={item.type === 'insert' ? 'green' : item.type === 'delete' ? 'red' : 'blue'} style={{ margin: 0, fontSize: 9, lineHeight: '14px', height: 16, minWidth: 20, textAlign: 'center', flexShrink: 0 }}>
+          <div className="pending-sql-drawer-body">
+            {pendingSqls.map((item) => (
+              <div key={item.id} className="pending-sql-row">
+                <span className={`pending-sql-type is-${item.type}`}>
                   {item.type === 'insert' ? 'INS' : item.type === 'delete' ? 'DEL' : 'UPD'}
-                </Tag>
-                <code style={{ flex: 1, fontSize: 10, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-primary)' }}>{item.sql}</code>
-                <Button size="small" type="text" danger icon={<CloseOutlined />} onClick={() => handleRemovePendingSql(item.id)} style={{ height: 16, width: 16, fontSize: 9, flexShrink: 0 }} />
+                </span>
+                <span className="pending-sql-code">
+                  <SqlText sql={item.sql} />
+                </span>
+                <Tooltip title={t('common.dataGrid.revertRow')}>
+                  <Button
+                    size="small"
+                    type="text"
+                    danger
+                    icon={<CloseOutlined />}
+                    onClick={() => handleRemovePendingSql(item.id)}
+                    style={{ height: 18, width: 18, padding: 0, flexShrink: 0 }}
+                  />
+                </Tooltip>
               </div>
             ))}
             {pendingSqls.length === 0 && (
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textAlign: 'center', padding: 8 }}>{t('common.dataGrid.noPendingSql')}</div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-tertiary)',
+                  textAlign: 'center',
+                  padding: 8,
+                }}
+              >
+                {t('common.dataGrid.noPendingSql')}
+              </div>
             )}
             {noPkWarning && (
-              <div style={{ fontSize: 11, color: 'var(--color-warning, #F59E0B)', textAlign: 'center', padding: '4px 8px', borderTop: '1px solid var(--border-color)' }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--color-warning, #F59E0B)',
+                  textAlign: 'center',
+                  padding: '4px 8px',
+                  borderTop: '1px solid var(--border-color)',
+                }}
+              >
                 {t('common.dataGrid.noPrimaryKeyWarning')}
               </div>
             )}
@@ -1177,33 +2087,152 @@ export const DataTable = memo(function DataTable({
       )}
 
       {/* ═══ Status Bar ═══ */}
-      <div style={{ borderTop: '1px solid var(--border-color)', background: 'var(--background-card)', padding: '1px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, minHeight: 22 }}>
+      <div
+        style={{
+          borderTop: '1px solid var(--border-color)',
+          background: 'var(--background-card)',
+          padding: '1px 4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0,
+          minHeight: 24,
+        }}
+      >
         <Space size={2}>
-          <Button icon={<ReloadOutlined />} onClick={() => loadData()} loading={loading} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }}>{t('common.refreshLabel')}</Button>
-          {hasChanges && (
-            <Tooltip title={t('common.dataGrid.pendingSql')}>
-              <Button icon={<CodeOutlined />} size="small" type={showSqlPanel ? 'primary' : 'default'} onClick={() => setShowSqlPanel(!showSqlPanel)} style={{ height: 20, padding: '0 4px', fontSize: 11 }} />
+          {!showSqlPanel && pendingSqls.length > 0 && (
+            <Tooltip title={t('common.dataGrid.expandPendingSql')}>
+              <Button
+                icon={<ArrowUpOutlined />}
+                size="small"
+                onClick={() => setShowSqlPanel(true)}
+                style={{ height: 20, padding: '0 6px', fontSize: 11 }}
+              >
+                {t('common.dataGrid.pendingSqlTitle')} ({pendingSqls.length})
+              </Button>
             </Tooltip>
           )}
         </Space>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
-          <code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontFamily: 'monospace', padding: '2px 6px', background: 'var(--background-card)', borderRadius: 3, border: '1px solid var(--border-color)', maxWidth: 'none' }}>{currentSql}</code>
+          <code
+            style={{
+              flex: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 11,
+              fontFamily: 'var(--font-family-code)',
+              padding: '2px 6px',
+              background: 'var(--background-card)',
+              borderRadius: 3,
+              border: '1px solid var(--border-color)',
+              maxWidth: 'none',
+            }}
+          >
+            <SqlText sql={currentSql} />
+          </code>
           <Tooltip title={t('common.copySql')}>
-            <Button icon={<CopyOutlined />} type="text" onClick={copySql} size="small" style={{ height: 20, padding: '0 4px', fontSize: 11 }} />
+            <Button
+              icon={<CopyOutlined />}
+              type="text"
+              onClick={copySql}
+              size="small"
+              style={{ height: 20, padding: '0 4px', fontSize: 11 }}
+            />
           </Tooltip>
         </div>
         <Space size={2} style={{ flexShrink: 0 }}>
-          <Button size="small" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }} title={t('common.firstPage')}>«</Button>
-          <Button size="small" disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }}>‹</Button>
-          <Input size="small" value={pageInput} onChange={(e) => setPageInput(e.target.value)} onBlur={() => { const v = parseInt(pageInput); if (!isNaN(v) && v > 0 && v <= Math.ceil(totalCount / pageSize)) setCurrentPage(v); else setPageInput(String(currentPage)); }} onPressEnter={() => { const v = parseInt(pageInput); if (!isNaN(v) && v > 0 && v <= Math.ceil(totalCount / pageSize)) setCurrentPage(v); else setPageInput(String(currentPage)); }} style={{ width: 32, fontSize: 11, textAlign: 'center', padding: '0 2px', height: 20 }} />
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)', userSelect: 'none' }}>/ {Math.ceil(totalCount / pageSize) || 1}</span>
-          <Button size="small" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(currentPage + 1)} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }}>›</Button>
-          <Button size="small" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize))} style={{ height: 20, padding: '0 8px', fontSize: 11, lineHeight: '18px' }} title={t('common.lastPage')}>»</Button>
-          <AutoComplete value={String(pageSize)} onChange={(val) => { const n = parseInt(val); if (n > 0 && n <= 10000) { setPageSizeState(n); setCurrentPage(1); } else if (n > 10000) { setPageSizeState(10000); setCurrentPage(1); } }}
-            size="small" style={{ width: 56, fontSize: 11 }} options={[{ value: '50' }, { value: '100' }, { value: '500' }, { value: '1000' }]}
-            popupClassName="page-size-dropdown"
-          />
-          <style>{`.page-size-dropdown .ant-select-item-option { font-size: 11px !important; } .page-size-dropdown { min-width: 64px !important; }`}</style>
+          <Button
+            size="small"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(currentPage - 1)}
+            style={{ height: 20, padding: '0 6px', fontSize: 11, lineHeight: '18px' }}
+          >
+            ‹
+          </Button>
+          <Popover
+            trigger="click"
+            placement="topRight"
+            content={
+              <div className="pager-popover">
+                <div className="pager-popover-row">
+                  <span className="pager-popover-label">{t('common.dataGrid.pageNumber')}</span>
+                  <Input
+                    size="small"
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onBlur={applyPageInput}
+                    onPressEnter={applyPageInput}
+                    style={{ width: 58, fontSize: 11, textAlign: 'center', height: 22 }}
+                  />
+                  <span className="pager-popover-total">/ {pageCount}</span>
+                  <div style={{ flex: 1 }} />
+                  <Button
+                    type="link"
+                    size="small"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(1)}
+                    style={{ padding: 0, height: 20, fontSize: 11 }}
+                  >
+                    {t('common.firstPage')}
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
+                    disabled={currentPage === pageCount}
+                    onClick={() => setCurrentPage(pageCount)}
+                    style={{ padding: 0, height: 20, fontSize: 11 }}
+                  >
+                    {t('common.lastPage')}
+                  </Button>
+                </div>
+                <div className="pager-popover-row">
+                  <span className="pager-popover-label">{t('common.pageSize')}</span>
+                  <AutoComplete
+                    value={String(pageSize)}
+                    onChange={applyPageSize}
+                    size="small"
+                    style={{ width: 96, fontSize: 11 }}
+                    options={[
+                      { value: '50' },
+                      { value: '100' },
+                      { value: '500' },
+                      { value: '1000' },
+                    ]}
+                    popupClassName="page-size-dropdown"
+                  />
+                </div>
+                <div className="pager-popover-row">
+                  <span className="pager-popover-label">{t('common.goToRow')}</span>
+                  <Input
+                    size="small"
+                    placeholder={t('common.goToRow')}
+                    value={goToRowValue}
+                    onChange={(e) => setGoToRowValue(e.target.value)}
+                    onPressEnter={handleGoToRow}
+                    style={{ width: 110, fontSize: 11, textAlign: 'center', height: 22 }}
+                  />
+                </div>
+              </div>
+            }
+          >
+            <Button
+              type="text"
+              size="small"
+              className="pager-summary-btn"
+              style={{ height: 20, padding: '0 6px', fontSize: 11 }}
+            >
+              {currentPage} / {pageCount} · {totalCount.toLocaleString()} {t('common.rows')}
+            </Button>
+          </Popover>
+          <Button
+            size="small"
+            disabled={currentPage * pageSize >= totalCount}
+            onClick={() => setCurrentPage(currentPage + 1)}
+            style={{ height: 20, padding: '0 6px', fontSize: 11, lineHeight: '18px' }}
+          >
+            ›
+          </Button>
         </Space>
       </div>
     </div>

@@ -41,31 +41,11 @@ export function useTreeDialogs(
     database: string;
   } | null>(null);
 
-  // User management dialog
-  const [userManagementOpen, setUserManagementOpen] = useState(false);
-  const [userManagementTarget, setUserManagementTarget] = useState<{
-    connId: string;
-    database?: string;
-  } | null>(null);
-
   // Create database dialog
   const [createDatabaseOpen, setCreateDatabaseOpen] = useState(false);
   const [createDatabaseTarget, setCreateDatabaseTarget] = useState<{
     connId: string;
     dbType?: string;
-  } | null>(null);
-
-  // Process list dialog
-  const [processListOpen, setProcessListOpen] = useState(false);
-  const [processListTarget, setProcessListTarget] = useState<{
-    connId: string;
-    database?: string;
-  } | null>(null);
-
-  // Server status dialog
-  const [serverStatusOpen, setServerStatusOpen] = useState(false);
-  const [serverStatusTarget, setServerStatusTarget] = useState<{
-    connId: string;
   } | null>(null);
 
   // Schema compare dialog
@@ -150,29 +130,11 @@ export function useTreeDialogs(
     backupRestoreTarget,
     setBackupRestoreTarget,
 
-    // User management dialog
-    userManagementOpen,
-    setUserManagementOpen,
-    userManagementTarget,
-    setUserManagementTarget,
-
     // Create database dialog
     createDatabaseOpen,
     setCreateDatabaseOpen,
     createDatabaseTarget,
     setCreateDatabaseTarget,
-
-    // Process list dialog
-    processListOpen,
-    setProcessListOpen,
-    processListTarget,
-    setProcessListTarget,
-
-    // Server status dialog
-    serverStatusOpen,
-    setServerStatusOpen,
-    serverStatusTarget,
-    setServerStatusTarget,
 
     // Schema compare dialog
     schemaCompareOpen,

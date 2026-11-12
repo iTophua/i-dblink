@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Modal, Form, Input, Select, message } from 'antd';
+import { Modal, Form, Input, Select, App } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 import { getErrorMessage } from '../../utils/getErrorMessage';
@@ -27,9 +27,11 @@ export function CreateDatabaseDialog({
   onSuccess,
 }: CreateDatabaseDialogProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [selectedCharset, setSelectedCharset] = useState<string>('utf8mb4');
+  // 仅保留 setter：当前没有读取方（charset 值走 Form），但多处逻辑会同步它
+  const [, setSelectedCharset] = useState<string>('utf8mb4');
   const [charsetOptions, setCharsetOptions] = useState<{ label: string; value: string }[]>([]);
   const [collationOptions, setCollationOptions] = useState<{ label: string; value: string }[]>([]);
   const [charsetCollationsMap, setCharsetCollationsMap] = useState<
@@ -54,7 +56,13 @@ export function CreateDatabaseDialog({
 
   // 从数据库动态查询支持的字符集、排序规则及默认值
   useEffect(() => {
-    if (!open || !connectionId || loadingRef.current || lastConnectionIdRef.current === connectionId) return;
+    if (
+      !open ||
+      !connectionId ||
+      loadingRef.current ||
+      lastConnectionIdRef.current === connectionId
+    )
+      return;
 
     loadingRef.current = true;
     lastConnectionIdRef.current = connectionId;
@@ -101,13 +109,11 @@ export function CreateDatabaseDialog({
           if (defaultCollationResult.rows?.[0]) {
             form.setFieldValue('collation', String(defaultCollationResult.rows[0][1]));
           }
-        } else if (
-          ['postgresql', 'kingbase', 'highgo', 'vastbase'].includes(lowerDbType)
-        ) {
+        } else if (['postgresql', 'kingbase', 'highgo', 'vastbase'].includes(lowerDbType)) {
           const [encodingResult, collationResult] = await Promise.all([
             api.executeQuery(
               connectionId,
-              "SELECT DISTINCT pg_encoding_to_char(encoding) AS enc FROM pg_database WHERE encoding IS NOT NULL"
+              'SELECT DISTINCT pg_encoding_to_char(encoding) AS enc FROM pg_database WHERE encoding IS NOT NULL'
             ),
             api.executeQuery(
               connectionId,
@@ -136,8 +142,12 @@ export function CreateDatabaseDialog({
           setCollationOptions(collations);
 
           form.setFieldsValue({
-            charset: defaultEncodingResult.rows?.[0] ? String(defaultEncodingResult.rows[0][0]) : undefined,
-            collation: defaultLocaleResult.rows?.[0] ? String(defaultLocaleResult.rows[0][0]) : undefined,
+            charset: defaultEncodingResult.rows?.[0]
+              ? String(defaultEncodingResult.rows[0][0])
+              : undefined,
+            collation: defaultLocaleResult.rows?.[0]
+              ? String(defaultLocaleResult.rows[0][0])
+              : undefined,
           });
         } else if (lowerDbType === 'sqlserver') {
           const [collationResult, defaultResult] = await Promise.all([
@@ -204,7 +214,12 @@ export function CreateDatabaseDialog({
           sql += ` COLLATE ${values.collation}`;
         }
         sql += ';';
-      } else if (upperDbType === 'POSTGRESQL' || upperDbType === 'KINGBASE' || upperDbType === 'HIGHGO' || upperDbType === 'VASTBASE') {
+      } else if (
+        upperDbType === 'POSTGRESQL' ||
+        upperDbType === 'KINGBASE' ||
+        upperDbType === 'HIGHGO' ||
+        upperDbType === 'VASTBASE'
+      ) {
         sql = `CREATE DATABASE "${dbName}"`;
         if (values.charset) {
           sql += ` WITH ENCODING = '${values.charset}'`;
@@ -271,11 +286,7 @@ export function CreateDatabaseDialog({
       transitionName=""
       maskTransitionName=""
     >
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={{ charset: 'utf8mb4' }}
-      >
+      <Form form={form} layout="vertical" initialValues={{ charset: 'utf8mb4' }}>
         <Form.Item
           name="databaseName"
           label={t('common.databaseName')}
@@ -364,11 +375,7 @@ export function CreateDatabaseDialog({
 
         {isDameng && (
           <Form.Item name="charset" label={t('common.charset')}>
-            <Select
-              placeholder={t('common.selectCharset')}
-              options={DAMENG_CHARSETS}
-              allowClear
-            />
+            <Select placeholder={t('common.selectCharset')} options={DAMENG_CHARSETS} allowClear />
           </Form.Item>
         )}
       </Form>

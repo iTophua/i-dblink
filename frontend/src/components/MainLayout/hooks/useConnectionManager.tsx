@@ -414,8 +414,9 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
       setSelectedConnectionId(connectionId);
       setSelectedDatabase(database);
 
-      // 检查连接状态
-      const conn = connections.find((c) => c.id === connectionId);
+      // 从 store 取最新状态：首页「最近使用」会在 connect() 返回后立刻调用本方法，
+      // 闭包里的 connections 还是连接前的快照，会把刚连上的连接误判为 disconnected
+      const conn = useAppStore.getState().connections.find((c) => c.id === connectionId);
 
       // Track recent database
       if (conn) {
@@ -439,7 +440,7 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
       await loadDatabaseTables(connectionId, database, true);
       await loadDatabaseRoutines(connectionId, database);
     },
-    [loadDatabaseTables, loadDatabaseRoutines, connectionDatabases, connections]
+    [loadDatabaseTables, loadDatabaseRoutines, connectionDatabases]
   );
 
   const handleDatabaseRefresh = useCallback(
@@ -624,6 +625,8 @@ export function useConnectionManager({ tabPanelRef }: UseConnectionManagerParams
           setSelectedSchema(undefined);
           setActiveConnection(null);
         }
+        // 监控/权限 Tab 无未保存内容，断开时静默关闭（数据/查询 Tab 仍走上面的确认）
+        tabPanelRef.current?.closeMonitorTabs(connectionId);
         disconnect(connectionId);
       };
 

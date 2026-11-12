@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Modal, Form, Select, message } from 'antd';
+import { Modal, Form, Select, App } from 'antd';
 import {
   FolderOutlined,
   GlobalOutlined,
@@ -37,6 +37,7 @@ export function GroupDialog({
   onSave,
 }: GroupDialogProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
 
   const GROUP_ICONS = [
     { label: t('common.folder'), value: '📁', icon: <FolderOutlined /> },

@@ -12,6 +12,8 @@ import {
   Collapse,
   Typography,
   App,
+  Row,
+  Col,
 } from 'antd';
 import { DiffOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -19,7 +21,6 @@ import { api } from '../api';
 import type { ConnectionOutput } from '../types/api';
 import { DDLViewer } from './DDLViewer';
 
-const { Panel } = Collapse;
 const { Text, Title } = Typography;
 
 interface DiffColumn {
@@ -242,104 +243,141 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
       open={open}
       onCancel={onClose}
       width={1000}
-      footer={null}
       transitionName=""
       maskTransitionName=""
+      footer={[
+        <Button key="close" onClick={onClose}>
+          {t('common.close')}
+        </Button>,
+        <Button
+          key="compare"
+          type="primary"
+          icon={<DiffOutlined />}
+          loading={loading}
+          onClick={handleCompare}
+        >
+          {t('common.compareStructure')}
+        </Button>,
+      ]}
     >
-      <Space orientation="vertical" style={{ width: '100%' }} size="large">
-        <Form form={form} layout="vertical">
-          <Form.Item
-            name="sourceConnectionId"
-            label={t('common.sourceDatabase')}
-            rules={[{ required: true, message: t('common.pleaseSelectSourceDatabase') }]}
-          >
-            <Select
-              placeholder={t('common.selectSourceConnection')}
-              onChange={(val) => setSelectedConn(val)}
+      <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            background: 'var(--background-toolbar)',
+          }}
+        >
+          <Form form={form} layout="vertical">
+            <Row gutter={12}>
+              <Col span={12}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-secondary)',
+                    marginBottom: 8,
+                  }}
+                >
+                  {t('common.sourceDatabase')}
+                </div>
+                <Form.Item
+                  name="sourceConnectionId"
+                  label={t('common.selectSourceConnection')}
+                  rules={[{ required: true, message: t('common.pleaseSelectSourceDatabase') }]}
+                >
+                  <Select onChange={(val) => setSelectedConn(val)}>
+                    {connections.map((c) => (
+                      <Select.Option key={c.id} value={c.id}>
+                        {c.name} ({c.db_type})
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+                <Form.Item
+                  name="sourceDatabase"
+                  label={t('common.sourceDatabaseName')}
+                  rules={[
+                    { required: true, message: t('common.pleaseEnterSourceDatabaseName') },
+                  ]}
+                  style={{ marginBottom: 0 }}
+                >
+                  <Input placeholder={t('common.exampleDb')} />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-secondary)',
+                    marginBottom: 8,
+                  }}
+                >
+                  {t('common.targetDatabase')}
+                </div>
+                <Form.Item
+                  name="targetConnectionId"
+                  label={t('common.selectTargetConnection')}
+                  rules={[{ required: true, message: t('common.pleaseSelectTargetDatabase') }]}
+                >
+                  <Select>
+                    {targetConns.map((c) => (
+                      <Select.Option key={c.id} value={c.id}>
+                        {c.name} ({c.db_type})
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+                <Form.Item
+                  name="targetDatabase"
+                  label={t('common.targetDatabaseName')}
+                  rules={[
+                    { required: true, message: t('common.pleaseEnterTargetDatabaseName') },
+                  ]}
+                  style={{ marginBottom: 0 }}
+                >
+                  <Input placeholder={t('common.exampleDb')} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item
+              name="tableName"
+              label={t('common.specifyTableNameOptional')}
+              tooltip={t('common.leaveEmptyCompareAllTables')}
+              style={{ marginTop: 12, marginBottom: 0 }}
             >
-              {connections.map((c) => (
-                <Select.Option key={c.id} value={c.id}>
-                  {c.name} ({c.db_type})
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="sourceDatabase"
-            label={t('common.sourceDatabaseName')}
-            rules={[{ required: true, message: t('common.pleaseEnterSourceDatabaseName') }]}
-          >
-            <Input placeholder={t('common.exampleDb')} />
-          </Form.Item>
-
-          <Form.Item
-            name="targetConnectionId"
-            label={t('common.targetDatabase')}
-            rules={[{ required: true, message: t('common.pleaseSelectTargetDatabase') }]}
-          >
-            <Select placeholder={t('common.selectTargetConnection')}>
-              {targetConns.map((c) => (
-                <Select.Option key={c.id} value={c.id}>
-                  {c.name} ({c.db_type})
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="targetDatabase"
-            label={t('common.targetDatabaseName')}
-            rules={[{ required: true, message: t('common.pleaseEnterTargetDatabaseName') }]}
-          >
-            <Input placeholder={t('common.exampleDb')} />
-          </Form.Item>
-
-          <Form.Item
-            name="tableName"
-            label={t('common.specifyTableNameOptional')}
-            tooltip={t('common.leaveEmptyCompareAllTables')}
-          >
-            <Input placeholder={t('common.exampleUsers')} />
-          </Form.Item>
-
-          <Form.Item>
-            <Button
-              type="primary"
-              icon={<DiffOutlined />}
-              onClick={handleCompare}
-              loading={loading}
-              block
-            >
-              {t('common.compareStructure')}
-            </Button>
-          </Form.Item>
-        </Form>
+              <Input placeholder={t('common.exampleUsers')} />
+            </Form.Item>
+          </Form>
+        </div>
 
         {diffs.length > 0 && (
-          <Collapse defaultActiveKey={[]}>
-            {diffs.map((diff) => (
-              <Panel
-                header={
-                  <Space>
-                    <Text strong>{diff.table_name}</Text>
-                    {diff.has_diffs ? (
-                      <Tag color="orange">
-                        {t('common.differencesCount', {
-                          count:
-                            diff.column_diffs.length +
-                            diff.index_diffs.length +
-                            diff.foreign_key_diffs.length,
-                        })}
-                      </Tag>
-                    ) : (
-                      <Tag color="green">{t('common.schemasMatch')}</Tag>
-                    )}
-                  </Space>
-                }
-                key={diff.table_name}
-              >
-                {diff.column_diffs.length > 0 && (
+          <Collapse
+            defaultActiveKey={diffs.filter((diff) => diff.has_diffs).map((diff) => diff.table_name)}
+            items={diffs.map((diff) => ({
+              key: diff.table_name,
+              label: (
+                <Space>
+                  <Text strong>{diff.table_name}</Text>
+                  {diff.has_diffs ? (
+                    <Tag color="orange">
+                      {t('common.differencesCount', {
+                        count:
+                          diff.column_diffs.length +
+                          diff.index_diffs.length +
+                          diff.foreign_key_diffs.length,
+                      })}
+                    </Tag>
+                  ) : (
+                    <Tag color="green">{t('common.schemasMatch')}</Tag>
+                  )}
+                </Space>
+              ),
+              children: (
+                <>
+                  {diff.column_diffs.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <Title level={5}>
                       {t('common.columnDifferences', { count: diff.column_diffs.length })}
@@ -402,9 +440,10 @@ export const SchemaCompareDialog: React.FC<SchemaCompareDialogProps> = ({
                     </Button>
                   </div>
                 )}
-              </Panel>
-            ))}
-          </Collapse>
+                </>
+              ),
+            }))}
+          />
         )}
       </Space>
     </Modal>

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { List, Tag, Typography, Empty, Button, Space, Popconfirm, Tooltip, message } from 'antd';
+import { List, Tag, Typography, Empty, Button, Space, Popconfirm, Tooltip, App } from 'antd';
 import {
   SearchOutlined,
   ClearOutlined,
@@ -37,6 +37,7 @@ export function HistoryPanel({
   storageKey = 'sql-history',
 }: HistoryPanelProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [searchText, setSearchText] = useState('');
   const tc = useThemeColors();
 
@@ -105,13 +106,16 @@ export function HistoryPanel({
   };
 
   // 复制 SQL 到剪贴板
-  const handleCopy = useCallback((sql: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(sql).then(
-      () => message.success(t('common.copiedToClipboard')),
-      () => message.error(t('common.copyFailed'))
-    );
-  }, [t]);
+  const handleCopy = useCallback(
+    (sql: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(sql).then(
+        () => message.success(t('common.copiedToClipboard')),
+        () => message.error(t('common.copyFailed'))
+      );
+    },
+    [t]
+  );
 
   // 暴露 addHistory 方法供外部调用
   useMemo(() => {
@@ -152,7 +156,13 @@ export function HistoryPanel({
         </Space>
 
         <Space size="small">
-          <Tag style={{ background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
+          <Tag
+            style={{
+              background: 'var(--color-primary-alpha-15)',
+              color: 'var(--color-primary)',
+              border: '1px solid var(--color-primary-alpha-30)',
+            }}
+          >
             {' '}
             {history.length} {t('common.items')}
           </Tag>
@@ -204,10 +214,22 @@ export function HistoryPanel({
                     }
                     title={
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Text strong style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Text
+                          strong
+                          style={{
+                            fontSize: 12,
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
                           {item.sql.length > 80 ? item.sql.substring(0, 80) + '...' : item.sql}
                         </Text>
-                        <Tag color={item.success ? 'success' : 'error'} style={{ fontSize: 10, margin: 0, flexShrink: 0 }}>
+                        <Tag
+                          color={item.success ? 'success' : 'error'}
+                          style={{ fontSize: 10, margin: 0, flexShrink: 0 }}
+                        >
                           {item.success ? t('common.success') : t('common.failed')}
                         </Tag>
                         {/* hover 时显示的操作按钮 */}
@@ -227,8 +249,15 @@ export function HistoryPanel({
                                 type="text"
                                 size="small"
                                 icon={<CaretRightOutlined />}
-                                onClick={(e) => { e.stopPropagation(); onRerun(item.sql); }}
-                                style={{ padding: '0 4px', height: 20, color: 'var(--color-primary)' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRerun(item.sql);
+                                }}
+                                style={{
+                                  padding: '0 4px',
+                                  height: 20,
+                                  color: 'var(--color-primary)',
+                                }}
                               />
                             </Tooltip>
                           )}

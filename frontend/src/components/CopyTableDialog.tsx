@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Form, Input, Radio, message, Select } from 'antd';
+import { Modal, Form, Input, Radio, App, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { getErrorMessage } from '../utils/getErrorMessage';
@@ -48,6 +48,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
   onSuccess,
 }) => {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -90,7 +91,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
             const colNames = result.columns || [];
             const dialect = getDialect(dbType);
             for (const row of result.rows) {
-              const values = row.map((v: any) => dialect.escapeValue(v));
+              const values = row.map((v: unknown) => dialect.escapeValue(v));
 
               const insertSql = `INSERT INTO ${escapeId(targetTable)} (${colNames.map((c: string) => escapeId(c)).join(', ')}) VALUES (${values.join(', ')})`;
               await api.executeQuery(connectionId, insertSql, targetDatabase);
@@ -122,6 +123,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
       confirmLoading={loading}
       okText={t('common.copy')}
       cancelText={t('common.cancel')}
+      width={560}
       destroyOnHidden
       transitionName=""
       maskTransitionName=""

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Events, Window } from '@wailsio/runtime';
-import { Empty, Input } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { CloseCircleFilled, SearchOutlined } from '@ant-design/icons';
+import { useSettingsStore } from '../stores/settingsStore';
+import { applyThemeVars } from '../styles/applyTheme';
 
 /**
  * 托盘快速连接面板（左键点托盘图标弹出的紧凑面板，AttachWindow 模式）。
@@ -39,13 +40,33 @@ export function ConnPicker() {
     Events.Emit('conn-picker:request-data').catch(() => {});
   }, []);
 
+  // 面板是独立窗口：主题令牌必须自己注入一遍（主窗口的注入不会跨窗口生效）。
+  // 显示时重放一次，保证主窗口切换主题后托盘面板立即跟随。
+  const applyCurrentTheme = useCallback(() => {
+    const { settings } = useSettingsStore.getState();
+    const { config } = applyThemeVars(settings.themeMode, settings.themePreset);
+    const hex = config.neutralColors.background.replace('#', '');
+    if (hex.length === 6) {
+      Window.SetBackgroundColour(
+        parseInt(hex.slice(0, 2), 16),
+        parseInt(hex.slice(2, 4), 16),
+        parseInt(hex.slice(4, 6), 16),
+        255
+      ).catch(() => {});
+    }
+  }, []);
+
   useEffect(() => {
+    applyCurrentTheme();
+
+    const offHydrate = useSettingsStore.persist.onFinishHydration(() => applyCurrentTheme());
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const applyTheme = () => {
-      document.documentElement.setAttribute('data-theme', mq.matches ? 'dark' : 'light');
+    const onSchemeChange = () => {
+      if (useSettingsStore.getState().settings.themeMode === 'system') {
+        applyCurrentTheme();
+      }
     };
-    applyTheme();
-    mq.addEventListener('change', applyTheme);
+    mq.addEventListener('change', onSchemeChange);
 
     const offData = Events.On('conn-picker:data', (ev) => {
       const payload = ev.data as
@@ -60,6 +81,7 @@ export function ConnPicker() {
     // 面板每次显示（托盘点击）都会触发 focus/visibilitychange → 重置并刷新
     const onWake = () => {
       if (document.visibilityState !== 'visible') return;
+      applyCurrentTheme();
       if (queryRef.current) {
         queryRef.current = '';
         setQuery('');
@@ -73,11 +95,12 @@ export function ConnPicker() {
     requestData();
     return () => {
       offData();
+      offHydrate();
       window.removeEventListener('focus', onWake);
       document.removeEventListener('visibilitychange', onWake);
-      mq.removeEventListener('change', applyTheme);
+      mq.removeEventListener('change', onSchemeChange);
     };
-  }, [requestData]);
+  }, [applyCurrentTheme, requestData]);
 
   const sections = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -131,7 +154,12 @@ export function ConnPicker() {
 
   return (
     <div
-      style={{ height: '100vh', padding: 8, boxSizing: 'border-box' }}
+      style={{
+        height: '100vh',
+        padding: 8,
+        boxSizing: 'border-box',
+        background: 'var(--background)',
+      }}
       onKeyDown={handleKeyDown}
     >
       <div
@@ -147,19 +175,57 @@ export function ConnPicker() {
         }}
       >
         <div style={{ padding: 10, borderBottom: '1px solid var(--border)' }}>
-          <Input
-            autoFocus
-            allowClear
-            size="small"
-            placeholder="搜索连接，回车连接"
-            prefix={<SearchOutlined style={{ color: 'var(--color-text-tertiary)' }} />}
-            value={query}
-            onChange={(e) => {
-              queryRef.current = e.target.value;
-              setQuery(e.target.value);
-              setActiveIndex(0); // 搜索变化回到首项
+          {/* 原生 input：面板窗口没有 antd ConfigProvider，用 antd Input 会固定走浅色 */}
+          <div
+            className="conn-picker-search"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              height: 30,
+              padding: '0 9px',
+              borderRadius: 6,
+              border: '1px solid var(--border)',
+              background: 'var(--background-card)',
             }}
-          />
+          >
+            <SearchOutlined style={{ color: 'var(--text-tertiary)', fontSize: 13 }} />
+            <input
+              autoFocus
+              value={query}
+              placeholder="搜索连接，回车连接"
+              onChange={(e) => {
+                queryRef.current = e.target.value;
+                setQuery(e.target.value);
+                setActiveIndex(0); // 搜索变化回到首项
+              }}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                color: 'var(--text-primary)',
+                fontSize: 12.5,
+                fontFamily: 'inherit',
+              }}
+            />
+            {query && (
+              <CloseCircleFilled
+                onClick={() => {
+                  queryRef.current = '';
+                  setQuery('');
+                  setActiveIndex(0);
+                }}
+                style={{
+                  color: 'var(--text-disabled)',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              />
+            )}
+          </div>
         </div>
         <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 6 }}>
           {flat.length === 0 ? (
@@ -171,7 +237,7 @@ export function ConnPicker() {
                 justifyContent: 'center',
               }}
             >
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的连接" />
+              <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>没有匹配的连接</div>
             </div>
           ) : (
             sections.map((sec) => (
@@ -180,7 +246,7 @@ export function ConnPicker() {
                   <div
                     style={{
                       fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
+                      color: 'var(--text-tertiary)',
                       padding: '6px 8px 2px',
                     }}
                   >
@@ -216,13 +282,13 @@ export function ConnPicker() {
                           background:
                             c.status === 'connected'
                               ? 'var(--color-success)'
-                              : 'var(--color-text-quaternary)',
+                              : 'var(--text-disabled)',
                         }}
                       />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text)', fontSize: 13 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', fontSize: 13 }}>
                         {c.name}
                       </span>
-                      <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                      <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 11, color: 'var(--text-tertiary)' }}>
                         {c.host}:{c.port}
                       </span>
                     </div>
@@ -237,7 +303,7 @@ export function ConnPicker() {
             padding: '4px 10px',
             borderTop: '1px solid var(--border)',
             fontSize: 11,
-            color: 'var(--color-text-quaternary)',
+            color: 'var(--text-disabled)',
             display: 'flex',
             justifyContent: 'space-between',
           }}

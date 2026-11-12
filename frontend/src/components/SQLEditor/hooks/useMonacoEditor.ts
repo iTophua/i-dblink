@@ -117,7 +117,8 @@ export function useMonacoEditor({
         { token: 'operator', foreground: hx(tc.textSecondary) },
         { token: 'delimiter', foreground: hx(tc.textSecondary) },
         { token: 'variable', foreground: hx(tc.textPrimary) },
-        { token: 'function', foreground: '795E26' },
+        // pro 预设：函数用 info 蓝（#2563EB / #60A5FA），与 violet 关键字拉开层次
+        { token: 'function', foreground: tc.preset === 'default' || tc.preset === 'pro' ? hx(tc.info) : '795E26' },
         { token: 'predefined', foreground: '267F99' },
       ];
 
@@ -128,13 +129,14 @@ export function useMonacoEditor({
         r.token === 'type' || r.token === 'predefined'
           ? { ...r, foreground: '4EC9B0' }
           : r.token === 'function'
-            ? { ...r, foreground: 'DCDCAA' }
+            ? { ...r, foreground: tc.preset === 'default' || tc.preset === 'pro' ? hx(tc.info) : 'DCDCAA' }
             : r.token === 'operator' || r.token === 'delimiter'
               ? { ...r, foreground: 'D4D4D4' }
               : r
       ),
       colors: {
-        'editor.background': tc.background,
+        // pro 预设编辑器用面板白/近黑（backgroundCard），与结果窗格同为「数据表面」
+        'editor.background': tc.preset === 'default' || tc.preset === 'pro' ? tc.backgroundCard : tc.background,
         'editor.foreground': tc.textPrimary,
         'editorCursor.foreground': '#FFFFFF',
         'editor.lineHighlightBackground': tc.backgroundToolbar,
@@ -176,7 +178,7 @@ export function useMonacoEditor({
       inherit: true,
       rules,
       colors: {
-        'editor.background': tc.background,
+        'editor.background': tc.preset === 'default' || tc.preset === 'pro' ? tc.backgroundCard : tc.background,
         'editor.foreground': tc.textPrimary,
         'editorCursor.foreground': tc.textPrimary,
         'editor.lineHighlightBackground': tc.backgroundToolbar,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Space, Typography, Divider, Tag } from 'antd';
-import { CheckCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { Connection } from '../../stores/appStore';
 import { api } from '../../api';
@@ -77,15 +77,15 @@ export function StatusBar({
   return (
     <Footer
       style={{
-        height: 28,
-        lineHeight: '28px',
+        height: 24,
+        lineHeight: '24px',
         padding: '0 8px',
         background: 'var(--background-toolbar)',
         borderTop: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        fontSize: 12,
+        fontSize: 11,
         color: 'var(--text-secondary)',
       }}
       className="status-bar-enhanced"
@@ -108,24 +108,39 @@ export function StatusBar({
         </Text>
         {selectedDatabase && (
           <Text>
-            {t('common.database')}: {<span style={{ fontFamily: 'var(--font-family-code)' }}>{selectedDatabase}</span>}
+            {t('common.database')}:{' '}
+            {<span style={{ fontFamily: 'var(--font-family-code)' }}>{selectedDatabase}</span>}
           </Text>
         )}
         {selectedTable && (
           <Text>
-            {t('common.table')}: {<span style={{ fontFamily: 'var(--font-family-code)' }}>{selectedTable}</span>}
+            {t('common.table')}:{' '}
+            {<span style={{ fontFamily: 'var(--font-family-code)' }}>{selectedTable}</span>}
           </Text>
         )}
         {isQuerying && (
           <Tag
             color="processing"
-            style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px' }}
+            style={{ margin: 0, fontSize: 10, height: 18, lineHeight: '16px' }}
           >
             {t('common.querying')}
           </Tag>
         )}
         {isConnected && dbTypeLabel && (
-          <Tag style={{ margin: 0, fontSize: 11, height: 20, lineHeight: '20px', padding: '0 7px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
+          <Tag
+            style={{
+              margin: 0,
+              fontSize: 10,
+              height: 18,
+              lineHeight: '16px',
+              padding: '0 6px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'var(--color-primary-alpha-15)',
+              color: 'var(--color-primary)',
+              border: '1px solid var(--color-primary-alpha-30)',
+            }}
+          >
             {dbTypeLabel}
           </Tag>
         )}
@@ -140,9 +155,9 @@ export function StatusBar({
             color="orange"
             style={{
               margin: 0,
-              fontSize: 11,
-              height: 20,
-              lineHeight: '20px',
+              fontSize: 10,
+              height: 18,
+              lineHeight: '16px',
               fontVariantNumeric: 'tabular-nums',
             }}
             data-testid="status-transaction"
@@ -164,11 +179,12 @@ export function StatusBar({
       </Space>
       <Space separator={<Divider orientation="vertical" style={{ margin: '0 8px' }} />}>
         {isConnected && serverInfo?.character_set && (
-          <Text style={{ fontSize: 11, fontFamily: 'var(--font-family-code)' }}>{serverInfo.character_set}</Text>
+          <Text style={{ fontSize: 11, fontFamily: 'var(--font-family-code)' }}>
+            {serverInfo.character_set}
+          </Text>
         )}
         {!isConnected && <Text style={{ fontSize: 11 }}>UTF-8</Text>}
         <Text style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>v1.0.0</Text>
-        <QuestionCircleOutlined style={{ fontSize: 11, cursor: 'help', color: 'var(--text-tertiary)' }} />
       </Space>
     </Footer>
   );

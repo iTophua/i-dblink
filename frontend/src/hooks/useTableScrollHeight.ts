@@ -26,6 +26,10 @@ export function useTableScrollHeight(dependencies: unknown[] = []) {
     setTableScrollHeight(Math.max(300, height)); // 最小高度 300px
   }, []);
 
+  // dependencies 变化时（如 tab 内容重挂载、行数变化）重新绑定正在使用的容器，
+  // 否则首个渲染时 ref 为 null 的容器永远测不到高度
+  const depsKey = JSON.stringify(dependencies);
+
   useEffect(() => {
     calculateHeight();
 
@@ -42,7 +46,7 @@ export function useTableScrollHeight(dependencies: unknown[] = []) {
       window.removeEventListener('resize', calculateHeight);
       observer.disconnect();
     };
-  }, [calculateHeight]);
+  }, [calculateHeight, depsKey]);
 
   return {
     tableScrollHeight,

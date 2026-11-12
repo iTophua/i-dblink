@@ -1,12 +1,5 @@
 import React from 'react';
-import {
-  Button,
-  Space,
-  Tooltip,
-  Dropdown,
-  Select,
-  Segmented,
-} from 'antd';
+import { Button, Space, Tooltip, Dropdown, Select, Segmented } from 'antd';
 import { useTranslation } from 'react-i18next';
 import {
   PlayCircleOutlined,
@@ -31,7 +24,11 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useThemeColors } from '../../../hooks/useThemeColors';
-import { formatShortcutForDisplay, getEffectiveShortcut, isMacOS } from '../../../constants/menuShortcuts';
+import {
+  formatShortcutForDisplay,
+  getEffectiveShortcut,
+  isMacOS,
+} from '../../../constants/menuShortcuts';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useAIChatStore } from '../../../stores/aiChatStore';
 
@@ -62,6 +59,8 @@ export interface SQLEditorToolbarProps {
   copySQL: () => void;
   clearEditor: () => void;
   exportResult: () => void;
+  /** 是否有可导出的结果集（菜单项禁用态） */
+  hasResult?: boolean;
   setHistoryPanelVisible: (v: boolean) => void;
   setSnippetManagerOpen: (v: boolean) => void;
 
@@ -96,6 +95,7 @@ export function SQLEditorToolbar({
   copySQL,
   clearEditor,
   exportResult,
+  hasResult,
   setHistoryPanelVisible,
   setSnippetManagerOpen,
   connectionOptions,
@@ -111,56 +111,28 @@ export function SQLEditorToolbar({
   return (
     <div
       style={{
-        padding: '4px 12px',
         // 全屏时编辑器 fixed 铺满整窗，macOS 红绿灯悬浮在左上角——
         // 与顶部工具栏一致留 92px，避免执行按钮被遮挡（非 macOS 正常留白）
         ...(isFullscreen && isMacOS() ? { paddingLeft: 92 } : {}),
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        // 工作区条用白（card）：顶部工具栏/状态栏灰作骨架、tab/编辑器/结果
-        // 全白，形成「灰-白-灰」的干净层次（demo 同款），避免灰白条纹感
-        background: 'var(--background-card)',
       }}
       className="sql-editor-toolbar"
     >
-      <style>{`.sql-editor-toolbar .ant-btn { height: 26px; font-size: 12px; }`}</style>
       <Space size={6}>
         <Tooltip
           title={`${t('common.sqlEditor.execute')} (${formatShortcutForDisplay(getEffectiveShortcut('execute-query', useSettingsStore.getState().settings.shortcuts || {}))})`}
         >
-          <div
-            onClick={() => !loading && connectionId && handleExecuteQuery()}
+          <Button
+            type="primary"
+            size="small"
+            icon={loading ? <LoadingOutlined /> : <PlayCircleOutlined />}
+            onClick={() => handleExecuteQuery()}
+            disabled={!connectionId}
+            loading={loading}
+            className="sql-exec-btn"
             data-testid="sql-execute-btn"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '0 14px',
-              height: 26,
-              borderRadius: 7,
-              // 纯净实心主色（demo 形态）：无渐变/无光晕/无上浮，hover 只做亮度反馈
-              background: 'var(--color-primary)',
-              color: tc.isDark ? '#000000' : '#FFFFFF',
-              fontSize: 12.5,
-              fontWeight: 500,
-              cursor: !connectionId || loading ? 'not-allowed' : 'pointer',
-              opacity: !connectionId ? 0.5 : 1,
-              transition: 'filter 0.15s ease, opacity 0.15s ease',
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={(e) => {
-              if (!connectionId || loading) return;
-              e.currentTarget.style.filter = 'brightness(1.08)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.filter = 'none';
-            }}
           >
-            {loading ? <LoadingOutlined /> : <PlayCircleOutlined />}
             {t('common.executeButton')}
-          </div>
+          </Button>
         </Tooltip>
         <Tooltip title={t('common.stopButton')}>
           <Button
@@ -175,12 +147,26 @@ export function SQLEditorToolbar({
 
         {/* 执行状态条：loading 时实时显示已用时间；非 loading 显示上次查询耗时 */}
         {loading ? (
-          <span style={{ fontSize: 11, color: tc.primary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
+          <span
+            style={{
+              fontSize: 11,
+              color: tc.primary,
+              marginLeft: 2,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
             <LoadingOutlined style={{ marginRight: 4 }} />
             {t('common.executingLabel')} {execElapsed.toFixed(1)}s
           </span>
         ) : execElapsed > 0 ? (
-          <span style={{ fontSize: 11, color: tc.textTertiary, marginLeft: 2, fontVariantNumeric: 'tabular-nums' }}>
+          <span
+            style={{
+              fontSize: 11,
+              color: tc.textTertiary,
+              marginLeft: 2,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
             {execElapsed.toFixed(2)}s
           </span>
         ) : null}
@@ -305,7 +291,7 @@ export function SQLEditorToolbar({
                 key: 'export',
                 label: t('common.exportResults'),
                 icon: <DownloadOutlined />,
-                disabled: false, // result check is done in parent onClick
+                disabled: !hasResult,
               },
             ],
             onClick: ({ key }) => {

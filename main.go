@@ -122,8 +122,7 @@ func createToolsMenu() *application.Menu {
 	m.Add("操作日志").OnClick(callback("operation-log"))
 	m.Add("数据迁移...").OnClick(callback("data-migration"))
 	m.Add("数据同步...").OnClick(callback("data-sync"))
-	m.Add("进程管理...").OnClick(callback("process-list"))
-	m.Add("服务器状态...").OnClick(callback("server-status"))
+	m.Add("连接监控...").OnClick(callback("connection-monitor"))
 	m.AddSeparator()
 	m.Add("备份数据库...").OnClick(callback("backup"))
 	m.Add("恢复数据库...").OnClick(callback("restore"))
@@ -307,20 +306,21 @@ func runGUI() {
 	// HideOnFocusLost 点击别处自动收起，Esc 隐藏；窗口常驻仅隐藏保持热态。
 	// 右键托盘仍弹出完整菜单（v3 自动路由）。
 	connPickerWin := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:             "conn-picker",
-		Title:            "快速连接",
-		URL:              "/#conn-picker",
-		Width:            360,
-		Height:           460,
-		Frameless:        true,
-		AlwaysOnTop:      true,
-		Hidden:           true,
-		DisableResize:    true,
-		HideOnEscape:     true,
-		HideOnFocusLost:  true,
-		EnableFileDrop:   false,
-		BackgroundType:   application.BackgroundTypeTransparent,
-		BackgroundColour: application.NewRGB(242, 241, 237),
+		Name:            "conn-picker",
+		Title:           "快速连接",
+		URL:             "/#conn-picker",
+		Width:           360,
+		Height:          460,
+		Frameless:       true,
+		AlwaysOnTop:     true,
+		Hidden:          true,
+		DisableResize:   true,
+		HideOnEscape:    true,
+		HideOnFocusLost: true,
+		EnableFileDrop:  false,
+		BackgroundType:  application.BackgroundTypeTransparent,
+		// 默认 Pro 浅色窗口底（#F2F3F8）；实际颜色由前端按主题回写
+		BackgroundColour: application.NewRGB(242, 243, 248),
 		Windows:          application.WindowsWindow{HiddenOnTaskbar: true},
 	})
 	tray.AttachWindow(connPickerWin).WindowOffset(6)
@@ -431,10 +431,10 @@ func runGUI() {
 		// 允许拖放文件到窗口（配合前端 data-file-drop-target 区域）
 		EnableFileDrop: true,
 		// 初始窗口背景色（webview 透明时作为底色显示）
-		// 取 light 默认背景 #F2F1ED（护眼米色），前端主题加载后由 Window.SetBackgroundColour 同步覆盖。
+		// 取 Pro 浅色默认背景 #F2F3F8，前端主题加载后由 Window.SetBackgroundColour 同步覆盖。
 		// 选浅色而非深色：深色用户启动闪浅色 → 立即被覆盖，比浅色用户闪黑更可接受。
 		BackgroundType:   application.BackgroundTypeTransparent,
-		BackgroundColour: application.NewRGB(242, 241, 237),
+		BackgroundColour: application.NewRGB(242, 243, 248),
 		Mac: application.MacWindow{
 			// 隐藏标题栏：内容延伸到窗口顶部，红绿灯按钮保留在左上角。
 			// 配合前端 Toolbar 的 -webkit-app-region: drag 实现窗口拖动。

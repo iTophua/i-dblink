@@ -11,7 +11,7 @@ import {
   Select,
   Button,
   Space,
-  message,
+  App,
   Radio,
   Alert,
   Checkbox,
@@ -48,6 +48,7 @@ interface ParsedFile {
 
 export function ImportWizard({ open, onClose, tableName, columns, onImport }: ImportWizardProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [currentStep, setCurrentStep] = useState(0);
   const [parsedFile, setParsedFile] = useState<ParsedFile | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>('append');
@@ -186,7 +187,9 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
     for (const col of notNullColumns) {
       const mappedHeader = Object.entries(fieldMapping).find(([, v]) => v === col.column_name);
       if (!mappedHeader) {
-        warnings.push(`${t('common.importExport.requiredFieldNotMapped', { column: col.column_name })}`);
+        warnings.push(
+          `${t('common.importExport.requiredFieldNotMapped', { column: col.column_name })}`
+        );
       }
     }
     const sampleRows = parsedFile.rows.slice(0, 10);
@@ -308,7 +311,15 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
       content: (
         <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }} size="middle">
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <Tag style={{ fontSize: 13, padding: '2px 10px', background: 'var(--color-primary-alpha-15)', color: 'var(--color-primary)', border: '1px solid var(--color-primary-alpha-30)' }}>
+            <Tag
+              style={{
+                fontSize: 13,
+                padding: '2px 10px',
+                background: 'var(--color-primary-alpha-15)',
+                color: 'var(--color-primary)',
+                border: '1px solid var(--color-primary-alpha-30)',
+              }}
+            >
               {t('common.importExport.totalRows')}: {parsedFile?.rows.length || 0}
             </Tag>
             <Tag color="green" style={{ fontSize: 13, padding: '2px 10px' }}>
@@ -328,7 +339,9 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
                   ))}
                   {validationWarnings.length > 10 && (
                     <li>
-                      {t('common.importExport.moreWarnings', { count: validationWarnings.length - 10 })}
+                      {t('common.importExport.moreWarnings', {
+                        count: validationWarnings.length - 10,
+                      })}
                     </li>
                   )}
                 </ul>
@@ -338,11 +351,7 @@ export function ImportWizard({ open, onClose, tableName, columns, onImport }: Im
             />
           )}
           {validationWarnings.length === 0 && (
-            <Alert
-              message={t('common.importExport.noValidationIssues')}
-              type="success"
-              showIcon
-            />
+            <Alert message={t('common.importExport.noValidationIssues')} type="success" showIcon />
           )}
           <div style={{ maxHeight: 350, overflow: 'auto' }}>
             <Table

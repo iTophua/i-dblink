@@ -1,5 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Tabs,
   Table,
@@ -9,15 +8,13 @@ import {
   Switch,
   Space,
   Popconfirm,
-  message,
+  App,
   Card,
   Typography,
   Tooltip,
   Spin,
-  Menu,
   AutoComplete,
 } from 'antd';
-import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { GlobalInput } from '../GlobalInput';
 import {
@@ -36,8 +33,16 @@ import type { ColumnsType } from 'antd/es/table';
 import { api } from '../../api';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../../types/api';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { useTableScrollHeight } from '../../hooks/useTableScrollHeight';
+import { ContextMenu, useContextMenu } from '../ContextMenu';
+import type { MenuConfigItem } from '../ContextMenu';
 import { getDialect } from '../../utils/sqlDialects';
-import type { AlterTableOptions, DialectColumn, DialectIndex, DialectForeignKey } from '../../utils/sqlDialects/types';
+import type {
+  AlterTableOptions,
+  DialectColumn,
+  DialectIndex,
+  DialectForeignKey,
+} from '../../utils/sqlDialects/types';
 
 const { Text } = Typography;
 
@@ -359,6 +364,7 @@ export function TableDesigner({
   onCancel,
 }: TableDesignerProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const tc = useThemeColors();
   const editorRef = useRef<unknown>(null);
   const isEditMode = !!propTableName;
@@ -371,12 +377,20 @@ export function TableDesigner({
   const [foreignKeys, setForeignKeys] = useState<DesignerForeignKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [renamedColumns, setRenamedColumns] = useState<{ key: string; originalName: string }[]>([]);
-  const [ctxMenu, setCtxMenu] = useState<{
-    visible: boolean;
-    x: number;
-    y: number;
-    record: DesignerColumn | null;
-  }>({ visible: false, x: 0, y: 0, record: null });
+
+  // 右键菜单统一走全局 ContextMenu；被右击的行存进菜单 target
+  const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
+
+  // Tabs 的内容层高度是 auto，不能把测量容器放进 tab pane 里（会和表格 scroll.y
+  // 相互撑高形成反馈）；这里量高度确定的外层容器，再减去固定 chrome：
+  // tab 栏 ~46 + 内层操作行 40 + 表头 39 ≈ 125。
+  const { tableScrollHeight, containerRef: tabsContainerRef } = useTableScrollHeight([
+    activeTab,
+    columns.length,
+    indexes.length,
+    foreignKeys.length,
+  ]);
+  const tableY = tableScrollHeight > 0 ? Math.max(160, tableScrollHeight - 125) : undefined;
 
   // 保存原始结构用于生成 ALTER 语句
   const [originalColumns, setOriginalColumns] = useState<DesignerColumn[]>([]);
@@ -469,40 +483,50 @@ export function TableDesigner({
   // ── SQL Preview ────────────────────────────────────────────────────────
   const sqlPreview = useMemo(() => {
     const dialect = getDialect(dbType);
-    
+
     if (isEditMode) {
-      const columnChanges = columns.map((col) => {
-        const orig = originalColumns.find((c) => c.name === col.name);
-        if (!orig) {
-          const renameEntry = renamedColumns.find((r) => r.key === col.key);
-          if (renameEntry) {
-            const origCol = originalColumns.find((c) => c.name === renameEntry.originalName);
-            if (origCol) {
-              const hasPropsChanged =
-                origCol.type !== col.type ||
-                origCol.length !== col.length ||
-                origCol.nullable !== col.nullable ||
-                origCol.defaultValue !== col.defaultValue ||
-                origCol.comment !== col.comment ||
-                origCol.isPrimary !== col.isPrimary;
-              if (hasPropsChanged) {
-                return { type: 'modify' as const, column: toDialectColumn(col), oldName: renameEntry.originalName };
+      const columnChanges = columns
+        .map((col) => {
+          const orig = originalColumns.find((c) => c.name === col.name);
+          if (!orig) {
+            const renameEntry = renamedColumns.find((r) => r.key === col.key);
+            if (renameEntry) {
+              const origCol = originalColumns.find((c) => c.name === renameEntry.originalName);
+              if (origCol) {
+                const hasPropsChanged =
+                  origCol.type !== col.type ||
+                  origCol.length !== col.length ||
+                  origCol.nullable !== col.nullable ||
+                  origCol.defaultValue !== col.defaultValue ||
+                  origCol.comment !== col.comment ||
+                  origCol.isPrimary !== col.isPrimary;
+                if (hasPropsChanged) {
+                  return {
+                    type: 'modify' as const,
+                    column: toDialectColumn(col),
+                    oldName: renameEntry.originalName,
+                  };
+                }
+                return {
+                  type: 'rename' as const,
+                  column: toDialectColumn(col),
+                  oldName: renameEntry.originalName,
+                };
               }
-              return { type: 'rename' as const, column: toDialectColumn(col), oldName: renameEntry.originalName };
             }
+            return { type: 'add' as const, column: toDialectColumn(col) };
           }
-          return { type: 'add' as const, column: toDialectColumn(col) };
-        }
-        const hasChanged =
-          orig.type !== col.type ||
-          orig.length !== col.length ||
-          orig.nullable !== col.nullable ||
-          orig.defaultValue !== col.defaultValue ||
-          orig.comment !== col.comment ||
-          orig.isPrimary !== col.isPrimary;
-        if (hasChanged) return { type: 'modify' as const, column: toDialectColumn(col) };
-        return null;
-      }).filter(Boolean) as AlterTableOptions['columns'];
+          const hasChanged =
+            orig.type !== col.type ||
+            orig.length !== col.length ||
+            orig.nullable !== col.nullable ||
+            orig.defaultValue !== col.defaultValue ||
+            orig.comment !== col.comment ||
+            orig.isPrimary !== col.isPrimary;
+          if (hasChanged) return { type: 'modify' as const, column: toDialectColumn(col) };
+          return null;
+        })
+        .filter(Boolean) as AlterTableOptions['columns'];
 
       const deletedColumns = originalColumns
         .filter((orig) => {
@@ -513,32 +537,37 @@ export function TableDesigner({
         .map((orig) => ({ type: 'drop' as const, column: toDialectColumn(orig) }));
 
       // 索引变更
-      const indexChanges = indexes.map((idx) => {
-        const orig = originalIndexes.find((i) => i.name === idx.name);
-        if (!orig) return { type: 'add' as const, index: toDialectIndex(idx) };
-        const hasChanged =
-          orig.type !== idx.type ||
-          orig.columns.length !== idx.columns.length ||
-          orig.columns.some((c, i) => c !== idx.columns[i]);
-        if (hasChanged) {
-          return [
-            { type: 'drop' as const, index: toDialectIndex(orig) },
-            { type: 'add' as const, index: toDialectIndex(idx) },
-          ];
-        }
-        return null;
-      }).flat().filter(Boolean) as AlterTableOptions['indexes'];
+      const indexChanges = indexes
+        .map((idx) => {
+          const orig = originalIndexes.find((i) => i.name === idx.name);
+          if (!orig) return { type: 'add' as const, index: toDialectIndex(idx) };
+          const hasChanged =
+            orig.type !== idx.type ||
+            orig.columns.length !== idx.columns.length ||
+            orig.columns.some((c, i) => c !== idx.columns[i]);
+          if (hasChanged) {
+            return [
+              { type: 'drop' as const, index: toDialectIndex(orig) },
+              { type: 'add' as const, index: toDialectIndex(idx) },
+            ];
+          }
+          return null;
+        })
+        .flat()
+        .filter(Boolean) as AlterTableOptions['indexes'];
 
       const deletedIndexes = originalIndexes
         .filter((orig) => !indexes.find((i) => i.name === orig.name))
         .map((orig) => ({ type: 'drop' as const, index: toDialectIndex(orig) }));
 
       // 外键变更
-      const fkChanges = foreignKeys.map((fk) => {
-        const orig = originalForeignKeys.find((f) => f.name === fk.name);
-        if (!orig) return { type: 'add' as const, foreignKey: toDialectForeignKey(fk) };
-        return null;
-      }).filter(Boolean) as AlterTableOptions['foreignKeys'];
+      const fkChanges = foreignKeys
+        .map((fk) => {
+          const orig = originalForeignKeys.find((f) => f.name === fk.name);
+          if (!orig) return { type: 'add' as const, foreignKey: toDialectForeignKey(fk) };
+          return null;
+        })
+        .filter(Boolean) as AlterTableOptions['foreignKeys'];
 
       const deletedFks = originalForeignKeys
         .filter((orig) => !foreignKeys.find((f) => f.name === orig.name))
@@ -662,39 +691,37 @@ export function TableDesigner({
 
   const supportsColumnPosition = dbType === 'mysql' || dbType === 'mariadb';
 
-  const columnRowMenu = useCallback(
-    (record: DesignerColumn): MenuProps => ({
-      items: [
-        ...(supportsColumnPosition
-          ? [
-              {
-                key: 'insert-above',
-                label: t('common.insertColumnAbove'),
-                icon: <ArrowUpOutlined />,
-              },
-              {
-                key: 'insert-below',
-                label: t('common.insertColumnBelow'),
-                icon: <ArrowDownOutlined />,
-              },
-              { type: 'divider' as const },
-            ]
-          : []),
-        {
-          key: 'delete',
-          label: t('common.deleteColumn'),
-          icon: <DeleteOutlined />,
-          danger: true,
-        },
-      ],
-      onClick: ({ key }) => {
-        if (key === 'insert-above') insertColumnAbove(record.key);
-        else if (key === 'insert-below') insertColumnBelow(record.key);
-        else if (key === 'delete') deleteColumn(record.key);
+  // 右键菜单项：被右击的行由 menuTarget 携带，点击时按 key 操作
+  const ctxRecord = (menuTarget.rowData as unknown as DesignerColumn | undefined) ?? null;
+  const runColumnAction = (fn: (key: string) => void) => () => {
+    if (ctxRecord) fn(ctxRecord.key);
+    closeMenu();
+  };
+  const columnContextMenuItems: MenuConfigItem[] = [];
+  if (supportsColumnPosition) {
+    columnContextMenuItems.push(
+      {
+        key: 'insert-above',
+        icon: <ArrowUpOutlined />,
+        label: t('common.insertColumnAbove'),
+        onClick: runColumnAction(insertColumnAbove),
       },
-    }),
-    [t, supportsColumnPosition, columns]
-  );
+      {
+        key: 'insert-below',
+        icon: <ArrowDownOutlined />,
+        label: t('common.insertColumnBelow'),
+        onClick: runColumnAction(insertColumnBelow),
+      },
+      { type: 'divider' }
+    );
+  }
+  columnContextMenuItems.push({
+    key: 'delete',
+    icon: <DeleteOutlined />,
+    label: t('common.deleteColumn'),
+    danger: true,
+    onClick: runColumnAction(deleteColumn),
+  });
 
   // ── Index CRUD ─────────────────────────────────────────────────────────
   const addIndex = () => {
@@ -810,8 +837,8 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val}
-              placeholder={t('common.tableStructure.columnPlaceholder')}
-              onChange={(e) => updateColumn(record.key, 'name', e.target.value)}
+          placeholder={t('common.tableStructure.columnPlaceholder')}
+          onChange={(e) => updateColumn(record.key, 'name', e.target.value)}
           onBlur={(e) => {
             if (val !== e.target.value && val) {
               setIndexes((prev) =>
@@ -884,7 +911,10 @@ export function TableDesigner({
           options={defaultValueOptionsFor(record.type)}
           // 允许自由输入自定义默认值；有输入时按前缀过滤候选项
           filterOption={(input, option) =>
-            !input || String(option?.value ?? '').toUpperCase().includes(input.toUpperCase())
+            !input ||
+            String(option?.value ?? '')
+              .toUpperCase()
+              .includes(input.toUpperCase())
           }
           placeholder={t('common.tableStructure.nullDefault')}
           onChange={(v) => updateColumn(record.key, 'defaultValue', v || undefined)}
@@ -899,7 +929,7 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val || ''}
-              placeholder={t('common.tableStructure.commentPlaceholder')}
+          placeholder={t('common.tableStructure.commentPlaceholder')}
           onChange={(e) => updateColumn(record.key, 'comment', e.target.value)}
         />
       ),
@@ -963,7 +993,7 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val}
-              placeholder={t('common.tableStructure.indexNamePlaceholder')}
+          placeholder={t('common.tableStructure.indexNamePlaceholder')}
           onChange={(e) => updateIndex(record.key, 'name', e.target.value)}
         />
       ),
@@ -1025,7 +1055,7 @@ export function TableDesigner({
         <GlobalInput
           size="small"
           value={val}
-              placeholder={t('common.tableStructure.fkNamePlaceholder')}
+          placeholder={t('common.tableStructure.fkNamePlaceholder')}
           onChange={(e) => updateForeignKey(record.key, 'name', e.target.value)}
         />
       ),
@@ -1055,7 +1085,7 @@ export function TableDesigner({
           size="small"
           value={val}
           placeholder={t('common.tableStructure.tableNamePlaceholder')}
-              onChange={(e) => updateForeignKey(record.key, 'referencedTable', e.target.value)}
+          onChange={(e) => updateForeignKey(record.key, 'referencedTable', e.target.value)}
         />
       ),
     },
@@ -1068,7 +1098,7 @@ export function TableDesigner({
           size="small"
           value={val}
           placeholder={t('common.tableStructure.columnPlaceholder')}
-           onChange={(e) => updateForeignKey(record.key, 'referencedColumn', e.target.value)}
+          onChange={(e) => updateForeignKey(record.key, 'referencedColumn', e.target.value)}
         />
       ),
     },
@@ -1149,11 +1179,13 @@ export function TableDesigner({
               dataSource={columns}
               size="small"
               pagination={false}
-              scroll={{ y: 'calc(100vh - 320px)' }}
+              scroll={{ y: tableY }}
               onRow={(record) => ({
                 onContextMenu: (e) => {
                   e.preventDefault();
-                  setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, record });
+                  openMenu(e.clientX, e.clientY, {
+                    rowData: record as unknown as Record<string, unknown>,
+                  });
                 },
               })}
             />
@@ -1182,7 +1214,7 @@ export function TableDesigner({
               dataSource={indexes}
               size="small"
               pagination={false}
-              scroll={{ y: 'calc(100vh - 320px)' }}
+              scroll={{ y: tableY }}
             />
           </div>
         </div>
@@ -1209,7 +1241,7 @@ export function TableDesigner({
               dataSource={foreignKeys}
               size="small"
               pagination={false}
-              scroll={{ y: 'calc(100vh - 320px)' }}
+              scroll={{ y: tableY }}
             />
           </div>
         </div>
@@ -1227,7 +1259,7 @@ export function TableDesigner({
           size="small"
           className="sql-preview-card"
           style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
-          bodyStyle={{ flex: 1, overflow: 'hidden', padding: 0 }}
+          styles={{ body: { flex: 1, overflow: 'hidden', padding: 0 } }}
         >
           <Editor
             height="100%"
@@ -1318,87 +1350,65 @@ export function TableDesigner({
           <Spin tip={t('common.loadingTableStructure')} />
         </div>
       )}
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 16px',
-          borderBottom: `1px solid ${tc.borderLight}`,
-          background: tc.backgroundCard,
-        }}
-      >
+      {/* Header：与数据表/查询页统一的卡片工具栏 */}
+      <div className="table-designer-toolbar">
         <Space>
-<Text strong style={{ fontSize: 14 }}>
-             {t('common.tableDesigner')}
-           </Text>
+          <Text strong style={{ fontSize: 14 }}>
+            {t('common.tableDesigner')}
+          </Text>
           <GlobalInput
             size="small"
             style={{ width: 200 }}
             value={tableName}
-              placeholder={t('common.tableStructure.tableNamePlaceholder')}
-              onChange={(e) => setTableName(e.target.value)}
+            placeholder={t('common.tableStructure.tableNamePlaceholder')}
+            onChange={(e) => setTableName(e.target.value)}
             prefix={<CodeOutlined style={{ color: tc.textTertiary }} />}
           />
         </Space>
         <Space>
           {onCancel && (
-             <Button size="small" onClick={onCancel}>
-                {t('common.tableStructure.cancel')}
-             </Button>
+            <Button size="small" onClick={onCancel}>
+              {t('common.tableStructure.cancel')}
+            </Button>
           )}
-             <Button type="primary" size="small" onClick={handleSave}>
-                {t('common.tableStructure.saveSQL')}
-             </Button>
+          <Button type="primary" size="small" onClick={handleSave}>
+            {t('common.tableStructure.saveSQL')}
+          </Button>
         </Space>
       </div>
 
       {/* Tabs */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '12px 16px' }}>
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={tabItems}
-          destroyInactiveTabPane
-          style={{ flex: 1, overflow: 'hidden' }}
-        />
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '6px 10px 10px',
+        }}
+      >
+        <div
+          ref={tabsContainerRef}
+          style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+        >
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            items={tabItems}
+            destroyOnHidden
+            style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
+          />
+        </div>
       </div>
 
-      {ctxMenu.visible && ctxMenu.record && createPortal(
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1050 }}
-          onClick={() => setCtxMenu((s) => ({ ...s, visible: false }))}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setCtxMenu((s) => ({ ...s, visible: false }));
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              left: ctxMenu.x,
-              top: ctxMenu.y,
-              background: tc.backgroundCard,
-              borderRadius: 6,
-              boxShadow: '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
-              padding: 4,
-            }}
-          >
-            <Menu
-              items={columnRowMenu(ctxMenu.record).items}
-              onClick={({ key: menuKey }) => {
-                if (menuKey === 'insert-above') insertColumnAbove(ctxMenu.record!.key);
-                else if (menuKey === 'insert-below') insertColumnBelow(ctxMenu.record!.key);
-                else if (menuKey === 'delete') deleteColumn(ctxMenu.record!.key);
-                setCtxMenu((s) => ({ ...s, visible: false }));
-              }}
-              style={{ border: 'none' }}
-            />
-          </div>
-        </div>,
-        document.body
-      )}
+      <ContextMenu
+        visible={menuState.visible}
+        x={menuState.x}
+        y={menuState.y}
+        onClose={closeMenu}
+        items={columnContextMenuItems}
+      />
     </div>
   );
 }

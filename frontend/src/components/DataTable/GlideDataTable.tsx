@@ -1,7 +1,16 @@
 /**
  * GlideDataTable — 基于 Glide Data Grid 的通用数据表格组件
  */
-import { useMemo, useCallback, useState, useEffect, useRef, useLayoutEffect, createContext, useContext } from 'react';
+import {
+  useMemo,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+  createContext,
+  useContext,
+} from 'react';
 import type { MutableRefObject } from 'react';
 import DataEditor, {
   GridCellKind,
@@ -41,7 +50,8 @@ export interface GlideDataTableProps {
   getRowColor?: (row: GlideRow, index: number) => string | undefined;
   isCellModified?: (row: GlideRow, colId: string) => boolean;
   onSelectionChange?: (selectedRows: GlideRow[], gridSelection: GridSelection) => void;
-  onColumnMoved?: (startIndex: number, endIndex: number) => void;
+  /** 列拖拽完成：上报可见列的新顺序（列 id 数组），隐藏列由调用方自行合并 */
+  onColumnOrderChange?: (visibleOrder: string[]) => void;
   onCellEdited?: (col: number, row: number, newValue: string) => void;
   onCellsEdited?: (edits: Array<{ col: number; row: number; value: string }>) => void;
   onCellContextMenu?: (col: number, row: number, bounds: { x: number; y: number }) => void;
@@ -71,7 +81,7 @@ const FILLER_COL_ID = '__filler__';
 function matchFormatRule(
   value: unknown,
   rule: FormatRule,
-  duplicateSet: Set<string> | undefined,
+  duplicateSet: Set<string> | undefined
 ): boolean {
   const { condition } = rule;
   switch (condition) {
@@ -89,7 +99,9 @@ function matchFormatRule(
     }
     case 'contains': {
       const needle = String(rule.value ?? '').toLowerCase();
-      return String(value ?? '').toLowerCase().includes(needle);
+      return String(value ?? '')
+        .toLowerCase()
+        .includes(needle);
     }
     case 'greaterThan': {
       const num = Number(value);
@@ -141,10 +153,31 @@ const RangeEditContext = createContext<RangeEditRef | null>(null);
 
 function hexWithAlpha(hex: string, alpha: number): string {
   if (hex.startsWith('#') && hex.length === 7) {
-    const a = Math.round(alpha * 255).toString(16).padStart(2, '0');
+    const a = Math.round(alpha * 255)
+      .toString(16)
+      .padStart(2, '0');
     return hex + a;
   }
   return hex;
+}
+
+/**
+ * 按可用宽度裁剪文本并补省略号。
+ * 未超宽时只花一次 measureText；只有真正溢出的单元格才走二分。
+ */
+function fitCellText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (!text || maxWidth <= 0) return '';
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  const ellipsis = '…';
+  if (ctx.measureText(ellipsis).width > maxWidth) return '';
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (ctx.measureText(text.slice(0, mid) + ellipsis).width <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 ? text.slice(0, lo) + ellipsis : ellipsis;
 }
 
 export function buildGridColumns(columns: GlideColumn[], hiddenColumns: Set<string>): GridColumn[] {
@@ -239,21 +272,24 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
     if (liveFn) liveFn(valRef.current);
   }, [rangeEditRef]);
 
-  const commit = useCallback((v: string) => {
-    if (committedRef.current || cancelledRef.current) return;
-    committedRef.current = true;
-    const kind = p.value.kind;
-    let data: any;
-    let displayData: string;
-    if (kind === GridCellKind.Number) {
-      data = v === '' ? undefined : Number(v);
-      displayData = data == null ? 'NULL' : String(data);
-    } else {
-      data = v;
-      displayData = v == null || v === '' ? 'NULL' : String(v);
-    }
-    p.onFinishedEditing({ ...(p.value as any), data, displayData } as any);
-  }, [p, targetKey]);
+  const commit = useCallback(
+    (v: string) => {
+      if (committedRef.current || cancelledRef.current) return;
+      committedRef.current = true;
+      const kind = p.value.kind;
+      let data: any;
+      let displayData: string;
+      if (kind === GridCellKind.Number) {
+        data = v === '' ? undefined : Number(v);
+        displayData = data == null ? 'NULL' : String(data);
+      } else {
+        data = v;
+        displayData = v == null || v === '' ? 'NULL' : String(v);
+      }
+      p.onFinishedEditing({ ...(p.value as any), data, displayData } as any);
+    },
+    [p, targetKey]
+  );
 
   // 组件卸载时自动提交（兜底：onBlur 在卸载时可能不触发）
   // hasFocusedRef 用于区分 StrictMode 模拟卸载（focus 前的假卸载）和真实卸载。
@@ -266,7 +302,10 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
       }
       if (isRealUnmount) {
         const rs = rangeEditRef?.current;
-        if (rs && (rs.editingRange !== null || rs.liveRangeEditFn !== null || rs.wasLiveRangeEdit)) {
+        if (
+          rs &&
+          (rs.editingRange !== null || rs.liveRangeEditFn !== null || rs.wasLiveRangeEdit)
+        ) {
           rs.editingRange = null;
           rs.liveRangeEditFn = null;
           rs.wasLiveRangeEdit = false;
@@ -284,9 +323,19 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
         rangeEditRef?.current.liveRangeEditFn?.(e.target.value);
       }}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') { e.stopPropagation(); commit(val); }
-        if (e.key === 'Escape') { e.stopPropagation(); cancelledRef.current = true; p.onFinishedEditing(); }
-        if (e.key === 'Tab') { e.preventDefault(); commit(val); }
+        if (e.key === 'Enter') {
+          e.stopPropagation();
+          commit(val);
+        }
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          cancelledRef.current = true;
+          p.onFinishedEditing();
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          commit(val);
+        }
       }}
       onBlur={() => commit(val)}
       autoComplete="off"
@@ -295,7 +344,8 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
       spellCheck={false}
       style={{
         position: 'absolute',
-        left: 0, top: 0,
+        left: 0,
+        top: 0,
         width: p.target.width,
         height: p.target.height,
         border: 'none',
@@ -312,7 +362,7 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
       }}
     />
   );
-}
+};
 
 export function GlideDataTable({
   columns,
@@ -322,7 +372,7 @@ export function GlideDataTable({
   getRowColor,
   isCellModified,
   onSelectionChange,
-  onColumnMoved,
+  onColumnOrderChange,
   onCellEdited,
   onCellsEdited,
   onCellContextMenu,
@@ -343,10 +393,7 @@ export function GlideDataTable({
   const isDark = tc.isDark;
   const hiddenSet = hiddenColumns ?? new Set<string>();
 
-  const theme = useMemo<Partial<Theme>>(
-    () => buildGlideTheme(tc),
-    [tc]
-  );
+  const theme = useMemo<Partial<Theme>>(() => buildGlideTheme(tc), [tc]);
 
   // 内部列顺序和宽度（仅在父组件未传回调时使用）
   const [internalColOrder, setInternalColOrder] = useState<string[] | null>(null);
@@ -355,7 +402,7 @@ export function GlideDataTable({
   // 应用内部列重排和宽度
   const processedColumns = useMemo(() => {
     let result = columns;
-    if (!onColumnMoved && internalColOrder) {
+    if (!onColumnOrderChange && internalColOrder) {
       const orderSet = new Set(internalColOrder);
       const reordered = internalColOrder
         .map((id) => columns.find((c) => c.id === id))
@@ -369,7 +416,7 @@ export function GlideDataTable({
       }));
     }
     return result;
-  }, [columns, onColumnMoved, internalColOrder, onColumnResized, internalColWidths]);
+  }, [columns, onColumnOrderChange, internalColOrder, onColumnResized, internalColWidths]);
 
   const gridColumns = useMemo<GridColumn[]>(
     () => buildGridColumns(processedColumns, hiddenSet),
@@ -416,14 +463,21 @@ export function GlideDataTable({
   // ===== Find/Replace =====
   const [findInternalVisible, setFindInternalVisible] = useState(false);
   const findVisible = findReplaceVisibleProp ?? findInternalVisible;
-  const setFindVisible = useCallback((v: boolean) => {
-    if (onFindReplaceVisibleChange) onFindReplaceVisibleChange(v);
-    else setFindInternalVisible(v);
-  }, [onFindReplaceVisibleChange]);
+  const setFindVisible = useCallback(
+    (v: boolean) => {
+      if (onFindReplaceVisibleChange) onFindReplaceVisibleChange(v);
+      else setFindInternalVisible(v);
+    },
+    [onFindReplaceVisibleChange]
+  );
 
   const [findMatches, setFindMatches] = useState<FindMatch[]>([]);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
-  const findOptionsRef = useRef<FindOptions>({ caseSensitive: false, useRegex: false, wholeWord: false });
+  const findOptionsRef = useRef<FindOptions>({
+    caseSensitive: false,
+    useRegex: false,
+    wholeWord: false,
+  });
   const findTextRef = useRef('');
   const findDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -577,75 +631,84 @@ export function GlideDataTable({
   }, [enableFindReplace, setFindVisible]);
 
   // Scan rows/cells for matches (debounced 200ms)
-  const doSearch = useCallback((searchText: string, options: FindOptions) => {
-    if (!searchText) {
-      setFindMatches([]);
-      setCurrentMatchIndex(0);
-      return;
-    }
-    const visibleCols = gridColumns.filter((c) => c.id !== FILLER_COL_ID);
-    const results: FindMatch[] = [];
-    try {
-      let regex: RegExp | null = null;
-      if (options.useRegex) {
-        regex = new RegExp(searchText, options.caseSensitive ? '' : 'i');
-      } else {
-        const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = options.wholeWord ? `\\b${escaped}\\b` : escaped;
-        regex = new RegExp(pattern, options.caseSensitive ? '' : 'i');
+  const doSearch = useCallback(
+    (searchText: string, options: FindOptions) => {
+      if (!searchText) {
+        setFindMatches([]);
+        setCurrentMatchIndex(0);
+        return;
       }
-      for (let r = 0; r < rows.length; r++) {
-        const row = rows[r];
-        for (let c = 0; c < visibleCols.length; c++) {
-          const col = visibleCols[c];
-          if (!col.id) continue;
-          const value = row[col.id];
-          const str = value == null ? '' : String(value);
-          if (regex.test(str)) {
-            // Map visible col index back to gridColumns index (accounting for filler)
-            const gridColIdx = gridColumns.findIndex((gc) => gc.id === col.id);
-            if (gridColIdx >= 0) {
-              results.push({ row: r, col: gridColIdx });
+      const visibleCols = gridColumns.filter((c) => c.id !== FILLER_COL_ID);
+      const results: FindMatch[] = [];
+      try {
+        let regex: RegExp | null = null;
+        if (options.useRegex) {
+          regex = new RegExp(searchText, options.caseSensitive ? '' : 'i');
+        } else {
+          const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const pattern = options.wholeWord ? `\\b${escaped}\\b` : escaped;
+          regex = new RegExp(pattern, options.caseSensitive ? '' : 'i');
+        }
+        for (let r = 0; r < rows.length; r++) {
+          const row = rows[r];
+          for (let c = 0; c < visibleCols.length; c++) {
+            const col = visibleCols[c];
+            if (!col.id) continue;
+            const value = row[col.id];
+            const str = value == null ? '' : String(value);
+            if (regex.test(str)) {
+              // Map visible col index back to gridColumns index (accounting for filler)
+              const gridColIdx = gridColumns.findIndex((gc) => gc.id === col.id);
+              if (gridColIdx >= 0) {
+                results.push({ row: r, col: gridColIdx });
+              }
             }
           }
         }
+      } catch {
+        // Invalid regex, show no results
       }
-    } catch {
-      // Invalid regex, show no results
-    }
-    setFindMatches(results);
-    setCurrentMatchIndex(results.length > 0 ? 0 : -1);
-    // Scroll to first match
-    if (results.length > 0) {
-      gridRef.current?.scrollTo(results[0].col, results[0].row, 'both');
-    }
-  }, [rows, gridColumns]);
+      setFindMatches(results);
+      setCurrentMatchIndex(results.length > 0 ? 0 : -1);
+      // Scroll to first match
+      if (results.length > 0) {
+        gridRef.current?.scrollTo(results[0].col, results[0].row, 'both');
+      }
+    },
+    [rows, gridColumns]
+  );
 
-  const handleSearchChange = useCallback((searchText: string, options: FindOptions) => {
-    findTextRef.current = searchText;
-    findOptionsRef.current = options;
-    if (findDebounceRef.current) clearTimeout(findDebounceRef.current);
-    if (!searchText) {
-      doSearch(searchText, options);
-      return;
-    }
-    findDebounceRef.current = setTimeout(() => {
-      doSearch(searchText, options);
-    }, 200);
-  }, [doSearch]);
+  const handleSearchChange = useCallback(
+    (searchText: string, options: FindOptions) => {
+      findTextRef.current = searchText;
+      findOptionsRef.current = options;
+      if (findDebounceRef.current) clearTimeout(findDebounceRef.current);
+      if (!searchText) {
+        doSearch(searchText, options);
+        return;
+      }
+      findDebounceRef.current = setTimeout(() => {
+        doSearch(searchText, options);
+      }, 200);
+    },
+    [doSearch]
+  );
 
-  const handleFindNavigate = useCallback((direction: 'next' | 'prev') => {
-    if (findMatches.length === 0) return;
-    let nextIdx: number;
-    if (direction === 'next') {
-      nextIdx = (currentMatchIndex + 1) % findMatches.length;
-    } else {
-      nextIdx = (currentMatchIndex - 1 + findMatches.length) % findMatches.length;
-    }
-    setCurrentMatchIndex(nextIdx);
-    const match = findMatches[nextIdx];
-    gridRef.current?.scrollTo(match.col, match.row, 'both');
-  }, [findMatches, currentMatchIndex]);
+  const handleFindNavigate = useCallback(
+    (direction: 'next' | 'prev') => {
+      if (findMatches.length === 0) return;
+      let nextIdx: number;
+      if (direction === 'next') {
+        nextIdx = (currentMatchIndex + 1) % findMatches.length;
+      } else {
+        nextIdx = (currentMatchIndex - 1 + findMatches.length) % findMatches.length;
+      }
+      setCurrentMatchIndex(nextIdx);
+      const match = findMatches[nextIdx];
+      gridRef.current?.scrollTo(match.col, match.row, 'both');
+    },
+    [findMatches, currentMatchIndex]
+  );
 
   const handleFindClose = useCallback(() => {
     setFindVisible(false);
@@ -713,7 +776,13 @@ export function GlideDataTable({
       const gridCol = gridColumns[col];
       const colId = gridCol?.id;
       if (!colId || colId === FILLER_COL_ID) {
-        return { kind: GridCellKind.Text as any, data: '', displayData: '', allowOverlay: false, readonly: true };
+        return {
+          kind: GridCellKind.Text as any,
+          data: '',
+          displayData: '',
+          allowOverlay: false,
+          readonly: true,
+        };
       }
       const rowItem = rows[row];
       const value = rowItem?.[colId];
@@ -739,10 +808,10 @@ export function GlideDataTable({
       // 第一行：字段名（加大字号 + 顶部留白）
       ctx.fillStyle = tc.textPrimary;
       ctx.font = '600 13px sans-serif';
-      ctx.fillText(name, rect.x + 8, rect.y + 18);
-      // 第二行：PK 标记 + 类型（与第一行间距加大到 18px）
-      const secondY = rect.y + 36;
-      let secondX = rect.x + 8;
+      ctx.fillText(name, rect.x + 10, rect.y + 19);
+      // 第二行：PK 标记 + 类型（与第一行间距加大到 19px）
+      const secondY = rect.y + 38;
+      let secondX = rect.x + 10;
       if (isPk) {
         ctx.fillStyle = tc.warning;
         ctx.font = 'bold 10px sans-serif';
@@ -750,8 +819,8 @@ export function GlideDataTable({
         secondX += 22;
       }
       if (type) {
-        ctx.fillStyle = tc.textSecondary;
-        ctx.font = '10px sans-serif';
+        ctx.fillStyle = tc.textTertiary;
+        ctx.font = '11px sans-serif';
         ctx.fillText(type, secondX, secondY);
       }
     },
@@ -761,7 +830,7 @@ export function GlideDataTable({
   // ===== drawCell =====
   const drawCell = useCallback(
     (args: any) => {
-      const { cell, rect, ctx, theme: t, col, row: drawRow } = args;
+      const { cell, rect, ctx, theme: t, col, row: drawRow, hoverY } = args;
       const gridCol = gridColumns[col];
       if (!gridCol?.id || gridCol.id === FILLER_COL_ID) return;
       const rowItem = rows[drawRow];
@@ -770,6 +839,7 @@ export function GlideDataTable({
       const display = raw.displayData ?? '';
       const dataVal = raw.data;
       const status = rowStatus?.(rowItem, drawRow);
+      const modified = isCellModified?.(rowItem, gridCol.id);
 
       ctx.textBaseline = 'middle';
       const centerY = rect.y + rect.height / 2;
@@ -780,19 +850,42 @@ export function GlideDataTable({
         ctx.fillStyle = rowBg;
         ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       } else if (!status) {
-        const stripeColor = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+        const stripeColor = isDark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.024)';
         if (drawRow % 2 === 1) {
           ctx.fillStyle = stripeColor;
           ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
         }
       }
       // 状态背景（覆盖在斑马纹之上）
-      if (status === 'new') { ctx.fillStyle = hexWithAlpha(tc.success, 0.08); ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
-      else if (status === 'modified') { ctx.fillStyle = hexWithAlpha(tc.primary, 0.1); ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
-      if (isCellModified?.(rowItem, gridCol.id)) { ctx.fillStyle = hexWithAlpha(tc.primary, 0.06); ctx.fillRect(rect.x, rect.y, rect.width, rect.height); }
+      if (status === 'new') {
+        ctx.fillStyle = hexWithAlpha(tc.success, 0.08);
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      } else if (status === 'modified') {
+        ctx.fillStyle = hexWithAlpha(tc.primary, 0.1);
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      }
+      if (modified) {
+        ctx.fillStyle = hexWithAlpha(tc.primary, 0.06);
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      }
+
+      // 悬停行高亮：宽表横向读数时提供整行参照
+      if (hoverY === drawRow) {
+        ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.055)' : 'rgba(0, 0, 0, 0.04)';
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      }
+      // 被修改单元格：左侧 2px 主色标记，比底色更易定位
+      if (modified) {
+        ctx.fillStyle = tc.primary;
+        ctx.fillRect(rect.x, rect.y + 4, 2, Math.max(2, rect.height - 8));
+      }
 
       // Find/Replace match highlight
-      const isCurrentMatch = findMatches.length > 0 && currentMatchIndex >= 0 && findMatches[currentMatchIndex]?.col === col && findMatches[currentMatchIndex]?.row === drawRow;
+      const isCurrentMatch =
+        findMatches.length > 0 &&
+        currentMatchIndex >= 0 &&
+        findMatches[currentMatchIndex]?.col === col &&
+        findMatches[currentMatchIndex]?.row === drawRow;
       const isAnyMatch = matchSet.has(`${col},${drawRow}`);
       if (isCurrentMatch) {
         ctx.fillStyle = hexWithAlpha(tc.warning, 0.35);
@@ -812,7 +905,9 @@ export function GlideDataTable({
         const wildcardRules = rulesByColumn.get('*');
         const columnRules = rulesByColumn.get(colId);
         const allRules = wildcardRules
-          ? columnRules ? [...wildcardRules, ...columnRules] : wildcardRules
+          ? columnRules
+            ? [...wildcardRules, ...columnRules]
+            : wildcardRules
           : columnRules;
         if (allRules) {
           for (const rule of allRules) {
@@ -832,30 +927,61 @@ export function GlideDataTable({
 
       // 删除
       if (status === 'deleted') {
-        ctx.fillStyle = formatFg ?? t.textLight; ctx.font = '12px sans-serif';
-        ctx.fillText(display || 'NULL', rect.x + 8, centerY);
-        ctx.strokeStyle = formatFg ?? t.textLight; ctx.beginPath(); ctx.moveTo(rect.x + 8, centerY);
-        ctx.lineTo(rect.x + 8 + ctx.measureText(display || 'NULL').width, centerY); ctx.stroke();
+        ctx.font = '13px sans-serif';
+        ctx.fillStyle = formatFg ?? t.textLight;
+        const deletedText = fitCellText(ctx, display || 'NULL', rect.width - 20);
+        ctx.fillText(deletedText, rect.x + 10, centerY);
+        ctx.strokeStyle = formatFg ?? t.textLight;
+        ctx.beginPath();
+        ctx.moveTo(rect.x + 10, centerY);
+        ctx.lineTo(rect.x + 10 + ctx.measureText(deletedText).width, centerY);
+        ctx.stroke();
         return;
       }
-      // Bool
+      // Bool：勾/叉用语义色区分，避免和普通文本混在一起
       if (cell.kind === GridCellKind.Boolean) {
-        ctx.fillStyle = formatFg ?? t.textDark; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
-        ctx.fillText(dataVal ? '✓' : '✗', rect.x + rect.width / 2, centerY); ctx.textAlign = 'start'; return;
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = formatFg ?? (dataVal ? tc.success : tc.textTertiary);
+        ctx.fillText(dataVal ? '✓' : '✗', rect.x + rect.width / 2, centerY);
+        ctx.textAlign = 'start';
+        return;
       }
-      // NULL
+      // NULL：弱化的斜体，区别于真实字符串 "NULL"
       if (display === 'NULL' || display === '') {
-        ctx.fillStyle = formatFg ?? t.textLight; ctx.font = 'italic 12px sans-serif'; ctx.fillText('NULL', rect.x + 8, centerY); return;
+        ctx.fillStyle = formatFg ?? t.textLight;
+        ctx.font = 'italic 12.5px sans-serif';
+        ctx.fillText('NULL', rect.x + 10, centerY);
+        return;
       }
-      // 数值左对齐
-      if (cell.kind === GridCellKind.Number || (typeof dataVal === 'number')) {
-        ctx.fillStyle = formatFg ?? t.textDark; ctx.font = '12px sans-serif';
-        ctx.fillText(display, rect.x + 8, centerY); return;
+      // 数值右对齐：数字按位对齐，便于扫视和比较
+      if (cell.kind === GridCellKind.Number || typeof dataVal === 'number') {
+        ctx.fillStyle = formatFg ?? t.textDark;
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(fitCellText(ctx, display, rect.width - 20), rect.x + rect.width - 10, centerY);
+        ctx.textAlign = 'start';
+        return;
       }
-      // 文本
-      ctx.fillStyle = formatFg ?? t.textDark; ctx.font = '12px sans-serif'; ctx.fillText(display, rect.x + 8, centerY);
+      // 文本：超宽时裁剪加省略号，不在单元格边界硬切
+      ctx.fillStyle = formatFg ?? t.textDark;
+      ctx.font = '13px sans-serif';
+      ctx.fillText(fitCellText(ctx, display, rect.width - 20), rect.x + 10, centerY);
     },
-    [gridColumns, rows, rowStatus, isCellModified, isDark, getRowColor, matchSet, findMatches, currentMatchIndex, rulesByColumn, duplicateSets]
+    [
+      gridColumns,
+      rows,
+      rowStatus,
+      isCellModified,
+      isDark,
+      getRowColor,
+      matchSet,
+      findMatches,
+      currentMatchIndex,
+      rulesByColumn,
+      duplicateSets,
+      tc,
+    ]
   );
 
   // ===== 选择变化 =====
@@ -904,38 +1030,77 @@ export function GlideDataTable({
   );
 
   // ===== 列拖拽 =====
+  // DataEditor 的索引基于当前可见列（已去隐藏、已重排），这里先换算成列 id 再上报，
+  // 避免父组件按原始列序 splice 时因隐藏列导致落点错位。
   const handleColumnMoved = useCallback(
     (startIndex: number, endIndex: number) => {
-      if (onColumnMoved) {
-        onColumnMoved(startIndex, endIndex);
+      const visibleIds = gridColumns
+        .filter((c) => c.id !== FILLER_COL_ID)
+        .map((c) => c.id as string);
+      const colId = visibleIds[startIndex];
+      if (!colId || startIndex === endIndex) return;
+      const next = [...visibleIds];
+      next.splice(startIndex, 1);
+      next.splice(Math.max(0, Math.min(endIndex, next.length)), 0, colId);
+      if (onColumnOrderChange) {
+        onColumnOrderChange(next);
         return;
       }
-      // 用 gridColumns 而非 columns prop 做索引映射，
-      // 因为 DataEditor 的索引基于当前显示列（经过重排），
-      // columns prop 始终是原始顺序，索引对不上会导致恢复。
-      const visibleCols = gridColumns.filter((c) => c.id !== FILLER_COL_ID);
-      const colId = visibleCols[startIndex]?.id;
-      const targetId = visibleCols[endIndex]?.id;
-      if (!colId || colId === targetId) return;
-      setInternalColOrder((prev) => {
-        const initOrder = () => columns.filter((c) => !hiddenSet.has(c.id)).map((c) => c.id);
-        const cur = prev ? [...prev] : initOrder();
-        const fromIdx = cur.indexOf(colId);
-        if (fromIdx < 0) return cur;
-        const toIdx = targetId ? cur.indexOf(targetId) : cur.length;
-        // 如果列已在目标位置，跳过更新
-        if (fromIdx === toIdx) return prev ?? cur;
-        cur.splice(fromIdx, 1);
-        if (targetId) {
-          const adjustedToIdx = cur.indexOf(targetId);
-          cur.splice(adjustedToIdx, 0, colId);
-        } else {
-          cur.push(colId);
-        }
-        return cur;
-      });
+      setInternalColOrder(next);
     },
-    [onColumnMoved, gridColumns, columns, hiddenSet]
+    [onColumnOrderChange, gridColumns]
+  );
+
+  // ===== 表头双击自适应列宽 =====
+  // 单击仍走 onHeaderClicked（排序等由父组件决定）；320ms 内同一列第二次点击
+  // 视为双击，测量表头 + 当前页所有单元格文本宽度后复用列宽回调。
+  const lastHeaderClickRef = useRef<{ col: number; time: number } | null>(null);
+  const autoFitColumn = useCallback(
+    (colIndex: number) => {
+      const col = gridColumnsRef.current[colIndex];
+      if (!col || col.id === FILLER_COL_ID) return;
+      const ctx = document.createElement('canvas').getContext('2d');
+      if (!ctx) return;
+      const colId = String(col.id);
+      // title 编码为 name|type|isPK|comment，表头两行分别是名称与类型
+      const [name, type] = String(col.title ?? '').split('|');
+      ctx.font = '600 13px sans-serif';
+      let maxWidth = ctx.measureText(name ?? '').width;
+      if (type) {
+        ctx.font = '11px sans-serif';
+        maxWidth = Math.max(maxWidth, ctx.measureText(type).width);
+      }
+      ctx.font = '13px sans-serif';
+      for (const row of rows) {
+        const value = row[colId];
+        const text = value == null || value === '' ? 'NULL' : String(value);
+        const w = ctx.measureText(text).width;
+        if (w > maxWidth) maxWidth = w;
+      }
+      // 单元格左右各 10px 内边距 + 少量余量，夹在可读区间内
+      const width = Math.max(80, Math.min(600, Math.ceil(maxWidth) + 26));
+      if (onColumnResized) {
+        onColumnResized(col, width, colIndex);
+      } else {
+        setInternalColWidths((prev) => ({ ...prev, [colId]: width }));
+      }
+    },
+    [rows, onColumnResized]
+  );
+
+  const handleHeaderClicked = useCallback(
+    (colIndex: number) => {
+      const now = Date.now();
+      const last = lastHeaderClickRef.current;
+      if (last !== null && last.col === colIndex && now - last.time < 320) {
+        lastHeaderClickRef.current = null;
+        autoFitColumn(colIndex);
+        return;
+      }
+      lastHeaderClickRef.current = { col: colIndex, time: now };
+      onHeaderClicked?.(colIndex);
+    },
+    [autoFitColumn, onHeaderClicked]
   );
 
   // ===== 列宽调整 =====
@@ -951,27 +1116,30 @@ export function GlideDataTable({
   );
 
   // ===== 空区域点击取消选择 =====
-  const handleWrapperPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    // 只有点击 wrapper 本身（空白区域）时才清空，点击单元格时不处理
-    if (e.target !== e.currentTarget) return;
-    if (emptyClickTimerRef.current !== null) {
-      clearTimeout(emptyClickTimerRef.current);
-    }
-    emptyClickTimerRef.current = setTimeout(() => {
-      emptyClickTimerRef.current = null;
-      const cur = currentSelectionRef.current;
-      const hasSelection = cur.columns.toArray().length > 0 || cur.rows.toArray().length > 0;
-      if (!hasSelection) return;
-      const empty: GridSelection = {
-        columns: CompactSelection.empty(),
-        rows: CompactSelection.empty(),
-      };
-      setGridSelection(empty);
-      if (onSelectionChange) {
-        onSelectionChange([], empty);
+  const handleWrapperPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      // 只有点击 wrapper 本身（空白区域）时才清空，点击单元格时不处理
+      if (e.target !== e.currentTarget) return;
+      if (emptyClickTimerRef.current !== null) {
+        clearTimeout(emptyClickTimerRef.current);
       }
-    }, 120);
-  }, [onSelectionChange]);
+      emptyClickTimerRef.current = setTimeout(() => {
+        emptyClickTimerRef.current = null;
+        const cur = currentSelectionRef.current;
+        const hasSelection = cur.columns.toArray().length > 0 || cur.rows.toArray().length > 0;
+        if (!hasSelection) return;
+        const empty: GridSelection = {
+          columns: CompactSelection.empty(),
+          rows: CompactSelection.empty(),
+        };
+        setGridSelection(empty);
+        if (onSelectionChange) {
+          onSelectionChange([], empty);
+        }
+      }, 120);
+    },
+    [onSelectionChange]
+  );
 
   // ===== 编辑 =====
   // 注意：正常编辑流程由 handleCellsEdited 处理（Glide Data Grid 协议要求）。
@@ -981,9 +1149,14 @@ export function GlideDataTable({
       if (!onCellEdited || !editable) return;
       const gridCol = gridColumns[col];
       if (gridCol?.id === FILLER_COL_ID) return;
-      const rawVal = typeof newValue === 'object' && newValue !== null ? (newValue as any).data : undefined;
+      const rawVal =
+        typeof newValue === 'object' && newValue !== null ? (newValue as any).data : undefined;
       const hasVal = rawVal !== undefined && rawVal !== null;
-      const val = hasVal ? String(rawVal) : (typeof newValue === 'object' && newValue !== null ? '' : String(newValue ?? ''));
+      const val = hasVal
+        ? String(rawVal)
+        : typeof newValue === 'object' && newValue !== null
+          ? ''
+          : String(newValue ?? '');
       onCellEdited(col, row, String(val));
     },
     [onCellEdited, editable, gridColumns]
@@ -1010,7 +1183,9 @@ export function GlideDataTable({
       const isRange = savedRange !== null && newValues.length === 1;
 
       const extractVal = (value: EditableGridCell) =>
-        typeof value === 'object' && value !== null ? (value as any).data ?? '' : String(value ?? '');
+        typeof value === 'object' && value !== null
+          ? ((value as any).data ?? '')
+          : String(value ?? '');
 
       if (isRange) {
         lastRangeRef.current = null;
@@ -1030,7 +1205,12 @@ export function GlideDataTable({
       }
 
       if (onCellEdited && newValues.length <= 1) {
-        const [{ location: [col, row], value }] = newValues;
+        const [
+          {
+            location: [col, row],
+            value,
+          },
+        ] = newValues;
         if (gridColumns[col]?.id === FILLER_COL_ID) return false;
         onCellEdited(col, row, String(extractVal(value)));
         return true;
@@ -1060,7 +1240,12 @@ export function GlideDataTable({
     if (rs.editingRange === null) {
       const savedRange = lastRangeRef.current;
       if (savedRange && onCellsEditedRef.current) {
-        rs.editingRange = { x: savedRange.x, y: savedRange.y, width: savedRange.width, height: savedRange.height };
+        rs.editingRange = {
+          x: savedRange.x,
+          y: savedRange.y,
+          width: savedRange.width,
+          height: savedRange.height,
+        };
         if (savedRange.width * savedRange.height <= LIVE_FILL_CELL_LIMIT) {
           rs.wasLiveRangeEdit = true;
           rs.liveRangeEditFn = (value: string) => {
@@ -1105,17 +1290,11 @@ export function GlideDataTable({
 
   return (
     <RangeEditContext.Provider value={rangeEditRef}>
-      <div ref={wrapperRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }} onPointerDown={handleWrapperPointerDown}>
-        {enableFindReplace && (
-          <FindReplaceBar
-            visible={findVisible}
-            onClose={handleFindClose}
-            matches={findMatches}
-            currentMatchIndex={currentMatchIndex}
-            onNavigate={handleFindNavigate}
-            onSearchChange={handleSearchChange}
-          />
-        )}
+      <div
+        ref={wrapperRef}
+        style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}
+        onPointerDown={handleWrapperPointerDown}
+      >
         <div
           style={{
             flex: 1,
@@ -1127,97 +1306,121 @@ export function GlideDataTable({
           onMouseMove={onMouseMove}
           onWheelCapture={handleWheelCapture}
         >
-        <DataEditor
-          ref={gridRef}
-          width="100%"
-          height="100%"
-          columns={gridColumns}
-          rows={rows.length}
-          getCellContent={getCellContent}
-          drawCell={drawCell}
-          drawHeader={drawHeader}
-          gridSelection={gridSelection}
-          onGridSelectionChange={handleSelectionChange}
-          onColumnMoved={handleColumnMoved}
-          onColumnResize={handleColumnResized}
-          onCellEdited={handleCellEdited}
-          onCellsEdited={handleCellsEdited}
-          onCellContextMenu={handleContextMenu}
-          onHeaderClicked={onHeaderClicked}
-          onItemHovered={onItemHovered}
-          onVisibleRegionChanged={(
-            region: { x?: number; y?: number; width?: number; height?: number },
-            tx?: number,
-            ty?: number
-          ) => {
-            // 隐藏（尺寸归零）期间 glide 会发出 (0,0) 区域事件，只在有效区域时记录
-            if ((region.width ?? 0) > 0 && (region.height ?? 0) > 0) {
-              lastRegionRef.current = {
-                x: region.x ?? 0,
-                y: region.y ?? 0,
-                tx: tx ?? 0,
-                ty: ty ?? 0,
-              };
-            }
-          }}
-          onHeaderContextMenu={(colIndex, event) => {
-            if (!onHeaderContextMenu) return;
-            // 优先用鼠标坐标，回退到 header cell bounds 左上角
-            const ev = event as any;
-            const x = typeof ev?.clientX === 'number' ? ev.clientX : (ev?.bounds?.x ?? 0);
-            const y = typeof ev?.clientY === 'number' ? ev.clientY : (ev?.bounds?.y ?? 0);
-            onHeaderContextMenu(colIndex, { x, y });
-          }}
-          theme={theme}
-          headerHeight={headerHeight}
-          rowHeight={rowHeight}
-          rowMarkers="clickable-number"
-          smoothScrollX
-          smoothScrollY
-          rangeSelect="rect"
-          keybindings={{ search: !enableFindReplace, copy: true, paste: true, selectAll: true }}
-          getCellsForSelection={true}
-          onPaste={onPaste}
-          provideEditor={provideEditor}
-        />
-        {/* 表头 hover tooltip：显示字段注释
+          <DataEditor
+            ref={gridRef}
+            width="100%"
+            height="100%"
+            columns={gridColumns}
+            rows={rows.length}
+            getCellContent={getCellContent}
+            drawCell={drawCell}
+            drawHeader={drawHeader}
+            gridSelection={gridSelection}
+            onGridSelectionChange={handleSelectionChange}
+            onColumnMoved={handleColumnMoved}
+            onColumnResize={handleColumnResized}
+            onCellEdited={handleCellEdited}
+            onCellsEdited={handleCellsEdited}
+            onCellContextMenu={handleContextMenu}
+            onHeaderClicked={handleHeaderClicked}
+            onItemHovered={onItemHovered}
+            onVisibleRegionChanged={(
+              region: { x?: number; y?: number; width?: number; height?: number },
+              tx?: number,
+              ty?: number
+            ) => {
+              // 隐藏（尺寸归零）期间 glide 会发出 (0,0) 区域事件，只在有效区域时记录
+              if ((region.width ?? 0) > 0 && (region.height ?? 0) > 0) {
+                lastRegionRef.current = {
+                  x: region.x ?? 0,
+                  y: region.y ?? 0,
+                  tx: tx ?? 0,
+                  ty: ty ?? 0,
+                };
+              }
+            }}
+            onHeaderContextMenu={(colIndex, event) => {
+              if (!onHeaderContextMenu) return;
+              // 优先用鼠标坐标，回退到 header cell bounds 左上角
+              const ev = event as any;
+              const x = typeof ev?.clientX === 'number' ? ev.clientX : (ev?.bounds?.x ?? 0);
+              const y = typeof ev?.clientY === 'number' ? ev.clientY : (ev?.bounds?.y ?? 0);
+              onHeaderContextMenu(colIndex, { x, y });
+            }}
+            theme={theme}
+            headerHeight={headerHeight}
+            rowHeight={rowHeight}
+            rowMarkers="clickable-number"
+            smoothScrollX
+            smoothScrollY
+            rangeSelect="rect"
+            keybindings={{ search: !enableFindReplace, copy: true, paste: true, selectAll: true }}
+            getCellsForSelection={true}
+            onPaste={onPaste}
+            provideEditor={provideEditor}
+          />
+          {/* 表头 hover tooltip：显示字段注释
             trigger 用 fixed + 原生 mousemove 的 clientX/clientY，
             彻底避开 glide canvas 坐标系转换问题 */}
-        {hoveredHeaderCol !== null && (() => {
-          const col = gridColumns[hoveredHeaderCol];
-          if (!col) return null;
-          const parts = (col.title || '').split('|');
-          const name = parts[0] || '';
-          const type = parts[1] || '';
-          const comment = parts[3] || '';
-          if (!comment) return null;
-          return (
-            <Tooltip
-              open
-              title={
-                <div style={{ maxWidth: 320 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 2 }}>{name}</div>
-                  {type && <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>{type}</div>}
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{comment}</div>
-                </div>
-              }
-              overlayStyle={{ pointerEvents: 'none' }}
-            >
-              {/* 虚拟 trigger：跟随鼠标，1x1 不可见 */}
-              <div
-                style={{
-                  position: 'fixed',
-                  left: mouseClient.x,
-                  top: mouseClient.y,
-                  width: 1,
-                  height: 1,
-                  pointerEvents: 'none',
-                }}
-              />
-            </Tooltip>
-          );
-        })()}
+          {hoveredHeaderCol !== null &&
+            (() => {
+              const col = gridColumns[hoveredHeaderCol];
+              if (!col) return null;
+              const parts = (col.title || '').split('|');
+              const name = parts[0] || '';
+              const type = parts[1] || '';
+              const comment = parts[3] || '';
+              if (!comment) return null;
+              return (
+                <Tooltip
+                  open
+                  title={
+                    <div style={{ maxWidth: 320 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 2 }}>{name}</div>
+                      {type && (
+                        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>{type}</div>
+                      )}
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{comment}</div>
+                    </div>
+                  }
+                  overlayStyle={{ pointerEvents: 'none' }}
+                >
+                  {/* 虚拟 trigger：跟随鼠标，1x1 不可见 */}
+                  <div
+                    style={{
+                      position: 'fixed',
+                      left: mouseClient.x,
+                      top: mouseClient.y,
+                      width: 1,
+                      height: 1,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                </Tooltip>
+              );
+            })()}
         </div>
+        {/* 查找/替换：Cmd+F 触发后以浮层出现在网格右上角，不挤压表格高度 */}
+        {enableFindReplace && findVisible && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 12,
+              zIndex: 30,
+              width: 'min(560px, calc(100% - 24px))',
+            }}
+          >
+            <FindReplaceBar
+              visible={findVisible}
+              onClose={handleFindClose}
+              matches={findMatches}
+              currentMatchIndex={currentMatchIndex}
+              onNavigate={handleFindNavigate}
+              onSearchChange={handleSearchChange}
+            />
+          </div>
+        )}
       </div>
     </RangeEditContext.Provider>
   );

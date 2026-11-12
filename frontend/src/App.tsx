@@ -6,6 +6,7 @@ import enUS from 'antd/locale/en_US';
 import { useEffect, useMemo, useState } from 'react';
 import { useSettingsStore } from './stores/settingsStore';
 import { getThemeConfig, ThemeMode } from './styles/theme';
+import { applyThemeVars } from './styles/applyTheme';
 import { SplashScreen } from './components/SplashScreen';
 import i18n from './i18n';
 import './style.css';
@@ -128,50 +129,9 @@ function App() {
   useEffect(() => {
     if (!isHydrated) return;
 
-    const root = document.documentElement;
-
     const applyVars = () => {
-      // 启用主题过渡 class（CSS 里针对 .theme-transitioning 加 color transition），
-      // 300ms 后移除，避免影响日常 hover/动画
-      root.classList.add('theme-transitioning');
-
-      Object.entries(themeConfig.colors).forEach(([key, value]) => {
-        root.style.setProperty(`--color-${key}`, value);
-      });
-
-      Object.entries(themeConfig.neutralColors).forEach(([key, value]) => {
-        const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-        root.style.setProperty(`--${cssKey}`, value);
-      });
-
-      Object.entries(themeConfig.glassEffect).forEach(([key, value]) => {
-        // key 形如 glassBackground：需去掉族前缀再转 kebab，产出 --glass-background。
-        // 此前未去前缀产出 --glass-glass-background，theme-enhancements.css 的消费端从未命中，
-        // 玻璃效果一直走的是 CSS 里的静态 fallback 值
-        const cssKey = key
-          .replace(/^glass/, '')
-          .replace(/([A-Z])/g, '-$1')
-          .toLowerCase()
-          .replace(/^-/, '');
-        root.style.setProperty(`--glass-${cssKey}`, value);
-      });
-
-      Object.entries(themeConfig.focusStyle).forEach(([key, value]) => {
-        // 同上：focusRingColor → --focus-ring-color（非 --focus-focus-ring-color）
-        const cssKey = key
-          .replace(/^focus/, '')
-          .replace(/([A-Z])/g, '-$1')
-          .toLowerCase()
-          .replace(/^-/, '');
-        if (typeof value === 'number') {
-          root.style.setProperty(`--focus-${cssKey}`, `${value}px`);
-        } else {
-          root.style.setProperty(`--focus-${cssKey}`, value);
-        }
-      });
-
-      root.setAttribute('data-theme', effectiveMode);
-      root.setAttribute('data-theme-preset', themePreset);
+      // CSS 变量 + data-theme 标记统一由 applyThemeVars 注入（主窗口/托盘面板共用）
+      const { config } = applyThemeVars(themeMode, themePreset, { transition: true });
 
       // 同步原生窗口外观（macOS 标题栏/红绿灯按钮/窗口边框/菜单栏）
       // 后端通过 CGO+ObjC 调 NSWindow.setAppearance:（仅 darwin 生效，其他平台空实现）
@@ -182,7 +142,7 @@ function App() {
       // 同步窗口背景色：webview 透明（WebviewIsTransparent:true）时，
       // 窗口 BackgroundColour 作为底色透过透明像素显示。
       // 跟随主题 background 同步，消除启动白屏和主题切换闪烁。
-      const bg = themeConfig.neutralColors.background;
+      const bg = config.neutralColors.background;
       const hex = bg.replace('#', '');
       if (hex.length === 6) {
         const r = parseInt(hex.slice(0, 2), 16);
@@ -190,10 +150,6 @@ function App() {
         const b = parseInt(hex.slice(4, 6), 16);
         WailsWindow.SetBackgroundColour(r, g, b, 255);
       }
-
-      window.setTimeout(() => {
-        root.classList.remove('theme-transitioning');
-      }, 300);
     };
 
     requestAnimationFrame(() => {
@@ -231,15 +187,17 @@ function App() {
       colorInfoHover: themeConfig.colors.infoHover,
       colorInfoActive: themeConfig.colors.infoActive,
       colorBgContainer: themeConfig.neutralColors.backgroundCard,
-      colorBgElevated: themeConfig.neutralColors.backgroundCard,
-      colorBgLayout: themeConfig.neutralColors.background,
+      // 浮层必须比容器亮一档，否则弹窗/下拉与卡片同色，antd 的 elevation 层次被抹平
+      colorBgElevated: themeConfig.neutralColors.surfaceElevated,
+      colorBgLayout: themeConfig.neutralColors.surfaceCanvas,
       colorBorder: themeConfig.neutralColors.border,
       colorBorderSecondary: themeConfig.neutralColors.borderLight,
       colorText: themeConfig.neutralColors.textPrimary,
       colorTextSecondary: themeConfig.neutralColors.textSecondary,
       colorTextTertiary: themeConfig.neutralColors.textTertiary,
       colorTextQuaternary: themeConfig.neutralColors.textDisabled,
-      colorTextLightSolid: themeConfig.neutralColors.background,
+      // 主按钮文字色：旧值取 background（近白），窗口底压深后必须固定为浅色系
+      colorTextLightSolid: effectiveMode === 'dark' ? '#F5F7FA' : '#FFFFFF',
       borderRadius: 8,
       borderRadiusLG: 10,
       borderRadiusSM: 6,
@@ -251,12 +209,27 @@ function App() {
         "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
       fontFamilyCode:
         "ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Consolas, 'Courier New', monospace",
+      // antd 自绘浮层（Popover/Tooltip/Select 下拉等）的阴影系列：
+      // 此前未配置，走 antd 默认冷蓝灰阴影，与界面的暖中性阴影体系脱节
+      boxShadow:
+        effectiveMode === 'dark'
+          ? '0 0 0 1px rgba(255, 255, 255, 0.06), 0 3px 6px -4px rgba(0, 0, 0, 0.48), 0 6px 16px 0 rgba(0, 0, 0, 0.32), 0 9px 28px 8px rgba(0, 0, 0, 0.2)'
+          : '0 0 0 1px rgba(28, 28, 26, 0.04), 0 3px 6px -4px rgba(28, 28, 26, 0.08), 0 6px 16px 0 rgba(28, 28, 26, 0.08), 0 9px 28px 8px rgba(28, 28, 26, 0.05)',
+      boxShadowSecondary:
+        effectiveMode === 'dark'
+          ? '0 0 0 1px rgba(255, 255, 255, 0.06), 0 6px 16px -8px rgba(0, 0, 0, 0.4), 0 9px 28px 0 rgba(0, 0, 0, 0.28)'
+          : '0 0 0 1px rgba(28, 28, 26, 0.04), 0 6px 16px -8px rgba(28, 28, 26, 0.1), 0 9px 28px 0 rgba(28, 28, 26, 0.07)',
+      boxShadowTertiary:
+        effectiveMode === 'dark'
+          ? '0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.32)'
+          : '0 0 0 1px rgba(28, 28, 26, 0.04), 0 1px 2px rgba(28, 28, 26, 0.05)',
     },
     components: {
       Layout: {
         headerBg: themeConfig.neutralColors.backgroundToolbar,
-        siderBg: themeConfig.neutralColors.backgroundCard,
-        bodyBg: themeConfig.neutralColors.background,
+        // 侧栏使用最深的窗口底，内容区用工作区画布，两者不再同色
+        siderBg: themeConfig.neutralColors.background,
+        bodyBg: themeConfig.neutralColors.surfaceCanvas,
       },
       Menu: {
         itemBg: themeConfig.neutralColors.backgroundCard,
@@ -269,16 +242,20 @@ function App() {
       Tabs: {
         cardBg: themeConfig.neutralColors.backgroundCard,
         itemSelectedColor: themeConfig.colors.primary,
+        inkBarColor: themeConfig.colors.primary,
         fontSize: 14,
         horizontalItemPadding: '12px 16px',
       },
       Table: {
         headerBg: themeConfig.neutralColors.backgroundToolbar,
+        headerColor: themeConfig.neutralColors.textSecondary,
+        headerSplitColor: themeConfig.neutralColors.border,
+        borderColor: themeConfig.neutralColors.borderLight,
         rowHoverBg: themeConfig.neutralColors.backgroundHover,
         headerBorderRadius: 8,
         cellFontSize: 13,
         cellFontSizeMD: 13,
-        headerFontSize: 13,
+        headerFontSize: 12,
       },
       Card: {
         colorBgContainer: themeConfig.neutralColors.backgroundCard,
@@ -288,9 +265,15 @@ function App() {
         nodeSelectedColor: themeConfig.colors.primary,
       },
       Modal: {
-        contentBg: themeConfig.neutralColors.backgroundCard,
-        headerBg: themeConfig.neutralColors.backgroundCard,
-        footerBg: themeConfig.neutralColors.backgroundCard,
+        contentBg: themeConfig.neutralColors.surfaceElevated,
+        headerBg: themeConfig.neutralColors.surfaceElevated,
+        footerBg: themeConfig.neutralColors.surfaceElevated,
+        // 弹窗半径与标题字号：与主界面的卡片语汇保持一致
+        borderRadiusLG: 14,
+        titleFontSize: 14,
+      },
+      Drawer: {
+        colorBgElevated: themeConfig.neutralColors.surfaceElevated,
       },
       Input: {
         colorBgContainer: themeConfig.neutralColors.backgroundCard,
@@ -305,7 +288,8 @@ function App() {
         controlHeightSM: 28,
       },
       Button: {
-        primaryColor: themeConfig.neutralColors.background,
+        // 亮色为白字 / 暗色为深字，跟随浮层色阶，主色按钮始终清晰
+        primaryColor: themeConfig.neutralColors.surfaceElevated,
         borderRadius: 8,
         borderRadiusLG: 10,
         borderRadiusSM: 6,
@@ -319,11 +303,13 @@ function App() {
         itemMarginBottom: 16,
       },
       Dropdown: {
-        colorBgElevated: themeConfig.neutralColors.backgroundCard,
+        colorBgElevated: themeConfig.neutralColors.surfaceElevated,
+        borderRadiusLG: 10,
       },
       Tooltip: {
         colorBgSpotlight: themeConfig.neutralColors.backgroundCard,
         colorTextLightSolid: themeConfig.neutralColors.textPrimary,
+        borderRadius: 6,
       },
       Tag: {
         defaultBg: themeConfig.neutralColors.backgroundHover,
@@ -336,7 +322,7 @@ function App() {
         colorTextDisabled: themeConfig.neutralColors.textDisabled,
       },
       Message: {
-        colorBgElevated: themeConfig.neutralColors.backgroundCard,
+        colorBgElevated: themeConfig.neutralColors.surfaceElevated,
         colorText: themeConfig.neutralColors.textPrimary,
       },
     },

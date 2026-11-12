@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { ThemePreset } from '../../styles/theme';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -13,7 +14,7 @@ export interface ShortcutConfig {
 export interface AppSettings {
   pageSize: number;
   maxResultRows: number;
-
+  themePreset: ThemePreset;
   themeMode: ThemeMode;
   language: 'zh-CN' | 'en-US';
   settingsActiveTab?: 'general' | 'appearance' | 'language' | 'shortcuts' | 'editor';
@@ -31,7 +32,7 @@ interface SettingsState {
 const defaultSettings: AppSettings = {
   pageSize: 1000,
   maxResultRows: 10000,
-
+  themePreset: 'default',
   themeMode: 'system',
   language: 'zh-CN',
   shortcuts: {},

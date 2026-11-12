@@ -1,0 +1,365 @@
+/**
+ * pro-theme.css — Pro 预设的视觉增强层（最后加载，仅在 data-theme-preset='pro' 时生效）
+ *
+ * 设计语言：Linear / Warp 式高级感 = 环境光 + 靛紫渐变 + 发光选中态 + 玻璃质感。
+ * 令牌由 theme.ts 的 PRO_LIGHT / PRO_DARK 注入；本层负责那些「令牌表达不了」的效果：
+ *   1. 窗口环境辉光（radial-gradient 氛围光，非面板颜色）
+ *   2. 渐变主按钮 / 品牌标（内高光 + 柔和投影）
+ *   3. 选中连接卡、活动 Tab 的渐变描边与微光
+ *   4. 在线状态点光晕、数据库类型渐变徽标
+ *
+ * 全部样式以 [data-theme-pro] 为作用域，切走预设即完全消失，零回退成本。
+ */
+
+/* ==================== 1. 窗口环境辉光 ==================== */
+/* 光从窗口左上方散开（主色靛紫），右下角一点青色反射——高级感的环境来源 */
+[data-theme-pro] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 12% -12%, rgba(99, 102, 241, 0.12), transparent 62%),
+    radial-gradient(760px 420px at 96% 110%, rgba(34, 211, 238, 0.06), transparent 60%);
+}
+
+[data-theme-pro][data-theme='dark'] body::before {
+  background:
+    radial-gradient(900px 420px at 12% -12%, rgba(99, 102, 241, 0.14), transparent 62%),
+    radial-gradient(760px 420px at 96% 110%, rgba(34, 211, 238, 0.05), transparent 60%);
+}
+
+[data-theme-pro] #root {
+  position: relative;
+  z-index: 1;
+}
+
+/* 主表面需要一定不透明度，让辉光只「染」边缘而不穿透数据区 */
+[data-theme-pro] .sidebar-enhanced,
+[data-theme-pro] .ant-layout-content {
+  position: relative;
+}
+
+/* ==================== 2. 渐变主按钮与品牌标 ==================== */
+[data-theme-pro] .ant-btn-primary {
+  background-image: var(--color-primary-gradient) !important;
+  color: #FFFFFF !important;
+  border: none !important;
+  box-shadow:
+    0 4px 14px rgba(99, 102, 241, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}
+
+[data-theme-pro] .ant-btn-primary:hover {
+  background-image: var(--color-primary-gradient) !important;
+  filter: brightness(1.07);
+  box-shadow:
+    0 6px 20px rgba(99, 102, 241, 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26) !important;
+}
+
+[data-theme-pro] .ant-btn-primary:active:not(:disabled) {
+  filter: brightness(0.96);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.28) !important;
+}
+
+[data-theme-pro] .brand-mark {
+  background: var(--color-primary-gradient) !important;
+  box-shadow:
+    0 2px 10px rgba(99, 102, 241, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* ==================== 3. 活动 Tab：渐变描边 + 微光 ==================== */
+[data-theme-pro] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active,
+[data-theme-pro] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active:hover {
+  background: rgba(99, 102, 241, 0.10) !important;
+  border-color: rgba(99, 102, 241, 0.25) !important;
+  border-bottom-color: transparent !important;
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.10) !important;
+}
+
+[data-theme-pro] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active .ant-tabs-tab-btn,
+[data-theme-pro] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active .ant-tabs-tab-btn:hover {
+  color: var(--color-primary) !important;
+}
+
+[data-theme-pro][data-theme='dark'] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active,
+[data-theme-pro][data-theme='dark'] .ant-tabs.ant-tabs-editable-card .ant-tabs-tab-active:hover {
+  background: rgba(99, 102, 241, 0.16) !important;
+}
+
+/* ==================== 4. 连接树选中节点：圆角渐变卡（非扁平淡紫块） ==================== */
+/* theme-enhancements.css 里有 border-radius:0 !important / margin:0 !important 的
+   扁平行规则，Pro 的卡片化必须同权重覆盖，否则选中态永远是一块方形色带 */
+[data-theme-pro] .connection-tree .ant-tree-node-content-wrapper {
+  border-radius: 6px !important;
+}
+
+[data-theme-pro] .connection-tree .ant-tree-node-content-wrapper.ant-tree-node-selected,
+[data-theme-pro] .connection-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.10), rgba(139, 92, 246, 0.05)) !important;
+  border-radius: 8px !important;
+  margin: 1px 4px !important;
+  padding: 3px 8px !important;
+  width: auto !important;
+  border-left-color: transparent !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(99, 102, 241, 0.20),
+    0 2px 8px rgba(99, 102, 241, 0.07) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ==================== 合并行高度对齐 ==================== */
+/* 右侧标签栏必须与左侧侧栏品牌条同为 44px，否则顶部两条横线错位，整页显得散 */
+[data-theme-pro] .workspace-tabs > .ant-tabs-nav {
+  height: 44px;
+  box-sizing: border-box;
+  align-items: center;
+}
+
+[data-theme-pro] .workspace-tabs > .ant-tabs-nav .ant-tabs-nav-wrap {
+  align-items: center;
+}
+
+[data-theme-pro] .workspace-tabs > .ant-tabs-nav .ant-tabs-extra-content {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+/* ==================== 5. 输入框焦点环带一点光 ==================== */
+[data-theme-pro] .ant-input:focus,
+[data-theme-pro] .ant-input-affix-wrapper-focused,
+[data-theme-pro] .ant-select-focused .ant-select-selector {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14), 0 0 16px rgba(99, 102, 241, 0.08) !important;
+}
+
+/* ==================== 6. 连接行组件（ProConnectionRow 用） ==================== */
+.pro-conn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 8px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.pro-conn-row:hover {
+  background: var(--background-hover);
+}
+
+.pro-conn-row.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.13), rgba(139, 92, 246, 0.06));
+  border-color: rgba(99, 102, 241, 0.26);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.10);
+}
+
+.pro-db-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family-code);
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.pro-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pro-status-dot.on {
+  background: #34D399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+}
+
+.pro-status-dot.off {
+  background: var(--text-disabled);
+}
+
+/* 连接节点双行（名称 + host:port 副行）：让 antd 包装器随内容增高，呈卡片节奏 */
+[data-theme-pro] .connection-tree .ant-tree-node-content-wrapper {
+  line-height: 1.6;
+  /* theme-enhancements 的 1px 4px 密度过于拥挤，Pro 下放松行内边距 */
+  padding: 4px 8px !important;
+  border-radius: 7px !important;
+}
+
+/* 行间留白：11 个连接堆叠时不再粘成一片 */
+[data-theme-pro] .connection-tree .ant-tree-treenode {
+  padding-bottom: 3px;
+}
+
+/* 树内小尺寸徽标（24px 行高内保持 18px，不撑高行） */
+.pro-db-badge.sm {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 8px;
+  letter-spacing: -0.2px;
+}
+
+/* 数据库类型渐变徽标配色（与环境色相区分的品牌色） */
+.pro-db-mysql {
+  background: linear-gradient(135deg, #06B6D4, #0284C7);
+}
+
+.pro-db-postgresql,
+.pro-db-kingbase,
+.pro-db-highgo,
+.pro-db-vastbase {
+  background: linear-gradient(135deg, #60A5FA, #4F46E5);
+}
+
+.pro-db-oracle {
+  background: linear-gradient(135deg, #F87171, #DC2626);
+}
+
+.pro-db-sqlserver {
+  background: linear-gradient(135deg, #FBBF24, #D97706);
+}
+
+.pro-db-sqlite {
+  background: linear-gradient(135deg, #34D399, #059669);
+}
+
+.pro-db-dameng {
+  background: linear-gradient(135deg, #F472B6, #DB2777);
+}
+
+.pro-db-default {
+  background: linear-gradient(135deg, #94A3B8, #64748B);
+}
+
+/* ==================== 7. 深层页面表面规范 ==================== */
+/* 弹窗 / 抽屉 / 表单 / 表格 / 浮层统一到同一套半径、分隔线、阴影节奏，
+   避免深层页面还是 antd 默认长相（与窗格化主界面脱节） */
+
+/* ---- 弹窗 ---- */
+/* 注意：antd v6 的弹窗容器是 .ant-modal-container（v5 的 .ant-modal-content 已不存在） */
+[data-theme-pro] .ant-modal .ant-modal-container {
+  padding: 0 !important;
+  border-radius: 14px !important;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 24px 64px rgba(20, 24, 45, 0.16), 0 2px 8px rgba(20, 24, 45, 0.08) !important;
+  overflow: hidden;
+}
+
+[data-theme-pro][data-theme='dark'] .ant-modal .ant-modal-container {
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+}
+
+[data-theme-pro] .ant-modal .ant-modal-header {
+  margin: 0 !important;
+  padding: 14px 20px !important;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent !important;
+}
+
+[data-theme-pro] .ant-modal .ant-modal-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+}
+
+[data-theme-pro] .ant-modal .ant-modal-body {
+  padding: 18px 20px !important;
+}
+
+[data-theme-pro] .ant-modal .ant-modal-footer {
+  margin: 0 !important;
+  padding: 12px 20px !important;
+  border-top: 1px solid var(--border-color);
+  background: var(--background-toolbar) !important;
+}
+
+[data-theme-pro] .ant-modal .ant-modal-close {
+  top: 13px !important;
+  inset-inline-end: 14px !important;
+  border-radius: 6px;
+}
+
+/* ---- 抽屉 ---- */
+[data-theme-pro] .ant-drawer .ant-drawer-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+}
+
+[data-theme-pro] .ant-drawer .ant-drawer-body {
+  padding: 18px 20px;
+}
+
+[data-theme-pro] .ant-drawer .ant-drawer-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color);
+  background: var(--background-toolbar);
+}
+
+/* ---- 弹窗/抽屉内的 Tab：与工作区 Tab 同一语言 ---- */
+[data-theme-pro] .ant-modal .ant-tabs .ant-tabs-tab,
+[data-theme-pro] .ant-drawer .ant-tabs .ant-tabs-tab {
+  font-size: 12.5px;
+  padding: 8px 2px;
+}
+
+[data-theme-pro] .ant-modal .ant-tabs .ant-tabs-tab-active .ant-tabs-tab-btn,
+[data-theme-pro] .ant-drawer .ant-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--color-primary) !important;
+  font-weight: 500;
+}
+
+[data-theme-pro] .ant-modal .ant-tabs .ant-tabs-ink-bar,
+[data-theme-pro] .ant-drawer .ant-tabs .ant-tabs-ink-bar {
+  height: 2px !important;
+  border-radius: 2px;
+  background: var(--color-primary) !important;
+}
+
+/* ---- 表单控件：统一 7px 圆角 ---- */
+[data-theme-pro] .ant-input,
+[data-theme-pro] .ant-input-affix-wrapper,
+[data-theme-pro] .ant-input-number,
+[data-theme-pro] .ant-picker,
+[data-theme-pro] .ant-select .ant-select-selector {
+  border-radius: 7px !important;
+}
+
+/* ---- 表格 / 浮层 / 空状态 ----
+   颜色与字号统一走 App.tsx 的 antd 组件 token（Table.headerColor、Dropdown.borderRadiusLG、
+   Tooltip.borderRadius 等）。antd v6 多次重命名内部类名（modal-content→container、
+   drawer-content→section），因此这里不再按类名硬写结构性样式，避免静默失效。 */
+
+/* ---- 数据页工具栏：与主界面工具栏同节奏 ---- */
+/* 合并后的两行工具栏自带卡片外边距/内边距，不能被这里的 0 垂直内边距压扁 */
+[data-theme-pro] .data-toolbar:not(.data-toolbar-merged) {
+  min-height: 40px !important;
+  padding: 0 12px !important;
+  background: var(--background-toolbar);
+  border-bottom: 1px solid var(--border-color);
+}
+
+[data-theme-pro] .data-toolbar-btn {
+  height: 26px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+}
+
+[data-theme-pro] .data-toolbar-input {
+  height: 26px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+}
