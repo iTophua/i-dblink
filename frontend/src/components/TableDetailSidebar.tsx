@@ -25,25 +25,41 @@ interface TableDetailSidebarProps {
 
 interface SidebarTableInfo {
   engine?: string;
-  row_count?: number;
-  data_length?: number;
-  index_length?: number;
+  row_count?: number | string;
+  data_length?: number | string;
+  index_length?: number | string;
   collation?: string;
   create_time?: string;
   update_time?: string;
   comment?: string;
 }
 
-function formatBytes(bytes?: number): string {
-  if (!bytes) return '-';
+/** 后端统计字段可能是数字或数字字符串（驱动/库差异），统一转成数字 */
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value.replace(/,/g, ''));
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function formatBytes(bytes: unknown): string {
+  const num = toNumber(bytes);
+  if (num === undefined || num <= 0) return '-';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
+  let value = num;
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {
     value /= 1024;
     unit += 1;
   }
   return `${value.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`;
+}
+
+/** 描述项统一转字符串，避免后端返回对象时 React 渲染报错 */
+function formatText(value: unknown): string {
+  return value === null || value === undefined || value === '' ? '-' : String(value);
 }
 
 export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
@@ -143,21 +159,33 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
 
   const infoItems = info
     ? [
-        { key: 'engine', label: t('common.engine'), children: info.engine || '-' },
+        { key: 'engine', label: t('common.engine'), children: formatText(info.engine) },
         {
           key: 'rows',
           label: t('common.tableList.rowCount'),
-          children: info.row_count?.toLocaleString() || '-',
+          children: toNumber(info.row_count)?.toLocaleString() ?? '-',
         },
         { key: 'dataSize', label: t('common.dataSize'), children: formatBytes(info.data_length) },
-        { key: 'indexSize', label: t('common.indexSize'), children: formatBytes(info.index_length) },
+        {
+          key: 'indexSize',
+          label: t('common.indexSize'),
+          children: formatBytes(info.index_length),
+        },
         {
           key: 'collation',
           label: t('common.databaseProperties.collation'),
-          children: info.collation || '-',
+          children: formatText(info.collation),
         },
-        { key: 'createTime', label: t('common.createTime'), children: info.create_time || '-' },
-        { key: 'updateTime', label: t('common.updateTime'), children: info.update_time || '-' },
+        {
+          key: 'createTime',
+          label: t('common.createTime'),
+          children: formatText(info.create_time),
+        },
+        {
+          key: 'updateTime',
+          label: t('common.updateTime'),
+          children: formatText(info.update_time),
+        },
       ]
     : [];
 
@@ -197,10 +225,7 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
       >
         {!tableName ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <EnhancedEmptyState
-              icon={<TableOutlined />}
-              title={t('common.pleaseSelectATable')}
-            />
+            <EnhancedEmptyState icon={<TableOutlined />} title={t('common.pleaseSelectATable')} />
           </div>
         ) : (
           <>

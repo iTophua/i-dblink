@@ -126,7 +126,9 @@ class SchemaCompletionCache {
           batch.map(async (table) => {
             const tableType = (table.table_type || '').toUpperCase().trim();
             const isView =
-              tableType === 'VIEW' || tableType === 'SYSTEM VIEW' || tableType === 'MATERIALIZED VIEW';
+              tableType === 'VIEW' ||
+              tableType === 'SYSTEM VIEW' ||
+              tableType === 'MATERIALIZED VIEW';
 
             try {
               const columns = await getColumns(table.table_name);
@@ -352,10 +354,7 @@ export const useConnections = () => {
             /no route to host|network is (down|unreachable)|host is down/i.test(errorMsg) ||
             /网络通信异常.*dial address/.test(errorMsg)
           ) {
-            message.error(
-              `${errorMsg}\n${i18n.t('common.connectNetworkHint')}`,
-              6
-            );
+            message.error(`${errorMsg}\n${i18n.t('common.connectNetworkHint')}`, 6);
           } else {
             message.error(errorMsg);
           }
@@ -555,11 +554,8 @@ export const useDatabase = () => {
       const promise = (async () => {
         try {
           setTableDataLoading(cacheKey, true);
-          console.log('[DEBUG] Calling getTablesCategorized with:', { connectionId, database, search });
           const result = await api.getTablesCategorized(connectionId, database, search);
-          console.log('[DEBUG] getTablesCategorized result:', JSON.stringify(result, null, 2));
           const allTables = [...(result.tables || []), ...(result.views || [])];
-          console.log('[DEBUG] allTables count:', allTables.length, 'tables:', result.tables?.length, 'views:', result.views?.length);
           // 过期响应仲裁：仅当本请求仍是该 cacheKey 的最新请求时才写缓存/报错
           if (latestTableRequestId.get(cacheKey) === requestId) {
             setTableData(cacheKey, allTables);
@@ -632,7 +628,10 @@ export const useDatabase = () => {
         const result = await Promise.race([
           api.getTableStructure(connectionId, tableName, database),
           new Promise<import('../api').TableStructure>((_, reject) =>
-            setTimeout(() => reject(new Error('获取表结构超时 (15s)，请检查 Go sidecar 是否运行或网络连接')), TIMEOUT_MS)
+            setTimeout(
+              () => reject(new Error('获取表结构超时 (15s)，请检查 Go sidecar 是否运行或网络连接')),
+              TIMEOUT_MS
+            )
           ),
         ]);
         return result;
@@ -718,13 +717,23 @@ export const useDatabase = () => {
           return undefined;
         };
 
+        // 不同驱动可能把数值统计返回为字符串（如 "0"/"1,234"），统一归一化
+        const asNumber = (value: unknown): number | undefined => {
+          if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+          if (typeof value === 'string' && value.trim() !== '') {
+            const parsed = Number(value.replace(/,/g, ''));
+            return Number.isFinite(parsed) ? parsed : undefined;
+          }
+          return undefined;
+        };
+
         return {
           table_name: getValue(['table_name', 'TABLE_NAME', 'name']) as string,
           table_type: getValue(['table_type', 'TABLE_TYPE', 'type']) as string,
           engine: getValue(['engine', 'ENGINE']) as string,
-          row_count: getValue(['row_count', 'TABLE_ROWS', 'NUM_ROWS', 'rows']) as number,
-          data_length: getValue(['data_length', 'DATA_LENGTH', 'data_size', 'BYTES']) as number,
-          index_length: getValue(['index_length', 'INDEX_LENGTH', 'index_size']) as number,
+          row_count: asNumber(getValue(['row_count', 'TABLE_ROWS', 'NUM_ROWS', 'rows'])),
+          data_length: asNumber(getValue(['data_length', 'DATA_LENGTH', 'data_size', 'BYTES'])),
+          index_length: asNumber(getValue(['index_length', 'INDEX_LENGTH', 'index_size'])),
           create_time: getValue(['create_time', 'CREATE_TIME']) as string,
           update_time: getValue(['update_time', 'UPDATE_TIME']) as string,
           collation: getValue(['collation', 'TABLE_COLLATION']) as string,
