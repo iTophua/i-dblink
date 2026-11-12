@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"idblink/backend/db"
@@ -112,7 +113,11 @@ func mysqlGetTablesCategorized(ctx context.Context, dbConn db.Executor, database
 	for rows.Next() {
 		var name, engine sql.NullString
 		var rowCount, dataLen, idxLen sql.NullInt64
-		var createTime, updateTime sql.NullTime
+		// 时间列必须用 NullString：连接 DSN 固定 parseTime=false（见 backend/db/mysql.go），
+		// CREATE_TIME/UPDATE_TIME 以原始 []byte 返回，扫进 NullTime 会报
+		// "unsupported Scan, storing driver.Value type []uint8 into type *time.Time"，
+		// 且 MySQL 返回的已是 "2006-01-02 15:04:05" 格式字符串，无需再转 time.Time
+		var createTime, updateTime sql.NullString
 		var comment sql.NullString
 		var collation sql.NullString
 
@@ -122,7 +127,9 @@ func mysqlGetTablesCategorized(ctx context.Context, dbConn db.Executor, database
 		// Update_time, Check_time, Collation, Checksum, Create_options, Comment
 		var tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, tmp9 interface{}
 		if err := rows.Scan(&name, &engine, &tmp1, &tmp2, &rowCount, &tmp3, &dataLen, &tmp4, &idxLen, &tmp5, &tmp6, &createTime, &updateTime, &tmp7, &collation, &tmp8, &tmp9, &comment); err != nil {
-			// 不同 MySQL 版本列数不同，尝试只 scan 已知列
+			// 不再静默吞掉：此前每行扫描失败都被 continue 跳过，
+			// 最终返回「表 0 视图 0」且无任何报错，极难排查
+			slog.Warn("mysqlGetTablesCategorized: skip row due to scan error", "error", err)
 			continue
 		}
 
@@ -135,8 +142,8 @@ func mysqlGetTablesCategorized(ctx context.Context, dbConn db.Executor, database
 			Engine:     nullStr(engine),
 			DataSize:   formatBytes(dataLen),
 			IndexSize:  formatBytes(idxLen),
-			CreateTime: formatNullTime(createTime),
-			UpdateTime: formatNullTime(updateTime),
+			CreateTime: nullStr(createTime),
+			UpdateTime: nullStr(updateTime),
 			Collation:  nullStr(collation),
 		}
 

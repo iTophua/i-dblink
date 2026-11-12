@@ -160,7 +160,8 @@ func (h *Handler) KillProcess(w http.ResponseWriter, r *http.Request) {
 // ─── MySQL ───
 
 func mysqlGetProcessList(ctx context.Context, dbConn db.Executor) ([]ProcessInfo, error) {
-	rows, err := dbConn.QueryContext(ctx, "SHOW PROCESSLIST")
+	// FULL：SHOW PROCESSLIST 会把 INFO 截断到 100 字符，SQL 复制/详情需要完整语句
+	rows, err := dbConn.QueryContext(ctx, "SHOW FULL PROCESSLIST")
 	if err != nil {
 		return nil, err
 	}
