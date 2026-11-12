@@ -54,6 +54,7 @@ idblink
 .qwen/
 .lingma/
 .reasonix/
+.workbuddy/
 
 # Editor directories and files
 .vscode/
