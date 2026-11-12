@@ -42,6 +42,12 @@
     "refresh": "Refresh",
     "copy": "Copy",
     "copyAll": "Copy all",
+    "errorBoundary": {
+      "title": "Rendering error",
+      "description": "This page crashed and was caught by the error boundary. Copy the details below for troubleshooting, or reload the app.",
+      "copy": "Copy details",
+      "reload": "Reload"
+    },
     "paste": "Paste",
     "cut": "Cut",
     "selectAll": "Select All",

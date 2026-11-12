@@ -64,6 +64,7 @@ import {
   StreamExportTable,
   ReadSqlFile,
   SetCloseGuardState,
+  ShowDevTools,
   OpenResultPopup,
   SaveSqlFileDialog,
   WriteSqlFile,
@@ -370,10 +371,7 @@ export const api = {
     return (await GetDatabases(connectionId)) ?? [];
   },
 
-  async getTables(
-    connectionId: string,
-    database?: string
-  ): Promise<TableInfo[]> {
+  async getTables(connectionId: string, database?: string): Promise<TableInfo[]> {
     const result = await GetTables(connectionId, database ?? null);
     return result as unknown as TableInfo[];
   },
@@ -383,11 +381,7 @@ export const api = {
     database?: string,
     search?: string
   ): Promise<TablesResult> {
-    const result = await GetTablesCategorized(
-      connectionId,
-      database ?? null,
-      search ?? null
-    );
+    const result = await GetTablesCategorized(connectionId, database ?? null, search ?? null);
     return result as unknown as TablesResult;
   },
 
@@ -396,11 +390,7 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<TableStructure> {
-    const result = await GetTableStructure(
-      connectionId,
-      tableName,
-      database ?? null
-    );
+    const result = await GetTableStructure(connectionId, tableName, database ?? null);
     return result as unknown as TableStructure;
   },
 
@@ -409,11 +399,7 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<ColumnInfo[]> {
-    const result = await GetColumns(
-      connectionId,
-      tableName,
-      database ?? null
-    );
+    const result = await GetColumns(connectionId, tableName, database ?? null);
     return result as unknown as ColumnInfo[];
   },
 
@@ -430,11 +416,7 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<IndexInfo[]> {
-    const result = await GetIndexes(
-      connectionId,
-      tableName,
-      database ?? null
-    );
+    const result = await GetIndexes(connectionId, tableName, database ?? null);
     return result as unknown as IndexInfo[];
   },
 
@@ -443,11 +425,7 @@ export const api = {
     tableName: string,
     database?: string
   ): Promise<ForeignKeyInfo[]> {
-    const result = await GetForeignKeys(
-      connectionId,
-      tableName,
-      database ?? null
-    );
+    const result = await GetForeignKeys(connectionId, tableName, database ?? null);
     return result as unknown as ForeignKeyInfo[];
   },
 
@@ -464,11 +442,7 @@ export const api = {
     procedureName: string,
     database?: string
   ): Promise<string> {
-    return await GetProcedureBody(
-      connectionId,
-      procedureName,
-      database ?? null
-    );
+    return await GetProcedureBody(connectionId, procedureName, database ?? null);
   },
 
   async getFunctionBody(
@@ -476,11 +450,7 @@ export const api = {
     functionName: string,
     database?: string
   ): Promise<string> {
-    return await GetFunctionBody(
-      connectionId,
-      functionName,
-      database ?? null
-    );
+    return await GetFunctionBody(connectionId, functionName, database ?? null);
   },
 
   async executeQuery(
@@ -495,9 +465,10 @@ export const api = {
     // useTransaction: false = 绕过活跃事务走自动提交（默认 null = 有事务则进事务）
     // maxRows: 传入时后端扫描到该行数即停（truncated=true），避免整表拉回后才截断
     const txFlag = opts?.useTransaction === undefined ? null : opts.useTransaction;
-    const binding = opts?.maxRows != null && opts.maxRows > 0
-      ? ExecuteQueryLimited(connectionId, sql, database ?? null, txFlag, opts.maxRows)
-      : ExecuteQuery(connectionId, sql, database ?? null, txFlag);
+    const binding =
+      opts?.maxRows != null && opts.maxRows > 0
+        ? ExecuteQueryLimited(connectionId, sql, database ?? null, txFlag, opts.maxRows)
+        : ExecuteQuery(connectionId, sql, database ?? null, txFlag);
     if (!signal) {
       const result = await binding;
       return result as unknown as QueryResult;
@@ -507,9 +478,13 @@ export const api = {
         reject(new DOMException('Aborted', 'AbortError'));
         return;
       }
-      signal.addEventListener('abort', () => {
-        reject(new DOMException('Aborted', 'AbortError'));
-      }, { once: true });
+      signal.addEventListener(
+        'abort',
+        () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        },
+        { once: true }
+      );
     });
     try {
       const result = await Promise.race([binding, abortPromise]);
@@ -552,9 +527,13 @@ export const api = {
         reject(new DOMException('Aborted', 'AbortError'));
         return;
       }
-      signal.addEventListener('abort', () => {
-        reject(new DOMException('Aborted', 'AbortError'));
-      }, { once: true });
+      signal.addEventListener(
+        'abort',
+        () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        },
+        { once: true }
+      );
     });
     try {
       const result = await Promise.race([binding, abortPromise]);
@@ -572,35 +551,19 @@ export const api = {
     }
   },
 
-  async executeDDL(
-    connectionId: string,
-    sql: string,
-    database?: string
-  ): Promise<void> {
+  async executeDDL(connectionId: string, sql: string, database?: string): Promise<void> {
     await ExecuteDDL(connectionId, sql, database ?? null);
   },
 
-  async truncateTable(
-    connectionId: string,
-    tableName: string,
-    database?: string
-  ): Promise<void> {
+  async truncateTable(connectionId: string, tableName: string, database?: string): Promise<void> {
     await TruncateTable(connectionId, tableName, database ?? null);
   },
 
-  async dropTable(
-    connectionId: string,
-    tableName: string,
-    database?: string
-  ): Promise<void> {
+  async dropTable(connectionId: string, tableName: string, database?: string): Promise<void> {
     await DropTable(connectionId, tableName, database ?? null);
   },
 
-  async dropView(
-    connectionId: string,
-    viewName: string,
-    database?: string
-  ): Promise<void> {
+  async dropView(connectionId: string, viewName: string, database?: string): Promise<void> {
     await DropView(connectionId, viewName, database ?? null);
   },
 
@@ -661,9 +624,7 @@ export const api = {
     };
   },
 
-  async getServerStatus(
-    connectionId: string
-  ): Promise<{
+  async getServerStatus(connectionId: string): Promise<{
     version: string;
     uptime: string;
     connections: { current: number; max: number; active: number; idle: number };
@@ -682,11 +643,7 @@ export const api = {
     };
   },
 
-  async getTableDDL(
-    connectionId: string,
-    tableName: string,
-    database?: string
-  ): Promise<string[]> {
+  async getTableDDL(connectionId: string, tableName: string, database?: string): Promise<string[]> {
     return (await GetTableDDL(connectionId, tableName, database ?? null)) ?? [];
   },
 
@@ -694,18 +651,12 @@ export const api = {
     return await GetDatabaseDDL(connectionId, database);
   },
 
-  async getTriggers(
-    connectionId: string,
-    database?: string
-  ): Promise<any[]> {
+  async getTriggers(connectionId: string, database?: string): Promise<any[]> {
     const result = await GetTriggers(connectionId, database ?? null);
     return result as any[];
   },
 
-  async getEvents(
-    connectionId: string,
-    database?: string
-  ): Promise<any[]> {
+  async getEvents(connectionId: string, database?: string): Promise<any[]> {
     const result = await GetEvents(connectionId, database ?? null);
     return result as any[];
   },
@@ -817,11 +768,7 @@ export const api = {
     database: string;
     filePath: string;
   }): Promise<{ error?: string }> {
-    const result = await RestoreDatabase(
-      params.connectionId,
-      params.database,
-      params.filePath
-    );
+    const result = await RestoreDatabase(params.connectionId, params.database, params.filePath);
     return result as unknown as { error?: string };
   },
 
@@ -835,12 +782,7 @@ export const api = {
     host: string,
     database?: string
   ): Promise<any> {
-    return await GetUserPrivileges(
-      connectionId,
-      username,
-      host,
-      database ?? null
-    );
+    return await GetUserPrivileges(connectionId, username, host, database ?? null);
   },
 
   async getTablePrivileges(
@@ -849,12 +791,7 @@ export const api = {
     host: string,
     database?: string
   ): Promise<any[]> {
-    const result = await GetTablePrivileges(
-      connectionId,
-      username,
-      host,
-      database ?? null
-    );
+    const result = await GetTablePrivileges(connectionId, username, host, database ?? null);
     return result as any[];
   },
 
@@ -880,12 +817,7 @@ export const api = {
     host: string;
     database?: string;
   }): Promise<void> {
-    await DropUser(
-      params.connectionId,
-      params.username,
-      params.host,
-      params.database ?? null
-    );
+    await DropUser(params.connectionId, params.username, params.host, params.database ?? null);
   },
 
   async grantPrivilege(params: {
@@ -973,10 +905,7 @@ export const api = {
     };
   },
 
-  async getProcessList(
-    connectionId: string,
-    database?: string
-  ): Promise<any[]> {
+  async getProcessList(connectionId: string, database?: string): Promise<any[]> {
     const result = await GetProcessList(connectionId, database ?? null);
     return result as unknown as any[];
   },
@@ -1021,6 +950,11 @@ export const api = {
     await SetCloseGuardState(dataDirty);
   },
 
+  /** 打开开发者工具（macOS 走原生 WebKit 私有 API，生产包需 devtools tag 构建） */
+  async showDevTools(): Promise<void> {
+    await ShowDevTools();
+  },
+
   /** 取走冷启动待打开的 .sql 文件路径（双击文件启动应用场景，取后即清） */
   async takePendingOpenFile(): Promise<string> {
     return (await TakePendingOpenFile()) ?? '';
@@ -1058,10 +992,7 @@ export const api = {
     return await ImportNavicatConnections(ncxContent, overwrite);
   },
 
-  async getSequences(
-    connectionId: string,
-    database?: string
-  ): Promise<any[]> {
+  async getSequences(connectionId: string, database?: string): Promise<any[]> {
     const result = await GetSequences(connectionId, database ?? null);
     return result as unknown as any[];
   },
@@ -1075,26 +1006,15 @@ export const api = {
     await ResetSequence(connectionId, database, sequenceName, value);
   },
 
-  async getSchemas(
-    connectionId: string,
-    database?: string
-  ): Promise<string[]> {
+  async getSchemas(connectionId: string, database?: string): Promise<string[]> {
     return (await GetSchemas(connectionId, database ?? null)) ?? [];
   },
 
-  async createSchema(
-    connectionId: string,
-    database: string,
-    schemaName: string
-  ): Promise<void> {
+  async createSchema(connectionId: string, database: string, schemaName: string): Promise<void> {
     await CreateSchema(connectionId, database, schemaName);
   },
 
-  async dropSchema(
-    connectionId: string,
-    database: string,
-    schemaName: string
-  ): Promise<void> {
+  async dropSchema(connectionId: string, database: string, schemaName: string): Promise<void> {
     await DropSchema(connectionId, database, schemaName);
   },
 
@@ -1175,7 +1095,13 @@ export const api = {
     warnings: string[];
   }> {
     const { GetMigrationPreview } = await import('../../bindings/idblink/backend/app');
-    const result = await GetMigrationPreview(sourceConnId, targetConnId, database, targetDatabase, tables);
+    const result = await GetMigrationPreview(
+      sourceConnId,
+      targetConnId,
+      database,
+      targetDatabase,
+      tables
+    );
     return result as unknown as {
       tables: {
         table_name: string;
@@ -1201,16 +1127,37 @@ export const api = {
       batch_size: number;
     }
   ): Promise<{
-    tables: { table_name: string; row_count: number; time_ms: number; success: boolean; error: string; warnings?: string[] }[];
+    tables: {
+      table_name: string;
+      row_count: number;
+      time_ms: number;
+      success: boolean;
+      error: string;
+      warnings?: string[];
+    }[];
     total_rows: number;
     total_time_ms: number;
     success: boolean;
     error: string;
   }> {
     const { ExecuteMigration } = await import('../../bindings/idblink/backend/app');
-    const result = await ExecuteMigration(sourceConnId, targetConnId, database, targetDatabase, tables, options);
+    const result = await ExecuteMigration(
+      sourceConnId,
+      targetConnId,
+      database,
+      targetDatabase,
+      tables,
+      options
+    );
     return result as unknown as {
-      tables: { table_name: string; row_count: number; time_ms: number; success: boolean; error: string; warnings?: string[] }[];
+      tables: {
+        table_name: string;
+        row_count: number;
+        time_ms: number;
+        success: boolean;
+        error: string;
+        warnings?: string[];
+      }[];
       total_rows: number;
       total_time_ms: number;
       success: boolean;

@@ -42,6 +42,12 @@
     "refresh": "刷新",
     "copy": "复制",
     "copyAll": "复制全部",
+    "errorBoundary": {
+      "title": "界面渲染出错",
+      "description": "此页面发生异常，已被安全兜底。可复制下方错误信息用于排查，或重新加载应用。",
+      "copy": "复制错误信息",
+      "reload": "重新加载"
+    },
     "paste": "粘贴",
     "cut": "剪切",
     "selectAll": "全选",

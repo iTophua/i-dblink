@@ -1,5 +1,5 @@
 import { MainLayout } from './components/MainLayout';
-import { ConfigProvider, Modal, theme, App as AntdApp } from 'antd';
+import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import { registerAppModal } from './utils/appModal';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
@@ -8,6 +8,8 @@ import { useSettingsStore } from './stores/settingsStore';
 import { getThemeConfig, ThemeMode } from './styles/theme';
 import { applyThemeVars } from './styles/applyTheme';
 import { SplashScreen } from './components/SplashScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { api } from './api';
 import i18n from './i18n';
 import './style.css';
 import './App.css';
@@ -48,9 +50,12 @@ function App() {
   const themeMode = settings.themeMode;
   const themePreset = settings.themePreset;
 
-  const effectiveMode: ThemeMode = themeMode === 'system'
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : themeMode;
+  const effectiveMode: ThemeMode =
+    themeMode === 'system'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
+      : themeMode;
 
   // 缓存主题配置，避免每次渲染都重新计算
   const themeConfig = useMemo(
@@ -156,6 +161,23 @@ function App() {
       applyVars();
     });
   }, [effectiveMode, themeMode, themePreset, isHydrated]);
+
+  // F12 / Cmd+Opt+I 打开 DevTools：走后端 ShowDevTools（macOS 内部用 WebKit
+  // 私有 API，比 runtime 直调更可靠）；生产包需带 devtools tag 构建。
+  useEffect(() => {
+    const isWailsEnv =
+      typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>)._wails;
+    if (!isWailsEnv) return;
+    const handler = (e: KeyboardEvent) => {
+      const isDevToolsKey =
+        e.key === 'F12' || ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'i');
+      if (!isDevToolsKey) return;
+      e.preventDefault();
+      void api.showDevTools().catch(() => {});
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   if (showSplash) {
     return (
@@ -333,7 +355,9 @@ function App() {
   return (
     <ConfigProvider locale={antdLocale} theme={antdThemeConfig}>
       <AntdApp>
-        <AppInner />
+        <ErrorBoundary>
+          <AppInner />
+        </ErrorBoundary>
       </AntdApp>
     </ConfigProvider>
   );

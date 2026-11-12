@@ -285,21 +285,31 @@ func (a *App) ServiceShutdown() error {
 	return nil
 }
 
-// ShowDevTools 打开开发者工具（仅在 dev 模式下有效）
+// ShowDevTools 打开开发者工具。
+// dev 构建默认可用；生产包在 Taskfile 中以 `-tags production,devtools` 构建后同样可用。
 func (a *App) ShowDevTools() {
+	// macOS：先用 WebKit 私有 API 直接 show（仅设置公开 inspectable 时，
+	// 部分系统上 _inspector 仍为 nil，菜单点击会毫无反应）
+	if openNativeWebInspector() {
+		return
+	}
+
 	app := application.Get()
 	if app == nil {
 		return
 	}
-	if a.isDevMode() {
-		if w := app.Window.Current(); w != nil {
-			w.OpenDevTools()
-		}
-	} else {
-		app.Dialog.Info().
-			SetTitle("开发者工具").
-			SetMessage("开发者工具仅在开发模式下可用。请使用 wails3 dev 启动应用。").
-			Show()
+	// 菜单触发时 Window.Current() 可能为 nil（焦点在其他窗口/菜单栏），
+	// 优先取主窗口，再退化到当前窗口和第一个窗口
+	if w, ok := app.Window.GetByName("main"); ok && w != nil {
+		w.OpenDevTools()
+		return
+	}
+	if w := app.Window.Current(); w != nil {
+		w.OpenDevTools()
+		return
+	}
+	if windows := app.Window.GetAll(); len(windows) > 0 {
+		windows[0].OpenDevTools()
 	}
 }
 
