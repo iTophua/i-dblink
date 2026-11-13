@@ -57,10 +57,19 @@ describe('API Layer', () => {
     });
 
     it('should include SSL config when provided', async () => {
-      await api.testConnection('mysql', 'localhost', 3306, 'root', 'password', 'testdb', undefined, {
-        ssl_enabled: true,
-        ssl_ca_path: '/path/to/ca',
-      });
+      await api.testConnection(
+        'mysql',
+        'localhost',
+        3306,
+        'root',
+        'password',
+        'testdb',
+        undefined,
+        {
+          ssl_enabled: true,
+          ssl_ca_path: '/path/to/ca',
+        }
+      );
 
       const callArg = mockTestConnection.mock.calls[0][0];
       expect(callArg.ssl_enabled).toBe(true);
@@ -71,7 +80,15 @@ describe('API Layer', () => {
   describe('getConnections', () => {
     it('should return connection list', async () => {
       const mockData = [
-        { id: '1', name: 'Test DB', db_type: 'mysql', host: 'localhost', port: 3306, username: 'root', status: 'disconnected' },
+        {
+          id: '1',
+          name: 'Test DB',
+          db_type: 'mysql',
+          host: 'localhost',
+          port: 3306,
+          username: 'root',
+          status: 'disconnected',
+        },
       ];
       mockGetConnections.mockResolvedValue(mockData);
 
@@ -86,8 +103,13 @@ describe('API Layer', () => {
   describe('saveConnection', () => {
     it('should call SaveConnection with ConnectionInput', async () => {
       mockSaveConnection.mockResolvedValue({
-        id: '1', name: 'Test DB', db_type: 'mysql', host: 'localhost',
-        port: 3306, username: 'root', status: 'disconnected',
+        id: '1',
+        name: 'Test DB',
+        db_type: 'mysql',
+        host: 'localhost',
+        port: 3306,
+        username: 'root',
+        status: 'disconnected',
       });
 
       const result = await api.saveConnection({
@@ -117,13 +139,22 @@ describe('API Layer', () => {
     it('should call ExecuteQuery with correct args', async () => {
       mockExecuteQuery.mockResolvedValue({
         columns: ['id', 'name'],
-        rows: [[1, 'Alice'], [2, 'Bob']],
+        rows: [
+          [1, 'Alice'],
+          [2, 'Bob'],
+        ],
         rows_affected: 2,
       });
 
       const result = await api.executeQuery('conn-1', 'SELECT * FROM users');
 
-      expect(mockExecuteQuery).toHaveBeenCalledWith('conn-1', 'SELECT * FROM users', null, null);
+      expect(mockExecuteQuery).toHaveBeenCalledWith(
+        'conn-1',
+        'SELECT * FROM users',
+        null,
+        null,
+        ''
+      );
       expect(result.columns).toEqual(['id', 'name']);
       expect(result.rows).toHaveLength(2);
     });
@@ -133,12 +164,14 @@ describe('API Layer', () => {
 
       await api.executeQuery('conn-1', 'SELECT 1', 'testdb');
 
-      expect(mockExecuteQuery).toHaveBeenCalledWith('conn-1', 'SELECT 1', 'testdb', null);
+      expect(mockExecuteQuery).toHaveBeenCalledWith('conn-1', 'SELECT 1', 'testdb', null, '');
     });
 
     it('should return error in result', async () => {
       mockExecuteQuery.mockResolvedValue({
-        columns: [], rows: [], error: 'Syntax error',
+        columns: [],
+        rows: [],
+        error: 'Syntax error',
       });
 
       const result = await api.executeQuery('conn-1', 'INVALID SQL');
@@ -150,29 +183,29 @@ describe('API Layer', () => {
   describe('executeDDL', () => {
     it('should call ExecuteDDL', async () => {
       await api.executeDDL('conn-1', 'CREATE TABLE test (id INT)');
-      expect(mockExecuteDDL).toHaveBeenCalledWith('conn-1', 'CREATE TABLE test (id INT)', null);
+      expect(mockExecuteDDL).toHaveBeenCalledWith('conn-1', 'CREATE TABLE test (id INT)', null, '');
     });
   });
 
   describe('transaction APIs', () => {
     it('beginTransaction should call BeginTransaction', async () => {
-      await api.beginTransaction('conn-1');
-      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1');
+      await api.beginTransaction('conn-1', 'test');
+      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1', 'test');
     });
 
     it('commitTransaction should call CommitTransaction', async () => {
-      await api.commitTransaction('conn-1');
-      expect(mockCommitTransaction).toHaveBeenCalledWith('conn-1');
+      await api.commitTransaction('conn-1', 'test');
+      expect(mockCommitTransaction).toHaveBeenCalledWith('conn-1', 'test');
     });
 
     it('rollbackTransaction should call RollbackTransaction', async () => {
-      await api.rollbackTransaction('conn-1');
-      expect(mockRollbackTransaction).toHaveBeenCalledWith('conn-1');
+      await api.rollbackTransaction('conn-1', 'test');
+      expect(mockRollbackTransaction).toHaveBeenCalledWith('conn-1', 'test');
     });
 
     it('getTransactionStatus should return boolean', async () => {
       mockGetTransactionStatus.mockResolvedValue(true);
-      const result = await api.getTransactionStatus('conn-1');
+      const result = await api.getTransactionStatus('conn-1', 'test');
       expect(result).toBe(true);
     });
   });
@@ -185,9 +218,7 @@ describe('API Layer', () => {
     });
 
     it('getTables should return table list', async () => {
-      mockGetTables.mockResolvedValue([
-        { table_name: 'users', table_type: 'BASE TABLE' },
-      ]);
+      mockGetTables.mockResolvedValue([{ table_name: 'users', table_type: 'BASE TABLE' }]);
       const result = await api.getTables('conn-1', 'testdb');
       expect(result).toHaveLength(1);
     });
@@ -213,7 +244,8 @@ describe('API Layer', () => {
 
     it('getServerInfo should return server info', async () => {
       mockGetServerInfo.mockResolvedValue({
-        version: '8.0.32', server_type: 'MySQL',
+        version: '8.0.32',
+        server_type: 'MySQL',
       });
       const result = await api.getServerInfo('conn-1', 'testdb');
       expect(result.version).toBe('8.0.32');
@@ -222,7 +254,9 @@ describe('API Layer', () => {
 
   describe('group APIs', () => {
     it('getGroups should return groups', async () => {
-      mockGetGroups.mockResolvedValue([{ id: '1', name: 'Production', icon: '🚀', color: '#ff4d4f' }]);
+      mockGetGroups.mockResolvedValue([
+        { id: '1', name: 'Production', icon: '🚀', color: '#ff4d4f' },
+      ]);
       const result = await api.getGroups();
       expect(result).toHaveLength(1);
     });
@@ -237,7 +271,8 @@ describe('API Layer', () => {
     it('saveSnippet should call SaveSnippet', async () => {
       mockSaveSnippet.mockResolvedValue('snippet-1');
       const result = await api.saveSnippet({
-        name: 'Select Users', sql_text: 'SELECT * FROM users',
+        name: 'Select Users',
+        sql_text: 'SELECT * FROM users',
       });
       expect(result).toBe('snippet-1');
     });

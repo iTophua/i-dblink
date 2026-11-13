@@ -199,18 +199,18 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 	switch cat {
 	case scriptDML:
 		// 已有手工事务时拒绝：脚本的 commit/rollback 会波及用户自己的事务
-		if active, err := s.app.GetTransactionStatus(connID); err == nil && active {
+		if active, err := s.app.GetTransactionStatus(connID, mcpTxSession); err == nil && active {
 			return mcp.NewToolResultError(
 				"connection has an active manual transaction; commit or roll it back before running a script"), nil
 		}
-		if err := s.app.BeginTransaction(connID); err != nil {
+		if err := s.app.BeginTransaction(connID, mcpTxSession); err != nil {
 			return mcp.NewToolResultErrorFromErr("failed to begin transaction", err), nil
 		}
 		result.TransactionUsed = true
 		for i, stmt := range stmts {
-			res, err := s.app.ExecuteQuery(connID, stmt, database, nil)
+			res, err := s.app.ExecuteQuery(connID, stmt, database, nil, mcpTxSession)
 			if err != nil {
-				_, _ = s.app.RollbackTransaction(connID)
+				_, _ = s.app.RollbackTransaction(connID, mcpTxSession)
 				result.Transaction = "rolled_back"
 				result.Results = append(result.Results, scriptStmtResult{
 					Index: i, SQL: stmt, Error: err.Error(),
@@ -228,14 +228,14 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 				Index: i, SQL: stmt, RowsAffected: affected,
 			})
 		}
-		if _, err := s.app.CommitTransaction(connID); err != nil {
+		if _, err := s.app.CommitTransaction(connID, mcpTxSession); err != nil {
 			return mcp.NewToolResultErrorFromErr("failed to commit transaction", err), nil
 		}
 		result.Transaction = "committed"
 
 	case scriptDDL:
 		for i, stmt := range stmts {
-			if err := s.app.ExecuteDDL(connID, stmt, database); err != nil {
+			if err := s.app.ExecuteDDL(connID, stmt, database, mcpTxSession); err != nil {
 				if stopOnError {
 					return mcp.NewToolResultError(fmt.Sprintf(
 						"statement %d/%d failed: %v — execution stopped (%d statements succeeded). "+
@@ -253,7 +253,7 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 
 	case scriptReadOnly:
 		for i, stmt := range stmts {
-			res, err := s.app.ExecuteQuery(connID, stmt, database, nil)
+			res, err := s.app.ExecuteQuery(connID, stmt, database, nil, mcpTxSession)
 			if err != nil {
 				if stopOnError {
 					return mcp.NewToolResultError(fmt.Sprintf(

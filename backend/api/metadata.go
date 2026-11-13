@@ -17,6 +17,7 @@ type MetadataRequest struct {
 	Database     *string `json:"database,omitempty"`
 	TableName    *string `json:"table_name,omitempty"`
 	Search       *string `json:"search,omitempty"`
+	Schema       *string `json:"schema,omitempty"`
 }
 
 // GetDatabases 获取数据库列表
@@ -193,13 +194,13 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 	case "mysql":
 		columns, err = mysqlGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		columns, err = postgresGetColumns(ctx, exec, *req.TableName, req.Database)
+		columns, err = postgresGetColumns(ctx, exec, *req.TableName, req.Database, nil)
 	case "sqlite":
 		columns, err = sqliteGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
 		columns, err = damengGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "sqlserver":
-		columns, err = sqlserverGetColumns(ctx, exec, *req.TableName, req.Database)
+		columns, err = sqlserverGetColumns(ctx, exec, *req.TableName, req.Database, nil)
 	case "oracle":
 		columns, err = oracleGetColumns(ctx, exec, *req.TableName, req.Database)
 	default:
@@ -300,13 +301,13 @@ func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 	case "mysql":
 		indexes, err = mysqlGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		indexes, err = postgresGetIndexes(ctx, exec, *req.TableName, req.Database)
+		indexes, err = postgresGetIndexes(ctx, exec, *req.TableName, req.Database, nil)
 	case "sqlite":
 		indexes, err = sqliteGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
 		indexes, err = damengGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "sqlserver":
-		indexes, err = sqlserverGetIndexes(ctx, exec, *req.TableName, req.Database)
+		indexes, err = sqlserverGetIndexes(ctx, exec, *req.TableName, req.Database, nil)
 	case "oracle":
 		indexes, err = oracleGetIndexes(ctx, exec, *req.TableName, req.Database)
 	default:
@@ -353,13 +354,13 @@ func (h *Handler) GetForeignKeys(w http.ResponseWriter, r *http.Request) {
 	case "mysql":
 		fks, err = mysqlGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		fks, err = postgresGetForeignKeys(ctx, exec, *req.TableName, req.Database)
+		fks, err = postgresGetForeignKeys(ctx, exec, *req.TableName, req.Database, nil)
 	case "sqlite":
 		fks, err = sqliteGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
 		fks, err = damengGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "sqlserver":
-		fks, err = sqlserverGetForeignKeys(ctx, exec, *req.TableName, req.Database)
+		fks, err = sqlserverGetForeignKeys(ctx, exec, *req.TableName, req.Database, nil)
 	case "oracle":
 		fks, err = oracleGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	default:
@@ -406,13 +407,13 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 	case "mysql":
 		structure, err = mysqlGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		structure, err = postgresGetTableStructure(ctx, exec, *req.TableName, req.Database)
+		structure, err = postgresGetTableStructure(ctx, exec, *req.TableName, req.Database, req.Schema)
 	case "sqlite":
 		structure, err = sqliteGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "dameng":
 		structure, err = damengGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "sqlserver":
-		structure, err = sqlserverGetTableStructure(ctx, exec, *req.TableName, req.Database)
+		structure, err = sqlserverGetTableStructure(ctx, exec, *req.TableName, req.Database, req.Schema)
 	case "oracle":
 		structure, err = oracleGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	default:
@@ -950,7 +951,7 @@ func (h *Handler) GetCheckConstraints(w http.ResponseWriter, r *http.Request) {
 	case "mysql", "mariadb":
 		constraints, err = mysqlGetCheckConstraints(ctx, exec, *req.TableName, req.Database)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		constraints, err = postgresGetCheckConstraints(ctx, exec, *req.TableName, req.Database)
+		constraints, err = postgresGetCheckConstraints(ctx, exec, *req.TableName, req.Database, req.Schema)
 	default:
 		constraints = []models.CheckConstraintInfo{}
 	}

@@ -318,34 +318,34 @@ func TestTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("commit persists statements after Begin returns", func(t *testing.T) {
-		require.NoError(t, manager.BeginTransaction(connID))
+		require.NoError(t, manager.BeginTransaction(connID, "sess"))
 
 		// 事务执行器：Begin 已返回，语句必须能执行（不能是 ErrTxDone）
-		txExec, err := manager.GetExecutor(connID, "")
+		txExec, err := manager.GetExecutorForSession(connID, "", "sess")
 		require.NoError(t, err)
 		_, err = txExec.ExecContext(context.Background(),
 			"INSERT INTO tx_reg (v) VALUES ('committed')")
 		require.NoError(t, err)
 
-		_, err = manager.CommitTransaction(connID)
+		_, err = manager.CommitTransaction(connID, "sess")
 		require.NoError(t, err)
 		assert.Equal(t, 1, countRows(t, manager, connID, "tx_reg"))
-		assert.False(t, manager.HasTransaction(connID))
+		assert.False(t, manager.HasTransaction(connID, "sess"))
 	})
 
 	t.Run("rollback discards statements", func(t *testing.T) {
-		require.NoError(t, manager.BeginTransaction(connID))
+		require.NoError(t, manager.BeginTransaction(connID, "sess"))
 
-		txExec, err := manager.GetExecutor(connID, "")
+		txExec, err := manager.GetExecutorForSession(connID, "", "sess")
 		require.NoError(t, err)
 		_, err = txExec.ExecContext(context.Background(),
 			"INSERT INTO tx_reg (v) VALUES ('rolled-back')")
 		require.NoError(t, err)
 
-		_, err = manager.RollbackTransaction(connID)
+		_, err = manager.RollbackTransaction(connID, "sess")
 		require.NoError(t, err)
 		assert.Equal(t, 1, countRows(t, manager, connID, "tx_reg"), "回滚后插入不应落库")
-		assert.False(t, manager.HasTransaction(connID))
+		assert.False(t, manager.HasTransaction(connID, "sess"))
 	})
 }
 
@@ -359,21 +359,21 @@ func TestCommitRollbackReportActive(t *testing.T) {
 	}))
 	defer manager.Disconnect(connID)
 
-	active, err := manager.CommitTransaction(connID)
+	active, err := manager.CommitTransaction(connID, "sess")
 	require.NoError(t, err)
 	assert.False(t, active, "commit with no tx should report active=false")
 
-	active, err = manager.RollbackTransaction(connID)
+	active, err = manager.RollbackTransaction(connID, "sess")
 	require.NoError(t, err)
 	assert.False(t, active)
 
-	require.NoError(t, manager.BeginTransaction(connID))
-	active, err = manager.CommitTransaction(connID)
+	require.NoError(t, manager.BeginTransaction(connID, "sess"))
+	active, err = manager.CommitTransaction(connID, "sess")
 	require.NoError(t, err)
 	assert.True(t, active, "commit of a real tx should report active=true")
 
-	require.NoError(t, manager.BeginTransaction(connID))
-	active, err = manager.RollbackTransaction(connID)
+	require.NoError(t, manager.BeginTransaction(connID, "sess"))
+	active, err = manager.RollbackTransaction(connID, "sess")
 	require.NoError(t, err)
 	assert.True(t, active)
 }
@@ -396,12 +396,12 @@ func TestGetExecutorNoTx(t *testing.T) {
 	require.NoError(t, err)
 
 	// 有活跃事务（SQLite 单连接被独占）：NoTx 必须立即报错而非挂起
-	require.NoError(t, manager.BeginTransaction(connID))
+	require.NoError(t, manager.BeginTransaction(connID, "sess"))
 	_, err = manager.GetExecutorNoTx(connID, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "active transaction")
 
-	_, err = manager.CommitTransaction(connID)
+	_, err = manager.CommitTransaction(connID, "sess")
 	require.NoError(t, err)
 
 	// 事务结束后恢复可用

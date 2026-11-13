@@ -281,6 +281,7 @@ func (a *App) GetConnections() ([]ConnectionOutput, error) {
 			SSLCaPath:         conn.SSLCAPath,
 			SSLCertPath:       conn.SSLCertPath,
 			SSLKeyPath:        conn.SSLKeyPath,
+			SSLSkipVerify:     conn.SSLSkipVerify != nil && *conn.SSLSkipVerify == "true",
 		}
 		if conn.SSHPort != nil {
 			if p, err := strconv.Atoi(*conn.SSHPort); err == nil {
@@ -419,6 +420,7 @@ func (a *App) SaveConnection(input ConnectionInput) (ConnectionOutput, error) {
 		SSLCaPath:         conn.SSLCAPath,
 		SSLCertPath:       conn.SSLCertPath,
 		SSLKeyPath:        conn.SSLKeyPath,
+		SSLSkipVerify:     conn.SSLSkipVerify != nil && *conn.SSLSkipVerify == "true",
 	}
 	if conn.SSHPort != nil {
 		if p, err := strconv.Atoi(*conn.SSHPort); err == nil {

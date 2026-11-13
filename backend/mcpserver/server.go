@@ -87,8 +87,8 @@ func exeChanged(initial, current exeSnapshot) bool {
 
 // binaryWatcher 单例：发现更新后只触发一次退出。
 type binaryWatcher struct {
-	initial exeSnapshot
-	valid   bool
+	initial  exeSnapshot
+	valid    bool
 	exitOnce sync.Once
 }
 
@@ -219,6 +219,7 @@ func (s *Server) registerTools() {
 	s.registerMutationTools()
 	s.registerMetadataTools()
 	s.registerProcessTools()
+	s.registerAdvancedTools()
 }
 
 // ==================== 连接管理 tools ====================
@@ -245,14 +246,15 @@ func (s *Server) registerConnectionTools() {
 		mcp.NewTool("create_connection",
 			mcp.WithDescription("Create a new database connection in iDBLink. "+
 				"The connection is saved persistently and can be used by other tools. "+
-				"Supported db_type: mysql, postgresql, oracle, sqlserver, sqlite, dameng, kingbase, highgo, vastbase."),
+				"Supported db_type: mysql, postgresql, oracle, sqlserver, sqlite, dameng, kingbase, highgo, vastbase. "+
+				"Set ssh_host (or ssh_enabled=true) to reach databases through an SSH tunnel."),
 			mcp.WithString("name", mcp.Required(),
 				mcp.Description("A human-readable name for this connection, e.g. 'Production MySQL'")),
 			mcp.WithString("db_type", mcp.Required(),
 				mcp.Description("Database type"),
 				mcp.Enum("mysql", "postgresql", "oracle", "sqlserver", "sqlite", "dameng", "kingbase", "highgo", "vastbase")),
 			mcp.WithString("host", mcp.Required(),
-				mcp.Description("Database host address")),
+				mcp.Description("Database host address. With an SSH tunnel this is the database address as seen from the SSH host (e.g. 127.0.0.1 or an internal IP)")),
 			mcp.WithNumber("port",
 				mcp.Description("Database port. Optional: when omitted, inherits the port of an existing connection to the same server, else the default port for db_type")),
 			mcp.WithString("username", mcp.Required(),
@@ -261,6 +263,24 @@ func (s *Server) registerConnectionTools() {
 				mcp.Description("Database password (will be encrypted before storage)")),
 			mcp.WithString("database",
 				mcp.Description("Default database/schema name (optional for some db types)")),
+			mcp.WithBoolean("ssh_enabled",
+				mcp.Description("Enable the SSH tunnel. Providing ssh_host implies true; set false to force a direct connection")),
+			mcp.WithString("ssh_host", mcp.Description("SSH jump host address")),
+			mcp.WithNumber("ssh_port", mcp.Description("SSH port (default 22)")),
+			mcp.WithString("ssh_username", mcp.Description("SSH username")),
+			mcp.WithString("ssh_auth_method",
+				mcp.Description("SSH authentication method. Inferred from ssh_password/ssh_private_key_path when omitted"),
+				mcp.Enum("password", "key")),
+			mcp.WithString("ssh_password", mcp.Description("SSH password (encrypted before storage)")),
+			mcp.WithString("ssh_private_key_path",
+				mcp.Description("Path to the SSH private key on the machine running iDBLink (required when ssh_auth_method is \"key\")")),
+			mcp.WithString("ssh_passphrase", mcp.Description("Passphrase of the SSH private key (encrypted before storage)")),
+			mcp.WithBoolean("ssl_enabled",
+				mcp.Description("Enable TLS/SSL. Providing any ssl_* path implies true; set false for plaintext")),
+			mcp.WithString("ssl_ca_path", mcp.Description("Path to the CA certificate on the iDBLink host")),
+			mcp.WithString("ssl_cert_path", mcp.Description("Path to the client certificate on the iDBLink host")),
+			mcp.WithString("ssl_key_path", mcp.Description("Path to the client private key on the iDBLink host")),
+			mcp.WithBoolean("ssl_skip_verify", mcp.Description("Skip server certificate verification (insecure, testing only)")),
 		),
 		s.handleCreateConnection,
 	)
@@ -271,6 +291,7 @@ func (s *Server) registerConnectionTools() {
 			mcp.WithDescription("Update an existing database connection. "+
 				"Only provided fields are updated; omitted fields keep their current values. "+
 				"Pass password only when you want to change it; omit to keep the existing password. "+
+				"SSH tunnel settings are kept unless ssh_* is provided; ssh_enabled=false disables the tunnel. "+
 				"A full-server connection (no default database) cannot be narrowed to a specific database."),
 			mcp.WithString("connection_id", mcp.Required(),
 				mcp.Description("The ID of the connection to update (from list_connections)")),
@@ -281,6 +302,23 @@ func (s *Server) registerConnectionTools() {
 			mcp.WithString("username", mcp.Description("Database username")),
 			mcp.WithString("password", mcp.Description("New password (omit to keep existing)")),
 			mcp.WithString("database", mcp.Description("Default database/schema")),
+			mcp.WithBoolean("ssh_enabled",
+				mcp.Description("Omit to keep the current SSH settings; true enables the tunnel; false disables it")),
+			mcp.WithString("ssh_host", mcp.Description("SSH jump host address (keeps the current value when omitted)")),
+			mcp.WithNumber("ssh_port", mcp.Description("SSH port (keeps the current value when omitted)")),
+			mcp.WithString("ssh_username", mcp.Description("SSH username (keeps the current value when omitted)")),
+			mcp.WithString("ssh_auth_method",
+				mcp.Description("SSH authentication method (keeps the current value when omitted)"),
+				mcp.Enum("password", "key")),
+			mcp.WithString("ssh_password", mcp.Description("New SSH password (omit to keep existing)")),
+			mcp.WithString("ssh_private_key_path", mcp.Description("Path to the SSH private key on the iDBLink host")),
+			mcp.WithString("ssh_passphrase", mcp.Description("New SSH key passphrase (omit to keep existing)")),
+			mcp.WithBoolean("ssl_enabled",
+				mcp.Description("Omit to keep the current SSL settings; true enables TLS; false disables it")),
+			mcp.WithString("ssl_ca_path", mcp.Description("CA certificate path (keeps the current value when omitted)")),
+			mcp.WithString("ssl_cert_path", mcp.Description("Client certificate path (keeps the current value when omitted)")),
+			mcp.WithString("ssl_key_path", mcp.Description("Client private key path (keeps the current value when omitted)")),
+			mcp.WithBoolean("ssl_skip_verify", mcp.Description("Skip server certificate verification")),
 		),
 		s.handleUpdateConnection,
 	)
@@ -301,13 +339,29 @@ func (s *Server) registerConnectionTools() {
 	s.mcp.AddTool(
 		mcp.NewTool("test_connection",
 			mcp.WithDescription("Test a database connection without saving it. "+
-				"Useful to verify credentials before calling create_connection."),
+				"Useful to verify credentials before calling create_connection. "+
+				"Pass ssh_host to test through an SSH tunnel."),
 			mcp.WithString("db_type", mcp.Required(), mcp.Description("Database type")),
 			mcp.WithString("host", mcp.Required(), mcp.Description("Database host")),
 			mcp.WithNumber("port", mcp.Required(), mcp.Description("Database port")),
 			mcp.WithString("username", mcp.Required(), mcp.Description("Database username")),
 			mcp.WithString("password", mcp.Description("Database password")),
 			mcp.WithString("database", mcp.Description("Database name")),
+			mcp.WithString("ssh_host", mcp.Description("SSH jump host address")),
+			mcp.WithNumber("ssh_port", mcp.Description("SSH port (default 22)")),
+			mcp.WithString("ssh_username", mcp.Description("SSH username")),
+			mcp.WithString("ssh_auth_method",
+				mcp.Description("SSH authentication method. Inferred from ssh_password/ssh_private_key_path when omitted"),
+				mcp.Enum("password", "key")),
+			mcp.WithString("ssh_password", mcp.Description("SSH password")),
+			mcp.WithString("ssh_private_key_path",
+				mcp.Description("Path to the SSH private key on the machine running iDBLink")),
+			mcp.WithString("ssh_passphrase", mcp.Description("Passphrase of the SSH private key")),
+			mcp.WithBoolean("ssl_enabled", mcp.Description("Enable TLS/SSL")),
+			mcp.WithString("ssl_ca_path", mcp.Description("CA certificate path")),
+			mcp.WithString("ssl_cert_path", mcp.Description("Client certificate path")),
+			mcp.WithString("ssl_key_path", mcp.Description("Client private key path")),
+			mcp.WithBoolean("ssl_skip_verify", mcp.Description("Skip server certificate verification")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleTestConnection,
@@ -329,23 +383,25 @@ func (s *Server) registerQueryTools() {
 		s.handleListDatabases,
 	)
 
-		// list_tables
-		s.mcp.AddTool(
-			mcp.NewTool("list_tables",
-				mcp.WithDescription("List tables and views in a database. "+
-					"Returns table_name, table_type, row_count, and comment. "+
-					"For full column/index details use describe_table; for exact DDL use get_table_ddl. "+
-					"Optionally filter by a search keyword."),
-				mcp.WithString("connection_id", mcp.Required(),
-					mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
-				mcp.WithString("database",
-					mcp.Description("Database/schema name (optional, uses default if omitted)")),
-				mcp.WithString("search",
-					mcp.Description("Optional keyword to filter table names")),
-				mcp.WithReadOnlyHintAnnotation(true),
-			),
-			s.handleListTables,
-		)
+	// list_tables
+	s.mcp.AddTool(
+		mcp.NewTool("list_tables",
+			mcp.WithDescription("List tables and views in a database. "+
+				"Returns table_name, table_type, row_count, and comment. "+
+				"For full column/index details use describe_table; for exact DDL use get_table_ddl. "+
+				"Optionally filter by a search keyword."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema name (optional, uses default if omitted)")),
+			mcp.WithString("schema",
+				mcp.Description("Only return tables from this schema (PostgreSQL/SQL Server/Oracle)")),
+			mcp.WithString("search",
+				mcp.Description("Optional keyword to filter table names")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListTables,
+	)
 
 	// describe_table
 	s.mcp.AddTool(
@@ -358,6 +414,8 @@ func (s *Server) registerQueryTools() {
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
+			mcp.WithString("schema",
+				mcp.Description("Schema name for PostgreSQL/SQL Server/Oracle (optional)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleDescribeTable,
@@ -373,6 +431,8 @@ func (s *Server) registerQueryTools() {
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
+			mcp.WithString("schema",
+				mcp.Description("Schema name for PostgreSQL/SQL Server/Oracle (optional)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleGetTableDDL,
@@ -474,6 +534,8 @@ func (s *Server) registerMetadataTools() {
 			mcp.WithString("database",
 				mcp.Description("Database/schema to query (optional, temporary — does NOT modify the saved connection. "+
 					"If omitted, uses the connection's default database)")),
+			mcp.WithString("schema",
+				mcp.Description("Only return views from this schema (PostgreSQL/SQL Server/Oracle)")),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListViews,
@@ -618,5 +680,161 @@ func (s *Server) registerProcessTools() {
 			mcp.WithIdempotentHintAnnotation(false),
 		),
 		s.handleKillProcess,
+	)
+}
+
+// ==================== 高级工具 ====================
+
+func (s *Server) registerAdvancedTools() {
+	// list_schemas — 列出 Schema（PostgreSQL/SQL Server/Oracle 等 database 下的命名空间）
+	s.mcp.AddTool(
+		mcp.NewTool("list_schemas",
+			mcp.WithDescription("List schemas in a database (PostgreSQL, SQL Server, Oracle, Dameng). "+
+				"For MySQL a schema equals a database, so this is less useful there."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("database",
+				mcp.Description("Database to list schemas for (optional; uses the connection default)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListSchemas,
+	)
+
+	// search_columns — 跨表搜索列名
+	s.mcp.AddTool(
+		mcp.NewTool("search_columns",
+			mcp.WithDescription("Search columns across all tables in a database. "+
+				"Returns table, schema, column_name, data_type, is_nullable, column_key. "+
+				"Useful for finding which tables contain a given field."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema to search (optional)")),
+			mcp.WithString("search",
+				mcp.Description("Case-insensitive substring to match against column names")),
+			mcp.WithString("table",
+				mcp.Description("Case-insensitive substring to match against table names")),
+			mcp.WithString("schema",
+				mcp.Description("Only return columns from this schema (PostgreSQL/SQL Server/Oracle)")),
+			mcp.WithNumber("max_results",
+				mcp.Description("Maximum rows to return (default 200, max 500)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleSearchColumns,
+	)
+
+	// get_table_info — 单表元信息（大小/引擎/字符集/注释）
+	s.mcp.AddTool(
+		mcp.NewTool("get_table_info",
+			mcp.WithDescription("Get detailed info for a single table: row count, data/index size, "+
+				"engine, collation, comment, timestamps. Use it to gauge table scale before querying."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("table_name", mcp.Required(),
+				mcp.Description("Table name")),
+			mcp.WithString("database",
+				mcp.Description("Database/schema containing the table (optional)")),
+			mcp.WithString("schema",
+				mcp.Description("Schema name for PostgreSQL/SQL Server/Oracle (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleGetTableInfo,
+	)
+
+	// explain_query — 方言感知的执行计划
+	s.mcp.AddTool(
+		mcp.NewTool("explain_query",
+			mcp.WithDescription("Return the query execution plan for a single SQL statement. "+
+				"Read-only: EXPLAIN/SHOWPLAN only produces the plan, it never executes the statement. "+
+				"Useful to diagnose slow queries."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("sql", mcp.Required(),
+				mcp.Description("A single SQL statement to explain (SELECT/UPDATE/DELETE/...; no trailing multiple statements)")),
+			mcp.WithString("database",
+				mcp.Description("Database to run the plan in (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleExplainQuery,
+	)
+
+	// list_users / list_privileges
+	s.mcp.AddTool(
+		mcp.NewTool("list_users",
+			mcp.WithDescription("List database users/roles and their type (superuser vs normal)."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("database",
+				mcp.Description("Database to scope (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListUsers,
+	)
+	s.mcp.AddTool(
+		mcp.NewTool("list_privileges",
+			mcp.WithDescription("List privileges granted to a database user. "+
+				"For MySQL, pass the user's host too (e.g. '%' or 'localhost')."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("username", mcp.Required(),
+				mcp.Description("Database username")),
+			mcp.WithString("host",
+				mcp.Description("Host part of a MySQL account (optional; '%' for wildcard)")),
+			mcp.WithString("database",
+				mcp.Description("Database to scope (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListPrivileges,
+	)
+
+	// get_server_info — 服务器版本/字符集/运行信息
+	s.mcp.AddTool(
+		mcp.NewTool("get_server_info",
+			mcp.WithDescription("Get database server info: version, character set, collation, uptime, max connections. "+
+				"Useful for generating version-correct SQL."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("database",
+				mcp.Description("Database to scope (optional)")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleGetServerInfo,
+	)
+
+	// 事务工具
+	s.mcp.AddTool(
+		mcp.NewTool("begin_transaction",
+			mcp.WithDescription("Begin a transaction on the connection. "+
+				"NOTE: MCP and the desktop app share the same connection, so this also puts the desktop tab into a transaction. "+
+				"Wrap multi-step writes with begin/commit/rollback for atomicity; the server watchdog auto-rolls-back idle transactions."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+		),
+		s.handleBeginTransaction,
+	)
+	s.mcp.AddTool(
+		mcp.NewTool("commit_transaction",
+			mcp.WithDescription("Commit the active transaction on the connection."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+		),
+		s.handleCommitTransaction,
+	)
+	s.mcp.AddTool(
+		mcp.NewTool("rollback_transaction",
+			mcp.WithDescription("Roll back the active transaction on the connection."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+		),
+		s.handleRollbackTransaction,
+	)
+	s.mcp.AddTool(
+		mcp.NewTool("get_transaction_status",
+			mcp.WithDescription("Check whether the connection currently has an active transaction."),
+			mcp.WithString("connection_id", mcp.Required(),
+				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleGetTransactionStatus,
 	)
 }

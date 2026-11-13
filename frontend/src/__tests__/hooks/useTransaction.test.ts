@@ -45,7 +45,7 @@ describe('useTransaction', () => {
 
     // 状态检查是异步的，等微任务队列清空
     await act(async () => {});
-    expect(mockApi.getTransactionStatus).toHaveBeenCalledWith('conn-1');
+    expect(mockApi.getTransactionStatus).toHaveBeenCalledWith('conn-1', '');
     expect(result.current.transactionActive).toBe(true);
   });
 
@@ -57,7 +57,7 @@ describe('useTransaction', () => {
     expect(result.current.transactionActive).toBe(true);
 
     unmount();
-    expect(mockApi.rollbackTransaction).toHaveBeenCalledWith('conn-1');
+    expect(mockApi.rollbackTransaction).toHaveBeenCalledWith('conn-1', '');
   });
 
   it('开启事务按钮：成功后进入活跃状态', async () => {
@@ -65,7 +65,7 @@ describe('useTransaction', () => {
     await act(async () => {
       await result.current.handleBeginTransaction();
     });
-    expect(mockApi.beginTransaction).toHaveBeenCalledWith('conn-1');
+    expect(mockApi.beginTransaction).toHaveBeenCalledWith('conn-1', '');
     expect(result.current.transactionActive).toBe(true);
   });
 
@@ -108,7 +108,7 @@ describe('useTransaction', () => {
     expect(result.current.transactionActive).toBe(true);
 
     rerender({ id: 'conn-2' });
-    expect(mockApi.rollbackTransaction).toHaveBeenCalledWith('conn-1');
+    expect(mockApi.rollbackTransaction).toHaveBeenCalledWith('conn-1', '');
     expect(result.current.transactionActive).toBe(false);
     expect(result.current.txMode).toBe('auto');
   });

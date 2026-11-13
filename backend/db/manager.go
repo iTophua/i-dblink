@@ -206,12 +206,15 @@ func (m *Manager) Disconnect(connectionID string) error {
 	if ok {
 		delete(m.pools, connectionID)
 	}
-	// 如果有活跃事务，先回滚
-	if txInfo, txOk := m.txs[connectionID]; txOk {
-		delete(m.txs, connectionID)
-		close(txInfo.done) // 通知看门狗停止
-		_ = txInfo.tx.Rollback()
-		_ = txInfo.conn.Close()
+	// 如果有活跃事务（任一会话），先全部回滚
+	prefix := connectionID + txKeySep
+	for key, txInfo := range m.txs {
+		if strings.HasPrefix(key, prefix) {
+			delete(m.txs, key)
+			close(txInfo.done) // 通知看门狗停止
+			_ = txInfo.tx.Rollback()
+			_ = txInfo.conn.Close()
+		}
 	}
 	m.mu.Unlock()
 
@@ -378,12 +381,25 @@ func (m *Manager) GetWithDatabase(connectionID string, database string) (*sql.DB
 	return info.db, nil
 }
 
-// BeginTransaction 开启事务
-func (m *Manager) BeginTransaction(connectionID string) error {
+// txKeySep 事务槽位键分隔符：连接 ID 与会话 ID（查询 Tab / MCP）之间用 NUL 分隔，
+// 保证「连接 A 会话 1」与「连接 A\x00B 会话 1」不会碰撞。
+const txKeySep = "\x00"
+
+// txKey 构造事务槽位键。会话级隔离：同一连接的不同查询 Tab、MCP 各自拥有独立事务。
+func txKey(connectionID, sessionID string) string {
+	return connectionID + txKeySep + sessionID
+}
+
+// BeginTransaction 开启会话级事务（sessionID 为空表示调用方未提供会话，拒绝开启）。
+func (m *Manager) BeginTransaction(connectionID, sessionID string) error {
+	if sessionID == "" {
+		return fmt.Errorf("session_id is required to begin a transaction")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.txs[connectionID]; exists {
+	key := txKey(connectionID, sessionID)
+	if _, exists := m.txs[key]; exists {
 		// 幂等：已在事务中视为成功，避免前端状态错位后再也无法进入事务
 		return nil
 	}
@@ -418,7 +434,7 @@ func (m *Manager) BeginTransaction(connectionID string) error {
 		started: time.Now(),
 		done:    done,
 	}
-	m.txs[connectionID] = txEntry
+	m.txs[key] = txEntry
 
 	// 看门狗：事务超过 5 分钟未提交/回滚则自动回滚，避免连接被永久占用
 	// （用户关闭查询 Tab 或前端崩溃时的事务兜底）
@@ -431,8 +447,8 @@ func (m *Manager) BeginTransaction(connectionID string) error {
 		case <-timer.C:
 			m.mu.Lock()
 			// 确认仍是同一个事务（避免 commit 后又被新事务占用槽位导致误回滚）
-			if cur, ok := m.txs[connectionID]; ok && cur == txEntry {
-				delete(m.txs, connectionID)
+			if cur, ok := m.txs[key]; ok && cur == txEntry {
+				delete(m.txs, key)
 				_ = cur.tx.Rollback()
 				_ = cur.conn.Close()
 				close(cur.done)
@@ -447,10 +463,11 @@ func (m *Manager) BeginTransaction(connectionID string) error {
 // CommitTransaction 提交事务。返回值表示是否确有活跃事务被提交：
 // false = 没有事务在等待（可能已被看门狗超时回滚），前端据此提示
 // 真实结果，避免"实际已回滚却提示已提交"。
-func (m *Manager) CommitTransaction(connectionID string) (bool, error) {
+func (m *Manager) CommitTransaction(connectionID, sessionID string) (bool, error) {
+	key := txKey(connectionID, sessionID)
 	m.mu.Lock()
-	txInfo, exists := m.txs[connectionID]
-	delete(m.txs, connectionID)
+	txInfo, exists := m.txs[key]
+	delete(m.txs, key)
 	m.mu.Unlock()
 
 	if !exists {
@@ -472,10 +489,11 @@ func (m *Manager) CommitTransaction(connectionID string) (bool, error) {
 }
 
 // RollbackTransaction 回滚事务。返回值语义同 CommitTransaction。
-func (m *Manager) RollbackTransaction(connectionID string) (bool, error) {
+func (m *Manager) RollbackTransaction(connectionID, sessionID string) (bool, error) {
+	key := txKey(connectionID, sessionID)
 	m.mu.Lock()
-	txInfo, exists := m.txs[connectionID]
-	delete(m.txs, connectionID)
+	txInfo, exists := m.txs[key]
+	delete(m.txs, key)
 	m.mu.Unlock()
 
 	if !exists {
@@ -494,22 +512,43 @@ func (m *Manager) RollbackTransaction(connectionID string) (bool, error) {
 	return true, nil
 }
 
-// HasTransaction 检查是否有活跃事务
-func (m *Manager) HasTransaction(connectionID string) bool {
+// HasTransaction 检查指定会话是否有活跃事务。
+func (m *Manager) HasTransaction(connectionID, sessionID string) bool {
 	m.mu.RLock()
-	_, exists := m.txs[connectionID]
+	_, exists := m.txs[txKey(connectionID, sessionID)]
 	m.mu.RUnlock()
 	return exists
 }
 
-// GetExecutor 获取执行器（优先返回活跃事务，其次返回连接池）
-func (m *Manager) GetExecutor(connectionID string, database string) (Executor, error) {
+// hasAnyTransaction 检查连接上是否存在任一会话的事务（SQLite 单连接守护用）。
+func (m *Manager) hasAnyTransaction(connectionID string) bool {
 	m.mu.RLock()
-	if txInfo, exists := m.txs[connectionID]; exists {
-		m.mu.RUnlock()
-		return txInfo.tx, nil
+	defer m.mu.RUnlock()
+	prefix := connectionID + txKeySep
+	for k := range m.txs {
+		if strings.HasPrefix(k, prefix) {
+			return true
+		}
 	}
-	m.mu.RUnlock()
+	return false
+}
+
+// GetExecutor 获取自动提交执行器（不加入任何会话事务）。
+// 结构操作、元数据读写等无会话上下文的调用走这里。
+func (m *Manager) GetExecutor(connectionID string, database string) (Executor, error) {
+	return m.GetExecutorForSession(connectionID, database, "")
+}
+
+// GetExecutorForSession 获取执行器：指定会话存在活跃事务时返回该事务，否则返回连接池。
+func (m *Manager) GetExecutorForSession(connectionID string, database string, sessionID string) (Executor, error) {
+	if sessionID != "" {
+		m.mu.RLock()
+		if txInfo, exists := m.txs[txKey(connectionID, sessionID)]; exists {
+			m.mu.RUnlock()
+			return txInfo.tx, nil
+		}
+		m.mu.RUnlock()
+	}
 
 	if database != "" {
 		return m.GetWithDatabase(connectionID, database)
@@ -522,7 +561,7 @@ func (m *Manager) GetExecutor(connectionID string, database string) (Executor, e
 // 自动提交模式的查询和表数据编辑必须显式绕过，否则会被别处（如另一查询
 // Tab 的手动事务）开启的事务捕获，随其回滚而静默丢失。
 func (m *Manager) GetExecutorNoTx(connectionID string, database string) (Executor, error) {
-	if m.HasTransaction(connectionID) {
+	if m.hasAnyTransaction(connectionID) {
 		// SQLite 连接池是单连接（写入串行化），事务独占该连接时其他语句
 		// 只会在池里排队直到 60s 超时；直接报明确错误胜过挂起
 		if pool, err := m.GetPool(connectionID); err == nil && isSQLite(pool.DbType) {

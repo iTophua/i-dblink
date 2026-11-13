@@ -16,6 +16,7 @@ type GetTableDDLRequest struct {
 	ConnectionID string `json:"connection_id"`
 	TableName    string `json:"table_name"`
 	Database     string `json:"database,omitempty"`
+	Schema       string `json:"schema,omitempty"`
 }
 
 // GetTableDDL 获取表的完整建表语句
@@ -32,7 +33,7 @@ func (h *Handler) GetTableDDL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ddls, err := getTableDDL(pool, req.TableName, req.Database)
+	ddls, err := getTableDDL(pool, req.TableName, req.Database, req.Schema)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -45,7 +46,7 @@ func (h *Handler) GetTableDDL(w http.ResponseWriter, r *http.Request) {
 }
 
 // getTableDDL 根据数据库类型获取建表语句
-func getTableDDL(pool *db.DBPool, tableName string, database string) ([]string, error) {
+func getTableDDL(pool *db.DBPool, tableName string, database string, schema string) ([]string, error) {
 	var ddls []string
 	db := pool.DB()
 
@@ -79,9 +80,13 @@ func getTableDDL(pool *db.DBPool, tableName string, database string) ([]string, 
 
 	case "postgresql", "highgo", "vastbase":
 		var schemaName string
-		schemaQuery := "SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = $1 AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' ORDER BY n.nspname LIMIT 1"
-		if err := db.QueryRow(schemaQuery, tableName).Scan(&schemaName); err != nil || schemaName == "" {
-			schemaName = "public"
+		if schema != "" {
+			schemaName = schema
+		} else {
+			schemaQuery := "SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = $1 AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' ORDER BY n.nspname LIMIT 1"
+			if err := db.QueryRow(schemaQuery, tableName).Scan(&schemaName); err != nil || schemaName == "" {
+				schemaName = "public"
+			}
 		}
 
 		var createSQL string

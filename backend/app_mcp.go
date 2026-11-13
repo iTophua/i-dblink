@@ -62,13 +62,18 @@ func (a *App) GetMCPConfig() (MCPConfigInfo, error) {
 		"delete_connection", "test_connection",
 		// 查询
 		"list_databases", "list_tables", "describe_table", "get_table_ddl",
-		"execute_query",
+		"execute_query", "explain_query",
 		// 写操作
-		"execute_update", "execute_ddl",
+		"execute_update", "execute_ddl", "execute_script",
 		// 元数据
-		"list_views", "list_procedures", "get_procedure_body",
+		"list_schemas", "list_views", "list_procedures", "get_procedure_body",
 		"list_functions", "get_function_body",
 		"list_triggers", "list_sequences", "get_database_ddl",
+		"search_columns", "get_table_info",
+		// 事务
+		"begin_transaction", "commit_transaction", "rollback_transaction", "get_transaction_status",
+		// 用户 / 服务器
+		"list_users", "list_privileges", "get_server_info",
 	}, ", ")
 
 	return MCPConfigInfo{

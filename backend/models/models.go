@@ -129,8 +129,11 @@ type QueryRequest struct {
 	SQL            string `json:"sql"`
 	StreamResults  bool   `json:"stream_results,omitempty"`
 	// UseTransaction 显式 false = 绕过活跃事务走自动提交（nil/true = 默认：
-	// 该连接有活跃事务则进事务）。防止自动提交模式的语句被别处的手动事务捕获。
+	// 该会话有活跃事务则进事务）。防止自动提交模式的语句被别处的手动事务捕获。
 	UseTransaction *bool `json:"use_transaction,omitempty"`
+	// SessionID 事务会话标识（查询 Tab 的 tabKey / MCP 的固定会话名）。
+	// 为空 = 不参与任何事务（自动提交）；非空 = 该会话有活跃事务时加入之。
+	SessionID string `json:"session_id,omitempty"`
 	// MaxRows 返回行数上限：达到后提前停止扫描并置 QueryResult.Truncated。
 	// nil 或 <=0 = 不限制（GUI 默认；MCP 等自动化调用方用来防止大结果集）。
 	MaxRows *int `json:"max_rows,omitempty"`
@@ -225,6 +228,7 @@ type ExecuteDDLRequest struct {
 	ConnectionID string `json:"connection_id"`
 	Database     string `json:"database,omitempty"`
 	SQL          string `json:"sql"`
+	SessionID    string `json:"session_id,omitempty"`
 }
 
 // TableOperationRequest 表操作请求(truncate/drop 等)

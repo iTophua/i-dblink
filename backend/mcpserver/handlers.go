@@ -179,6 +179,294 @@ func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequ
 	return mcp.NewToolResultJSON(map[string]any{"connections": connectionSummaries(conns), "count": len(conns)})
 }
 
+// ==================== SSH 隧道参数 ====================
+
+// sshArgKeys create/update/test_connection 的 SSH 参数名。
+var sshArgKeys = []string{
+	"ssh_enabled", "ssh_host", "ssh_port", "ssh_username",
+	"ssh_auth_method", "ssh_password", "ssh_private_key_path", "ssh_passphrase",
+}
+
+// hasAnySSHArg 调用方是否显式传了任一 ssh_* 参数。
+// update_connection 用它区分「不修改 SSH」（全部缺省）与「修改/关闭 SSH」。
+func hasAnySSHArg(args map[string]any) bool {
+	for _, key := range sshArgKeys {
+		if _, ok := args[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// sshExplicitlyDisabled 是否显式传了 ssh_enabled=false。
+func sshExplicitlyDisabled(args map[string]any) bool {
+	v, ok := args["ssh_enabled"].(bool)
+	return ok && !v
+}
+
+// sshInput SSH 参数的解析结果（空值 = 未提供）。
+type sshInput struct {
+	host       string
+	port       *int
+	username   *string
+	authMethod string
+	password   *string
+	keyPath    *string
+	passphrase *string
+}
+
+func parseSSHInput(args map[string]any) sshInput {
+	in := sshInput{
+		host:       argStr(args, "ssh_host"),
+		port:       argIntPtr(args, "ssh_port"),
+		authMethod: strings.ToLower(argStr(args, "ssh_auth_method")),
+	}
+	if v := argStr(args, "ssh_username"); v != "" {
+		in.username = &v
+	}
+	if v := argStr(args, "ssh_password"); v != "" {
+		in.password = &v
+	}
+	if v := argStr(args, "ssh_private_key_path"); v != "" {
+		in.keyPath = &v
+	}
+	if v := argStr(args, "ssh_passphrase"); v != "" {
+		in.passphrase = &v
+	}
+	return in
+}
+
+// resolveAuthMethod 决定认证方式：显式参数 > 本次提供了私钥路径/密码 > 已存配置 > 密码。
+func resolveAuthMethod(in sshInput, existing *string) string {
+	if in.authMethod != "" {
+		return in.authMethod
+	}
+	switch {
+	case in.keyPath != nil:
+		return "key"
+	case in.password != nil:
+		return "password"
+	case existing != nil && *existing != "":
+		return *existing
+	default:
+		return "password"
+	}
+}
+
+// validateSSHAuth 校验认证方式与必需字段，返回规范化后的认证方式。
+func validateSSHAuth(authMethod string, keyPath *string) (string, error) {
+	switch authMethod {
+	case "password", "key":
+	default:
+		return "", fmt.Errorf("ssh_auth_method must be \"password\" or \"key\"")
+	}
+	if authMethod == "key" && (keyPath == nil || *keyPath == "") {
+		return "", fmt.Errorf("ssh_private_key_path is required when ssh_auth_method is \"key\"")
+	}
+	return authMethod, nil
+}
+
+// applyNewSSH 写入新建连接（create/test）的 SSH 配置。
+func applyNewSSH(in sshInput, input *backend.ConnectionInput) error {
+	if in.host == "" {
+		return fmt.Errorf("ssh_host is required to enable the SSH tunnel")
+	}
+	authMethod, err := validateSSHAuth(resolveAuthMethod(in, nil), in.keyPath)
+	if err != nil {
+		return err
+	}
+	input.SSHEnabled = true
+	input.SSHHost = &in.host
+	if in.port != nil && *in.port > 0 {
+		input.SSHPort = in.port
+	}
+	input.SSHUsername = in.username
+	input.SSHAuthMethod = &authMethod
+	input.SSHPrivateKeyPath = in.keyPath
+	input.SSHPassword = in.password
+	input.SSHPassphrase = in.passphrase
+	return nil
+}
+
+// applySSHUpdate 把 ssh_* 参数合并到已有连接。
+// 语义：未传任何 ssh_* → 原样保留；ssh_enabled=false → 关闭隧道；
+// 其余情况 → 启用隧道，未提供的字段沿用已存配置。
+func applySSHUpdate(args map[string]any, input *backend.ConnectionInput, existing *backend.ConnectionOutput) error {
+	if !hasAnySSHArg(args) {
+		input.SSHEnabled = existing.SSHEnabled
+		input.SSHHost = existing.SSHHost
+		input.SSHPort = existing.SSHPort
+		input.SSHUsername = existing.SSHUsername
+		input.SSHAuthMethod = existing.SSHAuthMethod
+		input.SSHPrivateKeyPath = existing.SSHPrivateKeyPath
+		return nil
+	}
+	if sshExplicitlyDisabled(args) {
+		// SSHEnabled=false 时 SaveConnection 不写 SSH 字段，等于清空隧道配置
+		input.SSHEnabled = false
+		return nil
+	}
+
+	in := parseSSHInput(args)
+	host := in.host
+	if host == "" && existing.SSHHost != nil {
+		host = *existing.SSHHost
+	}
+	if host == "" {
+		return fmt.Errorf("ssh_host is required to enable the SSH tunnel")
+	}
+
+	keyPath := in.keyPath
+	if keyPath == nil {
+		keyPath = existing.SSHPrivateKeyPath
+	}
+	authMethod, err := validateSSHAuth(resolveAuthMethod(in, existing.SSHAuthMethod), keyPath)
+	if err != nil {
+		return err
+	}
+
+	input.SSHEnabled = true
+	input.SSHHost = &host
+	input.SSHPort = nil
+	if in.port != nil && *in.port > 0 {
+		input.SSHPort = in.port
+	}
+	if input.SSHPort == nil {
+		input.SSHPort = existing.SSHPort
+	}
+	input.SSHUsername = in.username
+	if input.SSHUsername == nil {
+		input.SSHUsername = existing.SSHUsername
+	}
+	input.SSHAuthMethod = &authMethod
+	input.SSHPrivateKeyPath = keyPath
+	input.SSHPassword = in.password
+	input.SSHPassphrase = in.passphrase
+	return nil
+}
+
+// connectionInputFromExisting 用已存连接构造完整 ConnectionInput。
+// SaveConnection 会整行覆盖连接配置，MCP 的局部更新必须带上未修改字段
+// （分组、颜色、SSL/SSH 等），否则会被零值清空。
+func connectionInputFromExisting(c backend.ConnectionOutput) backend.ConnectionInput {
+	return backend.ConnectionInput{
+		ID:                c.ID,
+		Name:              c.Name,
+		DbType:            c.DbType,
+		Host:              c.Host,
+		Port:              c.Port,
+		Username:          c.Username,
+		Database:          c.Database,
+		GroupID:           c.GroupID,
+		Color:             c.Color,
+		SSHEnabled:        c.SSHEnabled,
+		SSHHost:           c.SSHHost,
+		SSHPort:           c.SSHPort,
+		SSHUsername:       c.SSHUsername,
+		SSHAuthMethod:     c.SSHAuthMethod,
+		SSHPrivateKeyPath: c.SSHPrivateKeyPath,
+		SSLEnabled:        c.SSLEnabled,
+		SSLCAPath:         c.SSLCaPath,
+		SSLCertPath:       c.SSLCertPath,
+		SSLKeyPath:        c.SSLKeyPath,
+		SSLSkipVerify:     c.SSLSkipVerify,
+	}
+}
+
+// ==================== SSL 参数 ====================
+
+var sslArgKeys = []string{
+	"ssl_enabled", "ssl_ca_path", "ssl_cert_path", "ssl_key_path", "ssl_skip_verify",
+}
+
+// hasAnySSLArg 调用方是否显式传了任一 ssl_* 参数。
+func hasAnySSLArg(args map[string]any) bool {
+	for _, key := range sslArgKeys {
+		if _, ok := args[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// sslRequested create 语义下是否要求启用 SSL（显式 true、证书路径或跳过校验）。
+func sslRequested(args map[string]any) bool {
+	if v, ok := args["ssl_enabled"].(bool); ok {
+		return v
+	}
+	return argStr(args, "ssl_ca_path") != "" ||
+		argStr(args, "ssl_cert_path") != "" ||
+		argStr(args, "ssl_key_path") != "" ||
+		argBool(args, "ssl_skip_verify", false)
+}
+
+// applyNewSSL 写入新建连接（create/test）的 SSL 配置。
+// 传了任一 ssl_* 或 ssl_enabled=true 即启用。
+func applyNewSSL(args map[string]any, input *backend.ConnectionInput) {
+	enabled := argBool(args, "ssl_enabled", false)
+	if !enabled {
+		enabled = argStr(args, "ssl_ca_path") != "" ||
+			argStr(args, "ssl_cert_path") != "" ||
+			argStr(args, "ssl_key_path") != "" ||
+			argBool(args, "ssl_skip_verify", false)
+	}
+	if !enabled {
+		return
+	}
+	input.SSLEnabled = true
+	if v := argStr(args, "ssl_ca_path"); v != "" {
+		input.SSLCAPath = &v
+	}
+	if v := argStr(args, "ssl_cert_path"); v != "" {
+		input.SSLCertPath = &v
+	}
+	if v := argStr(args, "ssl_key_path"); v != "" {
+		input.SSLKeyPath = &v
+	}
+	input.SSLSkipVerify = argBool(args, "ssl_skip_verify", false)
+}
+
+// applySSLUpdate 合并 SSL 配置：未传任何 ssl_* → 原样保留；
+// ssl_enabled=false → 关闭；其余情况启用并覆盖显式提供的字段。
+func applySSLUpdate(args map[string]any, input *backend.ConnectionInput, existing *backend.ConnectionOutput) {
+	if !hasAnySSLArg(args) {
+		input.SSLEnabled = existing.SSLEnabled
+		input.SSLCAPath = existing.SSLCaPath
+		input.SSLCertPath = existing.SSLCertPath
+		input.SSLKeyPath = existing.SSLKeyPath
+		input.SSLSkipVerify = existing.SSLSkipVerify
+		return
+	}
+	if v, ok := args["ssl_enabled"].(bool); ok && !v {
+		input.SSLEnabled = false
+		input.SSLCAPath = nil
+		input.SSLCertPath = nil
+		input.SSLKeyPath = nil
+		input.SSLSkipVerify = false
+		return
+	}
+	input.SSLEnabled = true
+	if v := argStr(args, "ssl_ca_path"); v != "" {
+		input.SSLCAPath = &v
+	} else {
+		input.SSLCAPath = existing.SSLCaPath
+	}
+	if v := argStr(args, "ssl_cert_path"); v != "" {
+		input.SSLCertPath = &v
+	} else {
+		input.SSLCertPath = existing.SSLCertPath
+	}
+	if v := argStr(args, "ssl_key_path"); v != "" {
+		input.SSLKeyPath = &v
+	} else {
+		input.SSLKeyPath = existing.SSLKeyPath
+	}
+	input.SSLSkipVerify = existing.SSLSkipVerify
+	if v, ok := args["ssl_skip_verify"].(bool); ok {
+		input.SSLSkipVerify = v
+	}
+}
+
 func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := req.GetArguments()
 
@@ -192,6 +480,12 @@ func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolReq
 	username := argStr(args, "username")
 	database := argStrPtr(args, "database")
 	password := argStr(args, "password")
+
+	// SSH 隧道：ssh_host 非空或 ssh_enabled=true 即启用；ssh_enabled=false 显式走直连。
+	sshRequested := argStr(args, "ssh_host") != "" || argBool(args, "ssh_enabled", false)
+	if sshRequested && sshExplicitlyDisabled(args) {
+		sshRequested = false
+	}
 
 	// 优先复用：同一服务器+账号（db_type+host+port+username）的连接已存在则复用，
 	// database 仅作优先级参考，不参与身份判定（execute_query 可指定任意库）。
@@ -211,11 +505,24 @@ func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolReq
 	}
 
 	if hit := findReusableConnection(existing, dbType, host, port, username, database); hit != nil {
-		// 命中：传了新密码则更新（仅改密码，用专用方法避免覆盖现有 SSL/SSH/Name 等字段）
+		// 命中：传了新密码则更新（用专用方法，避免覆盖现有 SSL/SSH/Name 等字段）
 		if password != "" {
 			if err := s.app.UpdateConnectionPassword(hit.ID, password); err != nil {
 				return mcp.NewToolResultErrorFromErr("failed to update connection password", err), nil
 			}
+		}
+		// 本次要求走 SSH 或传了 SSL 配置：合并到已有连接，避免建出被去重逻辑隐藏的重复连接
+		if sshRequested || sslRequested(args) {
+			input := connectionInputFromExisting(*hit)
+			if err := applySSHUpdate(args, &input, hit); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			applySSLUpdate(args, &input, hit)
+			conn, err := s.app.SaveConnection(input)
+			if err != nil {
+				return mcp.NewToolResultErrorFromErr("failed to update connection settings", err), nil
+			}
+			return s.connectionResult(conn.ID, conn)
 		}
 		return s.connectionResult(hit.ID, *hit)
 	}
@@ -232,6 +539,12 @@ func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolReq
 	if password != "" {
 		input.Password = &password
 	}
+	if sshRequested {
+		if err := applyNewSSH(parseSSHInput(args), &input); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
+	applyNewSSL(args, &input)
 
 	conn, err := s.app.SaveConnection(input)
 	if err != nil {
@@ -330,10 +643,25 @@ func (s *Server) handleUpdateConnection(ctx context.Context, req mcp.CallToolReq
 		return mcp.NewToolResultError("connection_id is required"), nil
 	}
 
-	input := backend.ConnectionInput{
-		ID: connID,
+	// 先从存储取现有连接：SaveConnection 整行覆盖，必须以现有配置为底再叠参数，
+	// 否则分组、颜色、SSL/SSH 等未传字段会被零值清空。
+	existing, err := s.app.GetConnections()
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to get existing connections", err), nil
 	}
-	// 只填入用户提供的字段（空值保持原样需要特殊处理——这里简化为：传了的就更新）
+	var current *backend.ConnectionOutput
+	for i := range existing {
+		if existing[i].ID == connID {
+			current = &existing[i]
+			break
+		}
+	}
+	if current == nil {
+		return mcp.NewToolResultError(fmt.Sprintf("connection %s not found", connID)), nil
+	}
+
+	input := connectionInputFromExisting(*current)
+	// 只覆盖用户显式提供的字段（空值 = 不修改）
 	if v := argStr(args, "name"); v != "" {
 		input.Name = v
 	}
@@ -352,53 +680,21 @@ func (s *Server) handleUpdateConnection(ctx context.Context, req mcp.CallToolReq
 	if v := argStr(args, "password"); v != "" {
 		input.Password = &v
 	}
+	// 全量连接（未指定默认库）不允许收窄为单库连接：全量连接本可访问
+	// 任意库（查询时带 database 参数即可），收窄只会降低能力且无法
+	// 通过 MCP 恢复（update 无清空 database 的语义）
 	if v := argStr(args, "database"); v != "" {
+		if current.Database == nil {
+			return mcp.NewToolResultError(
+				"connection has no default database (full-server connection) and cannot be narrowed to a specific database. " +
+					"Reuse it and pass the database parameter in query tools, or create a separate fixed-database connection."), nil
+		}
 		input.Database = &v
 	}
-
-	// 先从存储取现有连接，合并更新
-	existing, err := s.app.GetConnections()
-	if err != nil {
-		return mcp.NewToolResultErrorFromErr("failed to get existing connections", err), nil
+	if err := applySSHUpdate(args, &input, current); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
-	var found bool
-	for _, c := range existing {
-		if c.ID == connID {
-			found = true
-			// 全量连接（未指定默认库）不允许收窄为单库连接：全量连接本可访问
-			// 任意库（查询时带 database 参数即可），收窄只会降低能力且无法
-			// 通过 MCP 恢复（update 无清空 database 的语义）
-			if c.Database == nil && input.Database != nil {
-				return mcp.NewToolResultError(
-					"connection has no default database (full-server connection) and cannot be narrowed to a specific database. " +
-						"Reuse it and pass the database parameter in query tools, or create a separate fixed-database connection."), nil
-			}
-			// 用现有值补齐用户未传的字段（空值 = 不修改，回退到原值）
-			if input.Name == "" {
-				input.Name = c.Name
-			}
-			if input.DbType == "" {
-				input.DbType = c.DbType
-			}
-			if input.Host == "" {
-				input.Host = c.Host
-			}
-			if input.Port == 0 {
-				input.Port = c.Port
-			}
-			if input.Username == "" {
-				input.Username = c.Username
-			}
-			// database：用户未传则回退到原值
-			if input.Database == nil {
-				input.Database = c.Database
-			}
-			break
-		}
-	}
-	if !found {
-		return mcp.NewToolResultError(fmt.Sprintf("connection %s not found", connID)), nil
-	}
+	applySSLUpdate(args, &input, current)
 
 	conn, err := s.app.SaveConnection(input)
 	return jsonResult(conn, err, "failed to update connection")
@@ -434,6 +730,14 @@ func (s *Server) handleTestConnection(ctx context.Context, req mcp.CallToolReque
 	if input.DbType == "" || input.Host == "" {
 		return mcp.NewToolResultError("db_type and host are required"), nil
 	}
+
+	// SSH 隧道：给了 ssh_host 或 ssh_enabled=true 时先建隧道再测试
+	if argStr(args, "ssh_host") != "" || argBool(args, "ssh_enabled", false) {
+		if err := applyNewSSH(parseSSHInput(args), &input); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
+	applyNewSSL(args, &input)
 
 	if err := s.app.TestConnection(input); err != nil {
 		return mcp.NewToolResultErrorFromErr("connection test failed", err), nil
@@ -495,9 +799,10 @@ func (s *Server) handleListTables(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("failed to list tables", err), nil
 	}
+	schema := argStr(args, "schema")
 	return mcp.NewToolResultJSON(map[string]any{
-		"tables": tableSummaries(result.Tables),
-		"views":  tableSummaries(result.Views),
+		"tables": tableSummaries(filterTablesBySchema(result.Tables, schema)),
+		"views":  tableSummaries(filterTablesBySchema(result.Views, schema)),
 	})
 }
 
@@ -509,13 +814,28 @@ func (s *Server) handleDescribeTable(ctx context.Context, req mcp.CallToolReques
 		return mcp.NewToolResultError("connection_id and table_name are required"), nil
 	}
 
-	var database *string
-	if d := argStr(args, "database"); d != "" {
-		database = &d
+	database, schema, err := s.resolveScope(args)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	structure, err := s.app.GetTableStructure(connID, table, database)
-	return jsonResult(structure, err, "failed to describe table")
+	structure, err := s.app.GetTableStructureWithSchema(connID, table, database, schema)
+	if err != nil {
+		return jsonResult(nil, err, "failed to describe table")
+	}
+
+	// check constraints 尽力附加（驱动不支持时返回空，不阻塞整体结构）
+	out := struct {
+		models.TableStructure
+		CheckConstraints []models.CheckConstraintInfo `json:"check_constraints"`
+	}{
+		TableStructure:   structure,
+		CheckConstraints: []models.CheckConstraintInfo{},
+	}
+	if cc, cerr := s.app.GetCheckConstraintsWithSchema(connID, table, database, schema); cerr == nil {
+		out.CheckConstraints = cc
+	}
+	return mcp.NewToolResultJSON(out)
 }
 
 func (s *Server) handleGetTableDDL(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -526,12 +846,12 @@ func (s *Server) handleGetTableDDL(ctx context.Context, req mcp.CallToolRequest)
 		return mcp.NewToolResultError("connection_id and table_name are required"), nil
 	}
 
-	var database *string
-	if d := argStr(args, "database"); d != "" {
-		database = &d
+	database, schema, err := s.resolveScope(args)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	ddls, err := s.app.GetTableDDL(connID, table, database)
+	ddls, err := s.app.GetTableDDLWithSchema(connID, table, database, schema)
 	return jsonListResult("ddls", ddls, err, "failed to get table DDL")
 }
 
@@ -565,7 +885,7 @@ func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest
 		maxRows = mcpHardMaxRows
 	}
 
-	result, err := s.app.ExecuteQueryLimited(connID, sqlText, database, nil, maxRows)
+	result, err := s.app.ExecuteQueryLimited(connID, sqlText, database, nil, maxRows, mcpTxSession)
 	if err == nil {
 		truncateCellStrings(result.Rows, mcpCellMaxChars)
 	}
@@ -594,7 +914,7 @@ func (s *Server) handleExecuteUpdate(ctx context.Context, req mcp.CallToolReques
 		database = &d
 	}
 
-	result, err := s.app.ExecuteQuery(connID, sqlText, database, nil)
+	result, err := s.app.ExecuteQuery(connID, sqlText, database, nil, mcpTxSession)
 	return jsonResult(result, err, "update failed")
 }
 
@@ -620,7 +940,7 @@ func (s *Server) handleExecuteDDL(ctx context.Context, req mcp.CallToolRequest) 
 		database = &d
 	}
 
-	if err := s.app.ExecuteDDL(connID, sqlText, database); err != nil {
+	if err := s.app.ExecuteDDL(connID, sqlText, database, mcpTxSession); err != nil {
 		return mcp.NewToolResultErrorFromErr("DDL execution failed", err), nil
 	}
 	return mcp.NewToolResultJSON(map[string]any{"success": true, "message": "DDL executed successfully"})
@@ -643,7 +963,7 @@ func (s *Server) handleListViews(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("failed to list views", err), nil
 	}
-	return mcp.NewToolResultJSON(map[string]any{"views": result.Views})
+	return mcp.NewToolResultJSON(map[string]any{"views": filterTablesBySchema(result.Views, argStr(args, "schema"))})
 }
 
 func (s *Server) handleListProcedures(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -868,8 +1188,8 @@ func (s *Server) handleKillProcess(ctx context.Context, req mcp.CallToolRequest)
 		if err != nil {
 			if errors.Is(err, server.ErrElicitationNotSupported) || errors.Is(err, server.ErrNoActiveSession) {
 				return mcp.NewToolResultError(
-					"this MCP client does not support elicitation (human confirmation). "+
-						"Ask the user to kill it via the iDBLink GUI process list, or get the user's explicit "+
+					"this MCP client does not support elicitation (human confirmation). " +
+						"Ask the user to kill it via the iDBLink GUI process list, or get the user's explicit " +
 						"approval in the conversation first and retry with force=true."), nil
 			}
 			return mcp.NewToolResultErrorFromErr("human confirmation failed", err), nil
@@ -911,7 +1231,7 @@ func (s *Server) ownConnectionID(connID string, database *string) string {
 		// Oracle/DM 需查 v$session（权限复杂）、SQLite 无进程概念：跳过
 		return ""
 	}
-	res, err := s.app.ExecuteQueryLimited(connID, q, database, nil, 1)
+	res, err := s.app.ExecuteQueryLimited(connID, q, database, nil, 1, mcpTxSession)
 	if err != nil || res.Error != "" || len(res.Rows) == 0 || len(res.Rows[0]) == 0 {
 		return ""
 	}

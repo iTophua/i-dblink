@@ -466,12 +466,14 @@ export function TableImportWizard({
     const errors: string[] = [];
 
     if (sqlExecMode === 'transaction') {
+      // 私有事务会话：与任何查询 Tab / MCP 事务隔离
+      const importSession = 'import-wizard';
       try {
-        await api.beginTransaction(connectionId);
+        await api.beginTransaction(connectionId, importSession);
         for (let i = 0; i < stmts.length; i++) {
           if (cancelledRef.current) break;
           try {
-            await api.executeDDL(connectionId, stmts[i], database);
+            await api.executeDDL(connectionId, stmts[i], database, importSession);
             success++;
           } catch (e: unknown) {
             failed++;
@@ -482,9 +484,9 @@ export function TableImportWizard({
             setProgress((p) => ({ ...p, success, failed, errors }));
           }
         }
-        await api.commitTransaction(connectionId);
+        await api.commitTransaction(connectionId, importSession);
       } catch {
-        await api.rollbackTransaction(connectionId).catch(() => {});
+        await api.rollbackTransaction(connectionId, importSession).catch(() => {});
       }
     } else {
       for (let i = 0; i < stmts.length; i++) {

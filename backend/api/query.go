@@ -55,13 +55,13 @@ func debugLog(format string, args ...interface{}) {
 // 且与 MySQL 驱动的 readTimeout 对齐兜底死连接。
 const LongOpTimeout = 30 * time.Minute
 
-// getQueryExecutor 按 use_transaction 路由执行器：
-// 显式 false = 绕过活跃事务（自动提交路径），nil/true = 默认行为（有活跃事务则进事务）
+// getQueryExecutor 按 use_transaction + session 路由执行器：
+// 显式 false 或空 session = 自动提交；否则加入该会话的活跃事务（若有）。
 func (h *Handler) getQueryExecutor(req *models.QueryRequest) (db.Executor, error) {
-	if req.UseTransaction != nil && !*req.UseTransaction {
+	if (req.UseTransaction != nil && !*req.UseTransaction) || req.SessionID == "" {
 		return h.mgr.GetExecutorNoTx(req.ConnectionID, req.Database)
 	}
-	return h.mgr.GetExecutor(req.ConnectionID, req.Database)
+	return h.mgr.GetExecutorForSession(req.ConnectionID, req.Database, req.SessionID)
 }
 
 // ExecuteQueryDirect 查询直通入口（Wails 绑定路径）：复用与 HTTP handler

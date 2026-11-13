@@ -69,11 +69,18 @@ func (a *App) GetTablesCategorized(connectionID string, database *string, search
 
 // GetTableStructure 获取完整的表结构
 func (a *App) GetTableStructure(connectionID string, tableName string, database *string) (models.TableStructure, error) {
+	return a.GetTableStructureWithSchema(connectionID, tableName, database, nil)
+}
+
+// GetTableStructureWithSchema 获取指定 schema 下的表结构。
+// PG/KingBase/HighGo/VastBase 与 SQL Server 会按 schema 过滤；MySQL/Dameng 忽略 schema
+// （其 schema 语义等同 database，调用方可直接传 database）；其他驱动忽略。
+func (a *App) GetTableStructureWithSchema(connectionID string, tableName string, database, schema *string) (models.TableStructure, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return models.TableStructure{}, err
 	}
 
-	req := api.MetadataRequest{ConnectionID: connectionID, Database: database, TableName: &tableName}
+	req := api.MetadataRequest{ConnectionID: connectionID, Database: database, TableName: &tableName, Schema: schema}
 	respBytes, err := callHandler(a.handler.GetTableStructure, req)
 	if err != nil {
 		return models.TableStructure{}, err
@@ -496,11 +503,16 @@ func (a *App) DropSchema(connectionID string, database string, schemaName string
 
 // GetCheckConstraints 获取 CHECK 约束列表
 func (a *App) GetCheckConstraints(connectionID string, tableName string, database *string) ([]models.CheckConstraintInfo, error) {
+	return a.GetCheckConstraintsWithSchema(connectionID, tableName, database, nil)
+}
+
+// GetCheckConstraintsWithSchema 获取指定 schema 下的 CHECK 约束（PG 用 schema 限定解析）。
+func (a *App) GetCheckConstraintsWithSchema(connectionID string, tableName string, database, schema *string) ([]models.CheckConstraintInfo, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return nil, err
 	}
 
-	req := api.MetadataRequest{ConnectionID: connectionID, Database: database, TableName: &tableName}
+	req := api.MetadataRequest{ConnectionID: connectionID, Database: database, TableName: &tableName, Schema: schema}
 	respBytes, err := callHandlerRaw(a.handler.GetCheckConstraints, req)
 	if err != nil {
 		return nil, err

@@ -10,6 +10,7 @@ import (
 // TransactionRequest 事务请求
 type TransactionRequest struct {
 	ConnectionID string `json:"connection_id"`
+	SessionID    string `json:"session_id,omitempty"`
 }
 
 // BeginTransaction 开启事务
@@ -20,7 +21,7 @@ func (h *Handler) BeginTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.mgr.BeginTransaction(req.ConnectionID)
+	err := h.mgr.BeginTransaction(req.ConnectionID, req.SessionID)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		json.NewEncoder(w).Encode(models.GenericResponse{Error: err.Error()})
@@ -37,7 +38,7 @@ func (h *Handler) CommitTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	active, err := h.mgr.CommitTransaction(req.ConnectionID)
+	active, err := h.mgr.CommitTransaction(req.ConnectionID, req.SessionID)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		json.NewEncoder(w).Encode(models.GenericResponse{Error: err.Error()})
@@ -55,7 +56,7 @@ func (h *Handler) RollbackTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	active, err := h.mgr.RollbackTransaction(req.ConnectionID)
+	active, err := h.mgr.RollbackTransaction(req.ConnectionID, req.SessionID)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		json.NewEncoder(w).Encode(models.GenericResponse{Error: err.Error()})
@@ -72,7 +73,7 @@ func (h *Handler) GetTransactionStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	active := h.mgr.HasTransaction(req.ConnectionID)
+	active := h.mgr.HasTransaction(req.ConnectionID, req.SessionID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"active": active})
 }

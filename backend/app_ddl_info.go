@@ -32,12 +32,21 @@ func (a *App) GetServerInfo(connectionID string, database *string) (ServerInfo, 
 
 // GetTableDDL 获取建表语句
 func (a *App) GetTableDDL(connectionID string, tableName string, database *string) ([]string, error) {
+	return a.GetTableDDLWithSchema(connectionID, tableName, database, nil)
+}
+
+// GetTableDDLWithSchema 获取指定 schema 下的建表语句。
+// PG 使用给定 schema 解析对象；MySQL/Dameng 将 schema 视为 database；其他驱动忽略 schema。
+func (a *App) GetTableDDLWithSchema(connectionID string, tableName string, database, schema *string) ([]string, error) {
 	req := api.GetTableDDLRequest{
 		ConnectionID: connectionID,
 		TableName:    tableName,
 	}
 	if database != nil {
 		req.Database = *database
+	}
+	if schema != nil {
+		req.Schema = *schema
 	}
 
 	respBytes, err := callHandler(a.handler.GetTableDDL, req)

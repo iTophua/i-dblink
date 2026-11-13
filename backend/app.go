@@ -75,6 +75,7 @@ type ConnectionOutput struct {
 	SSLCaPath         *string `json:"ssl_ca_path,omitempty"`
 	SSLCertPath       *string `json:"ssl_cert_path,omitempty"`
 	SSLKeyPath        *string `json:"ssl_key_path,omitempty"`
+	SSLSkipVerify     bool    `json:"ssl_skip_verify"`
 }
 
 // GroupInput 分组输入

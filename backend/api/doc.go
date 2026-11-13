@@ -273,13 +273,13 @@ func getColumnsForDoc(ctx context.Context, exec db.Executor, dbType string, tabl
 	case "mysql", "mariadb":
 		return mysqlGetColumns(ctx, exec, tableName, database)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		return postgresGetColumns(ctx, exec, tableName, database)
+		return postgresGetColumns(ctx, exec, tableName, database, nil)
 	case "sqlite":
 		return sqliteGetColumns(ctx, exec, tableName, database)
 	case "dameng":
 		return damengGetColumns(ctx, exec, tableName, database)
 	case "sqlserver":
-		return sqlserverGetColumns(ctx, exec, tableName, database)
+		return sqlserverGetColumns(ctx, exec, tableName, database, nil)
 	case "oracle":
 		return oracleGetColumns(ctx, exec, tableName, database)
 	default:
@@ -293,13 +293,13 @@ func getIndexesForDoc(ctx context.Context, exec db.Executor, dbType string, tabl
 	case "mysql", "mariadb":
 		return mysqlGetIndexes(ctx, exec, tableName, database)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		return postgresGetIndexes(ctx, exec, tableName, database)
+		return postgresGetIndexes(ctx, exec, tableName, database, nil)
 	case "sqlite":
 		return sqliteGetIndexes(ctx, exec, tableName, database)
 	case "dameng":
 		return damengGetIndexes(ctx, exec, tableName, database)
 	case "sqlserver":
-		return sqlserverGetIndexes(ctx, exec, tableName, database)
+		return sqlserverGetIndexes(ctx, exec, tableName, database, nil)
 	case "oracle":
 		return oracleGetIndexes(ctx, exec, tableName, database)
 	default:
@@ -313,13 +313,13 @@ func getForeignKeysForDoc(ctx context.Context, exec db.Executor, dbType string, 
 	case "mysql", "mariadb":
 		return mysqlGetForeignKeys(ctx, exec, tableName, database)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		return postgresGetForeignKeys(ctx, exec, tableName, database)
+		return postgresGetForeignKeys(ctx, exec, tableName, database, nil)
 	case "sqlite":
 		return sqliteGetForeignKeys(ctx, exec, tableName, database)
 	case "dameng":
 		return damengGetForeignKeys(ctx, exec, tableName, database)
 	case "sqlserver":
-		return sqlserverGetForeignKeys(ctx, exec, tableName, database)
+		return sqlserverGetForeignKeys(ctx, exec, tableName, database, nil)
 	case "oracle":
 		return oracleGetForeignKeys(ctx, exec, tableName, database)
 	default:

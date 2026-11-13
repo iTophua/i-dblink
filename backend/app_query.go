@@ -13,27 +13,28 @@ import (
 // ==================== 查询与 DDL ====================
 
 // ExecuteQuery 执行 SQL 查询。useTransaction 显式传 false 时绕过活跃事务
-// 走自动提交（nil/true 保持默认：该连接有活跃事务则进事务）。
-func (a *App) ExecuteQuery(connectionID string, sql string, database *string, useTransaction *bool) (models.QueryResult, error) {
+// 走自动提交（nil/true 保持默认：该会话有活跃事务则进事务）。
+// sessionID 标识事务会话（查询 Tab 的 tabKey / MCP 的固定会话名），为空则自动提交。
+func (a *App) ExecuteQuery(connectionID string, sql string, database *string, useTransaction *bool, sessionID string) (models.QueryResult, error) {
 	a.queryStarted()
 	defer a.queryFinished()
-	return a.executeQuery(connectionID, sql, database, useTransaction, nil)
+	return a.executeQuery(connectionID, sql, database, useTransaction, sessionID, nil)
 }
 
 // ExecuteQueryLimited 执行 SQL 查询并限制返回行数（编辑器传设置里的最大行数，
 // 防止 SELECT 把整表拉回本地；MCP 等自动化调用方同样使用）。
 // maxRows <= 0 表示不限制；达到上限时结果携带 truncated=true 且不再继续扫描。
 // useTransaction 语义与 ExecuteQuery 相同（显式 false 绕过活跃事务）。
-func (a *App) ExecuteQueryLimited(connectionID string, sql string, database *string, useTransaction *bool, maxRows int) (models.QueryResult, error) {
+func (a *App) ExecuteQueryLimited(connectionID string, sql string, database *string, useTransaction *bool, maxRows int, sessionID string) (models.QueryResult, error) {
 	a.queryStarted()
 	defer a.queryFinished()
-	return a.executeQuery(connectionID, sql, database, useTransaction, &maxRows)
+	return a.executeQuery(connectionID, sql, database, useTransaction, sessionID, &maxRows)
 }
 
-func (a *App) executeQuery(connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
+func (a *App) executeQuery(connectionID string, sql string, database *string, useTransaction *bool, sessionID string, maxRows *int) (models.QueryResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), api.LongOpTimeout)
 	defer cancel()
-	result, err := a.executeQueryCore(ctx, connectionID, sql, database, useTransaction, maxRows)
+	result, err := a.executeQueryCore(ctx, connectionID, sql, database, useTransaction, sessionID, maxRows)
 	if err != nil {
 		return result, err
 	}
@@ -49,7 +50,7 @@ func (a *App) executeQuery(connectionID string, sql string, database *string, us
 // 整个脚本只记一条历史，避免逐语句 SQLite 提交的 fsync 开销）。
 // 走 ExecuteQueryDirect 直通路径：不经 callHandler 的 JSON 编解码，
 // 大结果集省两次全量序列化。ctx 控制本条语句的超时与取消。
-func (a *App) executeQueryCore(ctx context.Context, connectionID string, sql string, database *string, useTransaction *bool, maxRows *int) (models.QueryResult, error) {
+func (a *App) executeQueryCore(ctx context.Context, connectionID string, sql string, database *string, useTransaction *bool, sessionID string, maxRows *int) (models.QueryResult, error) {
 	if err := a.ensureConnected(connectionID); err != nil {
 		return models.QueryResult{}, err
 	}
@@ -59,6 +60,7 @@ func (a *App) executeQueryCore(ctx context.Context, connectionID string, sql str
 		SQL:            sql,
 		Database:       "",
 		UseTransaction: useTransaction,
+		SessionID:      sessionID,
 		MaxRows:        maxRows,
 	}
 	if database != nil {
@@ -83,7 +85,7 @@ func (a *App) executeQueryCore(ctx context.Context, connectionID string, sql str
 // cancelToken 非空时注册到取消表：CancelScriptBatch(token) 取消脚本级 ctx，
 // 正在执行的语句经驱动 ctx 监视器立即中断，未开始的语句在语句间跳过，
 // 结果携带 cancelled=true。
-func (a *App) ExecuteScriptBatch(connectionID string, statements []string, database *string, useTransaction *bool, maxRows int, cancelToken string) (models.ScriptResult, error) {
+func (a *App) ExecuteScriptBatch(connectionID string, statements []string, database *string, useTransaction *bool, sessionID string, maxRows int, cancelToken string) (models.ScriptResult, error) {
 	a.queryStarted()
 	defer a.queryFinished()
 
@@ -117,7 +119,7 @@ func (a *App) ExecuteScriptBatch(connectionID string, statements []string, datab
 
 		// 单语句超时从脚本 ctx 派生：取消向上传播、超时各自独立
 		stmtCtx, cancelStmt := context.WithTimeout(scriptCtx, api.LongOpTimeout)
-		res, err := a.executeQueryCore(stmtCtx, connectionID, stmt, database, useTransaction, maxRowsPtr)
+		res, err := a.executeQueryCore(stmtCtx, connectionID, stmt, database, useTransaction, sessionID, maxRowsPtr)
 		cancelStmt()
 		if err != nil {
 			res = models.QueryResult{Error: err.Error()}
@@ -169,7 +171,7 @@ func (a *App) CancelScriptBatch(cancelToken string) {
 }
 
 // ExecuteDDL 执行 DDL 语句
-func (a *App) ExecuteDDL(connectionID string, sql string, database *string) error {
+func (a *App) ExecuteDDL(connectionID string, sql string, database *string, sessionID string) error {
 	a.queryStarted()
 	defer a.queryFinished()
 	if err := a.ensureConnected(connectionID); err != nil {
@@ -179,6 +181,7 @@ func (a *App) ExecuteDDL(connectionID string, sql string, database *string) erro
 	req := models.ExecuteDDLRequest{
 		ConnectionID: connectionID,
 		SQL:          sql,
+		SessionID:    sessionID,
 	}
 	if database != nil {
 		req.Database = *database

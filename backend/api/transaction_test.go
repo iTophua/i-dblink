@@ -54,7 +54,7 @@ func TestBeginTransaction(t *testing.T) {
 	handler, connID := setupTransactionTest(t)
 
 	t.Run("begin transaction", func(t *testing.T) {
-		body := TransactionRequest{ConnectionID: connID}
+		body := TransactionRequest{ConnectionID: connID, SessionID: "sess"}
 		bodyBytes, _ := json.Marshal(body)
 		req := httptest.NewRequest("POST", "/begin-transaction", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
@@ -69,7 +69,7 @@ func TestBeginTransaction(t *testing.T) {
 	})
 
 	t.Run("begin transaction on non-existent connection", func(t *testing.T) {
-		body := TransactionRequest{ConnectionID: "non-existent"}
+		body := TransactionRequest{ConnectionID: "non-existent", SessionID: "sess"}
 		bodyBytes, _ := json.Marshal(body)
 		req := httptest.NewRequest("POST", "/begin-transaction", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
@@ -101,7 +101,7 @@ func TestTransactionStatus(t *testing.T) {
 	handler, connID := setupTransactionTest(t)
 
 	t.Run("status without transaction", func(t *testing.T) {
-		body := TransactionRequest{ConnectionID: connID}
+		body := TransactionRequest{ConnectionID: connID, SessionID: "sess"}
 		bodyBytes, _ := json.Marshal(body)
 		req := httptest.NewRequest("POST", "/transaction-status", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
@@ -117,7 +117,7 @@ func TestTransactionStatus(t *testing.T) {
 
 	t.Run("status with active transaction", func(t *testing.T) {
 		// Begin transaction
-		beginReq := TransactionRequest{ConnectionID: connID}
+		beginReq := TransactionRequest{ConnectionID: connID, SessionID: "sess"}
 		beginBytes, _ := json.Marshal(beginReq)
 		req := httptest.NewRequest("POST", "/begin-transaction", bytes.NewReader(beginBytes))
 		req.Header.Set("Content-Type", "application/json")
@@ -125,7 +125,7 @@ func TestTransactionStatus(t *testing.T) {
 		handler.BeginTransaction(rr, req)
 
 		// Check status
-		body := TransactionRequest{ConnectionID: connID}
+		body := TransactionRequest{ConnectionID: connID, SessionID: "sess"}
 		bodyBytes, _ := json.Marshal(body)
 		req = httptest.NewRequest("POST", "/transaction-status", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
@@ -146,7 +146,7 @@ func TestTransactionRequestValidation(t *testing.T) {
 	t.Run("commit without transaction is idempotent success", func(t *testing.T) {
 		// 没有活跃事务 = 已处于自动提交模式，提交应幂等成功而非报错，
 		// 否则前端事务状态可能永久卡死（事务被看门狗超时回滚后无法退出）
-		body := TransactionRequest{ConnectionID: "test"}
+		body := TransactionRequest{ConnectionID: "test", SessionID: "sess"}
 		bodyBytes, _ := json.Marshal(body)
 		req := httptest.NewRequest("POST", "/commit-transaction", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
@@ -161,7 +161,7 @@ func TestTransactionRequestValidation(t *testing.T) {
 	})
 
 	t.Run("rollback without transaction is idempotent success", func(t *testing.T) {
-		body := TransactionRequest{ConnectionID: "test"}
+		body := TransactionRequest{ConnectionID: "test", SessionID: "sess"}
 		bodyBytes, _ := json.Marshal(body)
 		req := httptest.NewRequest("POST", "/rollback-transaction", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")

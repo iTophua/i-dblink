@@ -109,7 +109,8 @@ describe('Integration Tests', () => {
       expect(mockExecuteDDL).toHaveBeenCalledWith(
         'conn-1',
         'CREATE TABLE test (id INT PRIMARY KEY, name VARCHAR(50))',
-        null
+        null,
+        ''
       );
     });
 
@@ -135,27 +136,27 @@ describe('Integration Tests', () => {
   describe('Transaction Flow', () => {
     it('should begin, execute, and commit transaction', async () => {
       mockExecuteQuery.mockResolvedValue({ columns: [], rows: [] });
-      await api.beginTransaction('conn-1');
-      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1');
+      await api.beginTransaction('conn-1', 'test');
+      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1', 'test');
 
       await api.executeQuery('conn-1', 'UPDATE users SET name = "test"');
 
-      await api.commitTransaction('conn-1');
-      expect(mockCommitTransaction).toHaveBeenCalledWith('conn-1');
+      await api.commitTransaction('conn-1', 'test');
+      expect(mockCommitTransaction).toHaveBeenCalledWith('conn-1', 'test');
     });
 
     it('should rollback on error', async () => {
       mockExecuteQuery.mockRejectedValue(new Error('query failed'));
 
-      await api.beginTransaction('conn-1');
+      await api.beginTransaction('conn-1', 'test');
 
       try {
         await api.executeQuery('conn-1', 'INVALID');
       } catch {
-        await api.rollbackTransaction('conn-1');
+        await api.rollbackTransaction('conn-1', 'test');
       }
 
-      expect(mockRollbackTransaction).toHaveBeenCalledWith('conn-1');
+      expect(mockRollbackTransaction).toHaveBeenCalledWith('conn-1', 'test');
     });
   });
 });

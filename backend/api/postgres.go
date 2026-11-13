@@ -247,7 +247,11 @@ func postgresGetAllColumns(ctx context.Context, dbConn db.Executor, database *st
 	return result, nil
 }
 
-func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
+func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) ([]models.ColumnInfo, error) {
+	sch := ""
+	if schema != nil {
+		sch = *schema
+	}
 	query := `
 		SELECT a.attname AS column_name,
 			pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
@@ -265,10 +269,11 @@ func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName strin
 			AND c.relname = $1
 			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 			AND n.nspname NOT LIKE 'pg_toast%%'
+			AND ($2 = '' OR n.nspname = $2)
 	`
 	query += " ORDER BY a.attnum"
 
-	rows, err := dbConn.QueryContext(ctx, query, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, tableName, sch)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +296,11 @@ func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName strin
 	return result, rows.Err()
 }
 
-func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.IndexInfo, error) {
+func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) ([]models.IndexInfo, error) {
+	sch := ""
+	if schema != nil {
+		sch = *schema
+	}
 	query := `
 		SELECT i.relname AS index_name, a.attname AS column_name,
 			ix.indisunique AS is_unique, ix.indisprimary AS is_primary,
@@ -303,10 +312,11 @@ func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName strin
 		JOIN pg_namespace n ON n.oid = t.relnamespace
 		WHERE t.relname = $1
 			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			AND ($2 = '' OR n.nspname = $2)
 	`
 	query += " ORDER BY i.relname, a.attnum"
 
-	rows, err := dbConn.QueryContext(ctx, query, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, tableName, sch)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +333,11 @@ func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName strin
 	return result, rows.Err()
 }
 
-func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ForeignKeyInfo, error) {
+func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) ([]models.ForeignKeyInfo, error) {
+	sch := ""
+	if schema != nil {
+		sch = *schema
+	}
 	query := `
 		SELECT tc.constraint_name, kcu.column_name,
 			ccu.table_name AS referenced_table,
@@ -332,10 +346,11 @@ func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName s
 		JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
 		JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
 		WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = $1
+			AND ($2 = '' OR tc.table_schema = $2)
 	`
 	query += " ORDER BY tc.constraint_name, kcu.ordinal_position"
 
-	rows, err := dbConn.QueryContext(ctx, query, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, tableName, sch)
 	if err != nil {
 		return nil, err
 	}
@@ -352,18 +367,18 @@ func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName s
 	return result, rows.Err()
 }
 
-func postgresGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, database *string) (models.TableStructure, error) {
+func postgresGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) (models.TableStructure, error) {
 	var result models.TableStructure
 	var err error
-	result.Columns, err = postgresGetColumns(ctx, dbConn, tableName, database)
+	result.Columns, err = postgresGetColumns(ctx, dbConn, tableName, database, schema)
 	if err != nil {
 		return result, err
 	}
-	result.Indexes, err = postgresGetIndexes(ctx, dbConn, tableName, database)
+	result.Indexes, err = postgresGetIndexes(ctx, dbConn, tableName, database, schema)
 	if err != nil {
 		return result, err
 	}
-	result.ForeignKeys, err = postgresGetForeignKeys(ctx, dbConn, tableName, database)
+	result.ForeignKeys, err = postgresGetForeignKeys(ctx, dbConn, tableName, database, schema)
 	if err != nil {
 		return result, err
 	}
@@ -507,9 +522,13 @@ func postgresDropSchema(ctx context.Context, dbConn db.Executor, schemaName stri
 	return nil
 }
 
-func postgresGetCheckConstraints(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.CheckConstraintInfo, error) {
+func postgresGetCheckConstraints(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) ([]models.CheckConstraintInfo, error) {
+	target := tableName
+	if schema != nil && *schema != "" {
+		target = *schema + "." + tableName
+	}
 	query := `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE contype = 'c' AND conrelid = $1::regclass`
-	rows, err := dbConn.QueryContext(ctx, query, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, target)
 	if err != nil {
 		return nil, fmt.Errorf("postgresGetCheckConstraints query failed: %w", err)
 	}

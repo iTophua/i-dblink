@@ -458,17 +458,18 @@ export const api = {
     sql: string,
     database?: string,
     signal?: AbortSignal,
-    opts?: { useTransaction?: boolean; maxRows?: number }
+    opts?: { useTransaction?: boolean; maxRows?: number; sessionId?: string }
   ): Promise<QueryResult> {
     // Wails binding 调用本身无法被 abort；用 Promise.race 让 UI 在 abort 时立即响应，
     // 后端查询仍会继续到完成（结果被丢弃）。真正的后端取消需要扩展 binding 接口。
     // useTransaction: false = 绕过活跃事务走自动提交（默认 null = 有事务则进事务）
     // maxRows: 传入时后端扫描到该行数即停（truncated=true），避免整表拉回后才截断
     const txFlag = opts?.useTransaction === undefined ? null : opts.useTransaction;
+    const session = opts?.sessionId ?? '';
     const binding =
       opts?.maxRows != null && opts.maxRows > 0
-        ? ExecuteQueryLimited(connectionId, sql, database ?? null, txFlag, opts.maxRows)
-        : ExecuteQuery(connectionId, sql, database ?? null, txFlag);
+        ? ExecuteQueryLimited(connectionId, sql, database ?? null, txFlag, opts.maxRows, session)
+        : ExecuteQuery(connectionId, sql, database ?? null, txFlag, session);
     if (!signal) {
       const result = await binding;
       return result as unknown as QueryResult;
@@ -507,7 +508,7 @@ export const api = {
     statements: string[],
     database?: string,
     signal?: AbortSignal,
-    opts?: { useTransaction?: boolean; maxRows?: number; cancelToken?: string }
+    opts?: { useTransaction?: boolean; maxRows?: number; cancelToken?: string; sessionId?: string }
   ): Promise<ScriptResult> {
     const txFlag = opts?.useTransaction === undefined ? null : opts.useTransaction;
     const binding = ExecuteScriptBatch(
@@ -515,6 +516,7 @@ export const api = {
       statements,
       database ?? null,
       txFlag,
+      opts?.sessionId ?? '',
       opts?.maxRows ?? 0,
       opts?.cancelToken ?? ''
     );
@@ -551,8 +553,13 @@ export const api = {
     }
   },
 
-  async executeDDL(connectionId: string, sql: string, database?: string): Promise<void> {
-    await ExecuteDDL(connectionId, sql, database ?? null);
+  async executeDDL(
+    connectionId: string,
+    sql: string,
+    database?: string,
+    sessionId = ''
+  ): Promise<void> {
+    await ExecuteDDL(connectionId, sql, database ?? null, sessionId);
   },
 
   async truncateTable(connectionId: string, tableName: string, database?: string): Promise<void> {
@@ -585,21 +592,21 @@ export const api = {
     await MaintainTable(connectionId, tableName, operation, database ?? null);
   },
 
-  async beginTransaction(connectionId: string): Promise<void> {
-    await BeginTransaction(connectionId);
+  async beginTransaction(connectionId: string, sessionId: string): Promise<void> {
+    await BeginTransaction(connectionId, sessionId);
   },
 
   /** 返回是否确有事务被提交/回滚（false = 没有等待中的事务，可能已被超时回滚） */
-  async commitTransaction(connectionId: string): Promise<boolean> {
-    return await CommitTransaction(connectionId);
+  async commitTransaction(connectionId: string, sessionId: string): Promise<boolean> {
+    return await CommitTransaction(connectionId, sessionId);
   },
 
-  async rollbackTransaction(connectionId: string): Promise<boolean> {
-    return await RollbackTransaction(connectionId);
+  async rollbackTransaction(connectionId: string, sessionId: string): Promise<boolean> {
+    return await RollbackTransaction(connectionId, sessionId);
   },
 
-  async getTransactionStatus(connectionId: string): Promise<boolean> {
-    return await GetTransactionStatus(connectionId);
+  async getTransactionStatus(connectionId: string, sessionId: string): Promise<boolean> {
+    return await GetTransactionStatus(connectionId, sessionId);
   },
 
   async getServerInfo(

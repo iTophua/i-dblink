@@ -195,7 +195,11 @@ func sqlserverGetAllColumns(ctx context.Context, dbConn db.Executor, database *s
 	return result, rows.Err()
 }
 
-func sqlserverGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ColumnInfo, error) {
+func sqlserverGetColumns(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) ([]models.ColumnInfo, error) {
+	sch := ""
+	if schema != nil {
+		sch = *schema
+	}
 	query := `
 		SELECT c.name AS column_name,
 			COALESCE(t.name + CASE 
@@ -215,7 +219,7 @@ func sqlserverGetColumns(ctx context.Context, dbConn db.Executor, tableName stri
 		LEFT JOIN sys.index_columns ic ON ic.object_id = tbl.object_id AND ic.column_id = c.column_id
 		LEFT JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
 		LEFT JOIN sys.extended_properties ep ON ep.major_id = tbl.object_id AND ep.minor_id = c.column_id AND ep.name = 'MS_Description'
-		WHERE tbl.name = @p1
+		WHERE tbl.name = @p1 AND (@p2 = '' OR SCHEMA_NAME(tbl.schema_id) = @p2)
 		ORDER BY c.column_id
 	`
 	if database != nil && *database != "" {
@@ -239,12 +243,12 @@ func sqlserverGetColumns(ctx context.Context, dbConn db.Executor, tableName stri
 			LEFT JOIN %s.sys.index_columns ic ON ic.object_id = tbl.object_id AND ic.column_id = c.column_id
 			LEFT JOIN %s.sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
 			LEFT JOIN %s.sys.extended_properties ep ON ep.major_id = tbl.object_id AND ep.minor_id = c.column_id AND ep.name = 'MS_Description'
-			WHERE tbl.name = @p1
+			WHERE tbl.name = @p1 AND (@p2 = '' OR SCHEMA_NAME(tbl.schema_id) = @p2)
 			ORDER BY c.column_id
 		`, safeDB, safeDB, safeDB, safeDB, safeDB, safeDB, safeDB)
 	}
 
-	rows, err := dbConn.QueryContext(ctx, query, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, tableName, sch)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +270,11 @@ func sqlserverGetColumns(ctx context.Context, dbConn db.Executor, tableName stri
 	return result, rows.Err()
 }
 
-func sqlserverGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.IndexInfo, error) {
+func sqlserverGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) ([]models.IndexInfo, error) {
+	sch := ""
+	if schema != nil {
+		sch = *schema
+	}
 	query := `
 		SELECT i.name AS index_name, c.name AS column_name,
 			i.is_unique AS is_unique, i.is_primary_key AS is_primary,
@@ -275,7 +283,7 @@ func sqlserverGetIndexes(ctx context.Context, dbConn db.Executor, tableName stri
 		JOIN sys.tables t ON i.object_id = t.object_id
 		JOIN sys.index_columns ic ON ic.object_id = t.object_id AND ic.index_id = i.index_id
 		JOIN sys.columns c ON c.object_id = t.object_id AND c.column_id = ic.column_id
-		WHERE t.name = @p1 AND i.type > 0
+		WHERE t.name = @p1 AND i.type > 0 AND (@p2 = '' OR SCHEMA_NAME(t.schema_id) = @p2)
 		ORDER BY i.name, ic.key_ordinal
 	`
 	if database != nil && *database != "" {
@@ -288,12 +296,12 @@ func sqlserverGetIndexes(ctx context.Context, dbConn db.Executor, tableName stri
 			JOIN %s.sys.tables t ON i.object_id = t.object_id
 			JOIN %s.sys.index_columns ic ON ic.object_id = t.object_id AND ic.index_id = i.index_id
 			JOIN %s.sys.columns c ON c.object_id = t.object_id AND c.column_id = ic.column_id
-			WHERE t.name = @p1 AND i.type > 0
+			WHERE t.name = @p1 AND i.type > 0 AND (@p2 = '' OR SCHEMA_NAME(t.schema_id) = @p2)
 			ORDER BY i.name, ic.key_ordinal
 		`, safeDB, safeDB, safeDB, safeDB)
 	}
 
-	rows, err := dbConn.QueryContext(ctx, query, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, tableName, sch)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +318,11 @@ func sqlserverGetIndexes(ctx context.Context, dbConn db.Executor, tableName stri
 	return result, rows.Err()
 }
 
-func sqlserverGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, database *string) ([]models.ForeignKeyInfo, error) {
+func sqlserverGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) ([]models.ForeignKeyInfo, error) {
+	sch := ""
+	if schema != nil {
+		sch = *schema
+	}
 	query := `
 		SELECT fk.name AS constraint_name, c.name AS column_name,
 			ref_t.name AS referenced_table, ref_c.name AS referenced_column
@@ -320,7 +332,7 @@ func sqlserverGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName 
 		JOIN sys.columns c ON c.object_id = t.object_id AND c.column_id = fkc.parent_column_id
 		JOIN sys.tables ref_t ON ref_t.object_id = fk.referenced_object_id
 		JOIN sys.columns ref_c ON ref_c.object_id = ref_t.object_id AND ref_c.column_id = fkc.referenced_column_id
-		WHERE t.name = @p1
+		WHERE t.name = @p1 AND (@p2 = '' OR SCHEMA_NAME(t.schema_id) = @p2)
 		ORDER BY fk.name
 	`
 	if database != nil && *database != "" {
@@ -334,12 +346,12 @@ func sqlserverGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName 
 			JOIN %s.sys.columns c ON c.object_id = t.object_id AND c.column_id = fkc.parent_column_id
 			JOIN %s.sys.tables ref_t ON ref_t.object_id = fk.referenced_object_id
 			JOIN %s.sys.columns ref_c ON ref_c.object_id = ref_t.object_id AND ref_c.column_id = fkc.referenced_column_id
-			WHERE t.name = @p1
+			WHERE t.name = @p1 AND (@p2 = '' OR SCHEMA_NAME(t.schema_id) = @p2)
 			ORDER BY fk.name
 		`, safeDB, safeDB, safeDB, safeDB, safeDB, safeDB)
 	}
 
-	rows, err := dbConn.QueryContext(ctx, query, tableName)
+	rows, err := dbConn.QueryContext(ctx, query, tableName, sch)
 	if err != nil {
 		return nil, err
 	}
@@ -356,18 +368,18 @@ func sqlserverGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName 
 	return result, rows.Err()
 }
 
-func sqlserverGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, database *string) (models.TableStructure, error) {
+func sqlserverGetTableStructure(ctx context.Context, dbConn db.Executor, tableName string, database *string, schema *string) (models.TableStructure, error) {
 	var result models.TableStructure
 	var err error
-	result.Columns, err = sqlserverGetColumns(ctx, dbConn, tableName, database)
+	result.Columns, err = sqlserverGetColumns(ctx, dbConn, tableName, database, schema)
 	if err != nil {
 		return result, err
 	}
-	result.Indexes, err = sqlserverGetIndexes(ctx, dbConn, tableName, database)
+	result.Indexes, err = sqlserverGetIndexes(ctx, dbConn, tableName, database, schema)
 	if err != nil {
 		return result, err
 	}
-	result.ForeignKeys, err = sqlserverGetForeignKeys(ctx, dbConn, tableName, database)
+	result.ForeignKeys, err = sqlserverGetForeignKeys(ctx, dbConn, tableName, database, schema)
 	if err != nil {
 		return result, err
 	}

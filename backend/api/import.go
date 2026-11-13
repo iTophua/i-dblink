@@ -12,6 +12,10 @@ import (
 	"idblink/backend/models"
 )
 
+// importTxSession 导入专用事务会话：导入整体在一个事务里原子提交，
+// 与任何查询 Tab / MCP 会话隔离，避免互相捕获语句。
+const importTxSession = "__import__"
+
 func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 	var req models.BatchImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -52,7 +56,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 	// 对于 replace 模式，先 TRUNCATE
 	if req.Mode == "replace" {
 		truncateSQL := fmt.Sprintf("TRUNCATE TABLE %s", tableName)
-		exec, err := h.mgr.GetExecutor(req.ConnectionID, "")
+		exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
 		if err != nil {
 			writeJSONError(w, err.Error())
 			return
@@ -65,8 +69,8 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 开始事务
-	if err := h.mgr.BeginTransaction(req.ConnectionID); err != nil {
+	// 开始导入事务（私有会话，与其他会话隔离）
+	if err := h.mgr.BeginTransaction(req.ConnectionID, importTxSession); err != nil {
 		writeJSONError(w, fmt.Sprintf("begin transaction failed: %v", err))
 		return
 	}
@@ -97,7 +101,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 					escapeIdentifier(req.PrimaryKey),
 					formatValue(pkValue))
 
-				exec, err := h.mgr.GetExecutor(req.ConnectionID, "")
+				exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
 				if err != nil {
 					failedCount++
 					lastError = err.Error()
@@ -155,7 +159,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 				strings.Join(cols, ", "),
 				strings.Join(valueGroups, ", "))
 
-			exec, err := h.mgr.GetExecutor(req.ConnectionID, "")
+			exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
 			if err != nil {
 				// 批量失败，回退到逐行执行
 				for _, row := range batch {
@@ -172,7 +176,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 						strings.Join(cols, ", "),
 						strings.Join(vals, ", "))
 
-					exec2, err := h.mgr.GetExecutor(req.ConnectionID, "")
+					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
 					if err != nil {
 						failedCount++
 						lastError = err.Error()
@@ -210,7 +214,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 						strings.Join(cols, ", "),
 						strings.Join(vals, ", "))
 
-					exec2, err := h.mgr.GetExecutor(req.ConnectionID, "")
+					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
 					if err != nil {
 						failedCount++
 						lastError = err.Error()
@@ -232,9 +236,9 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := h.mgr.CommitTransaction(req.ConnectionID); err != nil {
+	if _, err := h.mgr.CommitTransaction(req.ConnectionID, importTxSession); err != nil {
 		// 提交失败，尝试回滚
-		_, _ = h.mgr.RollbackTransaction(req.ConnectionID)
+		_, _ = h.mgr.RollbackTransaction(req.ConnectionID, importTxSession)
 		writeJSONError(w, fmt.Sprintf("commit failed: %v", err))
 		return
 	}

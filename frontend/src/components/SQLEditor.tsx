@@ -247,7 +247,7 @@ export function SQLEditor({
     ensureTransactionForExecution,
     handleCommitTransaction,
     handleRollbackTransaction,
-  } = useTransaction(connectionId);
+  } = useTransaction(connectionId, tabKey);
 
   // Query execution
   const {
@@ -282,8 +282,9 @@ export function SQLEditor({
     onQueryStatusChange,
     editorRef,
     onBeforeExecute: ensureTransactionForExecution,
-    // 自动提交模式显式绕过活跃事务（防被别处手动事务捕获）；
-    // 手动模式进事务（执行前钩子已确保事务开启）
+    // 事务会话按查询 Tab 隔离（tabKey），自动提交模式显式绕过活跃事务，
+    // 手动模式进本 Tab 的事务（执行前钩子已确保事务开启）
+    sessionId: tabKey,
     getUseTransaction: () => (txMode === 'manual' ? true : false),
   });
 

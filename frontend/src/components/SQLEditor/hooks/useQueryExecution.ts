@@ -42,6 +42,8 @@ export interface UseQueryExecutionParams {
   // 执行时读取事务路由意图：true = 进活跃事务（手动模式），false = 强制自动提交。
   // 不传则由 api 层默认（后端有活跃事务则进事务）。
   getUseTransaction?: () => boolean | undefined;
+  // 事务会话 ID（查询 Tab 的 tabKey），透传给后端做会话级事务隔离
+  sessionId?: string;
   // Editor ref for reading selection
   editorRef?: React.MutableRefObject<any>;
 }
@@ -56,6 +58,7 @@ export function useQueryExecution({
   onQueryStatusChange,
   onBeforeExecute,
   getUseTransaction,
+  sessionId,
   editorRef,
 }: UseQueryExecutionParams) {
   const { t } = useTranslation();
@@ -192,7 +195,7 @@ export function useQueryExecution({
             statements,
             database,
             abortControllerRef.current?.signal,
-            { useTransaction: useTx, maxRows, cancelToken }
+            { useTransaction: useTx, maxRows, cancelToken, sessionId: sessionId ?? '' }
           );
           scriptTokenRef.current = null;
 
@@ -311,7 +314,7 @@ export function useQueryExecution({
               [sqlToExecute],
               database,
               abortControllerRef.current?.signal,
-              { useTransaction: useTx, maxRows, cancelToken }
+              { useTransaction: useTx, maxRows, cancelToken, sessionId: sessionId ?? '' }
             );
             // 后端确认被取消：与 UI 侧 abort 走同一条"已停止"路径
             if (sr.cancelled) {

@@ -203,6 +203,8 @@ export interface ActiveTabInfo {
   connectionId?: string;
   database?: string;
   tableName?: string;
+  /** 事务会话 key（SQL 查询 Tab 的 tab key），用于状态栏按 Tab 查询事务状态 */
+  key?: string;
 }
 
 export interface TabPanelRef {
@@ -620,6 +622,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             title: `${t('common.viewDefinitionTitle')}: ${viewDef.viewName}`,
             connectionId: viewDef.connectionId,
             database: viewDef.database,
+            key: viewDef.key,
           };
         }
       }
@@ -648,6 +651,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           title: sqlTab.title,
           connectionId: sqlTab.connectionId,
           database: sqlTab.database,
+          key: sqlTab.key,
         };
       }
       return { type: 'objects' as const, title: t('common.objectList') };
@@ -701,6 +705,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             title: `${t('common.viewDefinitionTitle')}: ${viewDef.viewName}`,
             connectionId: viewDef.connectionId,
             database: viewDef.database,
+            key: viewDef.key,
           };
         }
       }
@@ -729,6 +734,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           title: sqlTab.title,
           connectionId: sqlTab.connectionId,
           database: sqlTab.database,
+          key: sqlTab.key,
         };
       }
       return { type: 'objects' as const, title: t('common.objectList') };

@@ -8,7 +8,7 @@ import { appModal } from '../../../utils/appModal';
 /** 事务模式：auto=自动提交（默认），manual=手动事务（执行后需提交/回滚，模式保持） */
 export type TransactionMode = 'auto' | 'manual';
 
-export function useTransaction(connectionId?: string | null) {
+export function useTransaction(connectionId?: string | null, sessionId = '') {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const [txMode, setTxMode] = useState<TransactionMode>('auto');
@@ -34,7 +34,7 @@ export function useTransaction(connectionId?: string | null) {
     if (prev !== connectionId) {
       // 切换连接：静默回滚旧连接的事务并重置模式与状态
       if (transactionActiveRef.current && prev) {
-        api.rollbackTransaction(prev).catch(() => {
+        api.rollbackTransaction(prev, sessionId).catch(() => {
           // 静默失败：旧事务可能已结束或连接已断，后端已幂等处理
         });
       }
@@ -44,7 +44,7 @@ export function useTransaction(connectionId?: string | null) {
     if (!connectionId) return;
     let cancelled = false;
     api
-      .getTransactionStatus(connectionId)
+      .getTransactionStatus(connectionId, sessionId)
       .then((active) => {
         if (!cancelled && active) setTransactionActive(true);
       })
@@ -61,7 +61,7 @@ export function useTransaction(connectionId?: string | null) {
   useEffect(
     () => () => {
       if (transactionActiveRef.current && connectionIdRef.current) {
-        api.rollbackTransaction(connectionIdRef.current).catch(() => {});
+        api.rollbackTransaction(connectionIdRef.current, sessionId).catch(() => {});
       }
     },
     []
@@ -74,25 +74,25 @@ export function useTransaction(connectionId?: string | null) {
   const ensureTransactionForExecution = useCallback(async () => {
     if (txMode !== 'manual' || !connectionId || transactionActive) return;
     try {
-      await api.beginTransaction(connectionId);
+      await api.beginTransaction(connectionId, sessionId);
       setTransactionActive(true);
     } catch (err: unknown) {
       message.error(`${t('common.failedToBeginTransaction')}: ${getErrorMessage(err)}`);
       throw err; // 手动模式下开不了事务就不应执行
     }
-  }, [txMode, transactionActive, connectionId, message, t]);
+  }, [txMode, transactionActive, connectionId, sessionId, message, t]);
 
   /** 手动模式下显式开启事务（执行 SQL 时也会懒开启；提前开启可立即获得提交/回滚控制） */
   const handleBeginTransaction = useCallback(async () => {
     if (!connectionId) return;
     try {
-      await api.beginTransaction(connectionId);
+      await api.beginTransaction(connectionId, sessionId);
       setTransactionActive(true);
       message.success(t('common.transactionStarted'));
     } catch (err: unknown) {
       message.error(`${t('common.failedToBeginTransaction')}: ${getErrorMessage(err)}`);
     }
-  }, [connectionId, message, t]);
+  }, [connectionId, sessionId, message, t]);
 
   /** 切换事务模式。切到自动时若有未提交事务，弹确认（提交并切换 / 取消留在手动）。 */
   const handleTxModeChange = useCallback(
@@ -107,7 +107,7 @@ export function useTransaction(connectionId?: string | null) {
             cancelText: t('common.cancel'),
             onOk: async () => {
               try {
-                const committed = await api.commitTransaction(connectionId);
+                const committed = await api.commitTransaction(connectionId, sessionId);
                 setTransactionActive(false);
                 setTxMode('auto');
                 if (committed) {
@@ -130,7 +130,7 @@ export function useTransaction(connectionId?: string | null) {
       // 否则本 Tab 永远看不到提交/回滚按钮，事务也无人收尾。
       if (connectionId) {
         api
-          .getTransactionStatus(connectionId)
+          .getTransactionStatus(connectionId, sessionId)
           .then((active) => {
             if (active) setTransactionActive(true);
           })
@@ -138,13 +138,13 @@ export function useTransaction(connectionId?: string | null) {
       }
       setTxMode('manual');
     },
-    [txMode, transactionActive, connectionId, message, t]
+    [txMode, transactionActive, connectionId, sessionId, message, t]
   );
 
   const handleCommitTransaction = useCallback(async () => {
     if (!connectionId) return;
     try {
-      const committed = await api.commitTransaction(connectionId);
+      const committed = await api.commitTransaction(connectionId, sessionId);
       if (committed) {
         message.success(t('common.transactionCommitted'));
       } else {
@@ -157,12 +157,12 @@ export function useTransaction(connectionId?: string | null) {
       // 事务结束但模式保持手动；后端已幂等（无事务=已结束），失败只剩连接级故障
       setTransactionActive(false);
     }
-  }, [connectionId, message, t]);
+  }, [connectionId, sessionId, message, t]);
 
   const handleRollbackTransaction = useCallback(async () => {
     if (!connectionId) return;
     try {
-      const rolledBack = await api.rollbackTransaction(connectionId);
+      const rolledBack = await api.rollbackTransaction(connectionId, sessionId);
       if (rolledBack) {
         message.success(t('common.transactionRolledBack'));
       } else {
@@ -173,7 +173,7 @@ export function useTransaction(connectionId?: string | null) {
     } finally {
       setTransactionActive(false);
     }
-  }, [connectionId, message, t]);
+  }, [connectionId, sessionId, message, t]);
 
   return {
     txMode,

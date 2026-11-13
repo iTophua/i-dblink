@@ -48,7 +48,7 @@ export function useTabManager({ selectedConnectionId, connections }: UseTabManag
       // 查询 Tab：监听事务状态
       if (selectedConnectionId) {
         api
-          .getTransactionStatus(selectedConnectionId)
+          .getTransactionStatus(selectedConnectionId, activeTabInfo.key ?? '')
           .then(setTransactionActive)
           .catch(() => {});
       } else {
