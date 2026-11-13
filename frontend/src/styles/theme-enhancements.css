@@ -1316,9 +1316,26 @@
   min-height: 0;
 }
 
-/* 行号区与代码区之间的细分隔线（用 inset 阴影，避免 border 改变 Monaco 布局宽度） */
-.monaco-editor .margin {
-  box-shadow: inset -1px 0 0 var(--border-color);
+/* 行号分隔线：画在行号列右缘（而不是 gutter 与代码的交界处）。
+   Monaco 的 margin 宽度等于 contentLeft，分隔线若画在 margin 右缘，代码首字符
+   必然紧贴它；画在行号后，右侧的折叠车道（lineDecorationsWidth + 16px）自然
+   成为线与代码之间的间隔。行号是绝对定位 + 固定宽度，用伪元素外移绘制既不改
+   Monaco 的布局计算，也给行号数字留出 9px 间隔。 */
+.monaco-editor .margin-view-overlays .line-numbers::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -9px;
+  width: 1px;
+  background: var(--border-color);
+  pointer-events: none;
+}
+
+/* Linux 上行高为奇数时行号会带 1px margin-top 做基线对齐，逐行分隔线因此出现断点；
+   去掉这 1px 偏移保证线连续（macOS/Windows 不会加 lh-odd，不受影响）。 */
+.monaco-editor .margin-view-overlays .line-numbers.lh-odd {
+  margin-top: 0;
 }
 
 /* ==================== 查询结果区 ==================== */
@@ -1749,27 +1766,31 @@
 }
 
 /* ==================== SQL 编辑器：语句级执行按钮（gutter ▶） ==================== */
-/* 颜色来自 mask + background-color，随主题变量自动适配 */
+/* 实心圆 + 镂空三角的「播放」按钮：比原先 12px 灰色小三角更醒目。
+   颜色来自 mask + background-color，随主题变量自动适配 */
 .sql-run-stmt-glyph {
   cursor: pointer;
-  background-color: var(--text-tertiary);
-  -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 3.2v9.6l8.2-4.8z'/%3E%3C/svg%3E");
+  background-color: var(--color-primary);
+  -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Zm-1.3 3.5 5.2 3.1-5.2 3.1V4.9Z'/%3E%3C/svg%3E");
   -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: 12px 12px;
-  mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.2 3.2v9.6l8.2-4.8z'/%3E%3C/svg%3E");
+  /* 行号左侧的 glyph 车道宽度固定为一行行高（14px 字号约 21px），
+     mask 居中会贴住编辑器左边缘；右移 3px 让按钮与左边界、行号都有间隔 */
+  -webkit-mask-position: left 3px center;
+  -webkit-mask-size: 18px 18px;
+  mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Zm-1.3 3.5 5.2 3.1-5.2 3.1V4.9Z'/%3E%3C/svg%3E");
   mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: 12px 12px;
-  opacity: 0.55;
+  mask-position: left 3px center;
+  mask-size: 18px 18px;
+  opacity: 0.8;
+  transform-origin: center;
   transition:
     opacity 0.15s ease,
-    background-color 0.15s ease;
+    transform 0.15s ease;
 }
 
 .sql-run-stmt-glyph:hover {
   opacity: 1;
-  background-color: var(--color-primary);
+  transform: scale(1.12);
 }
 
 /* ==================== 平滑滚动条 — 精致版 ==================== */
