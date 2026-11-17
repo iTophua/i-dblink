@@ -441,12 +441,12 @@ function MainLayoutComponent() {
       style={{
         ...layout.styles.root,
         // 左侧底板 + 右侧卡片：侧栏不再是独立卡片，它和窗口底色连成同一块
-        // 「底板」，右侧内容作为卡片内嵌在底板里（四周留 8px 缝，圆角 + 投影）
+        // 「底板」，右侧内容作为卡片内嵌在底板里（四周留 4px 缝，圆角 + 投影）
         background: 'var(--app-base)',
-        padding: 8,
+        padding: 4,
         // 侧栏贴左，底板色从窗口左缘连续铺开；收起侧栏后补回左边距
-        paddingLeft: layout.collapsed ? 8 : 0,
-        gap: layout.collapsed ? 0 : 8,
+        paddingLeft: layout.collapsed ? 4 : 0,
+        gap: layout.collapsed ? 0 : 4,
         boxSizing: 'border-box',
       }}
       data-file-drop-target="main"
