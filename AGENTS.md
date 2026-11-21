@@ -82,6 +82,13 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   import { mockExecuteQuery } from '../setupTests'
   ```
 - Vitest 配置：`frontend/vitest.config.ts`，jsdom 环境，globals 启用
+- **Node ≥26 必须关掉原生 webstorage**（2026-11-21 实锤）：Node 26 起默认声明实验性
+  `localStorage` 全局，但未传 `--localstorage-file` 时访问为 `undefined`；vitest 看到
+  globalThis 已有该 key 就不再从 jsdom 挂载，35 个用到 localStorage 的用例全炸。
+  所有 vitest script 已带 `NODE_OPTIONS=--no-experimental-webstorage`（`poolOptions.execArgv`
+  传播不到 worker，勿改回），若见 `Cannot read properties of undefined (reading 'setItem')`
+  先查这个。另外本机 pnpm 已升到 12.x，跑 `pnpm test` 会把根 `package.json` 的
+  `packageManager` 和 lockfile 重写，提交前注意还原这两个文件
 - ESLint：flat config 位于 `frontend/eslint.config.mjs`，忽略 `dist`、`wailsjs`（历史）和 `bindings`（生成物）
 - E2E 测试：Playwright 配置位于根目录 `playwright.config.ts`，测试在 `e2e/`。
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
