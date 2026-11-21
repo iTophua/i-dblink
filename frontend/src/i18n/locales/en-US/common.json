@@ -806,6 +806,8 @@
       "searchPlaceholder": "Search tables...",
       "rowCount": "Row count",
       "emptyHint": "This database has no tables yet — create one to get started",
+      "noDatabaseSelected": "No Database Selected",
+      "selectDatabaseHint": "Select a database in the sidebar to view its tables",
       "contextMenu": {
         "openTable": "Open Table",
         "designTable": "Design Table",

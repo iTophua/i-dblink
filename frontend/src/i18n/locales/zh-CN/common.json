@@ -822,6 +822,8 @@
       "searchPlaceholder": "搜索表...",
       "rowCount": "行数",
       "emptyHint": "当前库还没有表，先新建一张表开始使用",
+      "noDatabaseSelected": "未选择数据库",
+      "selectDatabaseHint": "在左侧选择一个数据库，即可查看其中的表",
       "contextMenu": {
         "openTable": "打开表",
         "designTable": "设计表",

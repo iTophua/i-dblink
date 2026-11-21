@@ -259,6 +259,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const { t } = useTranslation();
   const { message } = App.useApp();
   const connections = useAppStore((state) => state.connections);
+  // 对象区展示前提：已选连接且已连上——否则一律显示「开始使用」工作台首页
+  const objectsReady =
+    !!selectedConnectionId &&
+    connections.find((c) => c.id === selectedConnectionId)?.status === 'connected';
   // 首页「最近使用」：取最近库记录，只保留仍存在的连接，并补齐类型/名称/在线状态
   const recentDatabases = useWorkspaceStore((state) => state.recentDatabases);
   const recentForHome = useMemo<RecentDatabaseItem[]>(() => {
@@ -1966,8 +1970,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             </div>
           )}
 
-          {/* 内容区域 */}
-          {selectedConnectionId ? (
+          {/* 内容区域：未选连接或已选未连接 → 开始使用（对齐 TablePlus：
+              连接前不渲染空表列表，给工作台引导）；连上后才进表结构/表列表 */}
+          {objectsReady ? (
             selectedTable ? (
               // 单击表 → 展示表结构
               <TableStructure
@@ -2035,7 +2040,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               />
             )
           ) : (
-            // 首屏即工作台首页（左对齐两栏），不再是居中营销页；
+            // 工作台首页（左对齐两栏）：未选连接 / 已选未连接共用；
             // CTA 只在这里出现一次，侧栏空状态收敛为一行静默占位
             <div
               style={{

@@ -16,6 +16,7 @@ import {
   EditOutlined,
   PlusOutlined,
   DeleteOutlined,
+  DatabaseOutlined,
   ImportOutlined,
   ExportOutlined,
   ClearOutlined,
@@ -586,6 +587,15 @@ function TableListComponent({
   const tableDataCache = useAppStore((state) => state.tableDataCache);
   const { getTables } = useDatabase();
 
+  // 连接状态：本组件仅在已连接时由 TabPanel 渲染（未连接走「开始使用」首页），
+  // 这里再读一次是为防御直用时与 contextReady 语义一致
+  const connStatus = useAppStore(
+    (state) => state.connections.find((c) => c.id === connectionId)?.status
+  );
+  // 上下文就绪 = 已连接且已选库：工具栏与「新建表」入口都锚定在这个前提上
+  // （对齐主流客户端：无上下文不露建表入口，而非点了报错）
+  const contextReady = connStatus === 'connected' && !!database;
+
   const cacheKey = `${connectionId}::${database || ''}`;
   const cacheData = tableDataCache[cacheKey];
 
@@ -739,6 +749,7 @@ function TableListComponent({
           key: 'newTable',
           icon: <PlusOutlined />,
           label: t('common.tableList.contextMenu.newTable'),
+          disabled: !contextReady,
           onClick: () => onTableNew?.(),
         },
         { type: 'divider' as const, key: 'd2' },
@@ -819,6 +830,7 @@ function TableListComponent({
     };
   }, [
     contextTarget,
+    contextReady,
     t,
     database,
     onTableOpen,
@@ -955,7 +967,7 @@ function TableListComponent({
         height: '100%',
       }}
     >
-      {/* Toolbar */}
+      {/* Toolbar：未选库时不显示（未连接时整个组件都不渲染），引导交给空态 */}
       <div
         className="tablelist-toolbar"
         style={{
@@ -963,7 +975,7 @@ function TableListComponent({
           borderBottom: '1px solid var(--border)',
           padding: '8px 12px',
           background: 'var(--background-card)',
-          display: 'flex',
+          display: contextReady ? 'flex' : 'none',
           alignItems: 'center',
           gap: 8,
         }}
@@ -1297,6 +1309,12 @@ function TableListComponent({
                     <EnhancedEmptyState
                       icon={<SearchOutlined />}
                       title={t('common.noMatchingTables')}
+                    />
+                  ) : !database ? (
+                    <EnhancedEmptyState
+                      icon={<DatabaseOutlined />}
+                      title={t('common.tableList.noDatabaseSelected')}
+                      description={t('common.tableList.selectDatabaseHint')}
                     />
                   ) : (
                     <EnhancedEmptyState
