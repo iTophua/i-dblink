@@ -3,7 +3,10 @@ package backend
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"idblink/backend/api"
 	"idblink/backend/models"
@@ -48,7 +51,9 @@ func (a *App) StreamExportTable(connectionID string, tableName string, database 
 
 // ExportQueryResultToFileResult 服务端全量导出结果
 type ExportQueryResultToFileResult struct {
-	Rows int64 `json:"rows"`
+	Rows    int64 `json:"rows"`
+	Total   int64 `json:"total"`     // COUNT 预统计的总行数（-1 表示未知）
+	Elapsed int64 `json:"elapsedMs"` // 导出阶段用时（毫秒，不含 COUNT）
 }
 
 // ExportQueryResultToFile 服务端全量导出：执行 SQL（不受编辑器最大行数限制），
@@ -72,9 +77,42 @@ func (a *App) ExportQueryResultToFile(connectionID string, sql string, database 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	rows, err := api.StreamQueryResultToFile(ctx, exec, dbType, sql, format, path)
+	emitProgress := func(phase string, total, rows, elapsedMs int64) {
+		if app := application.Get(); app != nil {
+			app.Event.Emit("export-progress", map[string]interface{}{
+				"path": path, "phase": phase, "total": total, "rows": rows, "elapsedMs": elapsedMs,
+			})
+		}
+	}
+
+	// 预统计总行数（失败降级为未知总量：进度条转不确定模式）
+	q := strings.TrimSpace(sql)
+	q = strings.TrimSuffix(q, ";")
+	total := int64(-1)
+	emitProgress("counting", -1, 0, 0)
+	countSQL := "SELECT COUNT(*) FROM (" + q + ") __idblink_cnt__"
+	cCtx, cCancel := context.WithTimeout(ctx, 5*time.Minute)
+	var n int64
+	if err := exec.QueryRowContext(cCtx, countSQL).Scan(&n); err == nil {
+		total = n
+	}
+	cCancel()
+	emitProgress("exporting", total, 0, 0)
+
+	// 进度节流：行粒度 1000 已在底层控制，再按时间 ≥150ms 一帧防 IPC 洪泛
+	start := time.Now()
+	var lastEmit time.Time
+	rows, err := api.StreamQueryResultToFile(ctx, exec, dbType, q, format, path, func(_, done int64) {
+		now := time.Now()
+		if now.Sub(lastEmit) < 150*time.Millisecond {
+			return
+		}
+		lastEmit = now
+		emitProgress("exporting", total, done, now.Sub(start).Milliseconds())
+	})
+	elapsed := time.Since(start).Milliseconds()
 	if err != nil {
 		return ExportQueryResultToFileResult{}, err
 	}
-	return ExportQueryResultToFileResult{Rows: rows}, nil
+	return ExportQueryResultToFileResult{Rows: rows, Total: total, Elapsed: elapsed}, nil
 }

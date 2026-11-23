@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Input, Modal, Segmented, App } from 'antd';
+import { Button, Checkbox, Input, Modal, Progress, Segmented, App } from 'antd';
 import {
+  CheckCircleOutlined,
   DownloadOutlined,
   InfoCircleOutlined,
   TableOutlined,
@@ -13,7 +14,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { utils as xlsxUtils, write as xlsxWrite } from 'xlsx';
-import { api } from '../../api';
+import { api, EventsOn } from '../../api';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 export type ExportFormat = 'csv' | 'json' | 'xlsx' | 'txt' | 'xml' | 'md';
@@ -158,6 +159,14 @@ function stripOuterLimit(sqlText: string): { sql: string; removed: boolean } {
   return { sql: q, removed };
 }
 
+/** 毫秒 → 人读时长：<60s → Ns；<1h → Nm；否则 ~Nh Nm */
+function fmtDuration(ms: number): string {
+  const sec = Math.max(1, Math.round(ms / 1000));
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m${sec % 60 ? (sec % 60) + 's' : ''}`;
+  return `~${Math.floor(sec / 3600)}h${Math.floor((sec % 3600) / 60)}m`;
+}
+
 /** 表单分区：小标题 + 内容，统一间距 */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const tc = useThemeColors();
@@ -200,6 +209,15 @@ export function ResultExportDialog({
   const [fullSql, setFullSql] = useState('');
   const [fullSqlPristine, setFullSqlPristine] = useState(true);
   const [limitRemoved, setLimitRemoved] = useState(false);
+  // 服务端导出进度（按 path 过滤事件，避免多 Tab 串扰）
+  const [progress, setProgress] = useState<{
+    phase: 'counting' | 'exporting';
+    rows: number;
+    total: number;
+    elapsedMs: number;
+  } | null>(null);
+  // 成功态：不自动关窗，展示行数/用时/打开位置
+  const [doneInfo, setDoneInfo] = useState<{ rows: number; elapsedMs: number } | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -207,6 +225,8 @@ export function ResultExportDialog({
       setScope('all');
       setSavePath('');
       setExporting(false);
+      setProgress(null);
+      setDoneInfo(null);
       const stripped = stripOuterLimit(sql || '');
       setFullSql(stripped.sql);
       setFullSqlPristine(true);
@@ -232,9 +252,28 @@ export function ResultExportDialog({
 
   const doExport = async () => {
     setExporting(true);
+    setDoneInfo(null);
+    // 服务端导出期间订阅进度事件（同一保存路径才算自己的）
+    let unsub: (() => void) | undefined;
     try {
       // 全部数据：服务端重新执行 SQL 流式落盘（不受查询行数限制）
       if (scope === 'full') {
+        unsub = EventsOn<{
+          path: string;
+          phase: string;
+          rows: number;
+          total: number;
+          elapsedMs: number;
+        }>('export-progress', (p) => {
+          if (p && p.path === savePath) {
+            setProgress({
+              phase: p.phase === 'counting' ? 'counting' : 'exporting',
+              rows: p.rows,
+              total: p.total,
+              elapsedMs: p.elapsedMs,
+            });
+          }
+        });
         // 执行预览框里的 SQL（所见即所导）；未动过即剥除版
         const result = await api.exportQueryResultToFile(
           connectionId || '',
@@ -243,8 +282,7 @@ export function ResultExportDialog({
           format,
           savePath
         );
-        message.success(t('common.resultExport.doneRows', { path: savePath, rows: result.rows }));
-        onClose();
+        setDoneInfo({ rows: result.rows, elapsedMs: result.elapsedMs ?? 0 });
         return;
       }
       let data: Uint8Array;
@@ -273,11 +311,12 @@ export function ResultExportDialog({
         data = new TextEncoder().encode(text);
       }
       await api.writeExportFile(savePath, bytesToBase64(data));
-      message.success(t('common.resultExport.done', { path: savePath }));
-      onClose();
+      setDoneInfo({ rows: exportRows.length, elapsedMs: 0 });
     } catch (e) {
       message.error(t('common.resultExport.failed') + ': ' + String(e));
     } finally {
+      unsub?.();
+      setProgress(null);
       setExporting(false);
     }
   };
@@ -343,6 +382,102 @@ export function ResultExportDialog({
       data-testid="result-export-dialog"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 6 }}>
+        {/* 成功横幅：不自动关窗，可换格式重导或打开所在位置 */}
+        {doneInfo && !exporting && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '8px 12px',
+              borderRadius: 10,
+              background: 'var(--color-success-alpha-15)',
+              border: '1px solid var(--color-success)',
+              fontSize: 12,
+            }}
+            data-testid="result-export-done"
+          >
+            <CheckCircleOutlined style={{ color: 'var(--color-success)', fontSize: 14 }} />
+            <span style={{ flex: 1, color: tc.textPrimary }}>
+              {t('common.resultExport.successBanner', {
+                rows: doneInfo.rows.toLocaleString(),
+                duration: fmtDuration(doneInfo.elapsedMs),
+              })}
+            </span>
+            <Button
+              size="small"
+              icon={<FolderOpenOutlined />}
+              onClick={() => api.openInFolder(savePath).catch((e) => message.error(String(e)))}
+            >
+              {t('common.resultExport.openLocation')}
+            </Button>
+          </div>
+        )}
+
+        {/* 服务端导出进度：百分比/行数/速度/预计剩余 */}
+        {exporting && scope === 'full' && progress && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: 'var(--background-toolbar)',
+              fontSize: 12,
+            }}
+            data-testid="result-export-progress"
+          >
+            <Progress
+              percent={
+                progress.total > 0 && progress.rows > 0
+                  ? Math.min(99, Math.round((progress.rows / progress.total) * 100))
+                  : 0
+              }
+              status={progress.total > 0 ? 'normal' : 'active'}
+              showInfo={progress.total > 0}
+              size="small"
+              strokeColor="var(--color-primary)"
+            />
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between', color: tc.textTertiary }}
+            >
+              <span>
+                {progress.phase === 'counting'
+                  ? t('common.resultExport.progCounting')
+                  : progress.total > 0
+                    ? t('common.resultExport.progRows', {
+                        done: progress.rows.toLocaleString(),
+                        total: progress.total.toLocaleString(),
+                      })
+                    : t('common.resultExport.progRowsUnknown', {
+                        done: progress.rows.toLocaleString(),
+                      })}
+              </span>
+              {progress.phase === 'exporting' &&
+                progress.rows > 0 &&
+                progress.elapsedMs > 0 &&
+                (() => {
+                  const speed = progress.rows / (progress.elapsedMs / 1000);
+                  const eta =
+                    progress.total > 0
+                      ? t('common.resultExport.progEta', {
+                          eta: fmtDuration(((progress.total - progress.rows) / speed) * 1000),
+                        })
+                      : '';
+                  return (
+                    <span>
+                      {t('common.resultExport.progSpeed', {
+                        speed: Math.round(speed).toLocaleString(),
+                      })}
+                      {eta ? ` · ${eta}` : ''}
+                    </span>
+                  );
+                })()}
+            </div>
+          </div>
+        )}
+
         {/* 单列：格式 → 选项 → 范围 → SQL → 位置 */}
         <Section title={t('common.resultExport.format')}>
           <div

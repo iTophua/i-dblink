@@ -1230,10 +1230,16 @@ export const api = {
     database: string,
     format: string,
     path: string
-  ): Promise<{ rows: number }> {
+  ): Promise<{ rows: number; total: number; elapsedMs: number }> {
     const { ExportQueryResultToFile } = await import('../../bindings/idblink/backend/app');
     const result = await ExportQueryResultToFile(connectionId, sql, database, format, path);
-    return result as unknown as { rows: number };
+    return result as unknown as { rows: number; total: number; elapsedMs: number };
+  },
+
+  /** 导出完成后：在系统文件管理器中定位该文件 */
+  async openInFolder(path: string): Promise<void> {
+    const { OpenInFolder } = await import('../../bindings/idblink/backend/app');
+    await OpenInFolder(path);
   },
 
   /** 结果导出：原生保存对话框（返回空串表示取消） */

@@ -292,7 +292,10 @@ func (x *xlsxStreamWriter) finalize(path string) error { return x.f.SaveAs(path)
 // StreamQueryResultToFile 执行 SQL（无行数上限）并把全部结果流式写入 path。
 // 返回导出总行数。单次执行 + 逐行迭代：不在内存积累结果集；
 // xlsx 经 excelize StreamWriter 流式生成（超 Excel 行上限时报错，不产半截文件）。
-func StreamQueryResultToFile(ctx context.Context, exec db.Executor, dbType, querySQL, format, path string) (int64, error) {
+// onProgress 每 1000 行回调一次（total 为 -1 表示未知总行数，如 COUNT 失败）
+type onProgress func(total, rows int64)
+
+func StreamQueryResultToFile(ctx context.Context, exec db.Executor, dbType, querySQL, format, path string, progress onProgress) (int64, error) {
 	switch format {
 	case "csv", "json", "txt", "xml", "md", "xlsx":
 	default:
@@ -376,6 +379,9 @@ func StreamQueryResultToFile(ctx context.Context, exec db.Executor, dbType, quer
 			return total, err
 		}
 		total++
+		if progress != nil && total%1000 == 0 {
+			progress(-1, total)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return total, err

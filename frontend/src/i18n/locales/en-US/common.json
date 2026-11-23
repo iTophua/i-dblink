@@ -2286,7 +2286,14 @@
       "fullRowsHint": "Re-runs the SQL without row limits",
       "execSql": "SQL to execute",
       "limitRemovedTip": "Trailing row-limit clause (LIMIT/TOP) removed to export all data",
-      "restoreOriginal": "Restore original"
+      "restoreOriginal": "Restore original",
+      "successBanner": "Exported {{rows}} rows in {{duration}}",
+      "openLocation": "Open containing folder",
+      "progCounting": "Counting total rows…",
+      "progRows": "{{done}} / {{total}} rows",
+      "progRowsUnknown": "{{done}} rows exported",
+      "progSpeed": "{{speed}} rows/s",
+      "progEta": "ETA {{eta}}"
     }
   }
 }

@@ -2286,7 +2286,14 @@
       "fullRowsHint": "重新执行 SQL，不受查询行数限制",
       "execSql": "将执行的 SQL",
       "limitRemovedTip": "已移除尾部行数子句（LIMIT/TOP）以导出全部数据",
-      "restoreOriginal": "恢复原句"
+      "restoreOriginal": "恢复原句",
+      "successBanner": "已导出 {{rows}} 行 · 用时 {{duration}}",
+      "openLocation": "打开所在位置",
+      "progCounting": "正在统计总行数…",
+      "progRows": "{{done}} / {{total}} 行",
+      "progRowsUnknown": "已导出 {{done}} 行",
+      "progSpeed": "{{speed}} 行/秒",
+      "progEta": "预计剩余 {{eta}}"
     }
   }
 }

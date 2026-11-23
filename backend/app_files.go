@@ -4,7 +4,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -182,4 +184,19 @@ func (a *App) ReadImportFile(path string) (ImportFileContent, error) {
 		Name: filepath.Base(path),
 		Data: base64.StdEncoding.EncodeToString(data),
 	}, nil
+}
+
+// OpenInFolder 在系统文件管理器中定位并选中该文件。
+func (a *App) OpenInFolder(path string) error {
+	if path == "" {
+		return fmt.Errorf("文件路径为空")
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", "-R", path).Start()
+	case "windows":
+		return exec.Command("explorer", "/select,", path).Start()
+	default:
+		return exec.Command("xdg-open", filepath.Dir(path)).Start()
+	}
 }
