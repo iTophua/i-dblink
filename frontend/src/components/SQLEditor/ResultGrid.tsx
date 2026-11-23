@@ -17,9 +17,9 @@ import {
   CopyOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { ResultExportDialog, type ExportFormat } from './ResultExportDialog';
 import { useDatabase } from '../../hooks/useApi';
 import type { QueryResult, DatabaseType, ColumnInfo } from '../../types/api';
-import { exportToExcel } from '../../utils/exportUtils';
 import { getDialect } from '../../utils/sqlDialects';
 import { GlideDataTable, type GlideRow } from '../DataTable/GlideDataTable';
 import { EnhancedEmptyState } from '../LoadingStates';
@@ -62,80 +62,6 @@ function extractTable(sql: string): string | null {
     /\bFROM\s+(?:[`"']?(\w+)[`"']?\.)?[`"']?(\w+)[`"']?(?:\s+(?:AS\s+)?\w+)?(?:\s*$|\s+(?:WHERE|ORDER|GROUP|HAVING|LIMIT|OFFSET)\b)/i
   );
   return match ? match[2] || match[1] || null : null;
-}
-
-// ── 导出工具 ──
-function downloadBlob(content: string, name: string, type: string) {
-  const blob = new Blob([content], { type });
-  const a = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 100);
-}
-function exportToCsv(cols: string[], rows: unknown[][]): string {
-  const esc = (v: unknown) => {
-    const s = v == null ? '' : String(v);
-    return s.includes(',') || s.includes('"') || s.includes('\n')
-      ? `"${s.replace(/"/g, '""')}"`
-      : s;
-  };
-  return cols.map(esc).join(',') + '\n' + rows.map((r) => r.map(esc).join(',')).join('\n');
-}
-function exportToJson(cols: string[], rows: unknown[][]): string {
-  return JSON.stringify(
-    rows.map((r) => {
-      const o: Record<string, unknown> = {};
-      cols.forEach((c, i) => {
-        o[c] = r[i];
-      });
-      return o;
-    }),
-    null,
-    2
-  );
-}
-function exportToTxt(cols: string[], rows: unknown[][]): string {
-  const esc = (v: unknown) => {
-    const s = String(v ?? '');
-    return s.includes('\t') || s.includes('\n') ? s.replace(/\t/g, ' ').replace(/\n/g, '\\n') : s;
-  };
-  return (
-    '\uFEFF' + cols.map(esc).join('\t') + '\n' + rows.map((r) => r.map(esc).join('\t')).join('\n')
-  );
-}
-function exportToXml(cols: string[], rows: unknown[][]): string {
-  const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_\u4e00-\u9fff.-]/g, '_');
-  const esc = (v: unknown) =>
-    String(v ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<data>'];
-  for (const row of rows) {
-    lines.push('  <row>');
-    cols.forEach((c, i) => lines.push(`    <${sanitize(c)}>${esc(row[i])}</${sanitize(c)}>`));
-    lines.push('  </row>');
-  }
-  lines.push('</data>');
-  return lines.join('\n');
-}
-function exportToMd(cols: string[], rows: unknown[][]): string {
-  const esc = (v: unknown) =>
-    String(v ?? '')
-      .replace(/\|/g, '\\|')
-      .replace(/\n/g, '<br>');
-  const h = '| ' + cols.map(esc).join(' | ') + ' |';
-  return (
-    '\uFEFF' +
-    h +
-    '\n| ' +
-    cols.map(() => '---').join(' | ') +
-    ' |\n' +
-    rows.map((r) => '| ' + r.map(esc).join(' | ') + ' |').join('\n')
-  );
 }
 
 // ── Component ──
@@ -678,41 +604,22 @@ export const ResultGrid = memo(function ResultGrid({
     });
   }, [isEditable, selectedIndices, allRows, message, t]);
 
-  // 导出
-  const handleExport = useCallback(
-    (format: string) => {
-      const cols = queryResult.columns;
-      const rows = queryResult.rows;
-      if (format === 'csv') {
-        downloadBlob(exportToCsv(cols, rows), 'result.csv', 'text/csv');
-        message.success(t('common.exportedCsv'));
-      } else if (format === 'json') {
-        downloadBlob(exportToJson(cols, rows), 'result.json', 'application/json');
-        message.success(t('common.exportedJson'));
-      } else if (format === 'txt') {
-        downloadBlob(exportToTxt(cols, rows), 'result.txt', 'text/plain');
-        message.success(t('common.exportedTxt'));
-      } else if (format === 'xml') {
-        downloadBlob(exportToXml(cols, rows), 'result.xml', 'application/xml');
-        message.success(t('common.exportedXml'));
-      } else if (format === 'md') {
-        downloadBlob(exportToMd(cols, rows), 'result.md', 'text/markdown');
-        message.success(t('common.exportedMarkdown'));
-      } else if (format === 'xlsx') {
-        const data = rows.map((r) => {
-          const o: Record<string, any> = {};
-          cols.forEach((c, i) => {
-            o[c] = r[i];
-          });
-          return o;
-        });
-        const cdefs = cols.map((c) => ({ field: c, headerName: c }));
-        exportToExcel(data, cdefs, { filename: 'result.xlsx', sheetName: 'Query Result' });
-        message.success(t('common.exportedExcel'));
-      }
-    },
-    [queryResult, message, t]
+  // 导出：打开向导（格式预选自菜单项；范围/文件名/CSV 选项在向导内确认）
+  const [exportDialog, setExportDialog] = useState<{
+    open: boolean;
+    format: ExportFormat;
+  }>({ open: false, format: 'csv' });
+  // 选中行转导出形态：按列名取值（含未提交编辑），与全部行导出同构
+  const selectedExportRows = useMemo(
+    () =>
+      Array.from(selectedIndices)
+        .filter((i) => i < allRows.length)
+        .map((i) => queryResult.columns.map((c) => allRows[i][c])),
+    [selectedIndices, allRows, queryResult.columns]
   );
+  const openExportDialog = useCallback((format: string) => {
+    setExportDialog({ open: true, format: format as ExportFormat });
+  }, []);
 
   const hasChanges = modifiedRows.size > 0 || deletedIndices.size > 0 || newRows.length > 0;
 
@@ -769,27 +676,15 @@ export const ResultGrid = memo(function ResultGrid({
           </Tag>
         )}
         <div style={{ flex: 1 }} />
-        <Dropdown
-          menu={{
-            items: [
-              { key: 'csv', label: t('common.exportedCsv'), onClick: () => handleExport('csv') },
-              { key: 'json', label: t('common.exportedJson'), onClick: () => handleExport('json') },
-              {
-                key: 'xlsx',
-                label: t('common.exportedExcel'),
-                onClick: () => handleExport('xlsx'),
-              },
-              { type: 'divider' as const },
-              { key: 'txt', label: t('common.exportedTxt'), onClick: () => handleExport('txt') },
-              { key: 'xml', label: t('common.exportedXml'), onClick: () => handleExport('xml') },
-              { key: 'md', label: t('common.exportedMarkdown'), onClick: () => handleExport('md') },
-            ],
-          }}
+        <Button
+          size="small"
+          icon={<DownloadOutlined />}
+          onClick={() => openExportDialog('csv')}
+          style={{ fontSize: 12, height: 26 }}
+          data-testid="result-export-btn"
         >
-          <Button size="small" icon={<DownloadOutlined />} style={{ fontSize: 12, height: 26 }}>
-            {t('common.export')}
-          </Button>
-        </Dropdown>
+          {t('common.export')}
+        </Button>
         <Button
           size="small"
           icon={<BgColorsOutlined />}
@@ -979,6 +874,18 @@ export const ResultGrid = memo(function ResultGrid({
           <span className="is-warning">{t('common.dataGrid.truncatedBadge')}</span>
         )}
       </div>
+
+      <ResultExportDialog
+        open={exportDialog.open}
+        initialFormat={exportDialog.format}
+        columns={queryResult.columns}
+        rows={queryResult.rows}
+        selectedRows={selectedExportRows.length > 0 ? selectedExportRows : null}
+        sql={sqlForExtract}
+        connectionId={connectionId}
+        database={database}
+        onClose={() => setExportDialog((d) => ({ ...d, open: false }))}
+      />
     </div>
   );
 });

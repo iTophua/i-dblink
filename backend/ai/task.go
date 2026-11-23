@@ -14,6 +14,7 @@ const (
 	TaskSQLExplain  TaskID = "sql-explain"  // SQL 解释 + 优化建议
 	TaskSQLGenerate TaskID = "sql-generate" // 自然语言 → SQL
 	TaskChat        TaskID = "chat"         // 通用 AI 聊天（前端透传 messages）
+	TaskSQLOptimize TaskID = "sql-optimize" // SQL 性能优化（执行计划 + 表结构上下文）
 )
 
 // TaskRequest AI 任务请求
@@ -53,6 +54,7 @@ var taskRegistry = map[TaskID]*Task{
 	TaskSQLExplain:  taskSQLExplain,
 	TaskSQLGenerate: taskSQLGenerate,
 	TaskChat:        taskChat,
+	TaskSQLOptimize: taskSQLOptimize,
 }
 
 // taskChat 通用聊天任务占位定义。
@@ -128,6 +130,57 @@ var taskSQLExplain = &Task{
 		return []ChatMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
+		}
+	},
+}
+
+// ==================== SQL 性能优化（带执行计划/表结构上下文） ====================
+
+// taskSQLOptimize 与 taskSQLExplain 的区别：输入携带真实执行计划
+// （Context["explain_plan"]）与涉及表的 DDL（TableInfo），面向慢 SQL 治理，
+// 建议落在"索引怎么加、SQL 怎么改"的可执行层面。
+var taskSQLOptimize = &Task{
+	ID:          TaskSQLOptimize,
+	Name:        "SQL 性能优化",
+	Description: "基于执行计划与表结构给出慢 SQL 优化建议",
+	BuildPrompt: func(req *TaskRequest) []ChatMessage {
+		dbType := req.DatabaseType
+		if dbType == "" {
+			dbType = "未知"
+		}
+
+		system := "你是一个数据库性能优化专家，专注于慢 SQL 治理。基于用户提供的 SQL、" +
+			"真实执行计划和表结构（DDL，含索引定义）给出专业优化建议。\n\n" +
+			"分析要求：\n" +
+			"- 优先依据执行计划定位瓶颈（全表扫描、索引未命中、行数估算偏差、filesort/temporary 等）\n" +
+			"- 结合表结构与现有索引判断索引缺口；建议的索引必须是该数据库方言的正确语法\n" +
+			"- SQL 改写保持结果集语义完全一致\n" +
+			"- 提示信息（context 中可能附带 warnings）如实转述，不要虚构\n\n" +
+			"输出格式（Markdown）：\n" +
+			"## 执行计划分析\n" +
+			"逐条解读执行计划的关键步骤与瓶颈。\n\n" +
+			"## 问题诊断\n" +
+			"列出性能问题清单（每条一句话 + 严重程度）。\n\n" +
+			"## 优化建议\n" +
+			"按优先级给出可执行方案：索引 DDL、SQL 改写、参数/结构调优。\n\n" +
+			"## 优化后的 SQL\n" +
+			"给出改写后的完整 SQL（单个 " + codeFence + " 代码块）；若 SQL 无需改写，给出原 SQL 并说明。\n\n" +
+			"保持专业、简洁、可操作；不确定的地方明确说不确定。"
+
+		var b strings.Builder
+		fmt.Fprintf(&b, "数据库类型：%s\n\n待优化 SQL：\n%s\n%s\n%s", dbType, codeFence, req.SQL, "```")
+		if plan := req.Context["explain_plan"]; plan != "" {
+			fmt.Fprintf(&b, "\n\n执行计划（真实 EXPLAIN 输出）：\n```\n%s\n```", plan)
+		} else {
+			b.WriteString("\n\n（执行计划不可用：可能是该库不支持 EXPLAIN 或执行失败，仅基于 SQL 与表结构分析）")
+		}
+		if req.TableInfo != "" {
+			fmt.Fprintf(&b, "\n\n涉及表结构（含现有索引）：\n%s", req.TableInfo)
+		}
+
+		return []ChatMessage{
+			{Role: "system", Content: system},
+			{Role: "user", Content: b.String()},
 		}
 	},
 }

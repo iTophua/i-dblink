@@ -195,6 +195,14 @@ export interface AIChatMessage {
   content: string;
 }
 
+/** SQL 优化上下文（后端收集的真实执行计划 + 涉及表 DDL） */
+export interface SQLOptimizeContext {
+  dbType: string;
+  explainPlan?: string;
+  tableDdl?: string;
+  warnings?: string[];
+}
+
 export interface TableStructure {
   columns: ColumnInfo[];
   indexes: IndexInfo[];
@@ -1213,6 +1221,42 @@ export const api = {
     const { GetAIStatus } = await import('../../bindings/idblink/backend/app');
     const result = await GetAIStatus();
     return result as unknown as AIStatus;
+  },
+
+  /** 结果导出：服务端全量导出（不受查询行数限制），返回实际导出行数 */
+  async exportQueryResultToFile(
+    connectionId: string,
+    sql: string,
+    database: string,
+    format: string,
+    path: string
+  ): Promise<{ rows: number }> {
+    const { ExportQueryResultToFile } = await import('../../bindings/idblink/backend/app');
+    const result = await ExportQueryResultToFile(connectionId, sql, database, format, path);
+    return result as unknown as { rows: number };
+  },
+
+  /** 结果导出：原生保存对话框（返回空串表示取消） */
+  async saveExportFileDialog(defaultName: string, format: string): Promise<string> {
+    const { SaveExportFileDialog } = await import('../../bindings/idblink/backend/app');
+    return (await SaveExportFileDialog(defaultName, format)) ?? '';
+  },
+
+  /** 结果导出：把内容（base64）写入用户选择的路径 */
+  async writeExportFile(path: string, contentBase64: string): Promise<void> {
+    const { WriteExportFile } = await import('../../bindings/idblink/backend/app');
+    await WriteExportFile(path, contentBase64);
+  },
+
+  /** SQL 优化上下文（后端收集的执行计划 + 涉及表 DDL） */
+  async prepareSqlOptimize(
+    connectionId: string,
+    sql: string,
+    database: string
+  ): Promise<SQLOptimizeContext> {
+    const { PrepareSQLOptimize } = await import('../../bindings/idblink/backend/app');
+    const result = await PrepareSQLOptimize(connectionId, sql, database);
+    return result as unknown as SQLOptimizeContext;
   },
 
   // ── MCP ──

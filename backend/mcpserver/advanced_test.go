@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"idblink/backend/api"
 	"testing"
 
 	"idblink/backend"
@@ -21,7 +22,7 @@ func TestBuildExplainSQL(t *testing.T) {
 		"sqlserver":  "SET SHOWPLAN_XML ON;\nSELECT 1;\nSET SHOWPLAN_XML OFF;",
 	}
 	for dbType, want := range cases {
-		got, err := buildExplainSQL(dbType, "SELECT 1")
+		got, err := api.BuildExplainSQL(dbType, "SELECT 1")
 		if err != nil {
 			t.Errorf("%s: unexpected error: %v", dbType, err)
 			continue
@@ -30,7 +31,7 @@ func TestBuildExplainSQL(t *testing.T) {
 			t.Errorf("%s: got %q, want %q", dbType, got, want)
 		}
 	}
-	if _, err := buildExplainSQL("unknown", "SELECT 1"); err == nil {
+	if _, err := api.BuildExplainSQL("unknown", "SELECT 1"); err == nil {
 		t.Error("want error for unknown db_type")
 	}
 }

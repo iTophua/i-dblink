@@ -2,7 +2,9 @@ package mcpserver
 
 import (
 	"context"
+
 	"fmt"
+	"idblink/backend/api"
 	"sort"
 	"strings"
 
@@ -227,23 +229,6 @@ func (s *Server) handleGetTableInfo(ctx context.Context, req mcp.CallToolRequest
 // ==================== EXPLAIN ====================
 
 // buildExplainSQL 生成方言对应的执行计划 SQL。
-func buildExplainSQL(dbType, sql string) (string, error) {
-	switch dbType {
-	case "mysql", "mariadb":
-		return "EXPLAIN " + sql, nil
-	case "postgresql", "kingbase", "highgo", "vastbase":
-		return "EXPLAIN " + sql, nil
-	case "sqlite":
-		return "EXPLAIN QUERY PLAN " + sql, nil
-	case "oracle", "dameng":
-		return "EXPLAIN PLAN FOR " + sql, nil
-	case "sqlserver":
-		return "SET SHOWPLAN_XML ON;\n" + sql + ";\nSET SHOWPLAN_XML OFF;", nil
-	default:
-		return "", fmt.Errorf("explain is not supported for db_type %q", dbType)
-	}
-}
-
 func (s *Server) handleExplainQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := req.GetArguments()
 	connID := argStr(args, "connection_id")
@@ -264,7 +249,7 @@ func (s *Server) handleExplainQuery(ctx context.Context, req mcp.CallToolRequest
 		return mcp.NewToolResultError("explain_query accepts a single SQL statement"), nil
 	}
 
-	explainSQL, err := buildExplainSQL(conn.DbType, trimmed)
+	explainSQL, err := api.BuildExplainSQL(conn.DbType, trimmed)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}

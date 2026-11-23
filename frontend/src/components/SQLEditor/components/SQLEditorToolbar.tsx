@@ -18,6 +18,7 @@ import {
   DownloadOutlined,
   LoadingOutlined,
   RobotOutlined,
+  RocketOutlined,
   MoreOutlined,
   CommentOutlined,
   SwapOutlined,
@@ -40,6 +41,8 @@ export interface SQLEditorToolbarProps {
   stopQuery: () => void;
   showExplainPlan: () => void;
   execElapsed: number;
+  /** AI SQL 优化（执行计划 + 表结构上下文） */
+  onOptimizeSQL?: () => void;
 
   // Format
   formatSQL: () => void;
@@ -82,6 +85,7 @@ export function SQLEditorToolbar({
   stopQuery,
   showExplainPlan,
   execElapsed,
+  onOptimizeSQL,
   formatSQL,
   isFormatted,
   editorRef,
@@ -262,6 +266,18 @@ export function SQLEditorToolbar({
             size="small"
           />
         </Tooltip>
+        {onOptimizeSQL && (
+          <Tooltip title={t('common.sqlOptimize.button')}>
+            <Button
+              icon={<RocketOutlined />}
+              onClick={onOptimizeSQL}
+              disabled={!connectionId}
+              type="text"
+              size="small"
+              data-testid="sql-optimize-btn"
+            />
+          </Tooltip>
+        )}
 
         <Dropdown
           menu={{

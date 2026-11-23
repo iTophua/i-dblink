@@ -78,6 +78,62 @@ func (a *App) SaveSqlFileDialog(defaultName string) (string, error) {
 		PromptForSingleSelection()
 }
 
+// exportFileFilter 按导出格式给出原生保存对话框的过滤器（显示名;分号分隔模式）
+func exportFileFilter(format string) (string, string) {
+	switch format {
+	case "csv":
+		return "CSV 文件", "*.csv"
+	case "xlsx":
+		return "Excel 工作簿", "*.xlsx"
+	case "json":
+		return "JSON 文件", "*.json"
+	case "txt":
+		return "文本文件", "*.txt"
+	case "xml":
+		return "XML 文件", "*.xml"
+	case "md":
+		return "Markdown 文件", "*.md"
+	default:
+		return "所有文件", "*.*"
+	}
+}
+
+// SaveExportFileDialog 查询结果导出的原生保存对话框，返回所选路径（取消返回空串）。
+func (a *App) SaveExportFileDialog(defaultName string, format string) (string, error) {
+	app := application.Get()
+	if app == nil {
+		return "", fmt.Errorf("应用未运行")
+	}
+	name, patterns := exportFileFilter(format)
+	return app.Dialog.SaveFile().
+		SetFilename(defaultName).
+		AddFilter(name, patterns).
+		CanCreateDirectories(true).
+		PromptForSingleSelection()
+}
+
+// WriteExportFile 把导出内容（文本或二进制，base64 编码）写入用户选择的路径。
+// 文本编码（含 BOM）由前端拼好后再传，这里只负责解码落盘。
+// 用 base64 是因为 Wails v3 绑定把 []byte 生成为 TS string，base64 是双方
+// 都明确无歧义的字符串契约（解出后上限 200MB）。
+func (a *App) WriteExportFile(path string, contentBase64 string) error {
+	if path == "" {
+		return fmt.Errorf("文件路径为空")
+	}
+	data, err := base64.StdEncoding.DecodeString(contentBase64)
+	if err != nil {
+		return fmt.Errorf("invalid base64 content: %w", err)
+	}
+	if len(data) > 200<<20 {
+		return fmt.Errorf("内容过大（%dMB），上限 200MB", len(data)/(1<<20))
+	}
+	dir := filepath.Dir(path)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return fmt.Errorf("目录不存在：%s", dir)
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
 // WriteSqlFile 把编辑器 SQL 内容写入用户经原生对话框选择的路径。
 func (a *App) WriteSqlFile(path string, content string) error {
 	if path == "" {

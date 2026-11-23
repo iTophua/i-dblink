@@ -33,6 +33,7 @@ import {
   TableOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
+  ClockCircleOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -144,6 +145,11 @@ function defaultColumnWidth(dataType?: string): number {
   return 130;
 }
 
+/** 走秒动画的显示格式：0.0 s → 9.9 s → 10 s（一位小数，宽度稳定交给 tabular-nums） */
+function fmtLiveMs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
 /** SQL 着色文本：关键字/字符串/数字/标识符分别取主题色，深浅色自动适配 */
 const SqlText = memo(function SqlText({ sql }: { sql: string }) {
   if (!sql) return null;
@@ -199,6 +205,18 @@ export const DataTable = memo(function DataTable({
   const [showColVisibility, setShowColVisibility] = useState(false);
   const [findVisible, setFindVisible] = useState(false);
   const [currentSql, setCurrentSql] = useState('');
+  // 最近一次数据查询的服务端耗时（毫秒）：初始加载/翻页/筛选共用 loadData，
+  // 完成后在底栏 SQL 左侧展示；请求开始清空、失败保持空
+  const [execTimeMs, setExecTimeMs] = useState<number | null>(null);
+  // 查询进行中的实时走秒：100ms 步进的墙钟耗时，完成后定格为服务端耗时
+  const [liveMs, setLiveMs] = useState(0);
+  useEffect(() => {
+    if (!loading) return;
+    const start = Date.now();
+    setLiveMs(0);
+    const timer = setInterval(() => setLiveMs(Date.now() - start), 100);
+    return () => clearInterval(timer);
+  }, [loading]);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { menuState, menuTarget, openMenu, closeMenu } = useContextMenu();
@@ -514,6 +532,7 @@ export const DataTable = memo(function DataTable({
           undefined
         );
         setCurrentSql(query);
+        setExecTimeMs(null);
         // useTransaction:false —— 表数据浏览读的是已提交数据，绝不能被
         // 别处（如查询 Tab 的手动事务）的活跃事务捕获后随其回滚
         const [colResult, dataResult] = await Promise.all([
@@ -546,6 +565,7 @@ export const DataTable = memo(function DataTable({
           setRowData(data);
           setLoadError(null);
           setHasLoaded(true);
+          setExecTimeMs(dataResult.execution_time_ms ?? null);
         }
       } catch (err: unknown) {
         if (requestId !== reqIdRef.current) return;
@@ -2114,6 +2134,35 @@ export const DataTable = memo(function DataTable({
           )}
         </Space>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
+          {/* 耗时徽标：固定占位宽（含加载态骨架），SQL 文本位置不随之横跳 */}
+          <Tooltip title={t('common.dataGrid.queryTime')}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                flexShrink: 0,
+                width: 72,
+                fontSize: 11,
+                color: 'var(--text-tertiary)',
+                fontFamily: 'var(--font-family-code)',
+                fontVariantNumeric: 'tabular-nums',
+                visibility: hasLoaded ? 'visible' : 'hidden',
+              }}
+              data-testid="data-table-exec-time"
+            >
+              {loading ? (
+                <span data-testid="data-table-exec-time-live">{fmtLiveMs(liveMs)}</span>
+              ) : execTimeMs !== null ? (
+                <>
+                  <ClockCircleOutlined style={{ fontSize: 11 }} />
+                  {execTimeMs < 1000 ? `${execTimeMs} ms` : `${(execTimeMs / 1000).toFixed(2)} s`}
+                </>
+              ) : (
+                <span style={{ opacity: 0.4 }}>--</span>
+              )}
+            </span>
+          </Tooltip>
           <code
             style={{
               flex: 1,

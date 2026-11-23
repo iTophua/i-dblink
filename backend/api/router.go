@@ -141,6 +141,11 @@ type Handler struct {
 	tunnel *TunnelManager
 }
 
+// GetDBTypeFor 返回连接的数据库类型（App 层 SQL 优化上下文收集用）。
+func (h *Handler) GetDBTypeFor(connectionID string) (string, error) {
+	return h.mgr.GetDBType(connectionID)
+}
+
 // getConnAndType 获取连接执行器和数据库类型
 func (h *Handler) getConnAndType(connectionID string) (db.Executor, string, error) {
 	exec, err := h.mgr.GetExecutor(connectionID, "")

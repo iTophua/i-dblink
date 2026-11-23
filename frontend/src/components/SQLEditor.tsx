@@ -16,6 +16,7 @@ import {
 } from 'antd';
 import { ExpandAltOutlined, CopyOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { SQLOptimizePanel } from './SQLEditor/components/SQLOptimizePanel';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { api } from '../api';
 import { Events } from '@wailsio/runtime';
@@ -298,6 +299,27 @@ export function SQLEditor({
   } = useSqlDialectDetection(connectionId, dbType, sql, setSql);
 
   // 执行前守卫：结果集里有未提交编辑时先确认——重新执行会重建结果集并丢弃编辑
+  // ── AI SQL 优化：选中文本优先，否则整段（后端截取第一句）──
+  const [optimizeOpen, setOptimizeOpen] = useState(false);
+  const [optimizeSql, setOptimizeSql] = useState('');
+  const openOptimizePanel = useCallback(() => {
+    const editor = editorRef.current;
+    let target = '';
+    const selection = editor?.getSelection();
+    if (selection && !selection.isEmpty()) {
+      target = editor.getModel()?.getValueInRange(selection) || '';
+    }
+    if (!target.trim()) {
+      target = sql;
+    }
+    if (!target.trim()) {
+      message.warning(t('common.pleaseEnterSqlStatement'));
+      return;
+    }
+    setOptimizeSql(target.trim());
+    setOptimizeOpen(true);
+  }, [editorRef, sql, message, t]);
+
   const handleExecuteGuarded = useCallback(
     (explicitSql?: string) => {
       // 新一次执行后多结果默认回到第 1 个
@@ -859,6 +881,7 @@ export function SQLEditor({
         handleExecuteQuery={handleExecuteGuarded}
         stopQuery={stopQuery}
         showExplainPlan={showExplainPlan}
+        onOptimizeSQL={openOptimizePanel}
         execElapsed={execElapsed}
         formatSQL={formatSQL}
         isFormatted={isFormatted}
@@ -1094,6 +1117,15 @@ export function SQLEditor({
           // 延迟执行以确保状态更新
           setTimeout(() => handleExecuteGuarded(), 0);
         }}
+      />
+
+      {/* AI SQL 优化抽屉（执行计划 + 表结构上下文） */}
+      <SQLOptimizePanel
+        open={optimizeOpen}
+        onClose={() => setOptimizeOpen(false)}
+        connectionId={connectionId}
+        database={database}
+        sql={optimizeSql}
       />
     </div>
   );

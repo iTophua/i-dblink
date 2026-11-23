@@ -17,6 +17,8 @@ import {
   BadgeCheck,
   Bell,
   Bot,
+  Network,
+  BookOpenText,
   ChartColumn,
   ChartLine,
   Check,
@@ -75,6 +77,7 @@ import {
   Pin,
   Plus,
   RefreshCw,
+  Rocket,
   RotateCw,
   Save,
   Search,
@@ -155,6 +158,8 @@ function icon(Cmp: LucideIcon, opts?: { filled?: boolean; strokeWidth?: number }
 export const ApiOutlined = icon(Webhook);
 export const AppstoreOutlined = icon(LayoutGrid);
 export const ArrowDownOutlined = icon(ArrowDown);
+export const ApartmentOutlined = icon(Network);
+export const ReadOutlined = icon(BookOpenText);
 export const ArrowUpOutlined = icon(ArrowUp);
 export const BarChartOutlined = icon(ChartColumn);
 export const BellOutlined = icon(Bell);
@@ -225,6 +230,7 @@ export const PushpinOutlined = icon(Pin);
 export const QuestionCircleOutlined = icon(CircleHelp);
 export const ReloadOutlined = icon(RotateCw);
 export const RobotOutlined = icon(Bot);
+export const RocketOutlined = icon(Rocket);
 export const SafetyCertificateOutlined = icon(BadgeCheck);
 export const SafetyOutlined = icon(ShieldCheck);
 export const SaveOutlined = icon(Save);

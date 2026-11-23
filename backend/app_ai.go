@@ -3,10 +3,14 @@ package backend
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"idblink/backend/ai"
+	"idblink/backend/api"
+	"idblink/backend/models"
 )
 
 // ==================== AI DTO 类型 ====================
@@ -313,6 +317,185 @@ func (a *App) GetAIStatus() (AIStatusResponse, error) {
 		Enabled: a.aiManager.IsEnabled(),
 		Ready:   a.aiManager.IsReady(),
 	}, nil
+}
+
+// ==================== SQL 优化上下文收集 ====================
+
+// SQLOptimizeContext SQL 优化的真实上下文（喂给 AI 的证据材料）。
+// ExplainPlan/TableDDL 任一缺失时携带 Warnings，AI prompt 会如实说明。
+type SQLOptimizeContext struct {
+	DbType      string   `json:"dbType"`
+	ExplainPlan string   `json:"explainPlan,omitempty"`
+	TableDDL    string   `json:"tableDdl,omitempty"`
+	Warnings    []string `json:"warnings,omitempty"`
+}
+
+// 优化上下文的体量上限：防止长 EXPLAIN / 宽表 DDL 撑爆 LLM 上下文
+const (
+	optimizeExplainLimit = 8 * 1024
+	optimizeDDLLimit     = 16 * 1024
+	optimizeDDLPerTable  = 4 * 1024
+	optimizeMaxTables    = 5
+)
+
+// PrepareSQLOptimize 为 AI SQL 优化收集真实上下文：执行计划 + 涉及表 DDL。
+// 前端拿到后连同待优化 SQL 一起发起 sql-optimize 流式任务。
+// 所有收集步骤 best-effort：失败记入 warnings 并继续（AI 仍可基于 SQL 分析）。
+func (a *App) PrepareSQLOptimize(connectionID string, sql string, database string) (SQLOptimizeContext, error) {
+	if err := a.ensureConnected(connectionID); err != nil {
+		return SQLOptimizeContext{}, err
+	}
+	dbType, err := a.handler.GetDBTypeFor(connectionID)
+	if err != nil {
+		return SQLOptimizeContext{}, err
+	}
+	ctx := SQLOptimizeContext{DbType: dbType}
+
+	// 多语句只优化第一句（与编辑器"执行选中/当前语句"语义一致）
+	stmt := firstSQLStatement(sql)
+	if stmt == "" {
+		return SQLOptimizeContext{}, fmt.Errorf("empty SQL statement")
+	}
+
+	// 1) 执行计划：失败降级（TDengine 等无 EXPLAIN 的库照样可用）
+	if explainSQL, err := api.BuildExplainSQL(dbType, stmt); err != nil {
+		ctx.Warnings = append(ctx.Warnings, err.Error())
+	} else {
+		qCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		useTx := false
+		result, err := a.executeQueryCore(qCtx, connectionID, explainSQL, &database, &useTx, "", nil)
+		cancel()
+		if err != nil || result.Error != "" {
+			reason := err.Error()
+			if result.Error != "" {
+				reason = result.Error
+			}
+			ctx.Warnings = append(ctx.Warnings, "EXPLAIN failed: "+reason)
+		} else {
+			ctx.ExplainPlan = truncate(resultToText(&result), optimizeExplainLimit)
+		}
+	}
+
+	// 2) 涉及表 DDL：正则提取 FROM/JOIN/UPDATE/INTO 后的表名（含 db 前缀），
+	//    逐表取建表语句（含索引定义）。识别不到或取失败都不阻断。
+	var ddlBuilder strings.Builder
+	for i, tn := range extractTableNames(stmt) {
+		if i >= optimizeMaxTables {
+			ctx.Warnings = append(ctx.Warnings, fmt.Sprintf("too many tables referenced, only first %d analyzed", optimizeMaxTables))
+			break
+		}
+		table, schema, db := splitTableName(tn)
+		if db == "" {
+			db = database
+		}
+		dbPtr, schemaPtr := &db, &schema
+		if schema == "" {
+			schemaPtr = nil
+		}
+		stmtDDL, err := a.GetTableDDLWithSchema(connectionID, table, dbPtr, schemaPtr)
+		if err != nil {
+			ctx.Warnings = append(ctx.Warnings, fmt.Sprintf("DDL for %s: %v", tn, err))
+			continue
+		}
+		ddl := strings.Join(stmtDDL, "\n")
+		if ddlBuilder.Len() > 0 {
+			ddlBuilder.WriteString("\n\n")
+		}
+		ddlBuilder.WriteString(truncate(ddl, optimizeDDLPerTable))
+		if ddlBuilder.Len() >= optimizeDDLLimit {
+			break
+		}
+	}
+	ctx.TableDDL = ddlBuilder.String()
+
+	return ctx, nil
+}
+
+// firstSQLStatement 截取第一条语句：首个不在引号内的分号前的内容。
+func firstSQLStatement(sql string) string {
+	var quote byte
+	for i := 0; i < len(sql); i++ {
+		c := sql[i]
+		switch {
+		case quote != 0:
+			if c == '\\' && (quote == '\'' || quote == '"') {
+				i++ // 跳过转义字符
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+		case c == ';':
+			return strings.TrimSpace(sql[:i])
+		}
+	}
+	return strings.TrimSpace(sql)
+}
+
+// resultToText 把查询结果拼成 LLM 可读的竖线分隔文本。
+func resultToText(r *models.QueryResult) string {
+	if len(r.Columns) == 0 && len(r.Rows) == 0 {
+		return "(no output)"
+	}
+	var b strings.Builder
+	b.WriteString(strings.Join(r.Columns, " | "))
+	for _, row := range r.Rows {
+		b.WriteString("\n")
+		for i, v := range row {
+			if i > 0 {
+				b.WriteString(" | ")
+			}
+			fmt.Fprintf(&b, "%v", v)
+		}
+	}
+	return b.String()
+}
+
+// tableNameRe 提取 FROM/JOIN/UPDATE/INSERT INTO/DELETE FROM 后的表引用
+// （支持 schema.table / db.table 限定，反引号/双引号包裹）。
+var tableNameRe = regexp.MustCompile(
+	`(?i)(?:from|join|update|into)\s+((?:[\x60"\[]?[\w$]+[\x60"\]]?\.)?[\x60"\[]?[\w$]+[\x60"\]]?)`)
+
+// extractTableNames 提取 SQL 中引用的表名（去重、排除子查询关键字）。
+func extractTableNames(sql string) []string {
+	skip := map[string]bool{
+		"select": true, "values": true, "dual": true, "set": true,
+		"lateral": true, "unnest": true, "final": true,
+	}
+	// `db`.`t` / [db].[t] 形式逐段去引号再拼回
+	strip := func(part string) string {
+		return strings.Trim(strings.Trim(strings.Trim(strings.Trim(part, "`"), `"`), "["), "]")
+	}
+	var names []string
+	seen := make(map[string]bool)
+	for _, m := range tableNameRe.FindAllStringSubmatch(sql, -1) {
+		parts := strings.Split(m[1], ".")
+		for i, p := range parts {
+			parts[i] = strip(p)
+		}
+		raw := strings.Join(parts, ".")
+		lower := strings.ToLower(raw)
+		if lower == "" || skip[lower] || seen[lower] {
+			continue
+		}
+		seen[lower] = true
+		names = append(names, raw)
+	}
+	return names
+}
+
+// splitTableName 拆开 a.b.c 形式的表引用：返回 (table, schema, database)。
+// 两段式按 PG 语义视为 schema.table；三段式为 db.schema.table。
+func splitTableName(ref string) (table, schema, database string) {
+	parts := strings.Split(ref, ".")
+	switch len(parts) {
+	case 1:
+		return parts[0], "", ""
+	case 2:
+		return parts[1], parts[0], ""
+	default:
+		return parts[len(parts)-1], parts[len(parts)-2], parts[0]
+	}
 }
 
 // ==================== 辅助函数 ====================
