@@ -426,4 +426,6 @@ export const DB_VERSIONS: Record<DatabaseType, string[]> = {
   kingbase: ['V8R3', 'V8R6'],
   highgo: ['HG5', 'HG6'],
   vastbase: ['VB3', 'VB5'],
+  clickhouse: ['23.3', '23.8', '24.3', '24.8'],
+  tdengine: ['3.0', '3.1', '3.3'],
 };

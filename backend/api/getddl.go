@@ -127,6 +127,26 @@ func getTableDDL(pool *db.DBPool, tableName string, database string, schema stri
 			}
 		}
 
+	case "clickhouse":
+		// CH 系原生 SHOW CREATE TABLE（含 ENGINE/ORDER BY 完整定义；视图同样适用）；
+		// 未传 database 时用连接 DSN 里的当前库（CH 默认 default，不会为空）
+		ctx := context.Background()
+		qualified := "`" + strings.ReplaceAll(tableName, "`", "``") + "`"
+		if database != "" {
+			qualified = "`" + strings.ReplaceAll(database, "`", "``") + "`." + qualified
+		}
+		var tn, stmt string
+		if err := db.QueryRowContext(ctx, "SHOW CREATE TABLE "+qualified).Scan(&tn, &stmt); err == nil && stmt != "" {
+			ddls = append(ddls, stmt)
+		}
+
+	case "tdengine":
+		// TDengine 无 SHOW CREATE：从 DESCRIBE 重建近似 DDL
+		ctx := context.Background()
+		if stmt, err := tdengineGetTableDDL(ctx, pool.DB(), tableName, database); err == nil && stmt != "" {
+			ddls = append(ddls, stmt)
+		}
+
 	case "dameng", "kingbase":
 		ctx := context.Background()
 		schema := database

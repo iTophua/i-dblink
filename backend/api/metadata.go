@@ -49,6 +49,10 @@ func (h *Handler) GetDatabases(w http.ResponseWriter, r *http.Request) {
 		databases, err = damengGetDatabases(ctx, exec)
 	case "sqlserver":
 		databases, err = sqlserverGetDatabases(ctx, exec)
+	case "clickhouse":
+		databases, err = clickhouseGetDatabases(ctx, exec)
+	case "tdengine":
+		databases, err = tdengineGetDatabases(ctx, exec)
 	case "oracle":
 		databases, err = oracleGetDatabases(ctx, exec)
 	default:
@@ -97,6 +101,14 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 		tables, err = damengGetTables(ctx, exec, req.Database)
 	case "sqlserver":
 		tables, err = sqlserverGetTables(ctx, exec, req.Database)
+	case "clickhouse", "tdengine":
+		var r models.TablesResult
+		if dbType == "clickhouse" {
+			r, err = clickhouseGetTablesCategorized(ctx, exec, req.Database, nil)
+		} else {
+			r, err = tdengineGetTablesCategorized(ctx, exec, req.Database, nil)
+		}
+		tables = append(r.Tables, r.Views...)
 	case "oracle":
 		tables, err = oracleGetTables(ctx, exec, req.Database)
 	default:
@@ -148,6 +160,10 @@ func (h *Handler) GetTablesCategorized(w http.ResponseWriter, r *http.Request) {
 		result, err = damengGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	case "sqlserver":
 		result, err = sqlserverGetTablesCategorized(ctx, exec, req.Database, req.Search)
+	case "clickhouse":
+		result, err = clickhouseGetTablesCategorized(ctx, exec, req.Database, req.Search)
+	case "tdengine":
+		result, err = tdengineGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	case "oracle":
 		result, err = oracleGetTablesCategorized(ctx, exec, req.Database, req.Search)
 	default:
@@ -201,6 +217,10 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 		columns, err = damengGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "sqlserver":
 		columns, err = sqlserverGetColumns(ctx, exec, *req.TableName, req.Database, nil)
+	case "clickhouse":
+		columns, err = clickhouseGetColumns(ctx, exec, *req.TableName, req.Database)
+	case "tdengine":
+		columns, err = tdengineGetColumns(ctx, exec, *req.TableName, req.Database)
 	case "oracle":
 		columns, err = oracleGetColumns(ctx, exec, *req.TableName, req.Database)
 	default:
@@ -252,6 +272,10 @@ func (h *Handler) GetAllColumns(w http.ResponseWriter, r *http.Request) {
 		result, err = damengGetAllColumns(ctx, exec, req.Database)
 	case "sqlserver":
 		result, err = sqlserverGetAllColumns(ctx, exec, req.Database)
+	case "clickhouse":
+		result, err = clickhouseGetAllColumns(ctx, exec, req.Database)
+	case "tdengine":
+		result, err = tdengineGetAllColumns(ctx, exec, req.Database)
 	case "oracle":
 		result, err = oracleGetAllColumns(ctx, exec, req.Database)
 	default:
@@ -308,6 +332,8 @@ func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 		indexes, err = damengGetIndexes(ctx, exec, *req.TableName, req.Database)
 	case "sqlserver":
 		indexes, err = sqlserverGetIndexes(ctx, exec, *req.TableName, req.Database, nil)
+	case "clickhouse", "tdengine":
+		indexes = []models.IndexInfo{} // 无传统二级索引
 	case "oracle":
 		indexes, err = oracleGetIndexes(ctx, exec, *req.TableName, req.Database)
 	default:
@@ -361,6 +387,8 @@ func (h *Handler) GetForeignKeys(w http.ResponseWriter, r *http.Request) {
 		fks, err = damengGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	case "sqlserver":
 		fks, err = sqlserverGetForeignKeys(ctx, exec, *req.TableName, req.Database, nil)
+	case "clickhouse", "tdengine":
+		fks = []models.ForeignKeyInfo{} // 无外键
 	case "oracle":
 		fks, err = oracleGetForeignKeys(ctx, exec, *req.TableName, req.Database)
 	default:
@@ -414,6 +442,10 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 		structure, err = damengGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "sqlserver":
 		structure, err = sqlserverGetTableStructure(ctx, exec, *req.TableName, req.Database, req.Schema)
+	case "clickhouse":
+		structure, err = clickhouseGetTableStructure(ctx, exec, *req.TableName, req.Database)
+	case "tdengine":
+		structure, err = tdengineGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "oracle":
 		structure, err = oracleGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	default:

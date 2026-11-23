@@ -79,7 +79,11 @@ const OFFICIAL_PATHS: Record<
   },
 };
 
-const TEXT_ICONS: Record<string, { color: string; text: string }> = {};
+// 无官方 SVG 的新类型：文字徽标兜底
+const TEXT_ICONS: Record<string, { color: string; text: string }> = {
+  clickhouse: { color: DB_TYPE_COLORS.clickhouse, text: 'CH' },
+  tdengine: { color: DB_TYPE_COLORS.tdengine, text: 'TD' },
+};
 
 function OfficialSvgIcon({
   icon,
@@ -188,6 +192,8 @@ export function DatabaseIconWithLabel({ type, size = 20 }: DatabaseIconProps) {
       kingbase: 'KingBase',
       highgo: 'HighGo',
       vastbase: 'VastBase',
+      clickhouse: 'ClickHouse',
+      tdengine: 'TDengine',
     }[type] || type;
 
   return (

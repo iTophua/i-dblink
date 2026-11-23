@@ -8,7 +8,9 @@ export type DatabaseType =
   | 'dameng'
   | 'kingbase'
   | 'highgo'
-  | 'vastbase';
+  | 'vastbase'
+  | 'clickhouse'
+  | 'tdengine';
 
 export type ConnectionStatus = 'connected' | 'disconnected' | 'loading';
 

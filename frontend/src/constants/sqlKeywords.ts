@@ -13,6 +13,9 @@ export const DB_GROUP_MAP: Record<DatabaseType, DbGroup> = {
   kingbase: 'pg-like',
   highgo: 'pg-like',
   vastbase: 'pg-like',
+  // CH/TD 关键字库暂复用 mysql-like（两者语法都大量沿用 MySQL 风格）
+  clickhouse: 'mysql-like',
+  tdengine: 'mysql-like',
 };
 
 export interface SqlKeyword {

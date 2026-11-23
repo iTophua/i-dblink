@@ -44,7 +44,9 @@ export interface ConnectionFormData {
     | 'dameng'
     | 'kingbase'
     | 'highgo'
-    | 'vastbase';
+    | 'vastbase'
+    | 'clickhouse'
+    | 'tdengine';
   host: string;
   port: number;
   username: string;
@@ -87,6 +89,8 @@ const DB_TYPE_PORTS: Record<string, number> = {
   kingbase: 5432,
   highgo: 5866,
   vastbase: 5432,
+  clickhouse: 8123,
+  tdengine: 6041,
 };
 
 const DB_TYPE_OPTIONS = [
@@ -100,6 +104,8 @@ const DB_TYPE_OPTIONS = [
   { value: 'kingbase', label: i18n.t('common.kingbaseLabel'), descKey: 'common.dbDescKingbase' },
   { value: 'highgo', label: i18n.t('common.highgoLabel'), descKey: 'common.dbDescHighgo' },
   { value: 'vastbase', label: i18n.t('common.vastbaseLabel'), descKey: 'common.dbDescVastbase' },
+  { value: 'clickhouse', label: 'ClickHouse', descKey: 'common.dbDescClickhouse' },
+  { value: 'tdengine', label: 'TDengine', descKey: 'common.dbDescTdengine' },
 ];
 
 const DB_CATEGORIES = [
@@ -114,6 +120,10 @@ const DB_CATEGORIES = [
   {
     nameKey: 'common.dbCategoryDomestic',
     dbs: ['dameng', 'kingbase', 'highgo', 'vastbase'],
+  },
+  {
+    nameKey: 'common.dbCategoryAnalytics',
+    dbs: ['clickhouse', 'tdengine'],
   },
 ];
 
@@ -193,6 +203,8 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
     | 'kingbase'
     | 'highgo'
     | 'vastbase'
+    | 'clickhouse'
+    | 'tdengine'
   >(editingData?.dbType || 'mysql');
   const testCancelledRef = useRef(false);
 

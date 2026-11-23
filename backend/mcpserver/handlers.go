@@ -594,6 +594,10 @@ func defaultPortForDBType(dbType string) int {
 		return 5236
 	case "kingbase":
 		return 54321
+	case "clickhouse":
+		return 8123
+	case "tdengine":
+		return 6041
 	default:
 		return 0
 	}

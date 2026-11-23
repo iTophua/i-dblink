@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"idblink/backend/db"
 	"idblink/backend/models"
 )
 
@@ -69,10 +70,13 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 开始导入事务（私有会话，与其他会话隔离）
-	if err := h.mgr.BeginTransaction(req.ConnectionID, importTxSession); err != nil {
-		writeJSONError(w, fmt.Sprintf("begin transaction failed: %v", err))
-		return
+	// 开始导入事务（私有会话，与其他会话隔离）；
+	// ClickHouse/TDengine 无交互式事务，跳过包装直接逐句执行（各自原子提交）
+	if db.SupportsTx(dbType) {
+		if err := h.mgr.BeginTransaction(req.ConnectionID, importTxSession); err != nil {
+			writeJSONError(w, fmt.Sprintf("begin transaction failed: %v", err))
+			return
+		}
 	}
 
 	var successCount, failedCount int
@@ -236,7 +240,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := h.mgr.CommitTransaction(req.ConnectionID, importTxSession); err != nil {
+	if _, err := h.mgr.CommitTransaction(req.ConnectionID, importTxSession); err != nil && db.SupportsTx(dbType) {
 		// 提交失败，尝试回滚
 		_, _ = h.mgr.RollbackTransaction(req.ConnectionID, importTxSession)
 		writeJSONError(w, fmt.Sprintf("commit failed: %v", err))

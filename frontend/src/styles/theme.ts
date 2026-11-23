@@ -487,6 +487,8 @@ export const DB_TYPE_COLORS: Record<string, string> = {
   kingbase: '#003FA0',
   highgo: '#008080',
   vastbase: '#FE9500',
+  clickhouse: '#F9C33C', // ClickHouse 品牌黄（AIoTHouse 同类型沿用）
+  tdengine: '#00AAE7', // TDengine 品牌蓝
   default: '#4479A1',
 };
 

@@ -408,6 +408,11 @@ func (m *Manager) BeginTransaction(connectionID, sessionID string) error {
 	if !ok {
 		return fmt.Errorf("connection %s not found", connectionID)
 	}
+	// ClickHouse/TDengine 无交互式事务：明确报错而非静默成功，
+	// 前端事务按钮据此提示（语句各自原子提交，无需事务也够用）
+	if !SupportsTx(info.dbType) {
+		return fmt.Errorf("%s does not support interactive transactions", info.dbType)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -619,7 +624,21 @@ func openDB(args ConnectArgs) (*sql.DB, error) {
 		return openSQLServer(args)
 	case "oracle":
 		return openOracle(args)
+	case "clickhouse":
+		return openClickHouse(args)
+	case "tdengine":
+		return openTDengine(args)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", args.DbType)
 	}
+}
+
+// SupportsTx 该类型是否支持交互式事务（BeginTransaction 的前置判断；
+// api 层导入流程也用它决定是否包事务）
+func SupportsTx(dbType string) bool {
+	switch dbType {
+	case "clickhouse", "tdengine":
+		return false
+	}
+	return true
 }

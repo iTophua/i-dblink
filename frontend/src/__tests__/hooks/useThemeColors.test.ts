@@ -59,7 +59,7 @@ describe('useThemeColors', () => {
     // 直接引用 theme.ts 的单一来源，避免测试里再养一份会过时的副本
     const dbColors = Object.entries(DB_TYPE_COLORS).filter(([k]) => k !== 'default');
 
-    expect(dbColors.length).toBe(10);
-    expect(new Set(dbColors.map(([, v]) => v)).size).toBe(10);
+    expect(dbColors.length).toBe(12);
+    expect(new Set(dbColors.map(([, v]) => v)).size).toBe(12);
   });
 });

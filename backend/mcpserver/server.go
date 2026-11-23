@@ -246,13 +246,14 @@ func (s *Server) registerConnectionTools() {
 		mcp.NewTool("create_connection",
 			mcp.WithDescription("Create a new database connection in iDBLink. "+
 				"The connection is saved persistently and can be used by other tools. "+
-				"Supported db_type: mysql, postgresql, oracle, sqlserver, sqlite, dameng, kingbase, highgo, vastbase. "+
+				"Supported db_type: mysql, postgresql, oracle, sqlserver, sqlite, dameng, kingbase, highgo, vastbase, clickhouse, tdengine. "+
+				"clickhouse covers ClickHouse-compatible forks (e.g. AIoTHouse) over the standard HTTP port. "+
 				"Set ssh_host (or ssh_enabled=true) to reach databases through an SSH tunnel."),
 			mcp.WithString("name", mcp.Required(),
 				mcp.Description("A human-readable name for this connection, e.g. 'Production MySQL'")),
 			mcp.WithString("db_type", mcp.Required(),
 				mcp.Description("Database type"),
-				mcp.Enum("mysql", "postgresql", "oracle", "sqlserver", "sqlite", "dameng", "kingbase", "highgo", "vastbase")),
+				mcp.Enum("mysql", "postgresql", "oracle", "sqlserver", "sqlite", "dameng", "kingbase", "highgo", "vastbase", "clickhouse", "tdengine")),
 			mcp.WithString("host", mcp.Required(),
 				mcp.Description("Database host address. With an SSH tunnel this is the database address as seen from the SSH host (e.g. 127.0.0.1 or an internal IP)")),
 			mcp.WithNumber("port",

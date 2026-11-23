@@ -40,6 +40,8 @@ const PRO_BADGE_TEXT: Record<string, string> = {
   sqlserver: 'Ms',
   sqlite: 'Lt',
   dameng: 'Dm',
+  clickhouse: 'CH',
+  tdengine: 'TD',
 };
 
 function getProBadgeClass(dbType: string): string {

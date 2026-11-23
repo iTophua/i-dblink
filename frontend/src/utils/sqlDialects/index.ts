@@ -30,6 +30,10 @@ const dialectRegistry: Record<DatabaseType, SqlDialect> = {
   kingbase: postgresDialect, // Kingbase 兼容 PostgreSQL
   highgo: postgresDialect, // HighGo 兼容 PostgreSQL
   vastbase: postgresDialect, // VastBase 兼容 PostgreSQL
+  // ClickHouse/TDengine：分页都是 MySQL 风格 LIMIT offset, limit
+  // （TDengine 语法大量沿用 MySQL），标识符同为反引号
+  clickhouse: mysqlDialect,
+  tdengine: mysqlDialect,
 };
 
 /**

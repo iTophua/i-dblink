@@ -15,14 +15,14 @@ import (
 
 // DocOptions 文档生成选项
 type DocOptions struct {
-	IncludeViews        bool `json:"include_views"`
-	IncludeProcedures   bool `json:"include_procedures"`
-	IncludeFunctions    bool `json:"include_functions"`
-	IncludeTriggers     bool `json:"include_triggers"`
-	IncludeIndexes      bool `json:"include_indexes"`
-	IncludeForeignKeys  bool `json:"include_foreign_keys"`
-	IncludeRowCounts    bool `json:"include_row_counts"`
-	IncludeDDL          bool `json:"include_ddl"`
+	IncludeViews       bool `json:"include_views"`
+	IncludeProcedures  bool `json:"include_procedures"`
+	IncludeFunctions   bool `json:"include_functions"`
+	IncludeTriggers    bool `json:"include_triggers"`
+	IncludeIndexes     bool `json:"include_indexes"`
+	IncludeForeignKeys bool `json:"include_foreign_keys"`
+	IncludeRowCounts   bool `json:"include_row_counts"`
+	IncludeDDL         bool `json:"include_ddl"`
 }
 
 // docText 文档生成文案（支持中英文）
@@ -260,6 +260,10 @@ func getTablesCategorized(ctx context.Context, exec db.Executor, dbType string, 
 		return damengGetTablesCategorized(ctx, exec, database, search)
 	case "sqlserver":
 		return sqlserverGetTablesCategorized(ctx, exec, database, search)
+	case "clickhouse":
+		return clickhouseGetTablesCategorized(ctx, exec, database, search)
+	case "tdengine":
+		return tdengineGetTablesCategorized(ctx, exec, database, search)
 	case "oracle":
 		return oracleGetTablesCategorized(ctx, exec, database, search)
 	default:
@@ -280,6 +284,10 @@ func getColumnsForDoc(ctx context.Context, exec db.Executor, dbType string, tabl
 		return damengGetColumns(ctx, exec, tableName, database)
 	case "sqlserver":
 		return sqlserverGetColumns(ctx, exec, tableName, database, nil)
+	case "clickhouse":
+		return clickhouseGetColumns(ctx, exec, tableName, database)
+	case "tdengine":
+		return tdengineGetColumns(ctx, exec, tableName, database)
 	case "oracle":
 		return oracleGetColumns(ctx, exec, tableName, database)
 	default:
@@ -300,6 +308,8 @@ func getIndexesForDoc(ctx context.Context, exec db.Executor, dbType string, tabl
 		return damengGetIndexes(ctx, exec, tableName, database)
 	case "sqlserver":
 		return sqlserverGetIndexes(ctx, exec, tableName, database, nil)
+	case "clickhouse", "tdengine":
+		return []models.IndexInfo{}, nil // 无传统二级索引
 	case "oracle":
 		return oracleGetIndexes(ctx, exec, tableName, database)
 	default:
@@ -320,6 +330,8 @@ func getForeignKeysForDoc(ctx context.Context, exec db.Executor, dbType string, 
 		return damengGetForeignKeys(ctx, exec, tableName, database)
 	case "sqlserver":
 		return sqlserverGetForeignKeys(ctx, exec, tableName, database, nil)
+	case "clickhouse", "tdengine":
+		return []models.ForeignKeyInfo{}, nil // 无外键
 	case "oracle":
 		return oracleGetForeignKeys(ctx, exec, tableName, database)
 	default:
