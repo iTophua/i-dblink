@@ -28,6 +28,8 @@ import { ResultGrid, ExplainPlanGrid } from './SQLEditor/ResultGrid';
 import { SnippetManager } from './SnippetManager';
 import { ParamDialog } from './ParamDialog';
 import { replaceParams } from '../utils/sqlParams';
+import { SQL_INJECT_EVENT, registerSqlReader } from '../utils/activeSqlRegistry';
+import type { SqlInjectDetail } from '../utils/activeSqlRegistry';
 import type { DatabaseType } from '../types/api';
 import { SqlDialectBanner } from './SqlDialectBanner';
 // Extracted hooks
@@ -402,19 +404,42 @@ export function SQLEditor({
     };
   }, []);
 
-  // 监听全局 AI SQL 注入事件（来自 AIChatPanel 的"应用到编辑器"）
+  // 监听 AI SQL 注入事件（AI 面板的「插入 / 替换」、SQL 优化抽屉、命令面板）。
+  // 工作区里可能同时挂着多个 SQL 标签页，事件都冒泡到 window：只响应发给当前 tab 的那一条，
+  // 否则一次应用会把所有已打开的 SQL 标签页一起改掉。
   useEffect(() => {
     const handler = (event: Event) => {
-      const { mode, sql } = (event as CustomEvent).detail;
-      if (mode === 'replace') {
-        setSql(sql);
+      const detail = (event as CustomEvent<SqlInjectDetail>).detail;
+      if (!detail || (detail.tabKey || null) !== (tabKey || null)) return;
+      if (detail.mode === 'replace') {
+        setSql(detail.sql);
       } else {
-        setSql((prev) => (prev ? prev + '\n' + sql : sql));
+        setSql((prev) => (prev ? prev + '\n' + detail.sql : detail.sql));
       }
     };
-    window.addEventListener('ai-sql-inject', handler);
-    return () => window.removeEventListener('ai-sql-inject', handler);
-  }, []);
+    window.addEventListener(SQL_INJECT_EVENT, handler);
+    return () => window.removeEventListener(SQL_INJECT_EVENT, handler);
+  }, [tabKey, setSql]);
+
+  // 向 AI 面板提供本 tab 的全文与选区（「引用当前 SQL」）
+  const sqlForReaderRef = useRef(sql);
+  useEffect(() => {
+    sqlForReaderRef.current = sql;
+  }, [sql]);
+  useEffect(() => {
+    if (!tabKey) return;
+    return registerSqlReader(tabKey, () => {
+      const editor = editorRef.current;
+      // 编辑器实例还没就绪（刚打开标签页）时退回 React 状态里的 SQL
+      if (!editor) return { sql: sqlForReaderRef.current, selection: '' };
+      const selection = editor.getSelection();
+      const selectedText =
+        selection && !selection.isEmpty()
+          ? editor.getModel()?.getValueInRange(selection) || ''
+          : '';
+      return { sql: editor.getValue(), selection: selectedText };
+    });
+  }, [tabKey, editorRef]);
 
   // Format SQL / 还原（互切）
   const formatSQL = useCallback(() => {
@@ -1126,6 +1151,7 @@ export function SQLEditor({
         connectionId={connectionId}
         database={database}
         sql={optimizeSql}
+        tabKey={tabKey}
       />
     </div>
   );

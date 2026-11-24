@@ -1,196 +1,95 @@
+import { createContext, memo, useContext } from 'react';
+import type { ComponentProps, JSX } from 'react';
 import ReactMarkdown from 'react-markdown';
+import type { ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
-import { Button, Tooltip } from 'antd';
-import { CopyOutlined, CheckCircleOutlined, CodeOutlined } from '@ant-design/icons';
-import { useState } from 'react';
-import { useThemeColors } from '../../hooks/useThemeColors';
+import { CodeBlock } from './CodeBlock';
+import '../../styles/ai-chat.css';
+
+export type SqlApplyMode = 'append' | 'replace';
 
 interface MarkdownRendererProps {
   content: string;
-  /** SQL 代码块额外的操作按钮（如"应用到编辑器"） */
-  onApplySQL?: (sql: string) => void;
+  /** 把 SQL 代码块写入编辑器；传入后 SQL 代码块显示「插入 / 替换」 */
+  onApplySQL?: (sql: string, mode: SqlApplyMode) => void;
+  /** SQL 代码块提供哪些写入方式，缺省只有「插入」 */
+  sqlApplyModes?: SqlApplyMode[];
+  /** 内容仍在流式输出（禁用写入编辑器） */
+  streaming?: boolean;
 }
 
-/**
- * AI 聊天消息的 Markdown 渲染器。
- * - 支持 GFM（表格、删除线等）
- * - 代码块语法高亮（react-syntax-highlighter）
- * - SQL 代码块额外提供"复制"和"应用到编辑器"按钮
- */
-export function MarkdownRenderer({ content, onApplySQL }: MarkdownRendererProps) {
+type MarkedProps<Tag extends keyof JSX.IntrinsicElements> = ComponentProps<Tag> & ExtraProps;
+
+/** 标记当前 code 位于代码围栏内（pre 之下），区别于行内代码 */
+const BlockCodeContext = createContext(false);
+
+/** 渲染器级的选项，经上下文传给各个代码块（react-markdown 的组件映射拿不到外层 props） */
+const RendererOptionsContext = createContext<MarkdownRendererProps>({ content: '' });
+
+/** react-markdown 不需要 pre 本身的 DOM，只借它把「这是代码块」传给里面的 code */
+function MarkdownPre({ children }: MarkedProps<'pre'>) {
+  return <BlockCodeContext.Provider value={true}>{children}</BlockCodeContext.Provider>;
+}
+
+function MarkdownCode({ children, className }: MarkedProps<'code'>) {
   const { t } = useTranslation();
+  const inBlock = useContext(BlockCodeContext);
+  const { onApplySQL, sqlApplyModes, streaming } = useContext(RendererOptionsContext);
 
+  // 只取这两个字段：props 里还夹着 react-markdown 的 node（非 DOM 属性），不能整体透传
+  if (!inBlock) {
+    return <code className="ai-md-code">{children}</code>;
+  }
+  const match = /language-(\w+)/.exec(className || '');
+  const language = (match?.[1] || 'text').toLowerCase();
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        code(props) {
-          const { children, className, ...rest } = props;
-          const match = /language-(\w+)/.exec(className || '');
-          const codeStr = String(children).replace(/\n$/, '');
-          const isSQL = match?.[1]?.toLowerCase() === 'sql';
-
-          // 行内代码（无 language- 前缀且无换行）用简单样式
-          if (!match && !codeStr.includes('\n')) {
-            return (
-              <code
-                {...rest}
-                style={{
-                  background: 'var(--background-hover)',
-                  padding: '1px 4px',
-                  borderRadius: 3,
-                  fontSize: 12,
-                }}
-              >
-                {children}
-              </code>
-            );
-          }
-
-          return (
-            <CodeBlock
-              code={codeStr}
-              language={match?.[1] || 'text'}
-              isSQL={isSQL}
-              onApplySQL={onApplySQL}
-              t={t}
-            />
-          );
-        },
-        // 段落间距紧凑
-        p: ({ children }) => <p style={{ margin: '4px 0' }}>{children}</p>,
-        // 标题样式
-        h1: ({ children }) => <h3 style={{ fontSize: 14, margin: '8px 0 4px' }}>{children}</h3>,
-        h2: ({ children }) => <h4 style={{ fontSize: 13, margin: '8px 0 4px' }}>{children}</h4>,
-        h3: ({ children }) => <h5 style={{ fontSize: 12, margin: '6px 0 4px' }}>{children}</h5>,
-        // 列表紧凑
-        ul: ({ children }) => <ul style={{ margin: '4px 0', paddingLeft: 18 }}>{children}</ul>,
-        ol: ({ children }) => <ol style={{ margin: '4px 0', paddingLeft: 18 }}>{children}</ol>,
-        li: ({ children }) => <li style={{ margin: '2px 0' }}>{children}</li>,
-        // 表格样式
-        table: ({ children }) => (
-          <table
-            style={{
-              borderCollapse: 'collapse',
-              width: '100%',
-              fontSize: 12,
-              margin: '6px 0',
-            }}
-          >
-            {children}
-          </table>
-        ),
-        th: ({ children }) => (
-          <th
-            style={{
-              border: '1px solid var(--border)',
-              padding: '4px 8px',
-              textAlign: 'left',
-              background: 'var(--background-hover)',
-            }}
-          >
-            {children}
-          </th>
-        ),
-        td: ({ children }) => (
-          <td style={{ border: '1px solid var(--border)', padding: '4px 8px' }}>{children}</td>
-        ),
+    <CodeBlock
+      code={String(children).replace(/\n$/, '')}
+      language={language}
+      isSQL={language === 'sql'}
+      onApplySQL={onApplySQL}
+      applyModes={sqlApplyModes}
+      streaming={streaming}
+      labels={{
+        copy: t('common.copy'),
+        copied: t('common.aiChat.codeCopied'),
+        insert: t('common.aiChat.insert'),
+        replace: t('common.aiChat.replace'),
+        insertHint: t('common.aiChat.insertHint'),
+        replaceHint: t('common.aiChat.replaceHint'),
       }}
-    >
-      {content}
-    </ReactMarkdown>
+    />
   );
 }
 
-/** 带语法高亮和操作按钮的代码块 */
-function CodeBlock({
-  code,
-  language,
-  isSQL,
-  onApplySQL,
-  t,
-}: {
-  code: string;
-  language: string;
-  isSQL: boolean;
-  onApplySQL?: (sql: string) => void;
-  t: (k: string) => string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const tc = useThemeColors();
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
+/** 表格外包一层横向滚动容器，宽表不会撑破侧栏 */
+function MarkdownTable({ children }: MarkedProps<'table'>) {
   return (
-    <div style={{ position: 'relative', margin: '6px 0', maxWidth: '100%', overflow: 'hidden' }}>
-      <SyntaxHighlighter
-        language={language}
-        // 语法主题跟随明暗（浅色模式不再白气泡里嵌深色代码岛），
-        // 背景与边框覆盖为主题变量，与编辑器底色一致
-        style={tc.isDark ? oneDark : oneLight}
-        customStyle={{
-          margin: 0,
-          borderRadius: 8,
-          fontSize: 12,
-          padding: '10px 12px',
-          background: 'var(--background)',
-          border: '1px solid var(--border)',
-          maxWidth: '100%',
-          overflowX: 'auto',
-        }}
-        codeTagProps={{ style: { fontFamily: 'var(--font-family-code, monospace)' } }}
-      >
-        {code}
-      </SyntaxHighlighter>
-      {/* 代码块右上角操作按钮 */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 4,
-          right: 4,
-          display: 'flex',
-          gap: 4,
-        }}
-      >
-        <Tooltip title={t('common.copy')}>
-          <Button
-            size="small"
-            type="text"
-            icon={copied ? <CheckCircleOutlined style={{ color: 'var(--color-success)' }} /> : <CopyOutlined />}
-            onClick={handleCopy}
-            style={{
-              color: 'var(--text-secondary)',
-              background: 'var(--background-hover)',
-              minWidth: 24,
-              height: 24,
-            }}
-          />
-        </Tooltip>
-        {isSQL && onApplySQL && (
-          <Tooltip title={t('common.aiChat.applyToEditor')}>
-            <Button
-              size="small"
-              type="text"
-              icon={<CodeOutlined />}
-              onClick={() => onApplySQL(code)}
-              style={{
-                color: 'var(--text-secondary)',
-                background: 'var(--background-hover)',
-                minWidth: 24,
-                height: 24,
-              }}
-            />
-          </Tooltip>
-        )}
-      </div>
+    <div className="ai-md-table-wrap">
+      <table>{children}</table>
     </div>
   );
 }
+
+/**
+ * AI 输出的 Markdown 渲染器（AI 面板、SQL 优化抽屉、文档生成弹窗共用）。
+ * - 支持 GFM（表格、删除线、任务列表）
+ * - 代码块语法高亮，跟随明暗主题；SQL 代码块可写入编辑器
+ * 样式集中在 styles/ai-chat.css 的 `.ai-md` 下。
+ */
+export const MarkdownRenderer = memo(function MarkdownRenderer(props: MarkdownRendererProps) {
+  const { content } = props;
+  return (
+    <div className="ai-md">
+      <RendererOptionsContext.Provider value={props}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{ pre: MarkdownPre, code: MarkdownCode, table: MarkdownTable }}
+        >
+          {content}
+        </ReactMarkdown>
+      </RendererOptionsContext.Provider>
+    </div>
+  );
+});

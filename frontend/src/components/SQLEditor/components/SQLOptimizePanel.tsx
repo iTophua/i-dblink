@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Drawer, Tag, Tooltip, App } from 'antd';
+import { Button, Drawer, Tag, Tooltip } from 'antd';
 import {
   RocketOutlined,
   CloseOutlined,
@@ -12,6 +12,8 @@ import { api } from '../../../api';
 import { streamAITask } from '../../../services/aiService';
 import { useAIStore } from '../../../stores/aiStore';
 import { MarkdownRenderer } from '../../AIChatPanel/MarkdownRenderer';
+import type { SqlApplyMode } from '../../AIChatPanel/MarkdownRenderer';
+import { injectSqlToEditor } from '../../../utils/activeSqlRegistry';
 import { useThemeColors } from '../../../hooks/useThemeColors';
 import type { SQLOptimizeContext } from '../../../api';
 
@@ -22,15 +24,20 @@ interface SQLOptimizePanelProps {
   database?: string | null;
   /** 待优化的 SQL（编辑器选中语句或当前语句，由调用方截取） */
   sql: string;
+  /** 所属 SQL tab key：优化结果只写回这个编辑器 */
+  tabKey?: string;
 }
+
+/** 优化结果一律整体替换编辑器内容，所以代码块只给「替换」一个动作 */
+const APPLY_MODES: SqlApplyMode[] = ['replace'];
 
 /**
  * SQL 优化抽屉：AI 基于真实执行计划 + 表结构给出慢 SQL 优化建议。
  *
  * 流程：打开即收集上下文（后端 PrepareSQLOptimize：EXPLAIN + 涉及表 DDL）
  * → 发起 sql-optimize 流式任务 → Markdown 流式渲染。
- * SQL 代码块通过 MarkdownRenderer 自带「复制 / 应用到编辑器」按钮应用，
- * 应用走全局 ai-sql-inject 事件（与 AIChatPanel 同一条注入链路）。
+ * SQL 代码块通过 MarkdownRenderer 自带的「复制 / 替换」应用，
+ * 走 ai-sql-inject 事件并带上所属 tabKey，只写回发起优化的那个编辑器。
  */
 export function SQLOptimizePanel({
   open,
@@ -38,12 +45,11 @@ export function SQLOptimizePanel({
   connectionId,
   database,
   sql,
+  tabKey,
 }: SQLOptimizePanelProps) {
   const { t } = useTranslation();
-  const { message } = App.useApp();
   const tc = useThemeColors();
   const checkStatus = useAIStore((s) => s.checkStatus);
-  const aiReady = useAIStore((s) => s.ready);
 
   const [collecting, setCollecting] = useState(false);
   const [streaming, setStreaming] = useState(false);
@@ -211,10 +217,10 @@ export function SQLOptimizePanel({
         {content && (
           <MarkdownRenderer
             content={content}
+            streaming={streaming}
+            sqlApplyModes={APPLY_MODES}
             onApplySQL={(optimized) =>
-              window.dispatchEvent(
-                new CustomEvent('ai-sql-inject', { detail: { mode: 'replace', sql: optimized } })
-              )
+              injectSqlToEditor({ mode: 'replace', sql: optimized, tabKey })
             }
           />
         )}

@@ -1,92 +1,125 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  Drawer,
-  Select,
-  Checkbox,
-  Button,
-  Input,
-  Space,
-  Tooltip,
-  Collapse,
-  Tag,
-  Popconfirm,
-  App,
-} from 'antd';
-import {
-  RobotOutlined,
-  PauseCircleOutlined,
-  SendOutlined,
-  DatabaseOutlined,
-  SettingOutlined,
-  DeleteOutlined,
-  LoadingOutlined,
-  UserOutlined,
-  CopyOutlined,
-  BulbOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { App, Button, Drawer, Popconfirm, Tooltip } from 'antd';
+import { PlusOutlined, RobotOutlined, SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { Connection } from '../../stores/appStore';
-import type { DatabaseType } from '../../types/api';
 import { useAIStore } from '../../stores/aiStore';
 import { useAIChatStore } from '../../stores/aiChatStore';
+import type { ChatMessage } from '../../stores/aiChatStore';
 import { streamChat } from '../../services/aiService';
-import { buildTableInfo } from '../../utils/buildTableInfo';
-import { MarkdownRenderer } from './MarkdownRenderer';
+import type { AIChatMessage } from '../../api';
+import {
+  buildSchemaContext,
+  buildSystemPrompt,
+  composeUserContent,
+  SCHEMA_MAX_CHARS,
+  sqlLabelFor,
+  toRequestHistory,
+} from '../../utils/aiChat';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import type { SqlInjectMode } from '../../utils/activeSqlRegistry';
+import { ContextBar } from './ContextBar';
+import { MessageList } from './MessageList';
+import { ChatEmptyState } from './EmptyState';
+import { buildQuickActions } from './quickActions';
+import type { QuickAction } from './quickActions';
+import { Composer } from './Composer';
+import { PanelErrorBoundary } from './PanelErrorBoundary';
+import type { AttachedSql, ComposerHandle } from './Composer';
+import '../../styles/ai-chat.css';
 
-const { TextArea } = Input;
+const DEFAULT_WIDTH = 496;
+const MIN_WIDTH = 380;
+const MAX_WIDTH = 880;
+/** 给左侧工作区至少留出的宽度 */
+const MIN_WORKSPACE_WIDTH = 360;
+const WIDTH_STORAGE_KEY = 'idblink.aiChatPanel.width';
+/** 流式增量合并刷帧间隔：降低整条消息列表的重渲染频率 */
+const CHUNK_FLUSH_MS = 40;
+
+function clampWidth(width: number): number {
+  const room = typeof window === 'undefined' ? MAX_WIDTH : window.innerWidth - MIN_WORKSPACE_WIDTH;
+  return Math.max(MIN_WIDTH, Math.min(width, MAX_WIDTH, room));
+}
+
+function loadPanelWidth(): number {
+  try {
+    const saved = Number(window.localStorage.getItem(WIDTH_STORAGE_KEY));
+    return saved >= MIN_WIDTH ? clampWidth(saved) : DEFAULT_WIDTH;
+  } catch {
+    return DEFAULT_WIDTH;
+  }
+}
+
+function savePanelWidth(width: number): void {
+  try {
+    window.localStorage.setItem(WIDTH_STORAGE_KEY, String(width));
+  } catch {
+    // 隐私模式等场景下写入失败不影响使用
+  }
+}
 
 export interface AIChatPanelProps {
   connections: Connection[];
   /** 连接树当前选中连接 ID（面板打开时自动跟随） */
   selectedConnectionId: string | null;
   /** 各连接已加载的数据库列表（用于上下文勾选） */
-  connectionDatabases: Record<
-    string,
-    { database: string; loaded: boolean }[]
-  >;
-  /** 应用 SQL 到编辑器（当前 SQL tab 追加/替换；无 SQL tab 新建） */
-  onApplySQL: (sql: string, mode: 'append' | 'replace') => void;
+  connectionDatabases: Record<string, { database: string; loaded: boolean }[]>;
+  /** 把 SQL 写入当前 SQL 标签页（追加/替换；没有 SQL 标签页则新建） */
+  onApplySQL: (sql: string, mode: SqlInjectMode) => void;
+  /** 读取当前活动 SQL 标签页的全文与选区；没有 SQL 标签页返回 null */
+  getActiveSql?: () => { sql: string; selection: string } | null;
   /** 打开 AI 设置 */
   onOpenSettings: () => void;
 }
 
+/**
+ * AI 助手侧栏：贴边停靠（非悬浮卡片），可拖拽调宽。
+ *
+ * 结构：标题栏 → 上下文条（连接/库/表）→ 消息流 → 输入区。
+ * 发送流程：先把用户消息与占位回复落进界面，再异步整理表结构上下文、发起流式请求；
+ * 增量按 40ms 合并刷帧，历史消息对象引用不变，流式时只重渲染最后一条。
+ */
 export function AIChatPanel({
   connections,
   selectedConnectionId,
   connectionDatabases,
   onApplySQL,
+  getActiveSql,
   onOpenSettings,
 }: AIChatPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { message } = App.useApp();
 
   const panelVisible = useAIChatStore((s) => s.panelVisible);
-  const setPanelVisible = useAIChatStore((s) => s.setPanelVisible);
   const chatMessages = useAIChatStore((s) => s.messages);
   const streaming = useAIChatStore((s) => s.streaming);
   const connectionId = useAIChatStore((s) => s.connectionId);
-  const selectedDatabases = useAIChatStore((s) => s.selectedDatabases);
-
-  const setConnection = useAIChatStore((s) => s.setConnection);
-  const setSelectedDatabases = useAIChatStore((s) => s.setSelectedDatabases);
-  const addUserMessage = useAIChatStore((s) => s.addUserMessage);
-  const startAssistantMessage = useAIChatStore((s) => s.startAssistantMessage);
-  const appendAssistantChunk = useAIChatStore((s) => s.appendAssistantChunk);
-  const finalizeAssistantMessage = useAIChatStore((s) => s.finalizeAssistantMessage);
+  const setPanelVisible = useAIChatStore((s) => s.setPanelVisible);
   const clearMessages = useAIChatStore((s) => s.clearMessages);
 
-  const ready = useAIStore((s) => s.ready);
   const enabled = useAIStore((s) => s.enabled);
+  const ready = useAIStore((s) => s.ready);
   const checkStatus = useAIStore((s) => s.checkStatus);
 
-  const [input, setInput] = useState('');
+  const [width, setWidth] = useState(loadPanelWidth);
+  const [draft, setDraft] = useState('');
+  const [attached, setAttached] = useState<AttachedSql | null>(null);
   const [statusChecking, setStatusChecking] = useState(true);
+
   const abortRef = useRef<AbortController | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messageListRef = useRef<HTMLDivElement>(null);
-  const nearBottomRef = useRef(true);
+  const streamIdRef = useRef('');
+  const pendingRef = useRef('');
+  const flushTimerRef = useRef<number | null>(null);
+  const startedAtRef = useRef(0);
+  const latestWidthRef = useRef(width);
+  const lastSyncedConnRef = useRef<string | null>(null);
+  const connectionsRef = useRef(connections);
+  const composerRef = useRef<ComposerHandle>(null);
+
+  useEffect(() => {
+    connectionsRef.current = connections;
+  }, [connections]);
 
   // 应用启动时检查 AI 状态
   useEffect(() => {
@@ -99,599 +132,380 @@ export function AIChatPanel({
     };
   }, [checkStatus]);
 
-  // 面板打开时自动跟随连接树选中项（仅首次或连接变化时）
-  const lastSyncedConnRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (panelVisible && selectedConnectionId && selectedConnectionId !== lastSyncedConnRef.current) {
-      lastSyncedConnRef.current = selectedConnectionId;
-      setConnection(selectedConnectionId);
-      // 默认勾选该连接所有已加载数据库
-      const dbs = (connectionDatabases[selectedConnectionId] || [])
-        .filter((d) => d.loaded)
-        .map((d) => d.database);
-      setSelectedDatabases(dbs);
-    }
-  }, [panelVisible, selectedConnectionId, connectionDatabases, setConnection, setSelectedDatabases]);
+  /** 把面板上下文切到某个连接，并默认勾选其已加载的库 */
+  const syncConnection = useCallback(
+    (connId: string) => {
+      const store = useAIChatStore.getState();
+      store.setConnection(connId);
+      store.setSelectedDatabases(
+        (connectionDatabases[connId] || []).filter((d) => d.loaded).map((d) => d.database)
+      );
+    },
+    [connectionDatabases]
+  );
 
-  // 流式输出时只有用户本来就在底部才自动滚动，避免打断向上翻看
+  // 面板打开时跟随连接树选中项（仅连接变化时），默认勾选该连接所有已加载数据库
   useEffect(() => {
-    if (nearBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (
+      !panelVisible ||
+      !selectedConnectionId ||
+      selectedConnectionId === lastSyncedConnRef.current
+    ) {
+      return;
     }
-  }, [chatMessages]);
+    lastSyncedConnRef.current = selectedConnectionId;
+    syncConnection(selectedConnectionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelVisible, selectedConnectionId]);
 
-  const handleMessageListScroll = useCallback(() => {
-    const el = messageListRef.current;
-    if (!el) return;
-    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  // 卸载时清掉未刷出的增量与定时器，并中止进行中的请求
+  useEffect(
+    () => () => {
+      if (flushTimerRef.current !== null) window.clearTimeout(flushTimerRef.current);
+      abortRef.current?.abort();
+    },
+    []
+  );
+
+  const availableDatabases = useMemo(
+    () =>
+      connectionId
+        ? (connectionDatabases[connectionId] || []).filter((d) => d.loaded).map((d) => d.database)
+        : [],
+    [connectionId, connectionDatabases]
+  );
+
+  const quickActions = useMemo(() => buildQuickActions(t, i18n.language), [t, i18n.language]);
+
+  const flushPending = useCallback(() => {
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    const text = pendingRef.current;
+    if (!text) return;
+    pendingRef.current = '';
+    useAIChatStore.getState().appendAssistantChunk(streamIdRef.current, text);
   }, []);
 
-  // 当前连接信息
-  const currentConn = connections.find((c) => c.id === connectionId);
-  const currentDbType = (currentConn?.db_type as DatabaseType) || 'mysql';
+  const queueChunk = useCallback(
+    (chunk: string) => {
+      pendingRef.current += chunk;
+      if (flushTimerRef.current !== null) return;
+      flushTimerRef.current = window.setTimeout(flushPending, CHUNK_FLUSH_MS);
+    },
+    [flushPending]
+  );
 
-  // 可选数据库列表（该连接已加载的库）
-  const availableDatabases = connectionId
-    ? (connectionDatabases[connectionId] || []).filter((d) => d.loaded).map((d) => d.database)
-    : [];
+  /**
+   * 发送一轮请求。regenerate=true 时不新增用户消息：丢掉末尾那条回复，
+   * 沿用它的提问重新生成（重试失败、停止后继续、重新生成共用这条路径）。
+   */
+  const sendPrompt = useCallback(
+    async (text: string, options?: { attachedSql?: string; regenerate?: boolean }) => {
+      const store = useAIChatStore.getState();
+      if (store.streaming) return;
+      const regenerate = !!options?.regenerate;
+      const content = text.trim();
+      if (!regenerate && !content) return;
+      if (!useAIStore.getState().ready) {
+        message.warning(t('common.aiSettings.notConfigured'));
+        return;
+      }
 
-  const sendPrompt = useCallback(async (raw: string) => {
-    const trimmed = raw.trim();
-    if (!trimmed || streaming) return;
+      const language = i18n.language;
+      const sqlLabel = sqlLabelFor(language);
+      const source: ChatMessage[] = regenerate ? store.messages.slice(0, -1) : store.messages;
+      const history = toRequestHistory(source, sqlLabel);
+      if (regenerate && history[history.length - 1]?.role !== 'user') return;
+      const userContent = regenerate
+        ? history[history.length - 1].content
+        : composeUserContent(content, options?.attachedSql, sqlLabel);
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let assistantId: string;
+      if (regenerate) {
+        useAIChatStore.getState().removeMessage(store.messages[store.messages.length - 1].id);
+        assistantId = useAIChatStore.getState().startAssistantMessage();
+      } else {
+        useAIChatStore.getState().addUserMessage(content, options?.attachedSql);
+        assistantId = useAIChatStore.getState().startAssistantMessage();
+      }
+      streamIdRef.current = assistantId;
+      startedAtRef.current = performance.now();
+
+      // 新对话会作废进行中的流：被作废的流收尾时不能再改写状态
+      const isCurrent = () => streamIdRef.current === assistantId;
+      const finish = (status: 'done' | 'error' | 'stopped', error?: string) => {
+        if (!isCurrent()) return;
+        flushPending();
+        useAIChatStore.getState().finishAssistantMessage(assistantId, {
+          status,
+          error,
+          elapsedMs: performance.now() - startedAtRef.current,
+        });
+        if (abortRef.current === controller) abortRef.current = null;
+      };
+
+      try {
+        const schema = await buildSchemaContext({
+          connectionId: store.connectionId,
+          databases: store.selectedDatabases,
+          tables: store.selectedTables,
+        });
+        // 整理上下文期间点了停止：这条回复还没开始，直接撤掉占位
+        if (controller.signal.aborted) {
+          if (isCurrent()) {
+            streamIdRef.current = '';
+            useAIChatStore.getState().removeMessage(assistantId);
+          }
+          if (abortRef.current === controller) abortRef.current = null;
+          return;
+        }
+        if (schema.chars > SCHEMA_MAX_CHARS) {
+          finish(
+            'error',
+            t('common.aiChat.contextTooLarge', { n: Math.round(schema.chars / 1000) })
+          );
+          return;
+        }
+        const dbType = connectionsRef.current.find((c) => c.id === store.connectionId)?.db_type;
+        const requestMessages: AIChatMessage[] = [
+          {
+            role: 'system',
+            content: buildSystemPrompt({ dbType, schemaText: schema.text, language }),
+          },
+          ...(regenerate ? history.slice(0, -1) : history),
+          { role: 'user', content: userContent },
+        ];
+        await streamChat(requestMessages, queueChunk, undefined, controller.signal);
+        finish(controller.signal.aborted ? 'stopped' : 'done');
+      } catch (err) {
+        finish('error', getErrorMessage(err));
+      }
+    },
+    [message, t, i18n.language, queueChunk, flushPending]
+  );
+
+  const handleSend = useCallback(() => {
+    if (streaming || !draft.trim()) return;
     if (!ready) {
       message.warning(t('common.aiSettings.notConfigured'));
       return;
     }
+    const sql = attached?.sql;
+    setDraft('');
+    setAttached(null);
+    sendPrompt(draft, { attachedSql: sql });
+  }, [streaming, draft, attached, ready, message, t, sendPrompt]);
 
-    // 1. 先更新 UI（即时反馈）+ 设置 streaming=true 防止并发发送
-    //    在此之后 buildTableInfo 期间用户无法再次点发送
-    addUserMessage(trimmed);
-    startAssistantMessage();
-    setInput('');
+  const handleRegenerate = useCallback(() => {
+    sendPrompt('', { regenerate: true });
+  }, [sendPrompt]);
 
-    try {
-      // 2. 异步构建表结构上下文（可能耗时数秒，在 UI 已更新后执行）
-      const tableInfo = await buildTableInfo(connectionId || '', selectedDatabases);
-      const systemPrompt = buildSystemPrompt(currentDbType, tableInfo);
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort(); // 流以已完成部分收尾，随后按 stopped 落状态
+  }, []);
 
-      // 3. 构建发给后端的消息列表
-      //    历史消息从 chatMessages 闭包取值（此时不含刚 add 的用户消息，因为 React 未重渲染），
-      //    当前用户消息单独 append
-      const historyMessages = chatMessages.map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
+  /** 引用当前 SQL：有选区只引用选区，否则引用整个编辑器 */
+  const pickActiveSql = useCallback((): { sql: string; selection: string } | undefined => {
+    const snapshot = getActiveSql?.();
+    const selection = snapshot?.selection.trim();
+    const sql = selection || snapshot?.sql.trim();
+    return sql ? { sql, selection: selection ?? '' } : undefined;
+  }, [getActiveSql]);
 
-      const requestMessages = [
-        { role: 'system' as const, content: systemPrompt },
-        ...historyMessages,
-        { role: 'user' as const, content: trimmed },
-      ];
-
-      // 4. 流式发送（错误统一由 catch 处理，不传 onError 避免重复追加）
-      const controller = new AbortController();
-      abortRef.current = controller;
-      await streamChat(requestMessages, (chunk) => appendAssistantChunk(chunk), undefined, controller.signal);
-      abortRef.current = null;
-      finalizeAssistantMessage();
-    } catch (err) {
-      appendAssistantChunk(`\n\n[Error] ${getErrorMessage(err)}`);
-      abortRef.current = null;
-      finalizeAssistantMessage();
+  const handleAttachSql = useCallback(() => {
+    const picked = pickActiveSql();
+    if (!picked) {
+      message.info(t('common.aiChat.noSqlToAttach'));
+      return;
     }
-  }, [
-    streaming, ready, connectionId, selectedDatabases, currentDbType,
-    chatMessages, addUserMessage, startAssistantMessage, appendAssistantChunk,
-    finalizeAssistantMessage, setInput, message, t,
-  ]);
+    setAttached({ sql: picked.sql, partial: !!picked.selection });
+    composerRef.current?.focus();
+  }, [pickActiveSql, message, t]);
 
-  const handleSend = useCallback(() => {
-    sendPrompt(input);
-  }, [input, sendPrompt]);
-
-  const handleRetry = useCallback(() => {
-    const lastUser = [...chatMessages].reverse().find((m) => m.role === 'user');
-    if (lastUser) sendPrompt(lastUser.content);
-  }, [chatMessages, sendPrompt]);
-
-  const handleApplySQL = useCallback(
-    (sql: string) => {
-      onApplySQL(sql, 'append');
-      message.success(t('common.aiChat.applied'));
+  const runQuickAction = useCallback(
+    (action: QuickAction, target?: string) => {
+      let picked: { sql: string; selection: string } | undefined;
+      if (action.requiresSql) {
+        picked = pickActiveSql();
+        if (!picked) {
+          message.info(t('common.aiChat.noSqlToAttach'));
+          return;
+        }
+      }
+      // 「转换方言」必须先选目标数据库
+      if (action.key === 'convert' && !target) return;
+      const prompt =
+        typeof action.prompt === 'function' ? action.prompt(target ?? '') : action.prompt;
+      if (action.autoSend) {
+        sendPrompt(prompt, { attachedSql: picked?.sql });
+        return;
+      }
+      setDraft(prompt);
+      setAttached(picked ? { sql: picked.sql, partial: !!picked.selection } : null);
+      composerRef.current?.focus();
     },
-    [onApplySQL, message, t]
+    [pickActiveSql, sendPrompt, message, t]
   );
 
-  const handleCopyMessage = useCallback(
-    (text: string) => {
-      navigator.clipboard.writeText(text).then(
-        () => message.success(t('common.copiedToClipboard')),
-        () => message.error(t('common.copyFailed'))
-      );
+  const handleCopy = useCallback(
+    async (text: string) => {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        message.error(t('common.copyFailed'));
+        return false;
+      }
     },
     [message, t]
   );
 
-  const handleStop = useCallback(() => {
-    if (!abortRef.current) return;
-    appendAssistantChunk(`\n\n${t('common.aiChat.stopped')}`);
-    abortRef.current.abort(); // streamChat 以已完成部分 resolve，随后正常 finalize
-  }, [appendAssistantChunk, t]);
+  const handleApplySql = useCallback(
+    (sql: string, mode: SqlInjectMode) => {
+      onApplySQL(sql, mode);
+      message.success(
+        mode === 'replace' ? t('common.aiChat.replacedInEditor') : t('common.aiChat.applied')
+      );
+    },
+    [onApplySQL, message, t]
+  );
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  const handleNewChat = useCallback(() => {
+    abortRef.current?.abort();
+    streamIdRef.current = '';
+    pendingRef.current = '';
+    clearMessages();
+    setAttached(null);
+    composerRef.current?.focus();
+  }, [clearMessages]);
 
-  const dbTypeLabel = currentDbType.toUpperCase();
+  const lastMessage = chatMessages[chatMessages.length - 1];
+  const aiUnavailable = !enabled || !ready;
 
   return (
     <Drawer
+      placement="right"
+      size={width}
+      resizable={{
+        onResize: (size) => {
+          const next = clampWidth(size);
+          latestWidthRef.current = next;
+          setWidth(next);
+        },
+        onResizeEnd: () => savePanelWidth(latestWidthRef.current),
+      }}
+      mask={false}
+      open={panelVisible}
+      onClose={() => setPanelVisible(false)}
+      afterOpenChange={(open) => {
+        if (open) composerRef.current?.focus();
+      }}
+      rootClassName="ai-chat-drawer-root"
+      className="ai-chat-drawer"
+      closable={{ placement: 'end' }}
       title={
-        <Space size={8}>
-          <span
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: 8,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'var(--color-primary-alpha-15)',
-              color: 'var(--color-primary)',
-            }}
-          >
+        <span className="ai-chat-title">
+          <span className="ai-chat-title-icon">
             <RobotOutlined />
           </span>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>{t('common.ai')}</span>
-          {currentConn && (
-            <Tag bordered={false} style={{ fontSize: 10 }}>
-              {dbTypeLabel}
-            </Tag>
-          )}
-        </Space>
+          {t('common.ai')}
+        </span>
       }
-      placement="right"
-      width={496}
-      mask={false}
-      onClose={() => setPanelVisible(false)}
-      open={panelVisible}
-      className="ai-chat-drawer"
-      styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
       extra={
+        !statusChecking &&
+        !aiUnavailable &&
         chatMessages.length > 0 && (
           <Popconfirm
-            title={t('common.aiChat.clearHistory')}
+            title={t('common.aiChat.newChatConfirm')}
             okText={t('common.confirm')}
             cancelText={t('common.cancel')}
-            onConfirm={() => clearMessages()}
+            onConfirm={handleNewChat}
           >
-            <Button
-              size="small"
-              type="text"
-              aria-label={t('common.aiChat.clearHistory')}
-              icon={<DeleteOutlined />}
-            />
+            <Tooltip title={t('common.aiChat.newChat')}>
+              <Button
+                type="text"
+                size="small"
+                icon={<PlusOutlined />}
+                aria-label={t('common.aiChat.newChat')}
+                data-testid="ai-new-chat"
+              />
+            </Tooltip>
           </Popconfirm>
         )
       }
-    >
-      {statusChecking ? (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            color: 'var(--text-tertiary)',
-            fontSize: 12,
-          }}
-        >
-          <LoadingOutlined />
-          {t('common.aiChat.checking')}
-        </div>
-      ) : !enabled || !ready ? (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            padding: '0 32px',
-            textAlign: 'center',
-          }}
-        >
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 14,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'var(--color-primary-alpha-15)',
-              color: 'var(--color-primary)',
-              fontSize: 22,
-            }}
-          >
-            <RobotOutlined />
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>
-            {t('common.aiSettings.notConfigured')}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-            {t('common.aiChat.notConfiguredHint')}
-          </div>
-          <Button type="primary" icon={<SettingOutlined />} onClick={onOpenSettings}>
-            {t('common.aiSettings.goToSettings')}
-          </Button>
-        </div>
-      ) : (
-        <>
-          {/* ── 上下文配置区 ── */}
-          <div
-            style={{
-              padding: '10px 12px 6px',
-              borderBottom: '1px solid var(--border)',
-              background: 'var(--background-toolbar)',
-              flexShrink: 0,
-            }}
-          >
-            {/* 连接选择 */}
-            <Select
-              value={connectionId || undefined}
-              onChange={(v) => {
-                setConnection(v);
-                const dbs = (connectionDatabases[v] || []).filter((d) => d.loaded).map((d) => d.database);
-                setSelectedDatabases(dbs);
-              }}
-              placeholder={t('common.aiChat.selectConnection')}
-              size="small"
-              style={{ width: '100%', marginBottom: 6 }}
-              options={connections.map((c) => ({
-                value: c.id,
-                label: `${c.name} (${c.db_type.toUpperCase()})`,
-              }))}
-              showSearch
-              optionFilterProp="label"
-            />
-
-            {/* 数据库勾选 */}
-            {availableDatabases.length > 0 && (
-              <Collapse
-                ghost
-                size="small"
-                defaultActiveKey={['ctx']}
-                items={[{
-                  key: 'ctx',
-                  label: (
-                    <Space size={4}>
-                      <DatabaseOutlined style={{ fontSize: 11 }} />
-                      <span style={{ fontSize: 12 }}>{t('common.aiChat.context')}</span>
-                      <Tag color="blue" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>
-                        {selectedDatabases.length}
-                      </Tag>
-                    </Space>
-                  ),
-                  children: (
-                    <div style={{ maxHeight: 100, overflow: 'auto' }}>
-                      <Checkbox.Group
-                        value={selectedDatabases}
-                        onChange={(checked) => setSelectedDatabases(checked as string[])}
-                        style={{ width: '100%' }}
-                      >
-                        <Space orientation="vertical" size={2} style={{ width: '100%' }}>
-                          {availableDatabases.map((db) => (
-                            <Checkbox key={db} value={db} style={{ fontSize: 12 }}>
-                              {db}
-                            </Checkbox>
-                          ))}
-                        </Space>
-                      </Checkbox.Group>
-                      {availableDatabases.length > 1 && (
-                        <Space size={8} style={{ marginTop: 4 }}>
-                          <Button
-                            size="small"
-                            type="link"
-                            style={{ fontSize: 11, padding: 0, height: 'auto' }}
-                            onClick={() => setSelectedDatabases(availableDatabases)}
-                          >
-                            {t('common.aiChat.selectAll')}
-                          </Button>
-                          <Button
-                            size="small"
-                            type="link"
-                            style={{ fontSize: 11, padding: 0, height: 'auto' }}
-                            onClick={() => setSelectedDatabases([])}
-                          >
-                            {t('common.aiChat.selectNone')}
-                          </Button>
-                        </Space>
-                      )}
-                    </div>
-                  ),
-                }]}
-              />
-            )}
-          </div>
-
-          {/* ── 消息列表 ── */}
-          <div
-            ref={messageListRef}
-            onScroll={handleMessageListScroll}
-            style={{ flex: 1, overflow: 'auto', padding: '14px 14px 8px' }}
-          >
-            {chatMessages.length === 0 ? (
-              <div
-                style={{
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 12px',
-                  textAlign: 'center',
-                }}
-              >
-                <div
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'var(--color-primary-alpha-15)',
-                    color: 'var(--color-primary)',
-                    fontSize: 20,
-                  }}
-                >
-                  <RobotOutlined />
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>
-                  {t('common.aiChat.emptyTitle')}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                  {t('common.aiChat.emptyHint')}
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6,
-                    width: '100%',
-                    marginTop: 16,
-                  }}
-                >
-                  {(['suggestExplain', 'suggestOptimize', 'suggestDdl'] as const).map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className="ai-chat-suggestion"
-                      onClick={() => setInput(t(`common.aiChat.${key}`))}
-                    >
-                      <BulbOutlined />
-                      <span>{t(`common.aiChat.${key}`)}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              chatMessages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  onApplySQL={handleApplySQL}
-                  onCopy={handleCopyMessage}
-                  onRetry={handleRetry}
-                />
-              ))
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* ── 输入区 ── */}
-          <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'flex-end',
-                gap: 8,
-                padding: '6px 6px 6px 10px',
-                border: '1px solid var(--border)',
-                borderRadius: 12,
-                background: 'var(--surface-elevated)',
-                transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-              }}
-            >
-              <TextArea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t('common.aiChat.inputPlaceholder')}
-                autoSize={{ minRows: 1, maxRows: 4 }}
-                variant="borderless"
-                style={{
-                  flex: 1,
-                  fontSize: 13,
-                  padding: '4px 0',
-                  resize: 'none',
-                  background: 'transparent',
-                }}
-              />
-              {streaming && (
-                <Button
-                  type="text"
-                  danger
-                  size="small"
-                  icon={<PauseCircleOutlined />}
-                  onClick={handleStop}
-                  title={t('common.aiChat.stopGeneration')}
-                />
-              )}
-              <Button
-                type="primary"
-                shape="circle"
-                size="small"
-                icon={streaming ? <LoadingOutlined /> : <SendOutlined />}
-                onClick={handleSend}
-                disabled={streaming || !input.trim()}
-                aria-label={t('common.aiChat.send')}
-              />
-            </div>
-            <div
-              style={{
-                marginTop: 6,
-                fontSize: 11,
-                color: 'var(--text-tertiary)',
-                textAlign: 'right',
-              }}
-            >
-              {t('common.aiChat.disclaimer')}
-            </div>
-          </div>
-        </>
-      )}
-    </Drawer>
-  );
-}
-
-/** 单条消息：用户=淡主色气泡；助手=无气泡正文 + 复制/重试操作 */
-function MessageBubble({
-  msg,
-  onApplySQL,
-  onCopy,
-  onRetry,
-}: {
-  msg: { role: 'user' | 'assistant'; content: string; streaming?: boolean; sqlBlocks?: string[] };
-  onApplySQL: (sql: string) => void;
-  onCopy: (text: string) => void;
-  onRetry: () => void;
-}) {
-  const { t } = useTranslation();
-  const isUser = msg.role === 'user';
-  const hasError = !isUser && /\[Error\]/.test(msg.content);
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 8,
-        alignItems: 'flex-start',
-        flexDirection: isUser ? 'row-reverse' : 'row',
-        marginBottom: 14,
-        maxWidth: '100%',
+      styles={{
+        header: { padding: '0 10px 0 16px' },
+        body: { padding: 0, display: 'flex', flexDirection: 'column' },
       }}
     >
-      {/* 头像 */}
-      <div
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 8,
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: isUser ? 'var(--color-primary)' : 'var(--color-primary-alpha-15)',
-          color: isUser ? 'var(--surface-elevated)' : 'var(--color-primary)',
-          fontSize: 12,
-        }}
-      >
-        {isUser ? <UserOutlined /> : <RobotOutlined />}
-      </div>
-
-      <div
-        style={{
-          minWidth: 0,
-          maxWidth: 'calc(100% - 34px)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: isUser ? 'flex-end' : 'flex-start',
-        }}
-      >
-        {isUser ? (
+      <PanelErrorBoundary>
+        {statusChecking ? (
+          <div className="ai-chat-center ai-chat-muted" data-testid="ai-chat-checking">
+            <span className="ai-thinking-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            {t('common.aiChat.checking')}
+          </div>
+        ) : aiUnavailable ? (
           <div
-            style={{
-              background: 'var(--color-primary-alpha-15)',
-              border: '1px solid var(--color-primary-alpha-30)',
-              color: 'var(--text-primary)',
-              padding: '6px 10px',
-              borderRadius: '12px 2px 12px 12px',
-              fontSize: 13,
-              lineHeight: 1.5,
-              whiteSpace: 'pre-wrap',
-              overflowWrap: 'anywhere',
-            }}
+            className="ai-chat-center ai-chat-not-configured"
+            data-testid="ai-chat-not-configured"
           >
-            {msg.content}
+            <div className="ai-chat-empty-hero">
+              <RobotOutlined />
+            </div>
+            <div className="ai-chat-empty-title">{t('common.aiSettings.notConfigured')}</div>
+            <div className="ai-chat-empty-hint">{t('common.aiChat.notConfiguredHint')}</div>
+            <Button type="primary" icon={<SettingOutlined />} onClick={onOpenSettings}>
+              {t('common.aiSettings.goToSettings')}
+            </Button>
           </div>
         ) : (
           <>
-            <div
-              style={{
-                fontSize: 13,
-                lineHeight: 1.6,
-                color: hasError ? 'var(--color-error)' : 'var(--text-primary)',
-                overflowWrap: 'anywhere',
-                maxWidth: '100%',
-                minWidth: 0,
-              }}
-            >
-              <MarkdownRenderer content={msg.content || ''} onApplySQL={onApplySQL} />
-              {msg.streaming && (
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                  <LoadingOutlined /> ...
-                </span>
-              )}
-            </div>
-            {!msg.streaming && msg.content && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 4 }}>
-                <Tooltip title={t('common.aiChat.copyMessage')}>
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<CopyOutlined />}
-                    style={{ fontSize: 11, color: 'var(--text-tertiary)' }}
-                    onClick={() => onCopy(msg.content)}
-                  />
-                </Tooltip>
-                {hasError && (
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<ReloadOutlined />}
-                    style={{ fontSize: 11, color: 'var(--color-primary)' }}
-                    onClick={onRetry}
-                  >
-                    {t('common.aiChat.retry')}
-                  </Button>
-                )}
-              </div>
-            )}
+            <ContextBar
+              connections={connections}
+              connectionId={connectionId}
+              availableDatabases={availableDatabases}
+              onSelectConnection={syncConnection}
+            />
+            <MessageList
+              messages={chatMessages}
+              canRegenerate={!streaming && lastMessage?.role === 'assistant'}
+              onCopy={handleCopy}
+              onRegenerate={handleRegenerate}
+              applySql={handleApplySql}
+              empty={
+                <ChatEmptyState
+                  actions={quickActions}
+                  hasContext={!!connectionId}
+                  contextName={connections.find((c) => c.id === connectionId)?.name}
+                  onAction={runQuickAction}
+                />
+              }
+            />
+            <Composer
+              ref={composerRef}
+              value={draft}
+              onChange={setDraft}
+              onSend={handleSend}
+              onStop={handleStop}
+              streaming={streaming}
+              attached={attached}
+              onDetach={() => setAttached(null)}
+              canAttachSql={!!getActiveSql?.()}
+              onAttachSql={handleAttachSql}
+              quickActions={quickActions}
+              onQuickAction={runQuickAction}
+            />
           </>
         )}
-      </div>
-    </div>
+      </PanelErrorBoundary>
+    </Drawer>
   );
-}
-
-/** 构建 system prompt（含数据库类型 + 表结构上下文） */
-function buildSystemPrompt(dbType: string, tableInfo: string): string {
-  let prompt = `你是一个 ${dbType} 数据库专家助手。帮助用户编写、分析、优化 SQL。\n\n`;
-  prompt += `要求：\n`;
-  prompt += `- 生成的 SQL 必须符合 ${dbType} 方言语法\n`;
-  prompt += `- SQL 代码放在 \`\`\`sql 代码块中\n`;
-  prompt += `- 解释用简洁的中文\n`;
-  if (tableInfo) {
-    prompt += `\n当前数据库的表结构（格式：库名.表名 (字段1 类型, 字段2 类型, ...)）：\n${tableInfo}\n`;
-    prompt += `\n跨库查询时请使用"库名.表名"的完整引用格式。\n`;
-  }
-  return prompt;
 }

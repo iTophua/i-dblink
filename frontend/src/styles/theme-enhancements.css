@@ -2441,56 +2441,6 @@
   font-size: 12px;
 }
 
-/* AI 聊天面板：右侧内嵌圆角卡片
-   antd v6 的可见容器是 .ant-drawer-section（v5 的 .ant-drawer-content 已不存在），
-   外层留 8px 露出底下的工作区，不再整块贴边、也不再全屏压暗 */
-/* className 落在 section 自身上（不是祖先），所以两个类名要连写 */
-.ant-drawer-section.ai-chat-drawer {
-  margin: 8px;
-  width: calc(100% - 16px);
-  height: calc(100% - 16px);
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--surface-elevated);
-  box-shadow: var(--shadow-panel);
-  overflow: hidden;
-}
-
-.ai-chat-drawer .ant-drawer-header {
-  background: transparent !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-
-.ai-chat-drawer .ant-drawer-body {
-  background: transparent !important;
-}
-
-/* 空会话的建议问题：整行可点，轻量描边 */
-.ai-chat-suggestion {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.ai-chat-suggestion:hover {
-  background: var(--background-hover);
-  border-color: var(--border-dark, var(--border));
-  color: var(--text-primary);
-}
-
 /* 表列表视图：列头拖宽手柄 */
 .tablelist-col-resize-handle {
   position: absolute;

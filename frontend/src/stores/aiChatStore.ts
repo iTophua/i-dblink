@@ -1,14 +1,27 @@
 import { create } from 'zustand';
 
+/** assistant 回复的结束方式：正常 / 失败 / 用户中止 */
+export type AssistantStatus = 'streaming' | 'done' | 'error' | 'stopped';
+
 /** 界面展示的聊天消息（仅 user/assistant，system prompt 发送时动态拼接） */
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  /** assistant 消息流式输出中 */
-  streaming?: boolean;
-  /** 从内容中提取的 SQL 代码块（供复制/应用到编辑器） */
-  sqlBlocks?: string[];
+  /** 仅 assistant */
+  status?: AssistantStatus;
+  /** status=error 时的失败原因 */
+  error?: string;
+  /** 仅 assistant：从发出请求到结束的耗时（毫秒） */
+  elapsedMs?: number;
+  /** 仅 user：随消息一并发给模型的编辑器 SQL（界面以引用块回显） */
+  attachedSql?: string;
+}
+
+export interface FinishResult {
+  status: Exclude<AssistantStatus, 'streaming'>;
+  error?: string;
+  elapsedMs?: number;
 }
 
 interface AIChatState {
@@ -19,38 +32,43 @@ interface AIChatState {
 
   // 上下文
   connectionId: string | null;
-  /** 用户勾选的数据库（纳入表结构上下文） */
+  /** 纳入表结构上下文的数据库 */
   selectedDatabases: string[];
+  /** 表级筛选：db → 表名列表。未出现的库表示整库纳入 */
+  selectedTables: Record<string, string[]>;
 
   // Actions
   setPanelVisible: (v: boolean) => void;
   setConnection: (connId: string | null) => void;
-  toggleDatabase: (db: string) => void;
   setSelectedDatabases: (dbs: string[]) => void;
-  addUserMessage: (content: string) => void;
-  /** 创建一条空的 assistant 消息（流式开始时） */
-  startAssistantMessage: () => void;
-  /** 流式追加内容到最后一条 assistant 消息 */
-  appendAssistantChunk: (chunk: string) => void;
-  /** 流结束：标记 streaming=false，提取 sqlBlocks */
-  finalizeAssistantMessage: () => void;
+  setDatabaseTables: (db: string, tables: string[] | null) => void;
+  /** 追加用户消息，返回消息 id */
+  addUserMessage: (content: string, attachedSql?: string) => string;
+  /** 创建一条空的 assistant 消息（流式开始时），返回消息 id */
+  startAssistantMessage: () => string;
+  /** 向指定 assistant 消息追加内容 */
+  appendAssistantChunk: (id: string, chunk: string) => void;
+  /** 流结束：写入状态、失败原因与耗时 */
+  finishAssistantMessage: (id: string, result: FinishResult) => void;
+  removeMessage: (id: string) => void;
   clearMessages: () => void;
-}
-
-/** 从文本中提取所有 ```sql 代码块内容 */
-function extractSqlBlocks(text: string): string[] {
-  const blocks: string[] = [];
-  const re = /```(?:sql)?\s*\n([\s\S]*?)\n```/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    blocks.push(m[1].trim());
-  }
-  return blocks;
 }
 
 /** 生成唯一消息 ID */
 function genId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function updateMessage(
+  messages: ChatMessage[],
+  id: string,
+  patch: (msg: ChatMessage) => ChatMessage
+): ChatMessage[] {
+  const idx = messages.findIndex((m) => m.id === id);
+  if (idx < 0) return messages;
+  const next = messages.slice();
+  next[idx] = patch(next[idx]);
+  return next;
 }
 
 export const useAIChatStore = create<AIChatState>((set) => ({
@@ -59,58 +77,73 @@ export const useAIChatStore = create<AIChatState>((set) => ({
   streaming: false,
   connectionId: null,
   selectedDatabases: [],
+  selectedTables: {},
 
   setPanelVisible: (v) => set({ panelVisible: v }),
 
+  // 换连接即清空库/表选择：库表属于旧连接，带过去没有意义
   setConnection: (connId) =>
-    set({ connectionId: connId, selectedDatabases: [] }),
+    set({ connectionId: connId, selectedDatabases: [], selectedTables: {} }),
 
-  toggleDatabase: (db) =>
+  setSelectedDatabases: (dbs) =>
+    set((s) => ({
+      selectedDatabases: dbs,
+      // 已移出范围的库，其表级筛选一并丢弃
+      selectedTables: Object.fromEntries(
+        Object.entries(s.selectedTables).filter(([db]) => dbs.includes(db))
+      ),
+    })),
+
+  // tables 传 null 表示恢复整库
+  setDatabaseTables: (db, tables) =>
     set((s) => {
-      const has = s.selectedDatabases.includes(db);
-      return {
-        selectedDatabases: has
-          ? s.selectedDatabases.filter((d) => d !== db)
-          : [...s.selectedDatabases, db],
-      };
+      const next = { ...s.selectedTables };
+      if (tables === null) delete next[db];
+      else next[db] = tables;
+      return { selectedTables: next };
     }),
 
-  setSelectedDatabases: (dbs) => set({ selectedDatabases: dbs }),
-
-  addUserMessage: (content) =>
+  addUserMessage: (content, attachedSql) => {
+    const id = genId();
     set((s) => ({
-      messages: [...s.messages, { id: genId(), role: 'user', content }],
+      messages: [...s.messages, { id, role: 'user', content, attachedSql }],
       streaming: true,
-    })),
+    }));
+    return id;
+  },
 
-  startAssistantMessage: () =>
+  startAssistantMessage: () => {
+    const id = genId();
     set((s) => ({
-      messages: [...s.messages, { id: genId(), role: 'assistant', content: '', streaming: true }],
+      messages: [...s.messages, { id, role: 'assistant', content: '', status: 'streaming' }],
+      streaming: true,
+    }));
+    return id;
+  },
+
+  // 只替换目标消息对象，其余消息保持引用不变 → 列表里的历史消息可以跳过重渲染
+  appendAssistantChunk: (id, chunk) =>
+    set((s) => ({
+      messages: updateMessage(s.messages, id, (m) => ({ ...m, content: m.content + chunk })),
     })),
 
-  appendAssistantChunk: (chunk) =>
-    set((s) => {
-      const msgs = [...s.messages];
-      const last = msgs[msgs.length - 1];
-      if (last && last.role === 'assistant') {
-        msgs[msgs.length - 1] = { ...last, content: last.content + chunk };
-      }
-      return { messages: msgs };
-    }),
+  finishAssistantMessage: (id, result) =>
+    set((s) => ({
+      messages: updateMessage(s.messages, id, (m) => ({
+        ...m,
+        status: result.status,
+        error: result.error,
+        elapsedMs: result.elapsedMs,
+      })),
+      streaming: false,
+    })),
 
-  finalizeAssistantMessage: () =>
-    set((s) => {
-      const msgs = [...s.messages];
-      const last = msgs[msgs.length - 1];
-      if (last && last.role === 'assistant') {
-        msgs[msgs.length - 1] = {
-          ...last,
-          streaming: false,
-          sqlBlocks: extractSqlBlocks(last.content),
-        };
-      }
-      return { messages: msgs, streaming: false };
-    }),
+  // 移除的是正在流式输出的那条时，一并结束 streaming（如整理上下文期间点了停止）
+  removeMessage: (id) =>
+    set((s) => ({
+      messages: s.messages.filter((m) => m.id !== id),
+      streaming: false,
+    })),
 
   clearMessages: () => set({ messages: [], streaming: false }),
 }));

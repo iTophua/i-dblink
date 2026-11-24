@@ -65,6 +65,13 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   经 popup-result:request/data 事件从源 SQLEditor 取快照；快照语义不联动）
 - **关窗=隐藏不退出**：红绿灯关闭只是 Hide（状态全保留），退出走托盘菜单/⌘Q；
   dock 角标显示执行中查询数（NSDockTile CGO，backend/window_appearance_darwin.go）
+- **SQL 写入编辑器必须带目标 tab**：`ai-sql-inject` 事件冒泡到 window，所有已打开的
+  SQL 标签页都在监听，不带 `tabKey` 会把每个标签页的内容一起改掉。统一走
+  `utils/activeSqlRegistry.ts`：写入用 `injectSqlToEditor({ mode, sql, tabKey })`，
+  读「当前 SQL」用 `registerSqlReader` / `readSqlFromEditor`（SQLEditor 挂载时按 tabKey 登记）
+- **AI 助手面板**（`components/AIChatPanel/`，样式在 `styles/ai-chat.css`）：全局 `code`/`pre`
+  规则会套进高亮代码块里形成多层框并把正文染红，`CodeBlock` 已逐项覆盖，改渲染器后
+  要实际看一眼代码块；`MarkdownRenderer` 同时被 SQL 优化抽屉、文档生成弹窗复用
 - **i18n 大部分已接入**（2026-10 实测）：2035 个 key、双语言全对齐（此前 12 个
   en 缺失已补）。剩余硬编码中文约 387 行/52 文件，大头在数据类内容
   （`constants/sqlFunctions.ts` 函数文档 61 行、`convertRules.ts` 26 行等）；

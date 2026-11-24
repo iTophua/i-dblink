@@ -42,6 +42,8 @@ import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { api, EventsOn } from '../api';
 import { getErrorMessage } from '../utils/getErrorMessage';
+import { injectSqlToEditor, readSqlFromEditor } from '../utils/activeSqlRegistry';
+import type { SqlInjectMode } from '../utils/activeSqlRegistry';
 import { useConnectionManager } from './MainLayout/hooks/useConnectionManager';
 import { useTabManager } from './MainLayout/hooks/useTabManager';
 import { useLayoutActions } from './MainLayout/hooks/useLayoutActions';
@@ -106,12 +108,13 @@ function MainLayoutComponent() {
     });
   }, [connMgr.selectedConnectionId, connMgr.connections, tabMgr.activeTabInfo]);
 
-  // AI 面板"应用到编辑器"：注入 SQL 到当前 SQL tab，无 SQL tab 则自动新建
+  // AI 面板 / 命令面板把 SQL 写入编辑器：当前是 SQL tab 就只发给这个 tab
+  // （多个 SQL 标签页同时挂着，不带 tabKey 会全部被改写），否则自动新建一个
   const handleInjectSQL = useCallback(
-    (sql: string, mode: 'append' | 'replace') => {
+    (sql: string, mode: SqlInjectMode) => {
       const info = tabPanelRef.current?.getActiveTabInfo();
-      if (info?.type === 'sql') {
-        window.dispatchEvent(new CustomEvent('ai-sql-inject', { detail: { mode, sql } }));
+      if (info?.type === 'sql' && info.key) {
+        injectSqlToEditor({ mode, sql, tabKey: info.key });
       } else {
         tabPanelRef.current?.openSqlTab({
           connectionId: info?.connectionId || connMgr.selectedConnectionId || undefined,
@@ -122,6 +125,12 @@ function MainLayoutComponent() {
     },
     [connMgr.selectedConnectionId, connMgr.selectedDatabase]
   );
+
+  // AI 面板「引用当前 SQL」的数据源：活动 SQL tab 的全文与选区
+  const getActiveSql = useCallback(() => {
+    const info = tabPanelRef.current?.getActiveTabInfo();
+    return info?.type === 'sql' && info.key ? readSqlFromEditor(info.key) : null;
+  }, []);
 
   // ── ⌘K 全域命令面板（动作/连接/表/片段/历史 五类索引）──
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -845,6 +854,7 @@ function MainLayoutComponent() {
         selectedConnectionId={connMgr.selectedConnectionId}
         connectionDatabases={connMgr.connectionDatabases}
         onApplySQL={handleInjectSQL}
+        getActiveSql={getActiveSql}
         onOpenSettings={() =>
           window.dispatchEvent(new CustomEvent('menu-action', { detail: { action: 'options' } }))
         }
