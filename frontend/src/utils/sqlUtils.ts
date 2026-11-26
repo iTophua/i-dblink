@@ -19,16 +19,52 @@ export function escapeSqlValue(value: unknown, dbType?: string): string {
   return getDialect(dbType).escapeValue(value);
 }
 
+export interface SplitSqlOptions {
+  /**
+   * 字符串里的反斜杠是不是转义符。只有 MySQL 系（和 ClickHouse / TDengine）默认是；
+   * PG（standard_conforming_strings）、SQLite、SQL Server、Oracle、达梦里反斜杠就是普通字符。
+   * 不传时按「是」处理（沿用旧行为）。PG 的 E'…' 不受影响：那种写法里反斜杠始终是转义符
+   */
+  backslashEscapes?: boolean;
+}
+
+/**
+ * 这种数据库的字符串里反斜杠是不是转义符。不认识的类型按「是」处理（沿用旧行为）
+ */
+export function stringBackslashIsEscape(dbType?: string): boolean {
+  switch (dbType) {
+    case 'postgresql':
+    case 'kingbase':
+    case 'highgo':
+    case 'vastbase':
+    case 'sqlite':
+    case 'sqlserver':
+    case 'oracle':
+    case 'dameng':
+      return false;
+    default:
+      return true;
+  }
+}
+
+/** 引号前面是不是 PG 转义字符串的前缀 E（紧挨着标识符的 e 不算） */
+function isEscapeStringPrefix(sql: string, quoteAt: number): boolean {
+  const prev = sql[quoteAt - 1];
+  if (prev !== 'E' && prev !== 'e') return false;
+  return !/[A-Za-z0-9_$]/.test(sql[quoteAt - 2] ?? '');
+}
+
 /**
  * 智能分割 SQL 语句，忽略字符串和注释中的分号。
  * 支持 MySQL 客户端 DELIMITER 指令：`delimiter //` 之后以 `//` 作为语句结束符
  * （存储过程/函数/触发器体内的分号不再切分语句），`delimiter ;` 恢复。
  * 指令行本身不产生语句；切出的语句文本不含结束符。
  * @param sql SQL 字符串
+ * @param options 反斜杠在字符串里是否是转义符（按目标库的方言传，见 stringBackslashIsEscape）
  * @returns SQL 语句数组
  */
-export function splitSqlStatements(sql: string): string[] {
-  return getSqlStatementRanges(sql).map((r) => r.text);
+export function splitSqlStatements(sql: string, options?: SplitSqlOptions): string[] {
+  return getSqlStatementRanges(sql, options).map((r) => r.text);
 }
 
 export interface SqlStatementRange {
@@ -45,11 +81,13 @@ export interface SqlStatementRange {
  * （字符串/注释内的分号不切分、支持 DELIMITER 指令）。
  * 偏移指向 trim 后的语句体本身，供编辑器 gutter 定位语句起始行使用。
  */
-export function getSqlStatementRanges(sql: string): SqlStatementRange[] {
+export function getSqlStatementRanges(sql: string, options?: SplitSqlOptions): SqlStatementRange[] {
   const statements: SqlStatementRange[] = [];
   let start = -1; // 当前语句首字符偏移（-1 表示尚未出现代码）
   let inString = false;
   let stringChar = '';
+  // 当前字符串里反斜杠是否转义：由方言决定，PG 的 E'…' 一律是
+  let stringBackslash = options?.backslashEscapes !== false;
   let inLineComment = false;
   let inBlockComment = false;
   let delimiter = ';';
@@ -88,7 +126,7 @@ export function getSqlStatementRanges(sql: string): SqlStatementRange[] {
     }
 
     if (inString) {
-      if (char === '\\' && nextChar) {
+      if (stringBackslash && char === '\\' && nextChar) {
         i++;
         continue;
       }
@@ -124,6 +162,8 @@ export function getSqlStatementRanges(sql: string): SqlStatementRange[] {
     if (char === "'" || char === '"' || char === '`') {
       inString = true;
       stringChar = char;
+      stringBackslash =
+        options?.backslashEscapes !== false || (char === "'" && isEscapeStringPrefix(sql, i));
       if (start < 0) start = i;
       atBoundary = false;
       continue;

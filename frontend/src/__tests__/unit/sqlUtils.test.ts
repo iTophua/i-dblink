@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { escapeSqlValue, escapeSqlIdentifier, splitSqlStatements, getSqlStatementRanges } from '../../utils/sqlUtils';
+import {
+  escapeSqlValue,
+  escapeSqlIdentifier,
+  splitSqlStatements,
+  getSqlStatementRanges,
+  stringBackslashIsEscape,
+} from '../../utils/sqlUtils';
 
 describe('escapeSqlValue', () => {
   it('escapes backslashes', () => {
@@ -144,6 +150,26 @@ WHERE id = 1;`;
     expect(result).toHaveLength(1);
   });
 
+  it('keeps backslashes literal for dialects where they are not escapes', () => {
+    const sql = "UPDATE t SET v = 'C:\\dir\\' WHERE id = 1; UPDATE t SET v = 'x' WHERE id = 2;";
+    // PG / SQLite / SQL Server：值以反斜杠结尾。把反斜杠当转义符的话 'C:\dir\' 没有闭合，两条会并成一条
+    expect(splitSqlStatements(sql, { backslashEscapes: false })).toHaveLength(2);
+    expect(getSqlStatementRanges(sql, { backslashEscapes: false }).map((r) => r.text)).toEqual([
+      "UPDATE t SET v = 'C:\\dir\\' WHERE id = 1",
+      "UPDATE t SET v = 'x' WHERE id = 2",
+    ]);
+    // 不传选项沿用旧行为：MySQL 系确实把反斜杠当转义符
+    expect(splitSqlStatements(sql)).toHaveLength(1);
+  });
+
+  it("still honours backslash escapes inside PostgreSQL E'…' strings", () => {
+    const sql = "SELECT E'it\\'s;' AS a; SELECT 2;";
+    expect(splitSqlStatements(sql, { backslashEscapes: false })).toEqual([
+      "SELECT E'it\\'s;' AS a",
+      'SELECT 2',
+    ]);
+  });
+
   it('returns empty array for empty string', () => {
     const result = splitSqlStatements('');
     expect(result).toHaveLength(0);
@@ -183,15 +209,19 @@ describe('splitSqlStatements - DELIMITER 指令', () => {
   });
 
   it('结束符可紧贴语句结尾（END$$，无空白分隔）', () => {
-    const script = 'DELIMITER $$\ncreate trigger trg before insert on t for each row begin set new.a = 1; end$$\nDELIMITER ;\nselect 1;';
+    const script =
+      'DELIMITER $$\ncreate trigger trg before insert on t for each row begin set new.a = 1; end$$\nDELIMITER ;\nselect 1;';
     const result = splitSqlStatements(script);
     expect(result).toHaveLength(2);
-    expect(result[0]).toBe('create trigger trg before insert on t for each row begin set new.a = 1; end');
+    expect(result[0]).toBe(
+      'create trigger trg before insert on t for each row begin set new.a = 1; end'
+    );
     expect(result[1]).toBe('select 1');
   });
 
   it('指令大小写不敏感，$$ 与 // 均支持', () => {
-    const script = 'DELIMITER $$\ncreate function f() returns int begin return 1; end$$\ndelimiter ;\nselect f();';
+    const script =
+      'DELIMITER $$\ncreate function f() returns int begin return 1; end$$\ndelimiter ;\nselect f();';
     const result = splitSqlStatements(script);
     expect(result).toHaveLength(2);
     expect(result[0]).toContain('return 1;');
@@ -214,7 +244,8 @@ describe('splitSqlStatements - DELIMITER 指令', () => {
   });
 
   it('语句边界后的注释与空白之后仍能识别指令', () => {
-    const script = 'select 1;\n-- 切换结束符\ndelimiter //\ncreate procedure p() begin select 2; end//\ndelimiter ;';
+    const script =
+      'select 1;\n-- 切换结束符\ndelimiter //\ncreate procedure p() begin select 2; end//\ndelimiter ;';
     const result = splitSqlStatements(script);
     expect(result).toHaveLength(2);
     // 边界注释随下一条语句携带（与默认模式下注释保留在语句内的行为一致，执行无害）
@@ -223,7 +254,8 @@ describe('splitSqlStatements - DELIMITER 指令', () => {
   });
 
   it('自定义结束符不匹配字符串与注释内的同名文本', () => {
-    const script = 'delimiter //\ncreate procedure p() begin -- 注释里有 // 网址\n select "a//b" as v; end//\ndelimiter ;';
+    const script =
+      'delimiter //\ncreate procedure p() begin -- 注释里有 // 网址\n select "a//b" as v; end//\ndelimiter ;';
     const result = splitSqlStatements(script);
     expect(result).toHaveLength(1);
     expect(result[0]).toContain('"a//b"');
@@ -255,20 +287,47 @@ describe('getSqlStatementRanges - 带偏移的语句切分', () => {
   });
 
   it('与 splitSqlStatements 结果保持一致（同一扫描器）', () => {
-    const script = "-- header\nselect 1;\ndelimiter //\ncreate procedure p() begin select 1; end//\ndelimiter ;\ncall p()//".replace(
-      /\/\/$/m,
-      ';//'
-    );
+    const script =
+      '-- header\nselect 1;\ndelimiter //\ncreate procedure p() begin select 1; end//\ndelimiter ;\ncall p()//'.replace(
+        /\/\/$/m,
+        ';//'
+      );
     const a = splitSqlStatements(script);
     const b = getSqlStatementRanges(script).map((r) => r.text);
     expect(b).toEqual(a);
   });
 
   it('DELIMITER 过程脚本：gutter 偏移落在 create 和 call 的起始处', () => {
-    const script = 'drop procedure if exists p;\ndelimiter //\ncreate procedure p() begin\n  select 1;\nend//\ndelimiter ;\ncall p();';
+    const script =
+      'drop procedure if exists p;\ndelimiter //\ncreate procedure p() begin\n  select 1;\nend//\ndelimiter ;\ncall p();';
     const ranges = getSqlStatementRanges(script);
     expect(ranges).toHaveLength(3);
     expect(script.startsWith('create procedure', ranges[1].startOffset)).toBe(true);
     expect(script.startsWith('call', ranges[2].startOffset)).toBe(true);
+  });
+});
+
+describe('stringBackslashIsEscape', () => {
+  it('is true for the MySQL family, ClickHouse, TDengine and unknown types', () => {
+    expect(stringBackslashIsEscape('mysql')).toBe(true);
+    expect(stringBackslashIsEscape('mariadb')).toBe(true);
+    expect(stringBackslashIsEscape('clickhouse')).toBe(true);
+    expect(stringBackslashIsEscape('tdengine')).toBe(true);
+    expect(stringBackslashIsEscape(undefined)).toBe(true);
+  });
+
+  it('is false where a backslash is an ordinary character', () => {
+    for (const dbType of [
+      'postgresql',
+      'kingbase',
+      'highgo',
+      'vastbase',
+      'sqlite',
+      'sqlserver',
+      'oracle',
+      'dameng',
+    ]) {
+      expect(stringBackslashIsEscape(dbType)).toBe(false);
+    }
   });
 });

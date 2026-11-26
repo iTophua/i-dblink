@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useDatabase } from '../../../hooks/useApi';
 import { api } from '../../../api';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { splitSqlStatements } from '../../../utils/sqlUtils';
+import { splitSqlStatements, stringBackslashIsEscape } from '../../../utils/sqlUtils';
 import { getDialect } from '../../../utils/sqlDialects';
 import type { QueryResult, DatabaseType } from '../../../types/api';
 import { getErrorMessage } from '../../../utils/getErrorMessage';
@@ -170,8 +170,12 @@ export function useQueryExecution({
 
         onQueryStatusChange?.(true);
 
-        // 检测是否多语句（按分号分割，忽略字符串内的分号）
-        const statements = splitSqlStatements(sqlToExecute);
+        // 检测是否多语句（按分号分割，忽略字符串内的分号）。
+        // 反斜杠在 PG / SQLite / SQL Server / Oracle 的字符串里是普通字符：当成转义符的话，
+        // 以反斜杠结尾的值（Windows 路径之类）会让字符串不闭合，后面的语句被并进上一条
+        const statements = splitSqlStatements(sqlToExecute, {
+          backslashEscapes: stringBackslashIsEscape(dbType),
+        });
         const isMultiStatement = statements.length > 1;
 
         if (isMultiStatement) {
