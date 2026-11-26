@@ -256,7 +256,17 @@ func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName strin
 		SELECT a.attname AS column_name,
 			pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
 			CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END AS is_nullable,
-			CASE WHEN i.indisprimary THEN 'PRI' WHEN i.indisunique THEN 'UNI' ELSE '' END AS column_key,
+			CASE
+				WHEN EXISTS (
+					SELECT 1 FROM pg_catalog.pg_index i
+					WHERE i.indrelid = a.attrelid AND i.indisprimary AND a.attnum = ANY(i.indkey)
+				) THEN 'PRI'
+				WHEN EXISTS (
+					SELECT 1 FROM pg_catalog.pg_index i
+					WHERE i.indrelid = a.attrelid AND i.indisunique AND a.attnum = ANY(i.indkey)
+				) THEN 'UNI'
+				ELSE ''
+			END AS column_key,
 			pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS column_default,
 			'' AS extra,
 			COALESCE(col_description(c.oid, a.attnum), '') AS comment
@@ -264,7 +274,6 @@ func postgresGetColumns(ctx context.Context, dbConn db.Executor, tableName strin
 		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-		LEFT JOIN pg_catalog.pg_index i ON i.indrelid = a.attrelid AND a.attnum = ANY(i.indkey)
 		WHERE a.attnum > 0 AND NOT a.attisdropped
 			AND c.relname = $1
 			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
@@ -304,7 +313,8 @@ func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName strin
 	query := `
 		SELECT i.relname AS index_name, a.attname AS column_name,
 			ix.indisunique AS is_unique, ix.indisprimary AS is_primary,
-			1 AS seq_in_index
+			-- 列在索引里的位置（从 1 开始）。不能按列在表里的顺序排：复合索引 (price, id) 会变成 (id, price)
+			array_position(ix.indkey::int2[], a.attnum) + 1 AS seq_in_index
 		FROM pg_index ix
 		JOIN pg_class t ON t.oid = ix.indrelid
 		JOIN pg_class i ON i.oid = ix.indexrelid
@@ -314,7 +324,7 @@ func postgresGetIndexes(ctx context.Context, dbConn db.Executor, tableName strin
 			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 			AND ($2 = '' OR n.nspname = $2)
 	`
-	query += " ORDER BY i.relname, a.attnum"
+	query += " ORDER BY i.relname, seq_in_index"
 
 	rows, err := dbConn.QueryContext(ctx, query, tableName, sch)
 	if err != nil {
@@ -338,17 +348,25 @@ func postgresGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName s
 	if schema != nil {
 		sch = *schema
 	}
+	// 从 pg_constraint 取并按位置配对两边的列。不能走 information_schema：
+	// key_column_usage 和 constraint_column_usage 各是「每列一行」，按约束名连接后
+	// 复合外键会出笛卡尔积（两列的外键返回四行）
 	query := `
-		SELECT tc.constraint_name, kcu.column_name,
-			ccu.table_name AS referenced_table,
-			ccu.column_name AS referenced_column
-		FROM information_schema.table_constraints tc
-		JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
-		JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
-		WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = $1
-			AND ($2 = '' OR tc.table_schema = $2)
+		SELECT con.conname AS constraint_name, src.attname AS column_name,
+			tgt.relname AS referenced_table, dst.attname AS referenced_column
+		FROM pg_constraint con
+		JOIN pg_class rel ON rel.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+		JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS ord(attnum, position) ON TRUE
+		JOIN pg_attribute src ON src.attrelid = rel.oid AND src.attnum = ord.attnum
+		JOIN pg_class tgt ON tgt.oid = con.confrelid
+		JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS ref(attnum, position) ON ref.position = ord.position
+		JOIN pg_attribute dst ON dst.attrelid = tgt.oid AND dst.attnum = ref.attnum
+		WHERE con.contype = 'f'
+			AND rel.relname = $1
+			AND ($2 = '' OR nsp.nspname = $2)
+		ORDER BY con.conname, ord.position
 	`
-	query += " ORDER BY tc.constraint_name, kcu.ordinal_position"
 
 	rows, err := dbConn.QueryContext(ctx, query, tableName, sch)
 	if err != nil {

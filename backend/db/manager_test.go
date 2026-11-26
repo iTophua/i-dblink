@@ -99,6 +99,58 @@ func TestManagerDisconnect(t *testing.T) {
 	})
 }
 
+// PG 不能在连接上切库，每选一个库就按「连接 ID:库名」单开一个连接池。这些池必须跟着
+// 主连接一起断开：否则重连（改地址 / 密码、SSH 隧道换端口、自动重连）之后，
+// 按库的查询仍走旧的那套
+func TestManagerDisconnectClosesDatabasePools(t *testing.T) {
+	manager := NewManager()
+	const connID = "test-scoped"
+	scopedPath := filepath.Join(t.TempDir(), "scoped.db")
+	t.Cleanup(func() { _ = manager.Disconnect(connID) })
+
+	connect := func() {
+		require.NoError(t, manager.Connect(connID, ConnectArgs{
+			DbType:   "sqlite",
+			Database: filepath.Join(t.TempDir(), "base.db"),
+		}))
+	}
+	connect()
+	stale, err := manager.GetWithDatabase(connID, scopedPath)
+	require.NoError(t, err)
+
+	require.NoError(t, manager.Disconnect(connID))
+
+	// 旧池已关闭、已摘掉
+	assert.ErrorContains(t, stale.Ping(), "database is closed")
+	_, err = manager.Get(connID + ":" + scopedPath)
+	assert.Error(t, err)
+
+	// 重连后按库查询用的是新建的池
+	connect()
+	fresh, err := manager.GetWithDatabase(connID, scopedPath)
+	require.NoError(t, err)
+	assert.NotSame(t, stale, fresh)
+	assert.NoError(t, fresh.Ping())
+}
+
+func TestManagerCancelConnectClosesDatabasePools(t *testing.T) {
+	manager := NewManager()
+	const connID = "test-scoped"
+	scopedPath := filepath.Join(t.TempDir(), "scoped.db")
+	require.NoError(t, manager.Connect(connID, ConnectArgs{
+		DbType:   "sqlite",
+		Database: filepath.Join(t.TempDir(), "base.db"),
+	}))
+	stale, err := manager.GetWithDatabase(connID, scopedPath)
+	require.NoError(t, err)
+
+	require.NoError(t, manager.CancelConnect(connID))
+
+	assert.ErrorContains(t, stale.Ping(), "database is closed")
+	_, err = manager.Get(connID + ":" + scopedPath)
+	assert.Error(t, err)
+}
+
 func TestManagerGetExecutor(t *testing.T) {
 	manager := NewManager()
 

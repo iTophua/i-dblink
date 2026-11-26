@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"idblink/backend/db"
@@ -282,23 +283,35 @@ func mysqlGetIndexes(ctx context.Context, dbConn db.Executor, tableName string, 
 	}
 	defer rows.Close()
 
+	// SHOW INDEX 的列数随版本变过（8.0 起多了 Visible、Expression）。此前按 11 个固定位置取值，
+	// 在 8.0 上每一行都扫描失败并被跳过，索引列表永远是空的。这里按实际列数取、按位置读前 5 列：
+	// Table, Non_unique, Key_name, Seq_in_index, Column_name
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	if len(columns) < 5 {
+		return nil, fmt.Errorf("unexpected SHOW INDEX columns: %v", columns)
+	}
+
 	var result []models.IndexInfo
 	for rows.Next() {
-		var idx models.IndexInfo
-		var nonUnique bool
-		var seqInIndex sql.NullInt64
-		var keyName, colName string
-		// SHOW INDEX 列：Table, Non_unique, Key_name, Seq_in_index, Column_name, ...
-		var table, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6 interface{}
-		if err := rows.Scan(&table, &nonUnique, &keyName, &seqInIndex, &colName, &tmp1, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6); err != nil {
-			continue
+		values := make([]sql.RawBytes, len(columns))
+		targets := make([]any, len(columns))
+		for i := range values {
+			targets[i] = &values[i]
 		}
-		idx.IndexName = keyName
-		idx.ColumnName = colName
-		idx.IsUnique = !nonUnique
-		idx.IsPrimary = keyName == "PRIMARY"
-		if seqInIndex.Valid {
-			idx.SeqInIndex = seqInIndex.Int64
+		if err := rows.Scan(targets...); err != nil {
+			return nil, err
+		}
+		idx := models.IndexInfo{
+			IndexName:  string(values[2]),
+			ColumnName: string(values[4]),
+			IsUnique:   string(values[1]) == "0",
+			IsPrimary:  string(values[2]) == "PRIMARY",
+		}
+		if seq, err := strconv.ParseInt(string(values[3]), 10, 64); err == nil {
+			idx.SeqInIndex = seq
 		}
 		result = append(result, idx)
 	}
@@ -310,7 +323,7 @@ func mysqlGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName stri
 		SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
 		FROM information_schema.KEY_COLUMN_USAGE
 		WHERE TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL AND TABLE_SCHEMA = DATABASE()
-		ORDER BY ORDINAL_POSITION
+		ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION
 	`
 	var args []any
 	if database != nil && *database != "" {
@@ -318,11 +331,14 @@ func mysqlGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName stri
 			SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
 			FROM information_schema.KEY_COLUMN_USAGE
 			WHERE TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL AND TABLE_SCHEMA = ?
-			ORDER BY ORDINAL_POSITION
+			ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION
 		`
-		args = append(args, *database)
+		// 占位符顺序是 TABLE_NAME、TABLE_SCHEMA：先表名后库名。
+		// 此前写成先库名后表名，带 database 调用时永远查不到外键（表结构页外键标签为空）。
+		args = append(args, tableName, *database)
+	} else {
+		args = append(args, tableName)
 	}
-	args = append(args, tableName)
 
 	rows, err := dbConn.QueryContext(ctx, query, args...)
 	if err != nil {

@@ -369,12 +369,15 @@ func damengGetForeignKeys(ctx context.Context, dbConn db.Executor, tableName str
 	// 达梦外键查询：使用 USER_CONSTRAINTS / ALL_CONSTRAINTS 视图
 	// 注意：不同版本的达梦数据库系统视图列名可能有差异，出错时返回空数组
 	queries := []string{
-		// 尝试 USER_ 视图（当前用户）
+		// 尝试 USER_ 视图（当前用户）。被引用表 / 列要走 R_CONSTRAINT_NAME 关联回父表的约束：
+		// 此前取的是 c.TABLE_NAME 和子列自己，每条外键都成了指向自己的自环
+		//（表结构页的外键标签、ER 图的通用路径都受影响），和下面 ALL_ / DBA_ 两版保持一致
 		`SELECT c.CONSTRAINT_NAME, cc.COLUMN_NAME,
-			c.TABLE_NAME AS REFERENCED_TABLE,
-			cc.COLUMN_NAME AS REFERENCED_COLUMN
+			c.R_TABLE_NAME AS REFERENCED_TABLE,
+			rcc.COLUMN_NAME AS REFERENCED_COLUMN
 		FROM USER_CONSTRAINTS c
 		JOIN USER_CONS_COLUMNS cc ON c.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
+		JOIN USER_CONS_COLUMNS rcc ON c.R_CONSTRAINT_NAME = rcc.CONSTRAINT_NAME
 		WHERE c.CONSTRAINT_TYPE = 'R'
 			AND c.TABLE_NAME = ?
 		ORDER BY cc.POSITION`,

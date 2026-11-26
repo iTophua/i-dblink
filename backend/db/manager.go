@@ -188,6 +188,7 @@ func (m *Manager) CancelConnect(connectionID string) error {
 	if connected {
 		delete(m.pools, connectionID)
 	}
+	databaseDbs := m.takeDatabasePools(connectionID)
 	m.mu.Unlock()
 
 	if connecting {
@@ -196,7 +197,30 @@ func (m *Manager) CancelConnect(connectionID string) error {
 	if connected {
 		_ = info.db.Close()
 	}
+	closePools(databaseDbs)
 	return nil
+}
+
+// takeDatabasePools 摘掉某个连接上按库打开的连接池（键是「连接 ID:库名」），调用方负责关闭。
+// 断开 / 取消时必须一起清掉：PG 不能在连接上切库，每选一个库就单开一个连接池，留着的话
+// 重连之后按库的查询仍走旧的那套——改了地址、密码，或 SSH 隧道换了本地端口之后，
+// 会一直连着旧的那套，直到重启应用。调用方需持有 m.mu
+func (m *Manager) takeDatabasePools(connectionID string) []*sql.DB {
+	prefix := connectionID + ":"
+	var dbs []*sql.DB
+	for key, info := range m.pools {
+		if strings.HasPrefix(key, prefix) {
+			delete(m.pools, key)
+			dbs = append(dbs, info.db)
+		}
+	}
+	return dbs
+}
+
+func closePools(dbs []*sql.DB) {
+	for _, databaseDB := range dbs {
+		_ = databaseDB.Close()
+	}
 }
 
 // Disconnect 断开连接并释放连接池
@@ -206,6 +230,8 @@ func (m *Manager) Disconnect(connectionID string) error {
 	if ok {
 		delete(m.pools, connectionID)
 	}
+	// 按库打开的连接池也要关：即使主连接池已经不在了（比如被 CancelConnect 摘掉），也不能留着
+	databaseDbs := m.takeDatabasePools(connectionID)
 	// 如果有活跃事务（任一会话），先全部回滚
 	prefix := connectionID + txKeySep
 	for key, txInfo := range m.txs {
@@ -217,6 +243,8 @@ func (m *Manager) Disconnect(connectionID string) error {
 		}
 	}
 	m.mu.Unlock()
+
+	closePools(databaseDbs)
 
 	if !ok {
 		return fmt.Errorf("connection %s not found", connectionID)
@@ -385,6 +413,10 @@ func (m *Manager) GetWithDatabase(connectionID string, database string) (*sql.DB
 // 保证「连接 A 会话 1」与「连接 A\x00B 会话 1」不会碰撞。
 const txKeySep = "\x00"
 
+// txWatchdogTimeout 事务最长存活时间（看门狗自动回滚的阈值）。
+// 包级变量仅为让真实数据库上的冒烟测试缩短等待，生产路径保持 5 分钟。
+var txWatchdogTimeout = 5 * time.Minute
+
 // txKey 构造事务槽位键。会话级隔离：同一连接的不同查询 Tab、MCP 各自拥有独立事务。
 func txKey(connectionID, sessionID string) string {
 	return connectionID + txKeySep + sessionID
@@ -444,7 +476,7 @@ func (m *Manager) BeginTransaction(connectionID, sessionID string) error {
 	// 看门狗：事务超过 5 分钟未提交/回滚则自动回滚，避免连接被永久占用
 	// （用户关闭查询 Tab 或前端崩溃时的事务兜底）
 	go func() {
-		timer := time.NewTimer(5 * time.Minute)
+		timer := time.NewTimer(txWatchdogTimeout)
 		defer timer.Stop()
 		select {
 		case <-done:

@@ -163,7 +163,9 @@ func sqliteGetColumns(ctx context.Context, dbConn db.Executor, tableName string,
 			IsNullable:    map[bool]string{true: "NO", false: "YES"}[notnull == 1],
 			ColumnDefault: nullStrEmpty(def),
 		}
-		if pk == 1 {
+		// table_info 的 pk 是该列在主键里的序号（不在主键里为 0）：
+		// 复合主键的每一列都大于 0，此前只判断 == 1 会漏掉第二列及以后
+		if pk > 0 {
 			c.ColumnKey = strPtr("PRI")
 		}
 		result = append(result, c)
@@ -183,6 +185,9 @@ func sqliteGetIndexes(ctx context.Context, dbConn db.Executor, tableName string,
 	type indexEntry struct {
 		name     string
 		isUnique bool
+		// origin：c = CREATE INDEX 显式建的，u = UNIQUE 约束，pk = 主键约束。
+		// 后两种的索引都叫 sqlite_autoindex_*，不能按名字前缀判主键
+		origin string
 	}
 	var entries []indexEntry
 	for listRows.Next() {
@@ -195,7 +200,7 @@ func sqliteGetIndexes(ctx context.Context, dbConn db.Executor, tableName string,
 		if err := listRows.Scan(&seq, &name, &isUnique, &origin, &partial); err != nil {
 			continue
 		}
-		entries = append(entries, indexEntry{name: name, isUnique: isUnique})
+		entries = append(entries, indexEntry{name: name, isUnique: isUnique, origin: origin})
 	}
 
 	var result []models.IndexInfo
@@ -216,7 +221,7 @@ func sqliteGetIndexes(ctx context.Context, dbConn db.Executor, tableName string,
 				IndexName:  entry.name,
 				ColumnName: colName,
 				IsUnique:   entry.isUnique,
-				IsPrimary:  strings.HasPrefix(entry.name, "sqlite_autoindex"),
+				IsPrimary:  entry.origin == "pk",
 				SeqInIndex: seq + 1,
 			})
 		}
