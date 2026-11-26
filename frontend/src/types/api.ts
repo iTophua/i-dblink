@@ -166,3 +166,132 @@ export interface DatabaseObject {
   schema?: string;
   comment?: string;
 }
+
+// ── AI 对话历史（backend/localdb.AIChatSession / AIChatMessage） ──
+
+/** 对话会话：时间戳为 RFC3339 字符串（纳秒精度） */
+export interface AIChatSession {
+  id: string;
+  title: string;
+  connection_id?: string | null;
+  context_json: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 持久化的对话消息 */
+export interface StoredChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  status?: string;
+  error?: string;
+  elapsed_ms?: number | null;
+  attached_sql?: string;
+}
+
+/** 一次批量写入：upserts 按 id 插入或覆盖，deletes 按 id 删除 */
+export interface AIChatMessageBatch {
+  upserts: StoredChatMessage[];
+  deletes: string[];
+}
+
+// ── ER 图（backend/models/er.go） ──
+
+export interface ERColumn {
+  name: string;
+  data_type: string;
+  nullable: boolean;
+  is_pk: boolean;
+  comment?: string;
+}
+
+/** ER 图里的表节点。id 在 PG 系下是 "schema.table"，其余是表名 */
+export interface ERTable {
+  id: string;
+  name: string;
+  schema?: string;
+  comment: string;
+  columns: ERColumn[];
+}
+
+/** 一条外键关系（复合外键按列拆成多条，seq 是列在约束里的顺序） */
+export interface EREdge {
+  name?: string;
+  from_table: string;
+  from_column: string;
+  to_table: string;
+  to_column: string;
+  seq: number;
+}
+
+export interface ERDiagram {
+  tables: ERTable[];
+  edges: EREdge[];
+  warnings?: string[];
+  /** 走了通用路径（逐表查外键，较慢） */
+  slow_path?: boolean;
+}
+
+// ── 数据对比（backend/models/data_compare.go） ──
+
+export interface DataCompareRequest {
+  source_connection_id: string;
+  source_database?: string;
+  source_table: string;
+  target_connection_id: string;
+  target_database?: string;
+  target_table: string;
+  /** 匹配行用的键；留空用源表主键 */
+  key_columns?: string[];
+  /** 每侧最多读取的行数 */
+  max_rows?: number;
+  /** 生成的同步语句上限 */
+  max_statements?: number;
+}
+
+/** 单元格的展示值（后端已转成文本并限长） */
+export interface DataCompareCell {
+  is_null: boolean;
+  value: string;
+}
+
+export interface DataCompareRow {
+  key: Record<string, DataCompareCell>;
+  /** 仅在源表的行带整行内容 */
+  row?: Record<string, DataCompareCell>;
+}
+
+export interface DataCompareChange {
+  column: string;
+  source: DataCompareCell;
+  target: DataCompareCell;
+}
+
+export interface DataCompareModified {
+  key: Record<string, DataCompareCell>;
+  changes: DataCompareChange[];
+}
+
+export interface DataCompareResult {
+  key_columns: string[];
+  compare_columns: string[];
+  source_only_columns: string[];
+  target_only_columns: string[];
+  source_rows: number;
+  target_rows: number;
+  same_count: number;
+  modified_count: number;
+  source_only_count: number;
+  target_only_count: number;
+  /** 任一侧超过行数上限提前停止：上面的数字只是已读取部分的 */
+  truncated: boolean;
+  warnings: string[];
+  modified: DataCompareModified[];
+  source_only: DataCompareRow[];
+  target_only: DataCompareRow[];
+  /** 同步 SQL：把目标表改成和源表一致。只生成，不执行 */
+  sql: string;
+  sql_counts: { update: number; insert: number; delete: number };
+  sql_truncated: boolean;
+}

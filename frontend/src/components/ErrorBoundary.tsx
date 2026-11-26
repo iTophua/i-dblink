@@ -8,6 +8,7 @@ import React from 'react';
 import { Button, Space, App } from 'antd';
 import { CopyOutlined, ReloadOutlined, WarningOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { consoleErrorReported, flushDiagnosticsBeforeExit, reportDiag } from '../utils/diagnostics';
 
 interface ErrorBoundaryState {
   error: Error | null;
@@ -43,7 +44,14 @@ function CrashFallback({ error, componentStack }: CrashFallbackProps) {
         >
           {t('common.errorBoundary.copy')}
         </Button>
-        <Button type="primary" icon={<ReloadOutlined />} onClick={() => window.location.reload()}>
+        <Button
+          type="primary"
+          icon={<ReloadOutlined />}
+          onClick={() => {
+            // 重载前把这次崩溃争取写进诊断日志（最多等 0.8 秒）
+            void flushDiagnosticsBeforeExit().then(() => window.location.reload());
+          }}
+        >
           {t('common.errorBoundary.reload')}
         </Button>
       </Space>
@@ -62,8 +70,14 @@ export class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // 同时写入控制台，方便开发者在 Web Inspector 里查看完整信息
-    console.error('[UI ErrorBoundary]', error, info.componentStack);
+    // 写入诊断日志；同时打到控制台，方便开发者在 Web Inspector 里查看完整信息
+    reportDiag(
+      'error',
+      'react',
+      `${error.name}: ${error.message}`,
+      `${error.stack ?? ''}\n\nComponent stack:${info.componentStack || ''}`
+    );
+    consoleErrorReported('[UI ErrorBoundary]', error, info.componentStack);
     this.setState({ componentStack: info.componentStack || '' });
   }
 

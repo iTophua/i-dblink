@@ -1,0 +1,242 @@
+/* ==================== 数据对比与同步 ==================== */
+
+.dc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dc-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.dc-side-col {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+}
+
+.dc-side-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dc-side {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dc-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.dc-swap {
+  display: flex;
+  justify-content: center;
+}
+
+.dc-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.dc-option {
+  display: flex;
+  flex: 0 0 180px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dc-option.is-wide {
+  flex: 1 1 320px;
+}
+
+.dc-option-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dc-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dc-actions .dc-hint {
+  margin-right: auto;
+}
+
+.dc-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.dc-error {
+  margin-top: 12px;
+}
+
+.dc-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.dc-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dc-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background-card);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.dc-tile:disabled {
+  cursor: default;
+}
+
+.dc-tile.is-active {
+  background: var(--background-hover);
+}
+
+.dc-tile.is-success.is-active,
+.dc-tile.is-warning.is-active,
+.dc-tile.is-info.is-active,
+.dc-tile.is-danger.is-active {
+  border-color: currentColor;
+}
+
+.dc-tile.is-success {
+  color: var(--color-success);
+}
+
+.dc-tile.is-warning {
+  color: var(--color-warning);
+}
+
+.dc-tile.is-info {
+  color: var(--color-info);
+}
+
+.dc-tile.is-danger {
+  color: var(--color-error);
+}
+
+.dc-tile-count {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.dc-tile-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dc-meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.dc-identical {
+  padding: 28px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* 内容不同：列名 + 目标旧值 → 源新值 */
+.dc-changes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dc-changes li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.dc-col {
+  color: var(--text-secondary);
+}
+
+.dc-old {
+  color: var(--color-error);
+  text-decoration: line-through;
+}
+
+.dc-arrow {
+  color: var(--text-tertiary);
+}
+
+.dc-new {
+  color: var(--color-success);
+}
+
+.dc-sql-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+}
+
+.dc-sql-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 同步脚本可能很长：纯文本 + 自动换行，不做格式化（几千条语句格式化会卡界面） */
+.dc-sql {
+  max-height: 52vh;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background-card);
+  color: var(--text-primary);
+  font-family: var(--font-family-code);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}

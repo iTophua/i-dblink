@@ -9,6 +9,7 @@ import {
   TableOutlined,
   EyeOutlined,
   SearchOutlined,
+  ApartmentOutlined,
   ReloadOutlined,
   AppstoreOutlined,
   UnorderedListOutlined,
@@ -94,6 +95,8 @@ export interface TableListProps {
   onTableOpen?: (tableName: string, database?: string) => void;
   onTableDesign?: (tableName: string, database?: string) => void;
   onTableNew?: () => void;
+  /** 查看当前库的 ER 图 */
+  onOpenER?: () => void;
   onTableDelete?: (tableName: string, database?: string) => void;
   onTableTruncate?: (tableName: string, database?: string) => void;
   onTableCopy?: (tableName: string, database?: string) => void;
@@ -501,6 +504,7 @@ function TableListComponent({
   onTableOpen,
   onTableDesign,
   onTableNew,
+  onOpenER,
   onTableDelete,
   onTableTruncate,
   onTableCopy,
@@ -1011,6 +1015,18 @@ function TableListComponent({
               <Button icon={<PlusOutlined />} size="small" onClick={onTableNew} />
             </span>
           </Tooltip>
+          {onOpenER && (
+            <Tooltip title={t('common.mainLayout.viewERDiagram')}>
+              <span>
+                <Button
+                  icon={<ApartmentOutlined />}
+                  size="small"
+                  onClick={onOpenER}
+                  data-testid="table-list-open-er"
+                />
+              </span>
+            </Tooltip>
+          )}
           <Tooltip title={t('common.truncateTable')} open={!selectedRow ? false : undefined}>
             <span>
               <Button

@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -270,11 +271,13 @@ func (a *App) HandleAIChatStream(c *application.StreamConn) {
 
 	provider, err := a.aiManager.GetActive()
 	if err != nil {
+		slog.Warn("ai chat stream rejected: no active provider", "task_id", req.TaskID, "error", err)
 		_ = c.SendJSON(aiStreamChunk{Done: true, Error: err.Error()})
 		return
 	}
 	task, err := ai.GetTask(ai.TaskID(req.TaskID))
 	if err != nil {
+		slog.Warn("ai chat stream rejected: unknown task", "task_id", req.TaskID, "error", err)
 		_ = c.SendJSON(aiStreamChunk{Done: true, Error: err.Error()})
 		return
 	}
@@ -284,8 +287,22 @@ func (a *App) HandleAIChatStream(c *application.StreamConn) {
 	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Minute)
 	defer cancel()
 
+	// 诊断日志只记任务号/轮数/耗时/输出长度，不记对话内容
+	start := time.Now()
+	outputChars := 0
+	finishLog := func(errMsg string) {
+		attrs := []any{"task_id", req.TaskID, "messages", len(messages),
+			"duration_ms", time.Since(start).Milliseconds(), "output_chars", outputChars}
+		if errMsg != "" {
+			slog.Warn("ai chat stream failed", append(attrs, "error", truncate(errMsg, 500))...)
+			return
+		}
+		slog.Info("ai chat stream finished", attrs...)
+	}
+
 	stream, err := provider.ChatStream(ctx, &ai.ChatRequest{Messages: messages})
 	if err != nil {
+		finishLog(err.Error())
 		_ = c.SendJSON(aiStreamChunk{Done: true, Error: err.Error()})
 		return
 	}
@@ -293,18 +310,24 @@ func (a *App) HandleAIChatStream(c *application.StreamConn) {
 		select {
 		case chunk, ok := <-stream:
 			if !ok {
+				finishLog("")
 				_ = c.SendJSON(aiStreamChunk{Done: true})
 				return
 			}
 			if chunk.Done {
+				finishLog("")
 				_ = c.SendJSON(aiStreamChunk{Done: true})
 				return
 			}
 			if err := c.SendJSON(aiStreamChunk{Content: chunk.Content}); err != nil {
 				cancel() // 前端已断开，立即终止 Provider 的 HTTP 请求
+				slog.Info("ai chat stream cancelled by frontend", "task_id", req.TaskID,
+					"duration_ms", time.Since(start).Milliseconds(), "output_chars", outputChars)
 				return
 			}
+			outputChars += len(chunk.Content)
 		case <-ctx.Done():
+			finishLog("请求超时或已取消")
 			_ = c.SendJSON(aiStreamChunk{Done: true, Error: "请求超时或已取消"})
 			return
 		}

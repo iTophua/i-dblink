@@ -106,6 +106,30 @@ func RunMigrations(db *sql.DB) error {
 			value TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
+		// AI 对话历史：会话（标题 + 发问时的上下文）与消息。connection_id 不设外键——
+		// 连接被删除后对话仍保留；消息随会话在仓库层显式删除（SQLite 默认不开外键级联）
+		`CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL DEFAULT '',
+			connection_id TEXT,
+			context_json TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_ai_chat_sessions_updated ON ai_chat_sessions(updated_at)`,
+		`CREATE TABLE IF NOT EXISTS ai_chat_messages (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			seq INTEGER NOT NULL,
+			role TEXT NOT NULL,
+			content TEXT NOT NULL,
+			status TEXT,
+			error TEXT,
+			elapsed_ms INTEGER,
+			attached_sql TEXT,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_ai_chat_messages_session ON ai_chat_messages(session_id, seq)`,
 	}
 
 	for i, migration := range migrations {

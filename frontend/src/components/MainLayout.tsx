@@ -38,6 +38,7 @@ import { OperationLog } from './OperationLog';
 import { UpdateDialog } from './UpdateDialog';
 import { DocGeneratorDialog } from './DocGeneratorDialog';
 import { DataMigrationDialog } from './DataMigrationDialog';
+import { DataCompareDialog } from './DataCompareDialog';
 import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { api, EventsOn } from '../api';
@@ -669,8 +670,12 @@ function MainLayoutComponent() {
                   tabMgr.setTableToOpen({ name: tableName, database });
                 }, 0);
               }}
-              onOpenDesigner={(tableName) => {
-                tabPanelRef.current?.openDesignerTab(tableName);
+              onOpenDesigner={(tableName, database) => {
+                tabPanelRef.current?.openDesignerTab(tableName, database);
+              }}
+              // 右键视图「查看定义」：此前没传这个回调，菜单项点了没反应
+              onOpenViewDefinition={(viewName, database) => {
+                tabPanelRef.current?.openViewDefTab(viewName, database);
               }}
               onViewOpen={(viewName, database) => {
                 tabMgr.setTableToOpen(null);
@@ -1003,6 +1008,23 @@ function MainLayoutComponent() {
       <DataMigrationDialog
         open={layout.migrationDialogOpen}
         onClose={() => layout.setMigrationDialogOpen(false)}
+      />
+
+      {/* 数据对比与同步：key 跟着预填的源库走，换了入口就重新初始化表单 */}
+      <DataCompareDialog
+        key={`${layout.dataSyncPreset?.connectionId ?? ''}:${layout.dataSyncPreset?.database ?? ''}`}
+        open={layout.dataSyncOpen}
+        onClose={() => layout.setDataSyncOpen(false)}
+        preset={layout.dataSyncPreset}
+        connections={connMgr.connections}
+        onOpenSql={(connectionId, database, sql) =>
+          tabPanelRef.current?.openSqlTab({
+            connectionId,
+            database,
+            content: sql,
+            title: t('common.dataCompare.sqlTabTitle'),
+          })
+        }
       />
     </Layout>
   );

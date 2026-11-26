@@ -7,8 +7,10 @@ import React, {
   useImperativeHandle,
   useMemo,
   memo,
+  lazy,
+  Suspense,
 } from 'react';
-import { Tabs, Breadcrumb, Menu, App, Tooltip } from 'antd';
+import { Tabs, Breadcrumb, Menu, App, Tooltip, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { TabsProps } from 'antd';
 import { appModal } from '../../utils/appModal';
@@ -27,6 +29,7 @@ import {
   StopOutlined,
   DashboardOutlined,
   SafetyOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { SQLEditor } from '../SQLEditor';
 import { DataTable } from '../DataTable';
@@ -42,6 +45,10 @@ import { CopyTableDialog } from '../CopyTableDialog';
 import { QuickStartGuide, type RecentDatabaseItem } from '../LoadingStates';
 import { ConnectionMonitorPanel } from '../ConnectionMonitor/ConnectionMonitorPanel';
 import { UserManagementPanel } from '../UserManagementPanel';
+// ER 图（React Flow + dagre）只在打开 ER 标签页时才加载，不占首屏包体
+const ERDiagram = lazy(() =>
+  import('../ERDiagram').then((module) => ({ default: module.ERDiagram }))
+);
 import type { TableInfo, DatabaseType, ColumnInfo } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAppStore } from '../../stores/appStore';
@@ -197,8 +204,17 @@ interface OpenedUsersTab {
   createdAt: number;
 }
 
+/** ER 图 Tab：一个连接 + 库一个；不随工作区恢复（重新打开即重新取数） */
+interface OpenedErTab {
+  key: string;
+  connectionId: string;
+  connectionName?: string;
+  database?: string;
+  createdAt: number;
+}
+
 export interface ActiveTabInfo {
-  type: 'objects' | 'data' | 'sql' | 'designer' | 'monitor' | 'users';
+  type: 'objects' | 'data' | 'sql' | 'designer' | 'monitor' | 'users' | 'er';
   title: string;
   connectionId?: string;
   database?: string;
@@ -208,8 +224,9 @@ export interface ActiveTabInfo {
 }
 
 export interface TabPanelRef {
-  openDesignerTab: (tableName?: string) => void;
-  openViewDefTab: (viewName: string) => void;
+  /** database 传了就按它打开（右键的表可能不在当前选中的库里），不传用当前选中的库 */
+  openDesignerTab: (tableName?: string, database?: string) => void;
+  openViewDefTab: (viewName: string, database?: string) => void;
   openSqlTab: (options: {
     connectionId?: string;
     database?: string;
@@ -307,6 +324,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   const [openedViewDefTabs, setOpenedViewDefTabs] = useState<OpenedViewDefTab[]>([]);
   // 连接监控 Tab（进程 + 服务器状态）与用户权限 Tab
   const [openedMonitorTabs, setOpenedMonitorTabs] = useState<OpenedMonitorTab[]>([]);
+  const [openedErTabs, setOpenedErTabs] = useState<OpenedErTab[]>([]);
   const [openedUsersTabs, setOpenedUsersTabs] = useState<OpenedUsersTab[]>([]);
   const [activeKey, setActiveKey] = useState('objects');
   const isRestoredRef = useRef(false);
@@ -474,11 +492,11 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
   }, []);
 
   useImperativeHandle(ref, () => ({
-    openDesignerTab: (tableName?: string) => {
-      openDesignerTab(tableName);
+    openDesignerTab: (tableName?: string, database?: string) => {
+      openDesignerTab(tableName, database);
     },
-    openViewDefTab: (viewName: string) => {
-      openViewDefTab(viewName);
+    openViewDefTab: (viewName: string, database?: string) => {
+      openViewDefTab(viewName, database);
     },
     openSqlTab: (options: {
       connectionId?: string;
@@ -525,21 +543,25 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         ...sqlTabsToClose.map((t) => t.key),
         ...openedMonitorTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
         ...openedUsersTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
+        ...openedErTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
       ]);
       setOpenedTables((prev) => prev.filter((t) => t.connectionId !== connectionId));
       setOpenedSqlTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
       setOpenedMonitorTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
       setOpenedUsersTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
+      setOpenedErTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
       setActiveKey((current) => (closedKeys.has(current) ? 'objects' : current));
     },
     closeMonitorTabs: (connectionId: string) => {
-      // 断开连接时静默关闭监控/权限 Tab（无未保存内容）
+      // 断开连接时静默关闭监控/权限/ER 图 Tab（无未保存内容，且都依赖这个连接）
       const closedKeys = new Set<string>([
         ...openedMonitorTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
         ...openedUsersTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
+        ...openedErTabs.filter((t) => t.connectionId === connectionId).map((t) => t.key),
       ]);
       setOpenedMonitorTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
       setOpenedUsersTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
+      setOpenedErTabs((prev) => prev.filter((t) => t.connectionId !== connectionId));
       setActiveKey((current) => (closedKeys.has(current) ? 'objects' : current));
     },
     closeDatabaseTabs: (connectionId: string, database: string) => {
@@ -555,6 +577,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         ...openedUsersTabs
           .filter((t) => t.connectionId === connectionId && t.database === database)
           .map((t) => t.key),
+        // 这个库的 ER 图跟着库走（和权限页一样没有未保存内容，不进确认文案）
+        ...openedErTabs
+          .filter((t) => t.connectionId === connectionId && t.database === database)
+          .map((t) => t.key),
       ]);
       setOpenedTables((prev) =>
         prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
@@ -563,6 +589,9 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
       );
       setOpenedUsersTabs((prev) =>
+        prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
+      );
+      setOpenedErTabs((prev) =>
         prev.filter((t) => !(t.connectionId === connectionId && t.database === database))
       );
       setActiveKey((current) => (closedKeys.has(current) ? 'objects' : current));
@@ -629,6 +658,17 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             key: viewDef.key,
           };
         }
+      }
+      const erTab = openedErTabs.find((t) => t.key === activeKey);
+      if (erTab) {
+        return {
+          type: 'er' as const,
+          title: `${t('common.erDiagram.title')}: ${
+            erTab.database || erTab.connectionName || erTab.connectionId
+          }`,
+          connectionId: erTab.connectionId,
+          database: erTab.database,
+        };
       }
       const monitorTab = openedMonitorTabs.find((t) => t.key === activeKey);
       if (monitorTab) {
@@ -713,6 +753,17 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           };
         }
       }
+      const erTab = openedErTabs.find((t) => t.key === activeKey);
+      if (erTab) {
+        return {
+          type: 'er' as const,
+          title: `${t('common.erDiagram.title')}: ${
+            erTab.database || erTab.connectionName || erTab.connectionId
+          }`,
+          connectionId: erTab.connectionId,
+          database: erTab.database,
+        };
+      }
       const monitorTab = openedMonitorTabs.find((t) => t.key === activeKey);
       if (monitorTab) {
         return {
@@ -752,6 +803,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     openedViewDefTabs,
     openedMonitorTabs,
     openedUsersTabs,
+    openedErTabs,
     onActiveTabChange,
     t,
   ]);
@@ -878,6 +930,30 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     return () => window.removeEventListener('sql-dirty-change', onSqlDirty);
   }, []);
 
+  // 打开 ER 图 Tab：一个连接 + 库一个，再次打开时聚焦
+  const openErTab = useCallback(
+    (connectionId: string | null | undefined, database?: string) => {
+      if (!connectionId) return;
+      const key = `er-${connectionId}-${database || 'default'}`;
+      setOpenedErTabs((prev) =>
+        prev.some((tab) => tab.key === key)
+          ? prev
+          : [
+              ...prev,
+              {
+                key,
+                connectionId,
+                connectionName: connections.find((c) => c.id === connectionId)?.name,
+                database,
+                createdAt: Date.now(),
+              },
+            ]
+      );
+      setActiveKey(key);
+    },
+    [connections]
+  );
+
   // 监听 tab-action 事件（来自菜单或工具栏）
   useEffect(() => {
     const handleTabAction = (
@@ -967,6 +1043,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         );
         setActiveKey(key);
         onActivateConnection?.(connId, dbName);
+      } else if (action === 'open-er-tab') {
+        openErTab(eventConnId || selectedConnectionId, eventDb || selectedDatabase);
       } else if (action === 'close-tab') {
         if (activeKey.startsWith('sql-')) {
           const keyToClose = activeKey;
@@ -980,30 +1058,44 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
     return () => {
       window.removeEventListener('tab-action', handleTabAction as EventListener);
     };
-  }, [activeKey, selectedConnectionId, selectedDatabase, connections, onActivateConnection, t]);
+  }, [
+    activeKey,
+    selectedConnectionId,
+    selectedDatabase,
+    connections,
+    onActivateConnection,
+    t,
+    openErTab,
+  ]);
 
-  // 双击表时调用（来自树或表列表），打开新的数据浏览 Tab
+  // 双击表时调用（来自树或表列表），打开新的数据浏览 Tab。
+  // target 用于从一个不属于当前树选中项的入口打开（如 ER 图标签页里双击表）
   const openTableTab = useCallback(
-    (tableName: string, database?: string, isView?: boolean) => {
-      if (!selectedConnectionId) return;
+    (
+      tableName: string,
+      database?: string,
+      isView?: boolean,
+      target?: { connectionId: string; connectionName?: string }
+    ) => {
+      const connId = target?.connectionId ?? selectedConnectionId;
+      if (!connId) return;
 
       const dataTabKey = getDataTabKey({
         name: tableName,
         database,
-        connectionId: selectedConnectionId,
+        connectionId: connId,
       });
 
       const exists = openedTables.find(
-        (t) =>
-          t.name === tableName && t.connectionId === selectedConnectionId && t.database === database
+        (t) => t.name === tableName && t.connectionId === connId && t.database === database
       );
       if (!exists) {
         setOpenedTables((prev) => [
           ...prev,
           {
             name: tableName,
-            connectionId: selectedConnectionId,
-            connectionName: selectedConnectionName || selectedConnectionId,
+            connectionId: connId,
+            connectionName: target?.connectionName || selectedConnectionName || connId,
             database,
             isDirty: false,
             isView,
@@ -1018,14 +1110,16 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
   // 打开表设计器 Tab
   const openDesignerTab = useCallback(
-    (tableName?: string) => {
+    (tableName?: string, database?: string) => {
       if (!selectedConnectionId) return;
+      // 右键的表可能不在当前选中的库里：显式传了库就按传的来
+      const targetDatabase = database ?? selectedDatabase;
 
       const isNewTable = !tableName || tableName === '';
       const tabKey = isNewTable
         ? `designer-new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        : selectedDatabase
-          ? `designer-${tableName}@${selectedDatabase}@${selectedConnectionId}`
+        : targetDatabase
+          ? `designer-${tableName}@${targetDatabase}@${selectedConnectionId}`
           : `designer-${tableName}@${selectedConnectionId}`;
 
       const exists = openedDesignerTabs.find((t) => {
@@ -1033,7 +1127,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         return (
           t.tableName === tableName &&
           t.connectionId === selectedConnectionId &&
-          t.database === selectedDatabase
+          t.database === targetDatabase
         );
       });
       if (!exists) {
@@ -1043,7 +1137,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             key: tabKey,
             title: isNewTable ? t('common.newTable') : `${t('common.design')}: ${tableName}`,
             connectionId: selectedConnectionId,
-            database: selectedDatabase,
+            database: targetDatabase,
             tableName: isNewTable ? undefined : tableName,
             isNewTable,
             createdAt: Date.now(),
@@ -1057,18 +1151,19 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
 
   // 打开视图定义 Tab
   const openViewDefTab = useCallback(
-    (viewName: string) => {
+    (viewName: string, database?: string) => {
       if (!selectedConnectionId) return;
+      const targetDatabase = database ?? selectedDatabase;
 
-      const tabKey = selectedDatabase
-        ? `viewdef-${viewName}@${selectedDatabase}@${selectedConnectionId}`
+      const tabKey = targetDatabase
+        ? `viewdef-${viewName}@${targetDatabase}@${selectedConnectionId}`
         : `viewdef-${viewName}@${selectedConnectionId}`;
 
       const exists = openedViewDefTabs.find(
         (t) =>
           t.viewName === viewName &&
           t.connectionId === selectedConnectionId &&
-          t.database === selectedDatabase
+          t.database === targetDatabase
       );
       if (!exists) {
         setOpenedViewDefTabs((prev) => [
@@ -1077,7 +1172,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             key: tabKey,
             title: `${t('common.viewDefinitionTitle')}: ${viewName}`,
             connectionId: selectedConnectionId,
-            database: selectedDatabase,
+            database: targetDatabase,
             viewName,
             createdAt: Date.now(),
           },
@@ -1228,6 +1323,12 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
         if (activeKey === key) {
           setActiveKey('objects');
         }
+      } else if (key.startsWith('er-')) {
+        // 关闭 ER 图 Tab
+        setOpenedErTabs((prev) => prev.filter((tab) => tab.key !== key));
+        if (activeKey === key) {
+          setActiveKey('objects');
+        }
       } else if (key.startsWith('users-')) {
         setOpenedUsersTabs((prev) => prev.filter((tab) => tab.key !== key));
         if (activeKey === key) {
@@ -1312,6 +1413,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             setOpenedViewDefTabs((prev) => prev.filter((t) => t.key === tabKey || t.pinned));
             setOpenedMonitorTabs((prev) => prev.filter((t) => t.key === tabKey));
             setOpenedUsersTabs((prev) => prev.filter((t) => t.key === tabKey));
+            setOpenedErTabs((prev) => prev.filter((t) => t.key === tabKey));
             setActiveKey(tabKey);
             message.success(t('common.closeOtherTabs'));
           };
@@ -1351,6 +1453,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               pinned: false,
             })),
             ...openedUsersTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: false })),
+            ...openedErTabs.map((t) => ({ key: t.key, createdAt: t.createdAt, pinned: false })),
           ].sort((a, b) => a.createdAt - b.createdAt);
 
           const currentIdx = allItems.findIndex((i) => i.key === tabKey);
@@ -1368,6 +1471,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
               setOpenedViewDefTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
               setOpenedMonitorTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
               setOpenedUsersTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
+              setOpenedErTabs((prev) => prev.filter((t) => !keysToClose.has(t.key)));
               setActiveKey(tabKey);
               message.success(t('common.closeRightTabs'));
             };
@@ -1391,6 +1495,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             setOpenedViewDefTabs((prev) => prev.filter((t) => t.pinned));
             setOpenedMonitorTabs([]);
             setOpenedUsersTabs([]);
+            setOpenedErTabs([]);
             setActiveKey('objects');
             message.success(t('common.closeAllTabs'));
           };
@@ -1493,6 +1598,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       openedViewDefTabs,
       openedMonitorTabs,
       openedUsersTabs,
+      openedErTabs,
       toggleTabPin,
       secondaryTabKeys,
       secondaryActiveKey,
@@ -1871,6 +1977,68 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
       _createdAt: tab.createdAt,
       _pinned: false,
     })),
+    ...openedErTabs.map((tab) => ({
+      key: tab.key,
+      label: (
+        <Tooltip
+          title={`${t('common.erDiagram.title')} · ${tab.connectionName || tab.connectionId}${
+            tab.database ? ` · ${tab.database}` : ''
+          }`}
+          placement="bottom"
+        >
+          <span
+            onContextMenu={(e) => handleTabContextMenu(e, tab.key)}
+            style={{
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              maxWidth: 200,
+            }}
+          >
+            <ApartmentOutlined style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {t('common.erDiagram.title')} ·{' '}
+              {tab.database || tab.connectionName || tab.connectionId}
+            </span>
+          </span>
+        </Tooltip>
+      ),
+      children: (
+        <div style={{ height: '100%' }}>
+          <Suspense
+            fallback={
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                }}
+              >
+                <Spin size="small" />
+              </div>
+            }
+          >
+            <ERDiagram
+              key={tab.key}
+              connectionId={tab.connectionId}
+              connectionName={tab.connectionName}
+              database={tab.database}
+              onOpenTable={(tableName) =>
+                openTableTab(tableName, tab.database, false, {
+                  connectionId: tab.connectionId,
+                  connectionName: tab.connectionName,
+                })
+              }
+            />
+          </Suspense>
+        </div>
+      ),
+      closable: true,
+      _createdAt: tab.createdAt,
+      _pinned: false,
+    })),
     ...openedUsersTabs.map((tab) => ({
       key: tab.key,
       label: (
@@ -1993,6 +2161,7 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 onTableOpen={openTableTab}
                 onTableDesign={(tableName) => openDesignerTab(tableName)}
                 onTableNew={() => openDesignerTab()}
+                onOpenER={() => openErTab(selectedConnectionId, selectedDatabase)}
                 onTableDelete={async (tableName, db) => {
                   try {
                     await api.dropTable(selectedConnectionId, tableName, db);
@@ -2234,7 +2403,8 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
             items={[
               // 监控/权限 Tab 不可固定，隐藏 pin 项
               ...(contextMenu.tabKey.startsWith('monitor-') ||
-              contextMenu.tabKey.startsWith('users-')
+              contextMenu.tabKey.startsWith('users-') ||
+              contextMenu.tabKey.startsWith('er-')
                 ? []
                 : [
                     {

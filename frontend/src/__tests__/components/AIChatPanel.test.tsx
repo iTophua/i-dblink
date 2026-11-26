@@ -25,7 +25,21 @@ vi.mock('../../services/aiService', () => ({
 }));
 
 import { streamChat } from '../../services/aiService';
-import { mockGetAllColumns } from '../setupTests';
+import {
+  mockAIChatCreateSession,
+  mockAIChatDeleteSession,
+  mockAIChatGetMessages,
+  mockAIChatListSessions,
+  mockAIChatRenameSession,
+  mockAIChatSaveMessages,
+  mockGetAllColumns,
+} from '../setupTests';
+import {
+  flushAIChatHistory,
+  installAIChatHistory,
+  resetAIChatHistoryForTests,
+  startNewAIChat,
+} from '../../services/aiChatHistory';
 import { AIChatPanel } from '../../components/AIChatPanel';
 import { MarkdownRenderer } from '../../components/AIChatPanel/MarkdownRenderer';
 import { PanelErrorBoundary } from '../../components/AIChatPanel/PanelErrorBoundary';
@@ -116,6 +130,9 @@ beforeEach(() => {
     connectionId: null,
     selectedDatabases: [],
     selectedTables: {},
+    sessionId: null,
+    sessions: [],
+    conversationSeq: 0,
   });
   useAIStore.setState({
     enabled: true,
@@ -124,7 +141,36 @@ beforeEach(() => {
   });
   mockStreamChat.mockReset();
   mockGetAllColumns.mockReset();
+  mockAIChatListSessions.mockReset().mockResolvedValue([]);
+  mockAIChatCreateSession.mockReset().mockResolvedValue({
+    id: 'session-1',
+    title: '',
+    connection_id: null,
+    context_json: '',
+    created_at: '2026-01-01T00:00:00.000000000Z',
+    updated_at: '2026-01-01T00:00:00.000000000Z',
+  });
+  mockAIChatSaveMessages.mockReset().mockResolvedValue(undefined);
+  mockAIChatRenameSession.mockReset().mockResolvedValue(undefined);
+  mockAIChatGetMessages.mockReset().mockResolvedValue([]);
+  mockAIChatDeleteSession.mockReset().mockResolvedValue(undefined);
 });
+
+/** 等持久化把队列写完 */
+const flushHistory = async () => {
+  await act(async () => {
+    await flushAIChatHistory();
+  });
+};
+
+const STORED_SESSION = {
+  id: 'session-1',
+  title: '订单统计',
+  connection_id: 'c1',
+  context_json: JSON.stringify({ connection_id: 'c1', databases: ['shop'], tables: {} }),
+  created_at: '2026-11-20T08:00:00.000000000Z',
+  updated_at: '2026-11-24T08:00:00.000000000Z',
+};
 
 describe('AIChatPanel 输入法与回车', () => {
   it('组字过程中的回车是「上屏」，不发送', async () => {
@@ -183,6 +229,21 @@ describe('AIChatPanel 输入法与回车', () => {
     renderPanel();
     await screen.findByTestId('ai-chat-not-configured');
     expect(screen.queryByTestId('ai-composer-input')).not.toBeInTheDocument();
+  });
+});
+
+describe('AIChatPanel 组字状态自愈', () => {
+  it('收不到 compositionend 时状态会卡住，之后的回车仍应照常发送', async () => {
+    renderPanel();
+    const input = await screen.findByTestId('ai-composer-input');
+    fireEvent.change(input, { target: { value: '你好' } });
+    fireEvent.compositionStart(input);
+    // 组字中途输入框被卸载又挂回来之类：compositionend 没有送达
+
+    pressEnter(input);
+    await flush();
+
+    expect(mockStreamChat).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -414,5 +475,286 @@ describe('PanelErrorBoundary', () => {
 
     expect(screen.getByTestId('recovered')).toBeInTheDocument();
     errorSpy.mockRestore();
+  });
+});
+
+describe('AIChatPanel 历史对话', () => {
+  let uninstall: () => void = () => {};
+
+  beforeEach(() => {
+    resetAIChatHistoryForTests();
+    uninstall = installAIChatHistory();
+  });
+
+  afterEach(() => {
+    uninstall();
+    resetAIChatHistoryForTests();
+  });
+
+  it('首轮提问自动落盘：建会话、消息写进会话', async () => {
+    mockStreamChat.mockImplementation(async (_msgs, onChunk) => {
+      onChunk('你好！');
+      return '';
+    });
+    renderPanel();
+    await typeAndSend('你好');
+    await flush();
+    await flushHistory();
+
+    expect(mockAIChatCreateSession).toHaveBeenCalledTimes(1);
+    expect(mockAIChatCreateSession.mock.calls[0][0]).toBe('你好');
+    expect(mockAIChatSaveMessages).toHaveBeenCalled();
+    expect(mockAIChatSaveMessages.mock.calls.every((call) => call[0] === 'session-1')).toBe(true);
+    expect(useAIChatStore.getState().sessionId).toBe('session-1');
+  });
+
+  it('空态列出最近对话，点一条即恢复消息与上下文', async () => {
+    mockAIChatListSessions.mockResolvedValue([STORED_SESSION]);
+    mockAIChatGetMessages.mockResolvedValue([
+      { id: 'u1', role: 'user', content: '历史提问' },
+      { id: 'a1', role: 'assistant', content: '历史回答', status: 'done' },
+    ]);
+    renderPanel();
+
+    await screen.findByTestId('ai-recent-chats');
+    expect(screen.getByText('订单统计')).toBeInTheDocument();
+    expect(screen.getByText('测试库')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('ai-recent-list-open'));
+
+    await waitFor(() => expect(screen.getByText('历史回答')).toBeInTheDocument());
+    expect(mockAIChatGetMessages).toHaveBeenCalledWith('session-1');
+    expect(useAIChatStore.getState().sessionId).toBe('session-1');
+    expect(useAIChatStore.getState().selectedDatabases).toEqual(['shop']);
+    // 没有历史时不显示「最近对话」
+    expect(screen.queryByTestId('ai-recent-chats')).not.toBeInTheDocument();
+  });
+
+  it('标题栏的历史弹层可以切换对话；新对话清空面板但保留历史', async () => {
+    mockAIChatListSessions.mockResolvedValue([
+      STORED_SESSION,
+      {
+        ...STORED_SESSION,
+        id: 'session-2',
+        title: '库存核对',
+        context_json: '',
+        updated_at: '2026-11-23T08:00:00.000000000Z',
+      },
+    ]);
+    mockAIChatGetMessages.mockImplementation(async (id: string) =>
+      id === 'session-1'
+        ? [{ id: 'u1', role: 'user', content: '第一个对话的消息' }]
+        : [{ id: 'u2', role: 'user', content: '第二个对话的消息' }]
+    );
+    renderPanel();
+    await waitFor(() => expect(useAIChatStore.getState().sessions).toHaveLength(2));
+
+    // 当前没有消息时只有历史入口，没有「新对话」
+    expect(screen.getByTestId('ai-history-trigger')).toBeInTheDocument();
+    expect(screen.queryByTestId('ai-new-chat')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('ai-history-trigger'));
+    const items = await screen.findAllByTestId('ai-history-list-item');
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent('订单统计');
+
+    fireEvent.click(screen.getAllByTestId('ai-history-list-open')[1]);
+    await waitFor(() => expect(screen.getByText('第二个对话的消息')).toBeInTheDocument());
+    expect(useAIChatStore.getState().sessionId).toBe('session-2');
+
+    // 有消息后出现「新对话」，确认后面板清空、历史还在
+    fireEvent.click(screen.getByTestId('ai-new-chat'));
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'common.confirm' }));
+    });
+    await waitFor(() => expect(screen.queryByText('第二个对话的消息')).not.toBeInTheDocument());
+    expect(useAIChatStore.getState().sessionId).toBeNull();
+    expect(useAIChatStore.getState().sessions).toHaveLength(2);
+  });
+
+  it('回复完成后点「新对话」，已完成的回答不会被改写成「已停止」', async () => {
+    mockStreamChat.mockImplementation(async (_msgs, onChunk) => {
+      onChunk('答完了');
+      return '';
+    });
+    renderPanel();
+    await typeAndSend('问题');
+    await flush();
+    await flushHistory();
+    const answerId = useAIChatStore.getState().messages[1].id;
+    expect(useAIChatStore.getState().messages[1]).toMatchObject({
+      status: 'done',
+      content: '答完了',
+    });
+
+    fireEvent.click(screen.getByTestId('ai-new-chat'));
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'common.confirm' }));
+    });
+    await waitFor(() => expect(useAIChatStore.getState().messages).toHaveLength(0));
+    await flushHistory();
+
+    // 落盘的始终是 done：切换 / 新建会话只收尾真正进行中的回复
+    const savedStatuses = mockAIChatSaveMessages.mock.calls
+      .flatMap((call) => call[1].upserts as { id: string; status?: string }[])
+      .filter((u) => u.id === answerId)
+      .map((u) => u.status);
+    expect(savedStatuses.at(-1)).toBe('done');
+    expect(savedStatuses).not.toContain('stopped');
+  });
+
+  it('流式输出中收到 ai-chat-interrupt：中止请求，回复按「已停止」收尾且缓冲里的内容不丢', async () => {
+    let push: (chunk: string) => void = () => {};
+    let signal: AbortSignal | undefined;
+    mockStreamChat.mockImplementation(async (_msgs, onChunk, _opts, s) => {
+      push = onChunk;
+      signal = s;
+      await new Promise<void>((resolve) => s?.addEventListener('abort', () => resolve()));
+      return '';
+    });
+    renderPanel();
+    await typeAndSend('问题');
+    await flush();
+
+    act(() => {
+      push('前半段'); // 进了缓冲，40ms 后才会接到回复上
+    });
+    act(() => {
+      window.dispatchEvent(new CustomEvent('ai-chat-interrupt'));
+    });
+
+    expect(signal?.aborted).toBe(true);
+    expect(useAIChatStore.getState().messages[1]).toMatchObject({
+      status: 'stopped',
+      content: '前半段',
+    });
+  });
+
+  it('被新对话作废的流，之后到达的内容不会接进新回复', async () => {
+    const pushes: Array<(chunk: string) => void> = [];
+    mockStreamChat.mockImplementation(
+      (_msgs, onChunk, _opts, signal) =>
+        new Promise<string>((resolve) => {
+          pushes.push(onChunk);
+          signal?.addEventListener('abort', () => resolve(''));
+        })
+    );
+    renderPanel();
+    await typeAndSend('第一问');
+    await flush();
+
+    // 外部入口直接开了新对话（面板已被清空），旧流还在跑
+    await act(async () => {
+      await startNewAIChat();
+    });
+    await typeAndSend('第二问');
+    await flush();
+    expect(pushes).toHaveLength(2);
+
+    act(() => {
+      pushes[0]('旧流的尾巴');
+      pushes[1]('新回复');
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    });
+    expect(useAIChatStore.getState().messages[1]).toMatchObject({
+      role: 'assistant',
+      content: '新回复',
+    });
+  });
+
+  it('还没生成内容就被打断：占位回复直接撤掉，不留空气泡', async () => {
+    let signal: AbortSignal | undefined;
+    mockStreamChat.mockImplementation(async (_msgs, _onChunk, _opts, s) => {
+      signal = s;
+      await new Promise<void>((resolve) => s?.addEventListener('abort', () => resolve()));
+      return '';
+    });
+    renderPanel();
+    await typeAndSend('问题');
+    await flush();
+    expect(useAIChatStore.getState().messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('ai-chat-interrupt'));
+    });
+
+    expect(signal?.aborted).toBe(true);
+    expect(useAIChatStore.getState().messages.map((m) => m.role)).toEqual(['user']);
+  });
+
+  it('点历史里当前打开的对话：只关弹层，不打断正在生成的回复', async () => {
+    mockAIChatListSessions.mockResolvedValue([STORED_SESSION]);
+    let signal: AbortSignal | undefined;
+    mockStreamChat.mockImplementation(async (_msgs, _onChunk, _opts, s) => {
+      signal = s;
+      await new Promise<void>((resolve) => s?.addEventListener('abort', () => resolve()));
+      return '';
+    });
+    renderPanel();
+    await waitFor(() => expect(useAIChatStore.getState().sessions).toHaveLength(1));
+    useAIChatStore.setState({ sessionId: 'session-1' });
+    await typeAndSend('问题');
+    await flush();
+
+    fireEvent.click(screen.getByTestId('ai-history-trigger'));
+    fireEvent.click(await screen.findByTestId('ai-history-list-open'));
+
+    expect(signal?.aborted).toBe(false);
+    expect(useAIChatStore.getState().messages).toHaveLength(2);
+  });
+
+  it('重命名失败时给出提示，而不是悄悄保持原标题', async () => {
+    mockAIChatListSessions.mockResolvedValue([STORED_SESSION]);
+    mockAIChatRenameSession.mockRejectedValue(new Error('locked'));
+    renderPanel();
+    await waitFor(() => expect(useAIChatStore.getState().sessions).toHaveLength(1));
+
+    fireEvent.click(screen.getByTestId('ai-history-trigger'));
+    fireEvent.click(await screen.findByTestId('ai-history-list-rename'));
+    const input = await screen.findByTestId('ai-history-list-rename-input');
+    fireEvent.change(input, { target: { value: '新名字' } });
+    pressEnter(input);
+
+    expect(await screen.findByText('common.aiChat.historyOpFailed: locked')).toBeInTheDocument();
+    expect(useAIChatStore.getState().sessions[0].title).toBe('订单统计');
+  });
+
+  it('历史列表第一次加载失败：下次打开面板时重试', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockAIChatListSessions.mockRejectedValueOnce(new Error('io'));
+    renderPanel();
+    await flush();
+    expect(useAIChatStore.getState().sessions).toHaveLength(0);
+
+    mockAIChatListSessions.mockResolvedValue([STORED_SESSION]);
+    await act(async () => {
+      useAIChatStore.setState({ panelVisible: false });
+    });
+    await act(async () => {
+      useAIChatStore.setState({ panelVisible: true });
+    });
+
+    await waitFor(() => expect(useAIChatStore.getState().sessions).toHaveLength(1));
+  });
+
+  it('删除当前对话后面板回到空态，列表同步移除', async () => {
+    mockAIChatListSessions.mockResolvedValue([STORED_SESSION]);
+    mockAIChatGetMessages.mockResolvedValue([{ id: 'u1', role: 'user', content: '历史提问' }]);
+    renderPanel();
+    await screen.findByTestId('ai-recent-chats');
+    fireEvent.click(screen.getByTestId('ai-recent-list-open'));
+    await waitFor(() => expect(screen.getByText('历史提问')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('ai-history-trigger'));
+    fireEvent.click(await screen.findByTestId('ai-history-list-delete'));
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'common.confirm' }));
+    });
+
+    await waitFor(() => expect(mockAIChatDeleteSession).toHaveBeenCalledWith('session-1'));
+    expect(useAIChatStore.getState().sessionId).toBeNull();
+    expect(useAIChatStore.getState().sessions).toEqual([]);
   });
 });

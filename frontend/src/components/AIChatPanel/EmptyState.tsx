@@ -8,6 +8,8 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import type { AIChatSessionSummary } from '../../stores/aiChatStore';
+import { HistoryList } from './HistoryPopover';
 import { CONVERT_TARGETS, parseQuickActionKey } from './quickActions';
 import type { QuickAction, QuickActionKey } from './quickActions';
 
@@ -66,16 +68,24 @@ interface ChatEmptyStateProps {
   hasContext: boolean;
   contextName?: string;
   onAction: (action: QuickAction, target?: string) => void;
+  /** 历史会话：有则在快捷卡片下方列出最近几条，点击恢复 */
+  recentSessions?: AIChatSessionSummary[];
+  getConnectionName?: (connectionId: string | null) => string | undefined;
+  onResume?: (id: string) => void;
 }
 
-/** 新会话空态：一句引导 + 四张快捷卡片（点击即带上当前 SQL 发问） */
+/** 新会话空态：一句引导 + 四张快捷卡片（点击即带上当前 SQL 发问）+ 最近对话 */
 export function ChatEmptyState({
   actions,
   hasContext,
   contextName,
   onAction,
+  recentSessions,
+  getConnectionName,
+  onResume,
 }: ChatEmptyStateProps) {
   const { t } = useTranslation();
+  const showRecent = !!onResume && !!recentSessions && recentSessions.length > 0;
 
   return (
     <div className="ai-chat-empty" data-testid="ai-chat-empty">
@@ -95,6 +105,20 @@ export function ChatEmptyState({
           </div>
         ))}
       </div>
+      {showRecent && (
+        <div className="ai-chat-recent" data-testid="ai-recent-chats">
+          <div className="ai-chat-recent-head">{t('common.aiChat.recentChats')}</div>
+          <HistoryList
+            sessions={recentSessions ?? []}
+            compact
+            limit={5}
+            getConnectionName={getConnectionName}
+            onSelect={onResume ?? (() => {})}
+            emptyText={t('common.aiChat.historyEmpty')}
+            testId="ai-recent-list"
+          />
+        </div>
+      )}
     </div>
   );
 }

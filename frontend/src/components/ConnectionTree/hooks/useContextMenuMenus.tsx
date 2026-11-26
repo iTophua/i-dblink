@@ -355,6 +355,8 @@ export function useContextMenuMenus(
         { key: 'restore-db', label: t('common.restoreDatabaseMenu') },
         { key: 'user-management', label: t('common.userPrivileges') },
         { key: 'schema-compare', label: t('common.schemaCompare') },
+        { key: 'data-compare', label: t('common.dataCompare.title') },
+        { key: 'view-er-diagram', label: t('common.mainLayout.viewERDiagram') },
         { key: 'connection-monitor', label: t('common.connectionMonitor'), icon: <DashboardOutlined /> },
         { type: 'divider' },
         { key: 'run-sql-file', label: t('common.runSqlFile') },
@@ -403,6 +405,20 @@ export function useContextMenuMenus(
           );
         } else if (key === 'schema-compare') {
           dialogSetters.setSchemaCompareOpen(true);
+        } else if (key === 'data-compare') {
+          // 数据对比：预填这个库作为源
+          window.dispatchEvent(
+            new CustomEvent('menu-action', {
+              detail: { action: 'data-sync', connectionId: connId, database: dbName },
+            })
+          );
+        } else if (key === 'view-er-diagram') {
+          // ER 图：工作区里的一个 Tab（按连接 + 库）
+          window.dispatchEvent(
+            new CustomEvent('tab-action', {
+              detail: { action: 'open-er-tab', connectionId: connId, database: dbName },
+            })
+          );
         } else if (key === 'connection-monitor') {
           // 进程 + 服务器状态合并为一个「连接监控」Tab，库级入口带库过滤
           window.dispatchEvent(

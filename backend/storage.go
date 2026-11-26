@@ -18,6 +18,7 @@ type Storage struct {
 	historyRepo    *localdb.HistoryRepository
 	favoriteRepo   *localdb.FavoriteRepository
 	aiConfigRepo   *localdb.AIConfigRepository
+	aiChatRepo     *localdb.AIChatRepository
 }
 
 // NewStorage 创建存储服务
@@ -45,6 +46,7 @@ func NewStorage(dataDir string) (*Storage, error) {
 		historyRepo:    localdb.NewHistoryRepository(pool.DB()),
 		favoriteRepo:   localdb.NewFavoriteRepository(pool.DB()),
 		aiConfigRepo:   localdb.NewAIConfigRepository(pool.DB()),
+		aiChatRepo:     localdb.NewAIChatRepository(pool.DB()),
 	}, nil
 }
 
@@ -320,4 +322,46 @@ func maskAPIKey(encrypted string) string {
 		return strings.Repeat("*", len(plain))
 	}
 	return plain[:4] + strings.Repeat("*", len(plain)-8) + plain[len(plain)-4:]
+}
+
+// ==================== AI 对话历史 ====================
+
+// ListAIChatSessions 获取最近的对话会话
+func (s *Storage) ListAIChatSessions(limit int) ([]*localdb.AIChatSession, error) {
+	return s.aiChatRepo.ListSessions(limit)
+}
+
+// CreateAIChatSession 新建对话会话
+func (s *Storage) CreateAIChatSession(title string, connectionID *string, contextJSON string) (*localdb.AIChatSession, error) {
+	return s.aiChatRepo.CreateSession(title, connectionID, contextJSON)
+}
+
+// RenameAIChatSession 重命名会话
+func (s *Storage) RenameAIChatSession(id string, title string) error {
+	return s.aiChatRepo.RenameSession(id, title)
+}
+
+// UpdateAIChatSessionContext 更新会话的表结构上下文
+func (s *Storage) UpdateAIChatSessionContext(id string, connectionID *string, contextJSON string) error {
+	return s.aiChatRepo.UpdateSessionContext(id, connectionID, contextJSON)
+}
+
+// DeleteAIChatSession 删除会话及其消息
+func (s *Storage) DeleteAIChatSession(id string) error {
+	return s.aiChatRepo.DeleteSession(id)
+}
+
+// DeleteAllAIChatSessions 清空全部对话历史
+func (s *Storage) DeleteAllAIChatSessions() error {
+	return s.aiChatRepo.DeleteAllSessions()
+}
+
+// GetAIChatMessages 获取会话消息
+func (s *Storage) GetAIChatMessages(sessionID string) ([]localdb.AIChatMessage, error) {
+	return s.aiChatRepo.GetMessages(sessionID)
+}
+
+// SaveAIChatMessages 批量写入会话消息
+func (s *Storage) SaveAIChatMessages(sessionID string, batch localdb.AIChatMessageBatch) error {
+	return s.aiChatRepo.SaveMessages(sessionID, batch)
 }

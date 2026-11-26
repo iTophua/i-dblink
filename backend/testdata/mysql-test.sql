@@ -1,4 +1,11 @@
 -- MySQL test schema + data (compatible syntax)
+-- 结构比较的真实库测试要在同一个实例上比两个库：testuser 只对 testdb 有权限，这里一并授权
+CREATE DATABASE IF NOT EXISTS idblink_compare_a;
+CREATE DATABASE IF NOT EXISTS idblink_compare_b;
+GRANT ALL PRIVILEGES ON idblink_compare_a.* TO 'testuser'@'%';
+GRANT ALL PRIVILEGES ON idblink_compare_b.* TO 'testuser'@'%';
+FLUSH PRIVILEGES;
+
 USE testdb;
 
 -- Users table

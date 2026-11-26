@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { QuickActionMenu } from './EmptyState';
 import type { QuickAction } from './quickActions';
+import { useImeSafeEnter } from './useImeSafeEnter';
 
 const { TextArea } = Input;
 
@@ -42,14 +43,6 @@ interface ComposerProps {
   onQuickAction: (action: QuickAction, target?: string) => void;
 }
 
-// WebKit（macOS 的 WKWebView）用回车确认候选词时，先触发 compositionend、再触发 keydown，
-// 此时 isComposing 已经是 false，只能按「组合刚结束」识别这次回车。Chromium 系顺序相反，
-// 不做这层兜底，否则紧接着的正常回车会被吞掉。
-const isWebKit =
-  typeof navigator !== 'undefined' &&
-  /AppleWebKit/.test(navigator.userAgent) &&
-  !/Chrome|Chromium|Edg|OPR/.test(navigator.userAgent);
-
 /** 输入区：引用的 SQL、文本框、快捷指令、发送/停止 */
 export function Composer({
   ref,
@@ -68,31 +61,19 @@ export function Composer({
   const { t } = useTranslation();
   const textAreaRef = useRef<ComponentRef<typeof TextArea>>(null);
   const [focused, setFocused] = useState(false);
-  const composingRef = useRef(false);
-  const compositionEndedAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const {
+    onCompositionStart: handleCompositionStart,
+    onCompositionEnd: handleCompositionEnd,
+    isRealEnter,
+  } = useImeSafeEnter();
 
   useImperativeHandle(ref, () => ({
     focus: () => textAreaRef.current?.focus({ cursor: 'end' }),
   }));
 
-  const handleCompositionStart = () => {
-    composingRef.current = true;
-  };
-
-  const handleCompositionEnd = () => {
-    composingRef.current = false;
-    compositionEndedAtRef.current = performance.now();
-  };
-
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter' || e.shiftKey) return;
-    // 输入法组字中的回车是「上屏」，不是发送
-    if (composingRef.current || e.nativeEvent.isComposing || e.keyCode === 229) return;
-    if (isWebKit && Math.abs(e.timeStamp - compositionEndedAtRef.current) < 500) {
-      // 只吞确认候选词的这一下，随后的回车照常发送
-      compositionEndedAtRef.current = Number.NEGATIVE_INFINITY;
-      return;
-    }
+    if (!isRealEnter(e)) return;
     e.preventDefault();
     onSend();
   };

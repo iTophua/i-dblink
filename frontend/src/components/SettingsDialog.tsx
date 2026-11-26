@@ -22,6 +22,7 @@ import {
   LaptopOutlined,
   EditOutlined,
   ExclamationCircleOutlined,
+  FolderOutlined,
   GlobalOutlined,
   LoadingOutlined,
   MoonOutlined,
@@ -47,6 +48,74 @@ import { SQL_LIVE_TEMPLATES } from '../constants/sqlLiveTemplates';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { getErrorMessage } from '../utils/getErrorMessage';
+
+/**
+ * 诊断日志入口：展示日志目录，一键在文件管理器中打开。
+ * active = 弹窗开着；每次重新打开都会再取一次路径
+ * （设置弹窗是 forceRender 的，不在启动时就发这次请求；上次失败也能补上）。
+ */
+function DiagnosticsRow({ active }: { active: boolean }) {
+  const { t } = useTranslation();
+  const [logPath, setLogPath] = useState('');
+  const [opening, setOpening] = useState(false);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    api
+      .getLogFolderPath()
+      .then((p) => {
+        if (!cancelled) setLogPath(p);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [active]);
+
+  const openFolder = async () => {
+    setOpening(true);
+    try {
+      await api.openLogFolder();
+    } catch (err) {
+      message.error(`${t('common.diagnostics.openFailed')}: ${getErrorMessage(err)}`);
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <SettingsRow
+      label={t('common.diagnostics.title')}
+      description={
+        <>
+          {t('common.diagnostics.desc')}
+          {logPath && (
+            <span
+              style={{
+                display: 'block',
+                marginTop: 4,
+                fontSize: 12,
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                color: 'var(--text-secondary)',
+                wordBreak: 'break-all',
+                userSelect: 'text',
+              }}
+              title={logPath}
+            >
+              {logPath}
+            </span>
+          )}
+        </>
+      }
+      control={
+        <Button size="small" icon={<FolderOutlined />} loading={opening} onClick={openFolder}>
+          {t('common.diagnostics.openFolder')}
+        </Button>
+      }
+    />
+  );
+}
 
 interface SettingsDialogProps {
   open: boolean;
@@ -450,6 +519,7 @@ export function SettingsDialog({ open, onCancel }: SettingsDialogProps) {
                     </Form.Item>
                   }
                 />
+                <DiagnosticsRow active={open} />
               </SettingsSection>
             )}
 

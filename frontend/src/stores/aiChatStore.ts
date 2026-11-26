@@ -24,11 +24,69 @@ export interface FinishResult {
   elapsedMs?: number;
 }
 
+/** 历史会话列表里的一项（消息内容不在这里，切换时另取） */
+export interface AIChatSessionSummary {
+  id: string;
+  title: string;
+  connectionId: string | null;
+  /** 发问时的表结构上下文（JSON 原文，恢复会话时解析） */
+  contextJson: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 一次对话的表结构上下文快照 */
+export interface ChatContextSnapshot {
+  connectionId: string | null;
+  databases: string[];
+  tables: Record<string, string[]>;
+}
+
+/**
+ * 消息变更事件：持久化层（services/aiChatHistory.ts）订阅后合并写盘。
+ * sessionId 为 null 表示当前对话还没落过盘（首条消息发出后才建会话）。
+ */
+export type ChatMutation =
+  | { type: 'upsert'; sessionId: string | null; message: ChatMessage }
+  | { type: 'delete'; sessionId: string | null; id: string };
+
+type MutationListener = (mutation: ChatMutation) => void;
+const mutationListeners = new Set<MutationListener>();
+
+/** 订阅消息变更；返回取消函数 */
+export function subscribeChatMutations(listener: MutationListener): () => void {
+  mutationListeners.add(listener);
+  return () => {
+    mutationListeners.delete(listener);
+  };
+}
+
+function emit(mutation: { type: 'upsert'; message: ChatMessage } | { type: 'delete'; id: string }) {
+  if (mutationListeners.size === 0) return;
+  const { sessionId } = useAIChatStore.getState();
+  for (const listener of mutationListeners) {
+    listener({ ...mutation, sessionId } as ChatMutation);
+  }
+}
+
 interface AIChatState {
   panelVisible: boolean;
   messages: ChatMessage[];
   /** 是否正在等待 AI 响应（发送后到流结束前） */
   streaming: boolean;
+
+  /** 当前对话对应的本地会话；null = 新对话还没落盘 */
+  sessionId: string | null;
+  /** 历史会话（最近更新在前） */
+  sessions: AIChatSessionSummary[];
+  /** 对话代际：每次新对话 / 切换会话 +1，持久化层据此区分「哪一轮对话在等建会话」 */
+  conversationSeq: number;
+  /**
+   * 在这个时间点之前，面板打开时不跟随连接树的选中项。
+   * ER 图「发给 AI」这类外部入口指定好上下文后置位，保住它设好的表选择；
+   * 用时间而不是开关，是为了不会因为面板早已打开而留下一个过期的标记。
+   */
+  contextSyncHoldUntil: number;
 
   // 上下文
   connectionId: string | null;
@@ -51,7 +109,22 @@ interface AIChatState {
   /** 流结束：写入状态、失败原因与耗时 */
   finishAssistantMessage: (id: string, result: FinishResult) => void;
   removeMessage: (id: string) => void;
+  /** 开始新对话：清空消息并脱离当前会话（已落盘的内容留在历史里） */
   clearMessages: () => void;
+
+  // 会话（由 services/aiChatHistory.ts 调用）
+  setCurrentSession: (id: string | null) => void;
+  setContextSyncHold: (until: number) => void;
+  setSessions: (sessions: AIChatSessionSummary[]) => void;
+  /** 新增或替换列表里的一项（保持最近更新在前） */
+  upsertSession: (session: AIChatSessionSummary) => void;
+  removeSessionFromList: (id: string) => void;
+  /** 载入一个历史会话：整体替换消息与上下文，不产生持久化事件 */
+  hydrateConversation: (args: {
+    sessionId: string;
+    messages: ChatMessage[];
+    context: ChatContextSnapshot | null;
+  }) => void;
 }
 
 /** 生成唯一消息 ID */
@@ -71,10 +144,19 @@ function updateMessage(
   return next;
 }
 
+/** 按 updatedAt 倒序插入/替换，同一 id 只保留一份 */
+function sortSessions(sessions: AIChatSessionSummary[]): AIChatSessionSummary[] {
+  return sessions.slice().sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 export const useAIChatStore = create<AIChatState>((set) => ({
   panelVisible: false,
   messages: [],
   streaming: false,
+  sessionId: null,
+  sessions: [],
+  conversationSeq: 0,
+  contextSyncHoldUntil: 0,
   connectionId: null,
   selectedDatabases: [],
   selectedTables: {},
@@ -105,19 +187,17 @@ export const useAIChatStore = create<AIChatState>((set) => ({
 
   addUserMessage: (content, attachedSql) => {
     const id = genId();
-    set((s) => ({
-      messages: [...s.messages, { id, role: 'user', content, attachedSql }],
-      streaming: true,
-    }));
+    const message: ChatMessage = { id, role: 'user', content, attachedSql };
+    set((s) => ({ messages: [...s.messages, message], streaming: true }));
+    emit({ type: 'upsert', message });
     return id;
   },
 
   startAssistantMessage: () => {
     const id = genId();
-    set((s) => ({
-      messages: [...s.messages, { id, role: 'assistant', content: '', status: 'streaming' }],
-      streaming: true,
-    }));
+    const message: ChatMessage = { id, role: 'assistant', content: '', status: 'streaming' };
+    set((s) => ({ messages: [...s.messages, message], streaming: true }));
+    emit({ type: 'upsert', message });
     return id;
   },
 
@@ -127,23 +207,63 @@ export const useAIChatStore = create<AIChatState>((set) => ({
       messages: updateMessage(s.messages, id, (m) => ({ ...m, content: m.content + chunk })),
     })),
 
-  finishAssistantMessage: (id, result) =>
+  finishAssistantMessage: (id, result) => {
+    let final: ChatMessage | undefined;
     set((s) => ({
-      messages: updateMessage(s.messages, id, (m) => ({
-        ...m,
-        status: result.status,
-        error: result.error,
-        elapsedMs: result.elapsedMs,
-      })),
+      messages: updateMessage(s.messages, id, (m) => {
+        final = {
+          ...m,
+          status: result.status,
+          error: result.error,
+          elapsedMs: result.elapsedMs,
+        };
+        return final;
+      }),
       streaming: false,
-    })),
+    }));
+    // 流结束是终态：立刻落盘（流式过程中的增量由持久化层定期存档）
+    if (final) emit({ type: 'upsert', message: final });
+  },
 
   // 移除的是正在流式输出的那条时，一并结束 streaming（如整理上下文期间点了停止）
-  removeMessage: (id) =>
+  removeMessage: (id) => {
     set((s) => ({
       messages: s.messages.filter((m) => m.id !== id),
       streaming: false,
+    }));
+    emit({ type: 'delete', id });
+  },
+
+  clearMessages: () =>
+    set((s) => ({
+      messages: [],
+      streaming: false,
+      sessionId: null,
+      conversationSeq: s.conversationSeq + 1,
     })),
 
-  clearMessages: () => set({ messages: [], streaming: false }),
+  setCurrentSession: (id) => set({ sessionId: id }),
+
+  setContextSyncHold: (until) => set({ contextSyncHoldUntil: until }),
+
+  setSessions: (sessions) => set({ sessions: sortSessions(sessions) }),
+
+  upsertSession: (session) =>
+    set((s) => ({
+      sessions: sortSessions([session, ...s.sessions.filter((item) => item.id !== session.id)]),
+    })),
+
+  removeSessionFromList: (id) =>
+    set((s) => ({ sessions: s.sessions.filter((item) => item.id !== id) })),
+
+  hydrateConversation: ({ sessionId, messages, context }) =>
+    set((s) => ({
+      sessionId,
+      messages,
+      streaming: false,
+      conversationSeq: s.conversationSeq + 1,
+      connectionId: context?.connectionId ?? null,
+      selectedDatabases: context?.databases ?? [],
+      selectedTables: context?.tables ?? {},
+    })),
 }));

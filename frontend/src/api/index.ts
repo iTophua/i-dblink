@@ -99,6 +99,12 @@ import type {
   ForeignKeyInfo,
   QueryResult,
   ScriptResult,
+  AIChatSession,
+  StoredChatMessage,
+  AIChatMessageBatch,
+  ERDiagram,
+  DataCompareRequest,
+  DataCompareResult,
 } from '../types/api';
 
 /**
@@ -1263,6 +1269,91 @@ export const api = {
     const { PrepareSQLOptimize } = await import('../../bindings/idblink/backend/app');
     const result = await PrepareSQLOptimize(connectionId, sql, database);
     return result as unknown as SQLOptimizeContext;
+  },
+
+  // ── 诊断日志 ──
+  // 前端异常的上报不在这里：utils/diagnostics.ts 直接调绑定（它装在 api 之前，不能依赖本模块）
+
+  /** 诊断日志目录路径（设置页展示） */
+  async getLogFolderPath(): Promise<string> {
+    const { GetLogFolderPath } = await import('../../bindings/idblink/backend/app');
+    return (await GetLogFolderPath()) ?? '';
+  },
+
+  async openLogFolder(): Promise<void> {
+    const { OpenLogFolder } = await import('../../bindings/idblink/backend/app');
+    await OpenLogFolder();
+  },
+
+  /**
+   * 表数据对比：按主键比对源表与目标表，并生成把目标表同步成源表的 SQL。
+   * 只比对和生成，不执行任何写操作。
+   */
+  async compareTableData(req: DataCompareRequest): Promise<DataCompareResult> {
+    const { CompareTableData } = await import('../../bindings/idblink/backend/app');
+    return (await CompareTableData(req)) as unknown as DataCompareResult;
+  },
+
+  /** ER 图：一次取齐表、列（带主键标记）与外键 */
+  async getERDiagram(connectionId: string, database?: string): Promise<ERDiagram> {
+    const { GetERDiagram } = await import('../../bindings/idblink/backend/app');
+    return (await GetERDiagram(connectionId, database ?? null)) as unknown as ERDiagram;
+  },
+
+  // ── AI 对话历史 ──
+
+  async listAIChatSessions(): Promise<AIChatSession[]> {
+    const { AIChatListSessions } = await import('../../bindings/idblink/backend/app');
+    return ((await AIChatListSessions()) ?? []) as unknown as AIChatSession[];
+  },
+
+  async createAIChatSession(
+    title: string,
+    connectionId: string | null,
+    contextJson: string
+  ): Promise<AIChatSession> {
+    const { AIChatCreateSession } = await import('../../bindings/idblink/backend/app');
+    return (await AIChatCreateSession(
+      title,
+      connectionId,
+      contextJson
+    )) as unknown as AIChatSession;
+  },
+
+  /** 重命名（不改变「最近更新」排序） */
+  async renameAIChatSession(id: string, title: string): Promise<void> {
+    const { AIChatRenameSession } = await import('../../bindings/idblink/backend/app');
+    await AIChatRenameSession(id, title);
+  },
+
+  /** 更新会话的表结构上下文（恢复会话时带回） */
+  async updateAIChatSessionContext(
+    id: string,
+    connectionId: string | null,
+    contextJson: string
+  ): Promise<void> {
+    const { AIChatUpdateSessionContext } = await import('../../bindings/idblink/backend/app');
+    await AIChatUpdateSessionContext(id, connectionId, contextJson);
+  },
+
+  async deleteAIChatSession(id: string): Promise<void> {
+    const { AIChatDeleteSession } = await import('../../bindings/idblink/backend/app');
+    await AIChatDeleteSession(id);
+  },
+
+  async deleteAllAIChatSessions(): Promise<void> {
+    const { AIChatDeleteAllSessions } = await import('../../bindings/idblink/backend/app');
+    await AIChatDeleteAllSessions();
+  },
+
+  async getAIChatMessages(sessionId: string): Promise<StoredChatMessage[]> {
+    const { AIChatGetMessages } = await import('../../bindings/idblink/backend/app');
+    return ((await AIChatGetMessages(sessionId)) ?? []) as unknown as StoredChatMessage[];
+  },
+
+  async saveAIChatMessages(sessionId: string, batch: AIChatMessageBatch): Promise<void> {
+    const { AIChatSaveMessages } = await import('../../bindings/idblink/backend/app');
+    await AIChatSaveMessages(sessionId, batch);
   },
 
   // ── MCP ──

@@ -25,7 +25,16 @@ import { buildQuickActions } from './quickActions';
 import type { QuickAction } from './quickActions';
 import { Composer } from './Composer';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
+import { HistoryPopover } from './HistoryPopover';
 import type { AttachedSql, ComposerHandle } from './Composer';
+import {
+  clearAIChatHistory,
+  deleteAIChatSession,
+  refreshAIChatSessions,
+  renameAIChatSession,
+  resumeAIChatSession,
+  startNewAIChat,
+} from '../../services/aiChatHistory';
 import '../../styles/ai-chat.css';
 
 const DEFAULT_WIDTH = 496;
@@ -96,7 +105,8 @@ export function AIChatPanel({
   const streaming = useAIChatStore((s) => s.streaming);
   const connectionId = useAIChatStore((s) => s.connectionId);
   const setPanelVisible = useAIChatStore((s) => s.setPanelVisible);
-  const clearMessages = useAIChatStore((s) => s.clearMessages);
+  const sessionId = useAIChatStore((s) => s.sessionId);
+  const sessions = useAIChatStore((s) => s.sessions);
 
   const enabled = useAIStore((s) => s.enabled);
   const ready = useAIStore((s) => s.ready);
@@ -106,6 +116,10 @@ export function AIChatPanel({
   const [draft, setDraft] = useState('');
   const [attached, setAttached] = useState<AttachedSql | null>(null);
   const [statusChecking, setStatusChecking] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  /** 正在切换 / 删除的会话 id */
+  const [historyBusy, setHistoryBusy] = useState<string | null>(null);
+  const [historyClearing, setHistoryClearing] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const streamIdRef = useRef('');
@@ -132,6 +146,16 @@ export function AIChatPanel({
     };
   }, [checkStatus]);
 
+  // 历史会话列表：AI 可用后拉一次（空对话不落盘，之后由持久化层增量维护）
+  const sessionsLoadedRef = useRef(false);
+  useEffect(() => {
+    if (statusChecking || !enabled || !ready || sessionsLoadedRef.current || !panelVisible) return;
+    // 加载失败不算「拉过」：面板常驻，一次失败就再也不重试的话，这次运行就一直没有历史入口
+    void refreshAIChatSessions().then((ok) => {
+      if (ok) sessionsLoadedRef.current = true;
+    });
+  }, [statusChecking, enabled, ready, panelVisible]);
+
   /** 把面板上下文切到某个连接，并默认勾选其已加载的库 */
   const syncConnection = useCallback(
     (connId: string) => {
@@ -154,6 +178,8 @@ export function AIChatPanel({
       return;
     }
     lastSyncedConnRef.current = selectedConnectionId;
+    // 外部入口（ER 图「发给 AI」）刚指定过上下文：这次不跟随连接树，保住它设好的表选择
+    if (Date.now() < useAIChatStore.getState().contextSyncHoldUntil) return;
     syncConnection(selectedConnectionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelVisible, selectedConnectionId]);
@@ -222,6 +248,11 @@ export function AIChatPanel({
         ? history[history.length - 1].content
         : composeUserContent(content, options?.attachedSql, sqlLabel);
 
+      // 面板被外部入口清空过（ER 图「发给 AI」）时，上一条回复的流可能还在跑：
+      // 先中止它，它的内容不能再接进这次的回复
+      abortRef.current?.abort();
+      streamIdRef.current = '';
+      pendingRef.current = '';
       const controller = new AbortController();
       abortRef.current = controller;
       let assistantId: string;
@@ -245,6 +276,8 @@ export function AIChatPanel({
           error,
           elapsedMs: performance.now() - startedAtRef.current,
         });
+        // 已经收尾：之后切换 / 新建会话时不能再把它改写成「已停止」
+        streamIdRef.current = '';
         if (abortRef.current === controller) abortRef.current = null;
       };
 
@@ -279,7 +312,15 @@ export function AIChatPanel({
           ...(regenerate ? history.slice(0, -1) : history),
           { role: 'user', content: userContent },
         ];
-        await streamChat(requestMessages, queueChunk, undefined, controller.signal);
+        await streamChat(
+          requestMessages,
+          (chunk: string) => {
+            // 这条流已被新对话作废：之后到达的内容不属于任何回复
+            if (isCurrent()) queueChunk(chunk);
+          },
+          undefined,
+          controller.signal
+        );
         finish(controller.signal.aborted ? 'stopped' : 'done');
       } catch (err) {
         finish('error', getErrorMessage(err));
@@ -351,6 +392,11 @@ export function AIChatPanel({
     [pickActiveSql, sendPrompt, message, t]
   );
 
+  const getConnectionName = useCallback(
+    (connId: string | null) => connections.find((c) => c.id === connId)?.name,
+    [connections]
+  );
+
   const handleCopy = useCallback(
     async (text: string) => {
       try {
@@ -374,14 +420,108 @@ export function AIChatPanel({
     [onApplySQL, message, t]
   );
 
-  const handleNewChat = useCallback(() => {
+  /**
+   * 把进行中的回复按「已停止」收尾：切换/新建/删除会话前调用，
+   * 这样最后一段已生成的内容也会落进历史（否则只留到上一次存档）。
+   */
+  const finalizeActiveStream = useCallback(() => {
     abortRef.current?.abort();
-    streamIdRef.current = '';
+    const id = streamIdRef.current;
+    if (!id) return;
+    const stillStreaming =
+      useAIChatStore.getState().messages.find((m) => m.id === id)?.status === 'streaming';
+    // 只收尾真正进行中的回复：已经完成 / 失败的不能被改写成「已停止」（否则恢复会话时
+    // 完成的回答显示成已停止、失败的回答丢掉错误信息）
+    if (stillStreaming) flushPending(); // 先把缓冲里的内容接到这条回复上
+    const reply = useAIChatStore.getState().messages.find((m) => m.id === id);
+    streamIdRef.current = ''; // 仍在途的流收尾时发现 id 已换，不会再改写状态
     pendingRef.current = '';
-    clearMessages();
+    if (!stillStreaming) return;
+    if (!reply?.content) {
+      // 还没生成任何内容就被打断：占位回复直接撤掉（留成「已停止」的话，恢复会话时是个空气泡）
+      useAIChatStore.getState().removeMessage(id);
+      return;
+    }
+    useAIChatStore.getState().finishAssistantMessage(id, {
+      status: 'stopped',
+      elapsedMs: performance.now() - startedAtRef.current,
+    });
+  }, [flushPending]);
+
+  // 外部入口（ER 图「发给 AI」）开新对话前发这个事件：把进行中的回复按「已停止」收尾。
+  // 否则面板已经清空、旧流还在跑，它的内容会接进新对话的下一条回复
+  useEffect(() => {
+    const onInterrupt = () => finalizeActiveStream();
+    window.addEventListener('ai-chat-interrupt', onInterrupt);
+    return () => window.removeEventListener('ai-chat-interrupt', onInterrupt);
+  }, [finalizeActiveStream]);
+
+  const runHistoryAction = useCallback(
+    async (id: string | null, action: () => Promise<void>) => {
+      finalizeActiveStream();
+      setHistoryBusy(id);
+      try {
+        await action();
+      } catch (err) {
+        message.error(`${t('common.aiChat.historyOpFailed')}: ${getErrorMessage(err)}`);
+      } finally {
+        setHistoryBusy(null);
+        setHistoryOpen(false);
+      }
+    },
+    [finalizeActiveStream, message, t]
+  );
+
+  const handleNewChat = useCallback(() => {
     setAttached(null);
-    composerRef.current?.focus();
-  }, [clearMessages]);
+    void runHistoryAction(null, async () => {
+      await startNewAIChat();
+      composerRef.current?.focus();
+    });
+  }, [runHistoryAction]);
+
+  const handleResume = useCallback(
+    (id: string) => {
+      setAttached(null);
+      // 点的就是当前对话：只是关掉弹层，不能把正在生成的回复打断
+      if (useAIChatStore.getState().sessionId === id) {
+        setHistoryOpen(false);
+        return;
+      }
+      void runHistoryAction(id, () => resumeAIChatSession(id));
+    },
+    [runHistoryAction]
+  );
+
+  const handleRename = useCallback(
+    async (id: string, title: string) => {
+      try {
+        await renameAIChatSession(id, title);
+      } catch (err) {
+        // 重命名不收尾进行中的回复，所以不走 runHistoryAction：失败提示要自己给
+        message.error(`${t('common.aiChat.historyOpFailed')}: ${getErrorMessage(err)}`);
+      }
+    },
+    [message, t]
+  );
+
+  const handleDelete = useCallback(
+    (id: string) => runHistoryAction(id, () => deleteAIChatSession(id)),
+    [runHistoryAction]
+  );
+
+  const handleClearHistory = useCallback(async () => {
+    finalizeActiveStream();
+    setHistoryClearing(true);
+    try {
+      await clearAIChatHistory();
+    } catch (err) {
+      message.error(`${t('common.aiChat.historyOpFailed')}: ${getErrorMessage(err)}`);
+    } finally {
+      setHistoryClearing(false);
+      setHistoryOpen(false);
+    }
+  }, [finalizeActiveStream, message, t]);
 
   const lastMessage = chatMessages[chatMessages.length - 1];
   const aiUnavailable = !enabled || !ready;
@@ -417,24 +557,42 @@ export function AIChatPanel({
       }
       extra={
         !statusChecking &&
-        !aiUnavailable &&
-        chatMessages.length > 0 && (
-          <Popconfirm
-            title={t('common.aiChat.newChatConfirm')}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            onConfirm={handleNewChat}
-          >
-            <Tooltip title={t('common.aiChat.newChat')}>
-              <Button
-                type="text"
-                size="small"
-                icon={<PlusOutlined />}
-                aria-label={t('common.aiChat.newChat')}
-                data-testid="ai-new-chat"
+        !aiUnavailable && (
+          <div className="ai-chat-header-actions">
+            {sessions.length > 0 && (
+              <HistoryPopover
+                sessions={sessions}
+                currentSessionId={sessionId}
+                getConnectionName={getConnectionName}
+                open={historyOpen}
+                onOpenChange={setHistoryOpen}
+                onSelect={handleResume}
+                onRename={handleRename}
+                onDelete={handleDelete}
+                onClearAll={handleClearHistory}
+                busyId={historyBusy}
+                clearing={historyClearing}
               />
-            </Tooltip>
-          </Popconfirm>
+            )}
+            {chatMessages.length > 0 && (
+              <Popconfirm
+                title={t('common.aiChat.newChatConfirm')}
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
+                onConfirm={handleNewChat}
+              >
+                <Tooltip title={t('common.aiChat.newChat')}>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<PlusOutlined />}
+                    aria-label={t('common.aiChat.newChat')}
+                    data-testid="ai-new-chat"
+                  />
+                </Tooltip>
+              </Popconfirm>
+            )}
+          </div>
         )
       }
       styles={{
@@ -486,6 +644,9 @@ export function AIChatPanel({
                   hasContext={!!connectionId}
                   contextName={connections.find((c) => c.id === connectionId)?.name}
                   onAction={runQuickAction}
+                  recentSessions={sessions}
+                  getConnectionName={getConnectionName}
+                  onResume={handleResume}
                 />
               }
             />

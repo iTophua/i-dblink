@@ -22,6 +22,7 @@ import {
   KeyOutlined,
   RobotOutlined,
   LayoutOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { KeyboardShortcutsModal } from '../../utils/uxEnhancements';
 import { getShortcutMenuLabel, isMacOS } from '../../constants/menuShortcuts';
@@ -62,7 +63,8 @@ export function Toolbar({
   const aiReady = useAIStore((s) => s.ready);
   const setChatPanelVisible = useAIChatStore((s) => s.setPanelVisible);
 
-  const getLabel = (key: string, text: string) => `${text}${getShortcutMenuLabel(key, shortcuts, isMac)}`;
+  const getLabel = (key: string, text: string) =>
+    `${text}${getShortcutMenuLabel(key, shortcuts, isMac)}`;
 
   const handleMenuAction = useCallback((action: string) => {
     window.dispatchEvent(new CustomEvent('menu-action', { detail: { action } }));
@@ -131,7 +133,11 @@ export function Toolbar({
   ];
 
   const viewMenuItems: MenuProps['items'] = [
-    { key: 'refresh', icon: <ReloadOutlined />, label: getLabel('refresh', t('common.refreshLabel')) },
+    {
+      key: 'refresh',
+      icon: <ReloadOutlined />,
+      label: getLabel('refresh', t('common.refreshLabel')),
+    },
     { type: 'divider' },
     { key: 'zoom-in', label: getLabel('zoom-in', t('common.zoomInLabel')) },
     { key: 'zoom-out', label: getLabel('zoom-out', t('common.zoomOutLabel')) },
@@ -146,9 +152,17 @@ export function Toolbar({
       icon: <LinkOutlined />,
       label: getLabel('connect-selected', t('common.connectSelected')),
     },
-    { key: 'disconnect', icon: <DisconnectOutlined />, label: getLabel('disconnect', t('common.disconnect')) },
+    {
+      key: 'disconnect',
+      icon: <DisconnectOutlined />,
+      label: getLabel('disconnect', t('common.disconnect')),
+    },
     { type: 'divider' },
-    { key: 'new-query', icon: <CodeOutlined />, label: getLabel('new-query', t('common.sqlEditor.newQuery')) },
+    {
+      key: 'new-query',
+      icon: <CodeOutlined />,
+      label: getLabel('new-query', t('common.sqlEditor.newQuery')),
+    },
     {
       key: 'execute-query',
       icon: <PlayCircleOutlined />,
@@ -165,7 +179,6 @@ export function Toolbar({
       key: 'data-sync',
       icon: <SyncOutlined />,
       label: getLabel('data-sync', t('common.dataSync')),
-      disabled: true,
     },
     {
       key: 'backup',
@@ -180,7 +193,12 @@ export function Toolbar({
       disabled: true,
     },
     { type: 'divider' },
-    { key: 'model-designer', label: getLabel('model-designer', t('common.modelDesigner')), disabled: true },
+    // 打开当前连接 / 库的 ER 图（菜单项的 key 沿用旧名）
+    {
+      key: 'model-designer',
+      icon: <ApartmentOutlined />,
+      label: getLabel('model-designer', t('common.erDiagram.title')),
+    },
   ];
 
   const windowMenuItems: MenuProps['items'] = [
@@ -332,7 +350,14 @@ export function Toolbar({
   if (variant === 'inline') {
     // 左槽：紧跟标签之前的视图控制；右槽：标签栏唯一的文档级主操作
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: slot === 'left' ? 6 : 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          paddingRight: slot === 'left' ? 6 : 0,
+        }}
+      >
         {slot === 'left' ? renderSidebarToggle() : renderNewQuery(true)}
       </div>
     );

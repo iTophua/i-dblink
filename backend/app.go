@@ -279,10 +279,12 @@ func (a *App) Context() context.Context {
 
 // Shutdown 应用关闭时调用（Wails v3 ServiceShutdown 接口）
 func (a *App) ServiceShutdown() error {
+	slog.Info("iDBLink shutting down")
 	a.disconnectAll()
 	if a.storage != nil {
 		a.storage.Close()
 	}
+	CloseAppLogging()
 	return nil
 }
 
@@ -362,6 +364,9 @@ func (a *App) getDataDir() string {
 	return filepath.Join(home, ".idblink", "data")
 }
 
+// DataDir 对外暴露数据目录路径（main 在创建 Wails 应用前初始化诊断日志时使用）。
+func (a *App) DataDir() string { return a.getDataDir() }
+
 // Greet 测试方法
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello, %s! Welcome to iDBLink!", name)
@@ -395,13 +400,17 @@ func callHandler(handlerFunc func(http.ResponseWriter, *http.Request), reqBody i
 	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
+	name := trimHandlerName(goruntime.FuncForPC(reflect.ValueOf(handlerFunc).Pointer()).Name())
 	rr := httptest.NewRecorder()
+	start := time.Now()
 	handlerFunc(rr, req)
+	// error 字段只解析一次，日志和返回值共用：查询结果这类大响应整体解析一遍并不便宜
+	errMsg := handlerErrorOf(rr.Body.Bytes())
+	logAPICall(name, time.Since(start), errMsg)
 
 	respBody := rr.Body.Bytes()
 
 	if isDevMode() {
-		name := trimHandlerName(goruntime.FuncForPC(reflect.ValueOf(handlerFunc).Pointer()).Name())
 		respStr := string(respBody)
 		if len(respStr) > 500 {
 			respStr = respStr[:500] + "..."
@@ -410,14 +419,22 @@ func callHandler(handlerFunc func(http.ResponseWriter, *http.Request), reqBody i
 	}
 
 	// 检查响应中是否包含 error 字段
-	var genericResp struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(respBody, &genericResp); err == nil && genericResp.Error != "" {
-		return nil, fmt.Errorf("%s", genericResp.Error)
+	if errMsg != "" {
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	return respBody, nil
+}
+
+// handlerErrorOf 取出 handler 响应里的 error 字段（无则空串）。
+func handlerErrorOf(respBody []byte) string {
+	var genericResp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &genericResp); err != nil {
+		return ""
+	}
+	return genericResp.Error
 }
 
 func trimHandlerName(name string) string {
@@ -438,7 +455,16 @@ func callHandlerRaw(handlerFunc func(http.ResponseWriter, *http.Request), reqBod
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
+	start := time.Now()
 	handlerFunc(rr, req)
+	// 调用方各自解析 error 字段，这里只为诊断日志取一次。失败的响应都很小；
+	// 全库列清单这类大响应（都是成功的）不再整体解析一遍
+	errMsg := ""
+	if body := rr.Body.Bytes(); len(body) <= maxLoggedErrorBody {
+		errMsg = handlerErrorOf(body)
+	}
+	logAPICall(trimHandlerName(goruntime.FuncForPC(reflect.ValueOf(handlerFunc).Pointer()).Name()),
+		time.Since(start), errMsg)
 
 	return rr.Body.Bytes(), nil
 }

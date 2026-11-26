@@ -127,7 +127,7 @@ func createToolsMenu() *application.Menu {
 	m.Add("备份数据库...").OnClick(callback("backup"))
 	m.Add("恢复数据库...").OnClick(callback("restore"))
 	m.AddSeparator()
-	m.Add("模型设计器...").OnClick(callback("model-designer"))
+	m.Add("ER 图...").OnClick(callback("model-designer"))
 	return m
 }
 
@@ -214,6 +214,9 @@ func runMCP() {
 func runGUI() {
 	app := backend.NewApp()
 
+	// 诊断日志要抢在 Wails 创建之前接管：框架内部的告警/错误也一并落盘
+	appLogger := backend.InitAppLogging(app.DataDir())
+
 	// 双击 .sql 冷启动：记录待打开文件，前端启动后经 TakePendingOpenFile 拉取
 	if p := sqlFileFromArgs(os.Args); p != "" {
 		backend.SetPendingOpenFile(p)
@@ -285,6 +288,7 @@ func runGUI() {
 		Services: []application.Service{
 			application.NewService(app),
 		},
+		Logger: appLogger,
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},

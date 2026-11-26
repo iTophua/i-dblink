@@ -62,8 +62,60 @@ export const mockQuitApp = vi.fn().mockResolvedValue(undefined);
 export const mockGreet = vi.fn().mockResolvedValue('');
 export const mockGetConnectionSSHCredentials = vi.fn().mockResolvedValue({ password: '', passphrase: '' });
 export const mockGetConnectionPassword = vi.fn().mockResolvedValue('');
+export const mockWriteAppLog = vi.fn().mockResolvedValue(undefined);
+export const mockGetLogFolderPath = vi.fn().mockResolvedValue('/tmp/idblink-logs');
+export const mockOpenLogFolder = vi.fn().mockResolvedValue(undefined);
+export const mockAIChatListSessions = vi.fn().mockResolvedValue([]);
+export const mockAIChatCreateSession = vi.fn().mockResolvedValue({
+  id: 'session-1',
+  title: '',
+  connection_id: null,
+  context_json: '',
+  created_at: '2026-01-01T00:00:00.000000000Z',
+  updated_at: '2026-01-01T00:00:00.000000000Z',
+});
+export const mockAIChatRenameSession = vi.fn().mockResolvedValue(undefined);
+export const mockAIChatUpdateSessionContext = vi.fn().mockResolvedValue(undefined);
+export const mockAIChatDeleteSession = vi.fn().mockResolvedValue(undefined);
+export const mockAIChatDeleteAllSessions = vi.fn().mockResolvedValue(undefined);
+export const mockAIChatGetMessages = vi.fn().mockResolvedValue([]);
+export const mockAIChatSaveMessages = vi.fn().mockResolvedValue(undefined);
+export const mockGetERDiagram = vi.fn().mockResolvedValue({ tables: [], edges: [] });
+export const mockCompareTableData = vi.fn().mockResolvedValue({
+  key_columns: [],
+  compare_columns: [],
+  source_only_columns: [],
+  target_only_columns: [],
+  source_rows: 0,
+  target_rows: 0,
+  same_count: 0,
+  modified_count: 0,
+  source_only_count: 0,
+  target_only_count: 0,
+  truncated: false,
+  warnings: [],
+  modified: [],
+  source_only: [],
+  target_only: [],
+  sql: '',
+  sql_counts: { update: 0, insert: 0, delete: 0 },
+  sql_truncated: false,
+});
 
 vi.mock('../../bindings/idblink/backend/app', () => ({
+  WriteAppLog: mockWriteAppLog,
+  GetLogFolderPath: mockGetLogFolderPath,
+  OpenLogFolder: mockOpenLogFolder,
+  AIChatListSessions: mockAIChatListSessions,
+  AIChatCreateSession: mockAIChatCreateSession,
+  AIChatRenameSession: mockAIChatRenameSession,
+  AIChatUpdateSessionContext: mockAIChatUpdateSessionContext,
+  AIChatDeleteSession: mockAIChatDeleteSession,
+  AIChatDeleteAllSessions: mockAIChatDeleteAllSessions,
+  AIChatGetMessages: mockAIChatGetMessages,
+  AIChatSaveMessages: mockAIChatSaveMessages,
+  GetERDiagram: mockGetERDiagram,
+  CompareTableData: mockCompareTableData,
   TestConnection: mockTestConnection,
   ConnectDatabase: mockConnectDatabase,
   DisconnectDatabase: mockDisconnectDatabase,

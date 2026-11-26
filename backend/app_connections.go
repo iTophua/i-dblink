@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"idblink/backend/db"
@@ -112,6 +113,7 @@ func (a *App) ConnectDatabase(connectionID string) error {
 
 // doConnectDatabase 执行真正的连接流程（调用方保证同一连接只有一条在途）
 func (a *App) doConnectDatabase(connectionID string) error {
+	start := time.Now()
 	conn, password, err := a.storage.GetConnectionWithPassword(connectionID)
 	if err != nil {
 		return fmt.Errorf("failed to get connection: %w", err)
@@ -119,6 +121,8 @@ func (a *App) doConnectDatabase(connectionID string) error {
 	if conn == nil {
 		return fmt.Errorf("connection not found")
 	}
+	// 诊断日志用：不含用户名/密码
+	logConn := []any{"connection_id", connectionID, "db_type", conn.DbType, "host", conn.Host, "port", conn.Port}
 
 	connectArgs := db.ConnectArgs{
 		DbType:   conn.DbType,
@@ -170,6 +174,7 @@ func (a *App) doConnectDatabase(connectionID string) error {
 			conn.Port,
 		)
 		if err != nil {
+			slog.Warn("ssh tunnel failed", append(logConn, "ssh_host", *conn.SSHHost, "error", err)...)
 			return fmt.Errorf("SSH tunnel failed: %w", err)
 		}
 		sshTunnelStarted = true
@@ -183,6 +188,8 @@ func (a *App) doConnectDatabase(connectionID string) error {
 		if sshTunnelStarted {
 			_ = a.tunnel.StopTunnel(connectionID)
 		}
+		slog.Warn("database connect failed", append(logConn, "ssh", sshTunnelStarted,
+			"duration_ms", time.Since(start).Milliseconds(), "error", err)...)
 		// 记录失败原因到操作日志（含错误信息），便于排查"首次连接失败"类问题
 		_ = a.storage.RecordHistory(connectionID, "connect", false, err.Error())
 		// 检测密码错误
@@ -198,6 +205,8 @@ func (a *App) doConnectDatabase(connectionID string) error {
 
 	a.setActiveConn(connectionID, true)
 	_ = a.storage.RecordHistory(connectionID, "connect", true, "")
+	slog.Info("database connected", append(logConn, "ssh", sshTunnelStarted,
+		"duration_ms", time.Since(start).Milliseconds())...)
 	return nil
 }
 

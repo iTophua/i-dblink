@@ -1,7 +1,10 @@
 package backend
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"idblink/backend/api"
 	"idblink/backend/models"
@@ -69,4 +72,23 @@ func (a *App) BatchImport(connectionID string, database *string, tableName strin
 		return nil, err
 	}
 	return result, nil
+}
+
+// CompareTableData 按主键比对两张表的数据，并生成把目标表同步成源表的 SQL。
+// 只做比对和生成，不执行任何写操作。
+func (a *App) CompareTableData(req models.DataCompareRequest) (*models.DataCompareResult, error) {
+	if err := a.ensureConnected(req.SourceConnectionID); err != nil {
+		return nil, fmt.Errorf("source connection: %w", err)
+	}
+	if err := a.ensureConnected(req.TargetConnectionID); err != nil {
+		return nil, fmt.Errorf("target connection: %w", err)
+	}
+	start := time.Now()
+	result, err := a.handler.CompareTableData(context.Background(), &req)
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	logAPICall("CompareTableData", time.Since(start), errMsg)
+	return result, err
 }

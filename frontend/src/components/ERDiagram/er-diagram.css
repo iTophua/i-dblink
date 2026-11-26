@@ -1,0 +1,332 @@
+/* ==================== ER 图 ====================
+   画布铺满标签页：工具栏 + React Flow 画布。只引用主题令牌。 */
+
+.er-diagram {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--background);
+}
+
+.er-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background-card);
+}
+
+.er-toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.er-toolbar-db {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.er-toolbar-stats {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.er-toolbar-slow {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--color-warning-alpha-15);
+  color: var(--color-warning);
+  font-size: 11px;
+  line-height: 18px;
+  cursor: help;
+}
+
+.er-search {
+  width: 220px;
+}
+
+.er-toolbar-spacer {
+  flex: 1;
+}
+
+/* 选中某张表后的操作条 */
+.er-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 2px 8px;
+  border: 1px solid var(--color-primary-alpha-30);
+  border-radius: 8px;
+  background: var(--color-primary-alpha-15);
+}
+
+.er-selection-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-code);
+  font-size: 12px;
+  color: var(--color-primary);
+}
+
+.er-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 加载 / 出错 / 空库 */
+.er-state {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--background);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.er-state-detail {
+  max-width: 60%;
+  color: var(--color-error);
+  word-break: break-all;
+  text-align: center;
+}
+
+.er-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background-card);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  pointer-events: none;
+  transform: translateX(-50%);
+  opacity: 0.85;
+}
+
+/* ---- React Flow 画布跟随主题 ---- */
+.er-flow {
+  background: var(--background);
+}
+
+.er-flow .react-flow__attribution {
+  background: transparent;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.er-flow .react-flow__controls {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.er-flow .react-flow__controls-button {
+  width: 26px;
+  height: 26px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background-card);
+  color: var(--text-secondary);
+  fill: var(--text-secondary);
+}
+
+.er-flow .react-flow__controls-button:hover {
+  background: var(--background-hover);
+}
+
+.er-flow {
+  /* React Flow 的小地图只在 .react-flow.dark 下才是深色，本应用用 data-theme 标记深色、从不加 .dark：
+     这里把它的几个默认色接到主题变量上 */
+  --xy-minimap-background-color-default: var(--background-card);
+  --xy-minimap-mask-background-color-default: color-mix(
+    in srgb,
+    var(--background) 65%,
+    transparent
+  );
+  --xy-minimap-node-background-color-default: var(--border);
+}
+
+.er-flow .react-flow__minimap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* ---- 表节点 ---- */
+.er-table {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background-card);
+  box-shadow: var(--shadow-sm);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.er-table:hover {
+  border-color: var(--color-primary-alpha-30);
+}
+
+.er-table.is-dimmed {
+  opacity: 0.35;
+}
+
+.er-table.is-selected {
+  border-color: var(--color-primary);
+  box-shadow:
+    0 0 0 2px var(--color-primary-alpha-30),
+    var(--shadow-md);
+}
+
+.er-table-header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background-toolbar);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.er-table-schema {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.er-table-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-code);
+}
+
+.er-table-body {
+  padding: 3px 0;
+}
+
+.er-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-family-code);
+}
+
+.er-row.is-pk .er-row-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.er-row-badges {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  width: 38px;
+}
+
+.er-badge {
+  padding: 0 3px;
+  border-radius: 3px;
+  font-family: var(--font-family);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0.2px;
+}
+
+.er-badge.is-pk {
+  background: var(--color-warning-alpha-15);
+  color: var(--color-warning);
+}
+
+.er-badge.is-fk {
+  background: var(--color-primary-alpha-15);
+  color: var(--color-primary);
+}
+
+.er-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-row-type {
+  flex-shrink: 0;
+  max-width: 86px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.er-row-more {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* 导出期间强制节点可见：没量过尺寸的节点会被 React Flow 设成 visibility: hidden */
+.er-flow.er-exporting .react-flow__node {
+  visibility: visible !important;
+}
+
+/* 连接点平时不显眼，悬停 / 选中时才出现 */
+.er-handle {
+  width: 6px;
+  height: 6px;
+  border: none;
+  background: var(--border);
+  opacity: 0;
+}
+
+.er-table:hover .er-handle,
+.er-table.is-selected .er-handle {
+  opacity: 1;
+}
+
+/* ---- 关系线 ---- */
+/* 关系线用次要文字色：边框色在浅色主题下几乎看不见 */
+.er-edge .react-flow__edge-path {
+  stroke: var(--text-tertiary);
+  stroke-width: 1.2;
+  stroke-opacity: 0.65;
+}
+
+.er-edge.is-active .react-flow__edge-path {
+  stroke: var(--color-primary);
+  stroke-width: 1.8;
+  stroke-opacity: 1;
+}
+
+.er-edge.is-dim {
+  opacity: 0.12;
+}

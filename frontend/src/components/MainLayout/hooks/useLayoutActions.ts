@@ -72,6 +72,12 @@ export function useLayoutActions({
   const [docGeneratorConnId, setDocGeneratorConnId] = useState('');
   const [docGeneratorDatabase, setDocGeneratorDatabase] = useState('');
   const [migrationDialogOpen, setMigrationDialogOpen] = useState(false);
+  const [dataSyncOpen, setDataSyncOpen] = useState(false);
+  /** 数据对比打开时预填的源库（从连接树的库节点右键进入） */
+  const [dataSyncPreset, setDataSyncPreset] = useState<{
+    connectionId: string;
+    database?: string;
+  } | null>(null);
 
   const workspaceRestoredRef = useRef(false);
 
@@ -209,7 +215,9 @@ export function useLayoutActions({
   useMenuShortcuts(menuActions);
 
   useEffect(() => {
-    const handleMenuAction = async (event: CustomEvent<{ action: string }>) => {
+    const handleMenuAction = async (
+      event: CustomEvent<{ action: string; connectionId?: string; database?: string }>
+    ) => {
       const { action } = event.detail;
       switch (action) {
         case 'new-connection':
@@ -347,7 +355,13 @@ export function useLayoutActions({
           setUpdateDialogOpen(true);
           break;
         case 'data-sync':
-          message.info(t('common.featureNotImplemented'));
+          // 从库节点的右键菜单进来时带着那个库；从工具菜单进来则从空白开始
+          setDataSyncPreset(
+            event.detail.connectionId
+              ? { connectionId: event.detail.connectionId, database: event.detail.database }
+              : null
+          );
+          setDataSyncOpen(true);
           break;
         case 'data-migration':
           setMigrationDialogOpen(true);
@@ -367,7 +381,20 @@ export function useLayoutActions({
           });
           break;
         case 'model-designer':
-          message.info(t('common.featureNotImplemented'));
+          // 打开当前连接 / 库的 ER 图（菜单项沿用旧名）。没选连接就没法画
+          if (!selectedConnectionId) {
+            message.warning(t('common.mainLayout.selectConnectionFirst'));
+            break;
+          }
+          window.dispatchEvent(
+            new CustomEvent('tab-action', {
+              detail: {
+                action: 'open-er-tab',
+                connectionId: selectedConnectionId,
+                database: selectedDatabase,
+              },
+            })
+          );
           break;
         case 'operation-log':
           setOperationLogOpen(true);
@@ -452,6 +479,9 @@ export function useLayoutActions({
     setDocGeneratorDatabase,
     migrationDialogOpen,
     setMigrationDialogOpen,
+    dataSyncOpen,
+    setDataSyncOpen,
+    dataSyncPreset,
     styles,
     isDarkMode,
     token,
