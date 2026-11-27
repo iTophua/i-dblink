@@ -4,6 +4,15 @@ import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
+  // Monaco 随应用打包，首次用到编辑器时才动态 import（utils/monacoLocal）。提前预打包：
+  // 否则开发时第一次打开 SQL 标签页会触发依赖重新优化，整页刷新
+  optimizeDeps: {
+    include: [
+      'monaco-editor/esm/vs/editor/edcore.main.js',
+      'monaco-editor/esm/vs/editor/editor.api.js',
+      'monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js',
+    ],
+  },
   resolve: {
     alias: [
       {

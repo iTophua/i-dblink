@@ -1805,6 +1805,10 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
           <div style={{ height: '100%' }} data-testid={`sql-tab-${sqlTab.key}`}>
             <SQLEditor
               tabKey={sqlTab.key}
+              // 菜单 / 快捷键的执行、保存只由当前显示的标签页响应（分屏时看当前操作的窗格）
+              isActive={
+                (activePane === 'secondary' ? secondaryActiveKey : activeKey) === sqlTab.key
+              }
               connectionId={sqlTab.connectionId || selectedConnectionId}
               database={sqlTab.database}
               defaultQuery={sqlTab.defaultQuery}

@@ -18,6 +18,8 @@ import {
   getDbSpecificDataTypes,
 } from '../utils/sqlCompletion';
 import { getSqlStatementRanges, type SqlStatementRange } from '../../../utils/sqlUtils';
+import { applyAppMonacoTheme } from '../../../utils/appMonacoTheme';
+import { registerSqlCompletion } from './sqlCompletionRegistry';
 
 export interface UseMonacoEditorParams {
   connectionId?: string | null;
@@ -62,7 +64,8 @@ export function useMonacoEditor({
 
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
-  const completionProviderRef = useRef<any>(null);
+  // 取消登记函数（见 sqlCompletionRegistry）；补全提供器本身每个 Monaco 实例只注册一次
+  const completionProviderRef = useRef<(() => void) | null>(null);
   const schemaRef = useRef<{
     tables: Map<string, string[]>;
     views: Map<string, string[]>;
@@ -105,117 +108,7 @@ export function useMonacoEditor({
   // 因 monacoRef 为空而跳过，之后 tc 不变就永远不执行，主题落到 VS 默认色
   const applyEditorTheme = useCallback(
     (monaco: typeof import('monaco-editor')) => {
-      // token 色从主题色派生：关键字=主色（靛蓝/青碧/墨随主题）、字符串=success、
-      // 数字=warning（浅色用深一档的 warningActive 保证白底对比度）、注释=三级文本
-      const hx = (c: string) => c.replace('#', '').toUpperCase();
-      const rules = [
-        { token: 'keyword', foreground: hx(tc.primary) },
-        { token: 'type', foreground: '267F99' },
-        { token: 'string', foreground: hx(tc.success) },
-        { token: 'comment', foreground: hx(tc.textTertiary) },
-        { token: 'number', foreground: hx(tc.isDark ? tc.warning : tc.warningActive) },
-        { token: 'operator', foreground: hx(tc.textSecondary) },
-        { token: 'delimiter', foreground: hx(tc.textSecondary) },
-        { token: 'variable', foreground: hx(tc.textPrimary) },
-        // pro 预设：函数用 info 蓝（#2563EB / #60A5FA），与 violet 关键字拉开层次
-        { token: 'function', foreground: tc.preset === 'default' || tc.preset === 'pro' ? hx(tc.info) : '795E26' },
-        { token: 'predefined', foreground: '267F99' },
-      ];
-
-    monaco.editor.defineTheme('custom-dark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: rules.map((r) =>
-        r.token === 'type' || r.token === 'predefined'
-          ? { ...r, foreground: '4EC9B0' }
-          : r.token === 'function'
-            ? { ...r, foreground: tc.preset === 'default' || tc.preset === 'pro' ? hx(tc.info) : 'DCDCAA' }
-            : r.token === 'operator' || r.token === 'delimiter'
-              ? { ...r, foreground: 'D4D4D4' }
-              : r
-      ),
-      colors: {
-        // pro 预设编辑器用面板白/近黑（backgroundCard），与结果窗格同为「数据表面」
-        'editor.background': tc.preset === 'default' || tc.preset === 'pro' ? tc.backgroundCard : tc.background,
-        'editor.foreground': tc.textPrimary,
-        'editorCursor.foreground': '#FFFFFF',
-        'editor.lineHighlightBackground': tc.backgroundToolbar,
-        'editor.selectionBackground': tc.backgroundActive,
-        'editor.inactiveSelectionBackground': tc.backgroundHover,
-        'editorLineNumber.foreground': tc.textTertiary,
-        'editorLineNumber.activeForeground': tc.primary,
-        'editor.findMatchBackground': tc.backgroundActive,
-        'editor.findMatchHighlightBackground': tc.backgroundHover,
-        'editorHoverWidget.background': tc.backgroundCard,
-        'editorHoverWidget.border': tc.border,
-        'editorSuggestWidget.background': tc.backgroundCard,
-        'editorSuggestWidget.border': tc.border,
-        'editorSuggestWidget.selectedBackground': tc.backgroundActive,
-        'editorSuggestWidget.foreground': tc.textPrimary,
-        'editorSuggestWidget.selectedForeground': tc.textPrimary,
-        'editorWidget.background': tc.backgroundCard,
-        'editorWidget.border': tc.border,
-        'editorWidget.resizeBorder': tc.border,
-        'editorWidget.shadow': '#000000',
-        'editorGroupHeader.tabsBackground': tc.backgroundToolbar,
-        'editorGroupHeader.noTabsBackground': tc.background,
-        'editorGroup.border': tc.border,
-        'editorGroup.dropBackground': tc.backgroundActive,
-        'editorGroupHeader.tabsBorder': tc.border,
-        'editorGroupHeader.noTabsBorder': tc.border,
-        'editorMarkerNavigation.background': tc.backgroundToolbar,
-        'editorMarkerNavigation.border': tc.border,
-        'editorOverviewRuler.background': tc.background,
-        'editorOverviewRuler.border': tc.border,
-        'editorIndentGuide.background': tc.border,
-        'editorIndentGuide.activeBackground': tc.textTertiary,
-        'editorWhitespace.foreground': tc.border,
-      },
-    });
-
-    monaco.editor.defineTheme('custom-light', {
-      base: 'vs',
-      inherit: true,
-      rules,
-      colors: {
-        'editor.background': tc.preset === 'default' || tc.preset === 'pro' ? tc.backgroundCard : tc.background,
-        'editor.foreground': tc.textPrimary,
-        'editorCursor.foreground': tc.textPrimary,
-        'editor.lineHighlightBackground': tc.backgroundToolbar,
-        'editor.selectionBackground': tc.backgroundActive,
-        'editor.inactiveSelectionBackground': tc.backgroundHover,
-        'editorLineNumber.foreground': tc.textTertiary,
-        'editorLineNumber.activeForeground': tc.primary,
-        'editor.findMatchBackground': tc.backgroundActive,
-        'editor.findMatchHighlightBackground': tc.backgroundHover,
-        'editorHoverWidget.background': tc.backgroundCard,
-        'editorHoverWidget.border': tc.border,
-        'editorSuggestWidget.background': tc.backgroundCard,
-        'editorSuggestWidget.border': tc.border,
-        'editorSuggestWidget.selectedBackground': tc.backgroundHover,
-        'editorSuggestWidget.foreground': tc.textPrimary,
-        'editorSuggestWidget.selectedForeground': tc.textPrimary,
-        'editorWidget.background': tc.backgroundCard,
-        'editorWidget.border': tc.border,
-        'editorWidget.resizeBorder': tc.border,
-        'editorWidget.shadow': '#A8A8A8',
-        'editorGroupHeader.tabsBackground': tc.backgroundToolbar,
-        'editorGroupHeader.noTabsBackground': tc.backgroundCard,
-        'editorGroup.border': tc.border,
-        'editorGroup.dropBackground': tc.backgroundHover,
-        'editorGroupHeader.tabsBorder': tc.border,
-        'editorGroupHeader.noTabsBorder': tc.border,
-        'editorMarkerNavigation.background': tc.backgroundToolbar,
-        'editorMarkerNavigation.border': tc.border,
-        'editorOverviewRuler.background': tc.backgroundCard,
-        'editorOverviewRuler.border': tc.border,
-        'editorIndentGuide.background': tc.border,
-        'editorIndentGuide.activeBackground': tc.textTertiary,
-        'editorWhitespace.foreground': tc.border,
-      },
-    });
-
-      monaco.editor.setTheme(tc.isDark ? 'custom-dark' : 'custom-light');
+      applyAppMonacoTheme(monaco, tc);
     },
     [tc]
   );
@@ -513,14 +406,15 @@ export function useMonacoEditor({
 
     // 注销旧的补全提供者（如果存在）
     if (completionProviderRef.current) {
-      completionProviderRef.current.dispose();
+      completionProviderRef.current();
       completionProviderRef.current = null;
     }
 
-    // 初始化补全提供者（智能上下文版本）
-    // 注意：'\n' 不能作为触发字符——回车应无条件换行，不该弹出建议/模板
-    completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
-      triggerCharacters: ['.', ' ', '(', '[', '{', ','],
+    // 初始化补全提供者（智能上下文版本）。
+    // 触发字符里不能有 '\n'——回车应无条件换行，不该弹出建议/模板（见 registerSqlCompletion）。
+    // 不直接向 Monaco 注册：补全提供器按语言全局生效，每个 SQL 标签页各注册一份的话，
+    // 开 N 个标签页候选就重复 N 份、计算量也乘 N
+    const sqlCompletionProvider = {
       provideCompletionItems: (model: any, position: any) => {
         // 获取光标前当前行的文本
         const textBeforeCursor = model.getValueInRange({
@@ -784,7 +678,12 @@ export function useMonacoEditor({
 
         return { suggestions };
       },
-    });
+    };
+    completionProviderRef.current = registerSqlCompletion(
+      monaco,
+      editor,
+      sqlCompletionProvider.provideCompletionItems
+    );
 
     // Placeholder callbacks
     const onSave = () => { console.log('Save not implemented'); };
@@ -878,7 +777,7 @@ export function useMonacoEditor({
     return () => {
       // 清理 Monaco Editor 补全提供者
       if (completionProviderRef.current) {
-        completionProviderRef.current.dispose();
+        completionProviderRef.current();
         completionProviderRef.current = null;
       }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Tabs, Card, Table, Spin, Typography } from 'antd';
 import { CodeOutlined, ColumnWidthOutlined } from '@ant-design/icons';
-import Editor from '@monaco-editor/react';
+import { LocalMonacoEditor as Editor } from '../LocalMonacoEditor';
 import type { ColumnsType } from 'antd/es/table';
 import type { ColumnInfo } from '../../types/api';
 import { useTranslation } from 'react-i18next';
@@ -131,8 +131,8 @@ export function ViewDefinition({ connectionId, viewName, database }: ViewDefinit
                       scrollBeyondLastLine: false,
                       wordWrap: 'on',
                     }}
-                    // 跟随应用明暗模式：此前硬编码 vs-dark，亮色模式下会出现突兀的黑块
-                    theme={tc.isDark ? 'vs-dark' : 'vs'}
+                    // 主题由 LocalMonacoEditor 统一应用：跟随应用明暗模式，
+                    // 也避免这里另设一套（vs / vs-dark）把其它编辑器的全局主题改掉
                   />
                 </Card>
               ),

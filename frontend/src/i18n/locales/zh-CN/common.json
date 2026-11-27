@@ -1557,6 +1557,10 @@
     "schemaCompareTargetOnly": "目标库另有 {{count}} 张表是源库没有的（不会被改动）：{{tables}}",
     "schemaCompareTableMissing": "目标库缺表",
     "schemaCompareTableMissingHint": "目标库里没有这张表，同步不会负责建表：请先按源表结构在目标库建表，再重新比较。",
+    "monacoEditor": {
+      "loadFailed": "SQL 编辑器加载失败",
+      "retry": "重试"
+    },
     "executeSync": "执行同步",
     "addNewRow": "新增行",
     "goToRow": "跳转到行",

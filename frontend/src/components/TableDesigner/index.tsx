@@ -28,7 +28,7 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
 } from '@ant-design/icons';
-import Editor from '@monaco-editor/react';
+import { LocalMonacoEditor as Editor } from '../LocalMonacoEditor';
 import type { ColumnsType } from 'antd/es/table';
 import { api } from '../../api';
 import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '../../types/api';
@@ -1266,52 +1266,10 @@ export function TableDesigner({
             defaultLanguage="sql"
             language="sql"
             value={sqlPreview}
-            onMount={(editor, monaco) => {
+            // 编辑器主题由 LocalMonacoEditor 统一应用（Monaco 的主题是全局的，
+            // 各处各定一套会互相覆盖）
+            onMount={(editor) => {
               editorRef.current = editor;
-              // 定义适配应用主题的自定义主题
-              monaco.editor.defineTheme('app-dark', {
-                base: 'vs-dark',
-                inherit: true,
-                rules: [
-                  { token: '', foreground: 'e4e4ed', background: '13132a' },
-                  { token: 'comment', foreground: '686888', fontStyle: 'italic' },
-                  { token: 'keyword', foreground: '00f5ff', fontStyle: 'bold' },
-                  { token: 'string', foreground: '39ff14' },
-                  { token: 'number', foreground: 'fbbf24' },
-                  { token: 'operator', foreground: 'f0abfc' },
-                ],
-                colors: {
-                  'editor.background': tc.background,
-                  'editor.foreground': tc.textPrimary,
-                  'editor.lineHighlightBackground': tc.backgroundToolbar,
-                  'editorLineNumber.foreground': tc.textTertiary,
-                  'editorLineNumber.activeForeground': tc.primary,
-                  'editor.selectionBackground': tc.backgroundActive,
-                  'editorCursor.foreground': tc.primary,
-                },
-              });
-              monaco.editor.defineTheme('app-light', {
-                base: 'vs',
-                inherit: true,
-                rules: [
-                  { token: '', foreground: '1a1a2e', background: 'ffffff' },
-                  { token: 'comment', foreground: '8a8a9a', fontStyle: 'italic' },
-                  { token: 'keyword', foreground: '00e5ff', fontStyle: 'bold' },
-                  { token: 'string', foreground: '00ff55' },
-                  { token: 'number', foreground: 'd946ff' },
-                  { token: 'operator', foreground: 'e879f9' },
-                ],
-                colors: {
-                  'editor.background': tc.backgroundCard,
-                  'editor.foreground': tc.textPrimary,
-                  'editor.lineHighlightBackground': tc.backgroundToolbar,
-                  'editorLineNumber.foreground': tc.textTertiary,
-                  'editorLineNumber.activeForeground': tc.primary,
-                  'editor.selectionBackground': tc.backgroundActive,
-                  'editorCursor.foreground': tc.primary,
-                },
-              });
-              monaco.editor.setTheme(tc.isDark ? 'app-dark' : 'app-light');
             }}
             options={{
               readOnly: true,

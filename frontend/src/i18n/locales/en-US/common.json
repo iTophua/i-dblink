@@ -1541,6 +1541,10 @@
     "schemaCompareTargetOnly": "The target also has {{count}} table(s) the source doesn't (left untouched): {{tables}}",
     "schemaCompareTableMissing": "Missing in target",
     "schemaCompareTableMissingHint": "The target database doesn't have this table and sync won't create it: create it from the source structure first, then compare again.",
+    "monacoEditor": {
+      "loadFailed": "Failed to load the SQL editor",
+      "retry": "Retry"
+    },
     "executeSync": "Execute Sync",
     "addNewRow": "Add New Row",
     "goToRow": "Go to row",

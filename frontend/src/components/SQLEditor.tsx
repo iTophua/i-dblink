@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect, useId } from 'react';
-import Editor from '@monaco-editor/react';
+import { LocalMonacoEditor as Editor } from './LocalMonacoEditor';
 
 import {
   App,
@@ -38,6 +38,7 @@ import { useMonacoEditor } from './SQLEditor/hooks/useMonacoEditor';
 import { useEditorResizer } from './SQLEditor/hooks/useEditorResizer';
 import { useTransaction } from './SQLEditor/hooks/useTransaction';
 import { useSqlDialectDetection } from './SQLEditor/hooks/useSqlDialectDetection';
+import { useTabActions } from './SQLEditor/hooks/useTabActions';
 
 // Extracted components
 import { SQLEditorToolbar } from './SQLEditor/components/SQLEditorToolbar';
@@ -70,6 +71,8 @@ interface SQLEditorProps {
   onQueryStatusChange?: (isQuerying: boolean) => void;
   /** 所属工作区 tab key：用于把未保存状态回传给 tab 标签 */
   tabKey?: string;
+  /** 是否为当前显示的标签页（默认 true）。菜单 / 快捷键的执行、保存只由当前页响应 */
+  isActive?: boolean;
 }
 
 /** 消息面板：错误高亮、自动滚到最新、一键复制全部 */
@@ -135,6 +138,7 @@ export function SQLEditor({
   dbType: propDbType,
   onQueryStatusChange,
   tabKey,
+  isActive = true,
 }: SQLEditorProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -386,23 +390,16 @@ export function SQLEditor({
     }
   }, [contextMenuVisible, contextMenuPos]);
 
-  // 监听 tab-action 事件（来自菜单或工具栏的快捷键）
-  useEffect(() => {
-    const handleTabAction = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (detail?.action === 'execute-query') {
-        handleExecuteQueryRef.current();
-      } else if (detail?.action === 'save') {
-        saveSQLRef.current();
-      } else if (detail?.action === 'save-as') {
-        saveSQLAsRef.current();
-      }
-    };
-    window.addEventListener('tab-action', handleTabAction);
-    return () => {
-      window.removeEventListener('tab-action', handleTabAction);
-    };
-  }, []);
+  // 监听 tab-action 事件（来自菜单或工具栏的快捷键）：只有当前标签页响应
+  useTabActions({
+    tabKey,
+    isActive,
+    handlers: {
+      executeQuery: () => handleExecuteQueryRef.current(),
+      save: () => saveSQLRef.current(),
+      saveAs: () => saveSQLAsRef.current(),
+    },
+  });
 
   // 监听 AI SQL 注入事件（AI 面板的「插入 / 替换」、SQL 优化抽屉、命令面板）。
   // 工作区里可能同时挂着多个 SQL 标签页，事件都冒泡到 window：只响应发给当前 tab 的那一条，
