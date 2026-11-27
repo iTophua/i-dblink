@@ -431,6 +431,7 @@ export const useGroups = () => {
   const groups = useAppStore((state) => state.groups);
   const isLoading = useAppStore((state) => state.isLoading);
   const setGroups = useAppStore((state) => state.setGroups);
+  const setConnections = useAppStore((state) => state.setConnections);
   const setLoading = useAppStore((state) => state.setLoading);
   const setError = useAppStore((state) => state.setError);
 
@@ -462,6 +463,11 @@ export const useGroups = () => {
         setLoading(true);
         await api.deleteGroup(id);
         setGroups((prev) => prev.filter((g) => g.id !== id));
+        // 组内连接变为未分组。后端已把它们改成 NULL 并广播 connections-changed，
+        // 但重新拉取前，本地这些连接还指向已删除的分组，在连接树里不显示
+        setConnections((prev) =>
+          prev.map((c) => (c.group_id === id ? { ...c, group_id: undefined } : c))
+        );
         message.success(i18n.t('common.groupDeleted'));
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '删除分组失败';
@@ -472,7 +478,7 @@ export const useGroups = () => {
         setLoading(false);
       }
     },
-    [setGroups, setLoading, setError]
+    [setGroups, setConnections, setLoading, setError]
   );
 
   return {

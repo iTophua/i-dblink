@@ -3,10 +3,24 @@ package localdb
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ungroupedGroupID 本地库里「未分组」伪分组的 id（connection_groups 里有一行 default / 未分组）。
+const ungroupedGroupID = "default"
+
+// normalizeGroupID 把「不分组」统一成 NULL。
+// 连接树只把空值当作未分组；存成 'default' 的连接在树里两头不沾——既不属于任何真实分组，
+// 也不算未分组。删除分组时曾把组内连接写成这个值，表现为删除分组后组内连接整组消失。
+func normalizeGroupID(groupID *string) *string {
+	if groupID == nil || *groupID == ungroupedGroupID || strings.TrimSpace(*groupID) == "" {
+		return nil
+	}
+	return groupID
+}
 
 // ConnectionRepository 连接配置仓库
 type ConnectionRepository struct {
@@ -62,6 +76,7 @@ func (r *ConnectionRepository) GetByID(id string) (*DbConnection, error) {
 func (r *ConnectionRepository) Save(conn *DbConnection) error {
 	now := time.Now().UTC()
 	conn.UpdatedAt = now
+	conn.GroupID = normalizeGroupID(conn.GroupID)
 
 	if conn.ID == "" {
 		conn.ID = uuid.New().String()
@@ -339,8 +354,8 @@ func (r *GroupRepository) Delete(id string) error {
 		}
 	}()
 
-	// Move connections to default group
-	_, err = tx.Exec("UPDATE connections SET group_id = 'default' WHERE group_id = ?", id)
+	// 组内连接变为未分组（NULL，口径见 normalizeGroupID）
+	_, err = tx.Exec("UPDATE connections SET group_id = NULL WHERE group_id = ?", id)
 	if err != nil {
 		return err
 	}

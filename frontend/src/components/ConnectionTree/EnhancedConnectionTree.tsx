@@ -8,6 +8,7 @@ import { EnhancedEmptyState } from '../LoadingStates';
 import { DatabaseIcon } from '../DatabaseIcon';
 import { isBaseTable } from './utils/tableTypeHelpers';
 import { matchesConnection } from './utils/searchUtils';
+import { isUngroupedConnection } from './utils/groupUtils';
 import type { ConnectionTreeProps } from './types';
 import { useTreeDialogs } from './hooks/useTreeDialogs';
 import { useConnectionActions } from './hooks/useConnectionActions';
@@ -207,7 +208,7 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
   const groupedConnections = useMemo(() => {
     const map: Record<string, Connection[]> = {};
     connections.forEach((conn) => {
-      const groupId = conn.group_id || 'ungrouped';
+      const groupId = isUngroupedConnection(conn) ? 'ungrouped' : (conn.group_id as string);
       if (!map[groupId]) map[groupId] = [];
       map[groupId].push(conn);
     });

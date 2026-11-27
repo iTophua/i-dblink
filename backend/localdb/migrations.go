@@ -130,6 +130,9 @@ func RunMigrations(db *sql.DB) error {
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_ai_chat_messages_session ON ai_chat_messages(session_id, seq)`,
+		// 「不分组」统一存 NULL（口径见 normalizeGroupID）。旧版删除分组时把组内连接写成了
+		// 'default'，这些连接在连接树里不显示；每次启动归一一遍，幂等
+		`UPDATE connections SET group_id = NULL WHERE group_id = 'default'`,
 	}
 
 	for i, migration := range migrations {

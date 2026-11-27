@@ -778,6 +778,8 @@ export function useContextMenuMenus(
       if (key === 'refresh-connections') {
         callbacks.onRefreshConnections?.();
       } else if (key === 'new-connection') {
+        // 不带分组：空白处新建的连接归入未分组。此前预填 group_id: 'default'，
+        // 而连接树不认这个值，保存后连接在树里不显示
         callbacks.onEditConnection({
           id: '',
           name: '',
@@ -786,7 +788,6 @@ export function useContextMenuMenus(
           port: 3306,
           username: '',
           status: 'disconnected',
-          group_id: 'default',
         } as Connection);
       } else if (key === 'new-group') {
         dialogSetters.setEditingGroup(null);
