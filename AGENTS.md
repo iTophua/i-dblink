@@ -145,6 +145,28 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   结果不完整。目标库缺表只给提示。「执行同步」只跑新增类语句、发到**目标库**；两边不是
   同一种库时 `sync_supported=false`，按钮置灰。Go 的 nil 切片会序列化成 `null`，
   前端读 `.length` 前要兜底（或后端给空切片）
+- **Monaco 编辑器**（2026-11）：本地打包、按需加载——所有编辑器必须经
+  `components/LocalMonacoEditor`，不能直接用 `@monaco-editor/react` 的 `<Editor>`（它的
+  loader 默认在运行时从 cdn.jsdelivr.net 加载，断网 / CDN 不通时编辑器出不来）。加载链：
+  `utils/monacoLoader`（动态 import，缓存 Promise）→ `utils/monacoLocal`（`edcore.main` +
+  SQL 基础语言 + worker + `loader.config({ monaco })`）。不用包的默认入口 `editor.main`：
+  它会把 TS / CSS / HTML / JSON 四个语言服务的 worker 也打进产物（近 9 MB，从不加载）。
+  ESM 构建没有 `window.monaco` 全局。主题是**全局**的：定义在 `utils/appMonacoTheme`，各处
+  编辑器共用同一对 `custom-dark` / `custom-light`；传给 `defineTheme` 的颜色必须是十六进制——
+  Monaco 的 `Color.fromHex` 解析不了 `rgba(...)` 会直接回退成纯红（选区、补全弹窗、缩进线
+  都曾因此变红），统一经 `utils/monacoColors` 转换。补全提供器按语言全局注册，Monaco 会把
+  同一语言的提供器**都跑一遍再合并**：不要在每个编辑器里各自
+  `registerCompletionItemProvider`（开 N 个标签页候选重复 N 份），经
+  `SQLEditor/hooks/sqlCompletionRegistry` 登记，每个 Monaco 实例只注册一次
+- **tab-action 事件只由当前标签页响应**（`SQLEditor/hooks/useTabActions`）：菜单 / ⌘R 的
+  执行、保存派发到 window，所有已挂载的 SQL 标签页都收得到；`TabPanel` 用 `isActive` 告诉
+  编辑器自己是不是当前页。新增这类广播动作时同样带上 tabKey 或走这个 hook（同 `ai-sql-inject`）
+- **「不分组」只有一种存法**：后端 `localdb.normalizeGroupID` 把 `'default'` / 空串统一成
+  NULL（启动迁移会归一旧数据），前端用 `ConnectionTree/utils/groupUtils` 的
+  `isUngroupedConnection` 判断。此前删除分组会把组内连接写成 `'default'`，而连接树只认
+  空值，表现为删除分组后组内连接整组消失
+- **启动画面是覆盖层**（`App.tsx`）：主界面在它下面立即挂载，不要改回「先渲染画面、结束后
+  再挂载主界面」
 - **antd 6 的几处改名/改结构**：Alert 的 `message` → `title`；Select 的 `data-testid` 落在
   `.ant-select` 根节点，没有 `.ant-select-selector`，展开要点 `input[role="combobox"]`，
   测试里同一选项会渲染两份（可见列表 + 无障碍列表）
@@ -155,7 +177,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 ## Test quirks
 
-- 前端测试位于 `frontend/src/__tests__/`（37 个文件）
+- 前端测试位于 `frontend/src/__tests__/`（41 个文件）
 - 测试分类：`unit/`、`components/`、`hooks/`、`api/`、`integration/`
 - 所有 Wails 绑定在 `src/__tests__/setupTests.ts` 中 mock，mock 以具名常量导出，直接 import 使用：
   ```ts
@@ -174,7 +196,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
   `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
   桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
-  `pnpm test`（570）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
+  `pnpm test`（625）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
   UI 重写整套用例。另外 e2e 脚本须从仓库根用
   `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
   运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）

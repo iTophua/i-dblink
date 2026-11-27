@@ -3,7 +3,7 @@ import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import { registerAppModal } from './utils/appModal';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSettingsStore } from './stores/settingsStore';
 import { getThemeConfig, ThemeMode } from './styles/theme';
 import { applyThemeVars } from './styles/applyTheme';
@@ -179,16 +179,15 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  if (showSplash) {
-    return (
-      <SplashScreen
-        onFinish={() => {
-          setShowSplash(false);
-          setIsHydrated(true);
-        }}
-      />
-    );
-  }
+  // 启动画面是覆盖层：主界面在它下面立即挂载、开始加载连接，不再干等固定时长。
+  // 画面不透明，挂载期的布局抖动被盖住；持久化设置 hydrate 完成后主题变量就应用（同样在画面
+  // 下面），不会先闪一帧默认主题。
+  // useCallback：SplashScreen 的计时器跟着 onFinish 走，主界面挂载引发的重渲染不能把计时重置
+  const finishSplash = useCallback(() => {
+    setShowSplash(false);
+    // 持久化设置迟迟没有 hydrate 完成时的兜底：主题应用不能一直等下去
+    setIsHydrated(true);
+  }, []);
 
   const antdThemeConfig = {
     algorithm: effectiveMode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
@@ -359,6 +358,7 @@ function App() {
           <AppInner />
         </ErrorBoundary>
       </AntdApp>
+      {showSplash && <SplashScreen onFinish={finishSplash} />}
     </ConfigProvider>
   );
 }
