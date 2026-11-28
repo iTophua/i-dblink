@@ -605,6 +605,12 @@ export function EnhancedConnectionTree(props: ConnectionTreeProps) {
                 virtual
                 height={treeHeight > 0 ? treeHeight : undefined}
                 itemHeight={28}
+                // 关掉展开 / 收起动画。虚拟滚动下它是这样实现的：在被操作的节点下方插入一个
+                // 「动画行」装着正在出现的子项，动画结束后再移除。收起时这一行从起步到结束依赖
+                // 浏览器的下一帧回调（兜底期限要走到「进行中」之后才启动），渲染一旦停顿它就停在
+                // 原地——节点已经是收起状态，下面却还留着它的子项；动画期间再点展开 / 收起，
+                // 树组件还会把点击直接忽略
+                motion={false}
               />
             </div>
           </>

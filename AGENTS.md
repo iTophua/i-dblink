@@ -59,6 +59,13 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   元素上方漏出（Chromium 完全正常，只在 WKWebView 出现）。表头类常驻元素要放
   滚动容器**外**（`TableList.tsx` 已改为 sibling + CSS 变量补偿滚动条宽度保持
   列对齐，勿改回 sticky）；`ResultGrid.tsx` 的 sticky 行在普通 overflow 容器内，不受影响
+- **连接树不走展开 / 收起动画**（`EnhancedConnectionTree` 给 antd `<Tree>` 传 `motion={false}`）：
+  antd 的树在虚拟滚动下的动画是「在被操作的节点下方插入一个动画行，装着正在出现 / 消失的子项，
+  动画结束再移除」。这一行从起步走到进行中靠 rAF，兜底期限（500ms）要进了进行中才启动，渲染一
+  停顿它就留在原地——节点已经收起，下面却还挂着它的子项（2026-11 用户在 PG 连接的「存储过程」
+  上遇到，收起后下面留着几行过程项；Chromium 里没复现出停顿）。动画期间再点展开 / 收起，树组件
+  还会把点击直接忽略。要传给 antd 的 `<Tree>` 本身（`EnhancedConnectionTree` 不转发）；传 `null`
+  不行（antd 用 `??` 回退成默认动画），要传 `false`
 - **`ConnectionInput` 等模型**：v3 绑定生成 interfaces（`-i`），前端直接用对象字面量传参，无模型类
 - **Wails 绑定**（`frontend/bindings/`）已 gitignore，`wails3 task build`/`dev` 时自动生成；跑 `tsc`/`pnpm test` 前若缺失需先 `~/go/bin/wails3 generate bindings -ts -i`（setupTests 已 mock 绑定模块，测试不依赖生成物）
 - **多窗口**：查询结果可弹出到独立窗口（`/#popup/<id>` hash 路由到 ResultPopup，
@@ -253,7 +260,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 ## Test quirks
 
-- 前端测试位于 `frontend/src/__tests__/`（55 个文件）
+- 前端测试位于 `frontend/src/__tests__/`（56 个文件）
 - 测试分类：`unit/`、`components/`、`hooks/`、`api/`、`integration/`
 - 所有 Wails 绑定在 `src/__tests__/setupTests.ts` 中 mock，mock 以具名常量导出，直接 import 使用：
   ```ts
@@ -272,7 +279,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
   `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
   桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
-  `pnpm test`（771）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
+  `pnpm test`（773）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
   UI 重写整套用例。另外 e2e 脚本须从仓库根用
   `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
   运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）
