@@ -203,5 +203,13 @@ describe('parseTreeKey', () => {
         name: 'seq_id',
       });
     });
+
+    // 重名的节点会在 key 末尾再接一段序号（useTreeData 的 createKeyAllocator），名字仍是第 4 段
+    it('ignores the trailing segment that disambiguates duplicate names', () => {
+      expect(parseTreeKey('proc::conn1::mydb::sp_get_user::2').name).toBe('sp_get_user');
+      expect(parseTreeKey('func::conn1::mydb::fn_calc::3').name).toBe('fn_calc');
+      expect(parseTreeKey('trigger::conn1::mydb::trg_audit::2').name).toBe('trg_audit');
+      expect(parseTreeKey('seq::conn1::mydb::seq_id::2').name).toBe('seq_id');
+    });
   });
 });

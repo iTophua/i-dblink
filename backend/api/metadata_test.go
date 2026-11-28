@@ -342,3 +342,36 @@ func TestGetRoutines(t *testing.T) {
 		assert.NotNil(t, result.Functions)
 	})
 }
+
+// PG 的重载在 information_schema.routines 里各是一行：同名只留第一条
+func TestUniqueRoutines(t *testing.T) {
+	routine := func(name, definition string) models.RoutineInfo {
+		return models.RoutineInfo{
+			RoutineName: name,
+			RoutineType: "PROCEDURE",
+			Definition:  &definition,
+		}
+	}
+
+	t.Run("同名只留第一条，顺序不变", func(t *testing.T) {
+		got := uniqueRoutines([]models.RoutineInfo{
+			routine("cagg_migrate_create_plan", "one"),
+			routine("cagg_migrate_create_plan", "two"),
+			routine("cagg_migrate_execute", "three"),
+			routine("cagg_migrate_create_plan", "four"),
+			routine("cagg_migrate_execute", "five"),
+		})
+
+		require.Len(t, got, 2)
+		assert.Equal(t, "cagg_migrate_create_plan", got[0].RoutineName)
+		assert.Equal(t, "one", *got[0].Definition)
+		assert.Equal(t, "cagg_migrate_execute", got[1].RoutineName)
+		assert.Equal(t, "three", *got[1].Definition)
+	})
+
+	t.Run("空列表和没有重名的列表原样返回", func(t *testing.T) {
+		assert.Nil(t, uniqueRoutines(nil))
+		one := []models.RoutineInfo{routine("a", ""), routine("b", "")}
+		assert.Equal(t, one, uniqueRoutines(one))
+	})
+}

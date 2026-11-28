@@ -484,6 +484,25 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(structure)
 }
 
+// uniqueRoutines 例程列表按名字去重，同名只留第一条。PG 的重载、不同 schema 里的同名例程
+// 在系统视图里各占一行，而列表只按名字用（取定义也是按名字取一条）；名字重复还会让连接树的
+// 节点 key 撞车——展开再收起后，重名的行会留在树上收不掉
+func uniqueRoutines(list []models.RoutineInfo) []models.RoutineInfo {
+	if len(list) < 2 {
+		return list
+	}
+	seen := make(map[string]struct{}, len(list))
+	out := make([]models.RoutineInfo, 0, len(list))
+	for _, r := range list {
+		if _, dup := seen[r.RoutineName]; dup {
+			continue
+		}
+		seen[r.RoutineName] = struct{}{}
+		out = append(out, r)
+	}
+	return out
+}
+
 // GetRoutines 获取存储过程和函数
 func (h *Handler) GetRoutines(w http.ResponseWriter, r *http.Request) {
 	var req MetadataRequest

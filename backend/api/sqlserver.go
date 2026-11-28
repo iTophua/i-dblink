@@ -432,6 +432,9 @@ func sqlserverGetRoutines(ctx context.Context, dbConn db.Executor, database *str
 			result.Functions = append(result.Functions, r)
 		}
 	}
+	// 不同 schema 里的同名例程在这里各是一行
+	result.Procedures = uniqueRoutines(result.Procedures)
+	result.Functions = uniqueRoutines(result.Functions)
 	return result, rows.Err()
 }
 

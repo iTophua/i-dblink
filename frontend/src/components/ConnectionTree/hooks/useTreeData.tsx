@@ -49,6 +49,22 @@ function getProBadgeClass(dbType: string): string {
   return `pro-db-badge sm pro-db-${known.includes(dbType) ? dbType : 'default'}`;
 }
 
+/**
+ * 给过程 / 函数 / 触发器 / 序列的节点分配 key，同一个 key 只出现一次。
+ * antd 按 key 认节点、React 按 key 复用列表项：key 重名时先出现的行在收起后没人回收，
+ * 会一直留在树上。名字是可能重复的——PG 的同名触发器可以建在多张表上，例程的重载则靠后端去重。
+ * 重名的后续项在 key 末尾再接一段序号，名字仍是第 4 段，parseTreeKey 照常取得到
+ */
+function createKeyAllocator() {
+  const used = new Set<string>();
+  return (key: string) => {
+    let next = key;
+    for (let n = 2; used.has(next); n += 1) next = `${key}::${n}`;
+    used.add(next);
+    return next;
+  };
+}
+
 interface MenuGetters {
   getConnectionMenu: (conn: Connection) => MenuProps;
   getGroupMenu: (group: ConnectionGroup) => MenuProps;
@@ -116,6 +132,7 @@ export function useTreeData({
   const treeData = useMemo(() => {
     const q = searchText.trim().toLowerCase();
     const treeNodes: any[] = [];
+    const nextKey = createKeyAllocator();
 
     const matchTables = (tables: TableInfo[]) =>
       !q || tables.some((t) => t.table_name.toLowerCase().includes(q));
@@ -269,7 +286,7 @@ export function useTreeData({
             : db.procedures && db.procedures.length > 0
               ? expandedKeys.includes(folderKey)
                 ? db.procedures.map((proc) => ({
-                    key: `proc::${connId}::${db.database}::${proc}`,
+                    key: nextKey(`proc::${connId}::${db.database}::${proc}`),
                     isLeaf: true,
                     title: (
                       <Dropdown menu={menus.getProcedureMenu(connId, proc, db.database)} trigger={['contextMenu']}>
@@ -338,7 +355,7 @@ export function useTreeData({
             : db.functions && db.functions.length > 0
               ? expandedKeys.includes(folderKey)
                 ? db.functions.map((func) => ({
-                    key: `func::${connId}::${db.database}::${func}`,
+                    key: nextKey(`func::${connId}::${db.database}::${func}`),
                     isLeaf: true,
                     title: (
                       <Dropdown menu={menus.getFunctionMenu(connId, func, db.database)} trigger={['contextMenu']}>
@@ -407,7 +424,7 @@ export function useTreeData({
             : db.triggers && db.triggers.length > 0
               ? expandedKeys.includes(folderKey)
                 ? db.triggers.map((trigger) => ({
-                    key: `trigger::${connId}::${db.database}::${trigger.name}`,
+                    key: nextKey(`trigger::${connId}::${db.database}::${trigger.name}`),
                     isLeaf: true,
                     title: (
                       <Dropdown menu={menus.getTriggerMenu(connId, trigger, db.database)} trigger={['contextMenu']}>
@@ -476,7 +493,7 @@ export function useTreeData({
             : db.sequences && db.sequences.length > 0
               ? expandedKeys.includes(folderKey)
                 ? db.sequences.map((seq) => ({
-                    key: `seq::${connId}::${db.database}::${seq.sequence_name}`,
+                    key: nextKey(`seq::${connId}::${db.database}::${seq.sequence_name}`),
                     isLeaf: true,
                     title: (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

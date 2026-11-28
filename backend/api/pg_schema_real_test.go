@@ -328,13 +328,22 @@ func TestRealPGSchemaTriggersAndRoutines(t *testing.T) {
 	f := newPGSchemaReal(t)
 	for _, stmt := range []string{
 		"CREATE SCHEMA app",
+		"CREATE SCHEMA app2",
 		"CREATE TABLE app.t_trg (id INT PRIMARY KEY, note TEXT)",
+		"CREATE TABLE app.t_trg2 (id INT PRIMARY KEY, note TEXT)",
 		`CREATE FUNCTION app.set_note_trg() RETURNS trigger LANGUAGE plpgsql AS $$
 			BEGIN NEW.note := 'auto:' || NEW.id; RETURN NEW; END $$`,
 		"CREATE TRIGGER t_trg_set BEFORE INSERT ON app.t_trg FOR EACH ROW EXECUTE FUNCTION app.set_note_trg()",
+		// 同名触发器建在另一张表上：是另一个触发器，列表里是两行
+		"CREATE TRIGGER t_trg_set BEFORE INSERT ON app.t_trg2 FOR EACH ROW EXECUTE FUNCTION app.set_note_trg()",
 		"CREATE FUNCTION app.add_one(x INT) RETURNS INT LANGUAGE sql AS 'SELECT x + 1'",
+		// 重载、别的 schema 里的同名函数：information_schema.routines 里各是一行
+		"CREATE FUNCTION app.add_one(x BIGINT) RETURNS BIGINT LANGUAGE sql AS 'SELECT x + 1'",
+		"CREATE FUNCTION app2.add_one(x INT) RETURNS INT LANGUAGE sql AS 'SELECT x + 1'",
 		`CREATE PROCEDURE app.write_note(p INT, t TEXT) LANGUAGE sql AS $$
 			INSERT INTO app.t_trg (id, note) VALUES (p, t) $$`,
+		`CREATE PROCEDURE app.write_note(p INT) LANGUAGE sql AS $$
+			INSERT INTO app.t_trg (id) VALUES (p) $$`,
 	} {
 		f.exec(f.work, stmt)
 	}
@@ -347,17 +356,35 @@ func TestRealPGSchemaTriggersAndRoutines(t *testing.T) {
 	require.NoError(t, json.Unmarshal(pgCallRaw(t, f.handler.GetTriggers, "/triggers",
 		f.body(nil)), &triggers))
 	require.Empty(t, triggers.Error)
-	require.Len(t, triggers.Triggers, 1)
+	require.Len(t, triggers.Triggers, 2)
 	assert.Equal(t, "t_trg_set", triggers.Triggers[0]["name"])
 	assert.Equal(t, "app", triggers.Triggers[0]["schema"])
 	assert.Equal(t, "t_trg", triggers.Triggers[0]["table_name"])
 	assert.Contains(t, triggers.Triggers[0]["definition"], "CREATE TRIGGER t_trg_set")
+	// 名字一样，表不同
+	assert.Equal(t, "t_trg_set", triggers.Triggers[1]["name"])
+	assert.Equal(t, "t_trg2", triggers.Triggers[1]["table_name"])
 
+	// 例程列表按名字去重：重载、别的 schema 里的同名例程不重复出现。名字重复会让连接树的
+	// 节点 key 撞车，收起后重名的行留在树上收不掉
 	procedures := decodeSlice[string](t, pgCallSlice(t, f.handler.GetProcedures, "/procedures", f.body(nil)))
 	assert.Equal(t, []string{"write_note"}, procedures)
 	functions := decodeSlice[string](t, pgCallSlice(t, f.handler.GetFunctions, "/functions", f.body(nil)))
 	// 触发器函数也是函数（RETURNS trigger），列表里本来就有它
 	assert.ElementsMatch(t, []string{"add_one", "set_note_trg"}, functions)
+	// GetRoutines（MCP、文档生成走这个）是同一份列表
+	var routines models.RoutinesResult
+	require.NoError(t, json.Unmarshal(pgCallRaw(t, f.handler.GetRoutines, "/routines",
+		f.body(nil)), &routines))
+	routineNames := func(list []models.RoutineInfo) []string {
+		names := make([]string, 0, len(list))
+		for _, r := range list {
+			names = append(names, r.RoutineName)
+		}
+		return names
+	}
+	assert.Equal(t, []string{"write_note"}, routineNames(routines.Procedures))
+	assert.Equal(t, []string{"add_one", "set_note_trg"}, routineNames(routines.Functions))
 
 	body := func(path string, fn func(http.ResponseWriter, *http.Request), name string) string {
 		out := pgCallMap(t, fn, path, f.body(map[string]any{"procedure_name": name, "function_name": name}))
@@ -385,6 +412,11 @@ func TestRealPGSchemaTriggersAndRoutines(t *testing.T) {
 	// 触发器真的会触发（定义没白建）
 	f.exec(f.work, "INSERT INTO app.t_trg (id) VALUES (7)")
 	assert.Equal(t, "auto:7", f.scalar(f.work, "SELECT note FROM app.t_trg WHERE id = 7"))
+	// 另一张表上的同名触发器、只有参数个数不同的重载过程，各自是能用的对象
+	f.exec(f.work, "INSERT INTO app.t_trg2 (id) VALUES (8)")
+	assert.Equal(t, "auto:8", f.scalar(f.work, "SELECT note FROM app.t_trg2 WHERE id = 8"))
+	f.exec(f.work, "CALL app.write_note(9)")
+	assert.Equal(t, "auto:9", f.scalar(f.work, "SELECT note FROM app.t_trg WHERE id = 9"))
 }
 
 // pgTableShape 一张表在系统目录里的样子：列、约束、索引、注释。schema 名归一化掉，

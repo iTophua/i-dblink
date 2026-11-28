@@ -59,13 +59,23 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   元素上方漏出（Chromium 完全正常，只在 WKWebView 出现）。表头类常驻元素要放
   滚动容器**外**（`TableList.tsx` 已改为 sibling + CSS 变量补偿滚动条宽度保持
   列对齐，勿改回 sticky）；`ResultGrid.tsx` 的 sticky 行在普通 overflow 容器内，不受影响
+- **连接树的节点 key 不能重复**（`useTreeData.tsx` 的 `createKeyAllocator`）：antd 按 key 认节点，
+  React 按 key 复用虚拟列表的行。key 重名时列表一变短（收起），先出现的重名行没人回收，成了
+  没人管的孤儿节点一直留在树上——2026-11 用户在 PG 连接的「存储过程」上遇到，收起后下面留着
+  三行过程项，其中两行同名。名字是会重复的：PG 的过程 / 函数有重载（TimescaleDB 的
+  `cagg_migrate_*` 一串）、别的 schema 里有同名的，同名触发器可以建在多张表上。例程在后端按
+  名字去重（`uniqueRoutines`，PG 系和 SQL Server；MCP、文档生成走的是同一个函数），触发器不去重
+  （是不同的触发器），由 `createKeyAllocator` 给重名的后续项在 key 末尾接 `::序号`——名字仍是
+  第 4 段，`parseTreeKey` 照常取得到。表 / 视图没走它：key 是「库 [+ schema] + 表名」，本身唯一，
+  而且扁平模式的表 key 多一段会被 `parseTreeKey` 当成 schema 模式。新增会生成树叶节点的列表时
+  key 要经 `nextKey(...)`；控制台出现 `Same 'key' exist in the Tree` 就是撞了
 - **连接树不走展开 / 收起动画**（`EnhancedConnectionTree` 给 antd `<Tree>` 传 `motion={false}`）：
   antd 的树在虚拟滚动下的动画是「在被操作的节点下方插入一个动画行，装着正在出现 / 消失的子项，
   动画结束再移除」。这一行从起步走到进行中靠 rAF，兜底期限（500ms）要进了进行中才启动，渲染一
-  停顿它就留在原地——节点已经收起，下面却还挂着它的子项（2026-11 用户在 PG 连接的「存储过程」
-  上遇到，收起后下面留着几行过程项；Chromium 里没复现出停顿）。动画期间再点展开 / 收起，树组件
-  还会把点击直接忽略。要传给 antd 的 `<Tree>` 本身（`EnhancedConnectionTree` 不转发）；传 `null`
-  不行（antd 用 `??` 回退成默认动画），要传 `false`
+  停顿它就留在原地；动画进行期间再点展开 / 收起，树组件还会把点击直接忽略（动画行和被忽略的
+  点击在 jsdom 里能复现，停在原地是预览窗格不出帧时见到的；但「收起后残留子项」不是它造成的，
+  见上一条）。要传给 antd 的 `<Tree>` 本身（`EnhancedConnectionTree` 不转发）；传 `null` 不行
+  （antd 用 `??` 回退成默认动画），要传 `false`
 - **`ConnectionInput` 等模型**：v3 绑定生成 interfaces（`-i`），前端直接用对象字面量传参，无模型类
 - **Wails 绑定**（`frontend/bindings/`）已 gitignore，`wails3 task build`/`dev` 时自动生成；跑 `tsc`/`pnpm test` 前若缺失需先 `~/go/bin/wails3 generate bindings -ts -i`（setupTests 已 mock 绑定模块，测试不依赖生成物）
 - **多窗口**：查询结果可弹出到独立窗口（`/#popup/<id>` hash 路由到 ResultPopup，
@@ -279,7 +289,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
   `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
   桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
-  `pnpm test`（773）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
+  `pnpm test`（779）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
   UI 重写整套用例。另外 e2e 脚本须从仓库根用
   `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
   运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）
@@ -291,7 +301,8 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   `backend/db/manager_tx_real_test.go`；空闲回收、超时后不退回自动提交、事务绑定库在 SQLite 上就能
   跑，见 `manager_tx_binding_test.go`）、限定表名取列（`backend/api/qualified_table_real_test.go`）、
   PG 的 schema 贯通（`backend/api/pg_schema_real_test.go`：限定名的列 / 索引 / 外键 / CHECK、删表 /
-  清空 / 重命名落在选中的库和 schema 上、触发器与过程函数列表、过程定义、建表语句重建后比对系统
+  清空 / 重命名落在选中的库和 schema 上、触发器与过程函数列表（重载、别的 schema 里的同名例程
+  只列一条；建在多张表上的同名触发器各是一行）、过程定义、建表语句重建后比对系统
   目录、序列、导入导出、服务端超时）、ER 图的 MySQL/PG 批量查询（`backend/api/er_diagram_test.go`）、
   数据对比（`backend/api/data_compare_real_test.go`，含 MySQL → PG 跨库、PG 的 schema 定位、MySQL
   生成列）、结构比较与表结构元数据（`backend/api/compare_real_test.go`，含「同步语句在
