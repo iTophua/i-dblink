@@ -232,8 +232,10 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   边界画错有两个方向：把字面量当代码只会误拒；把代码当字面量，藏在「字符串」里的第二条语句就跟着
   发给数据库了（lib/pq 不带参数时走简单协议，一次执行整段）。旧扫描器一律把 `\` 当转义符、不认
   `$tag$` / `[]` / `q'[…]'`，2026-11 实锤 PG 上 `SELECT '\'; DROP TABLE t; SELECT ''`、
-  `SELECT $$a'b$$; DROP …`、`E'\'; …` 以及 SQL Server 的 `[x']; …`、Oracle 的 `q'[a'b]'; …`
-  全部被判成只读。现在按连接的方言扫：MySQL 系 / ClickHouse / TDengine 字符串里 `\` 是转义，
+  `SELECT $$a'b$$; DROP …`（真库上直接发过去，表真的没了）以及 SQL Server 的 `[x']; …`、Oracle 的
+  `q'[a'b]'; …` 全部被判成只读。`E'…'` 不在其中：转义引号只会让字符串更长，夹着 DROP 的 E 字符串
+  是一条合法的只读 SELECT，认它是为了不误拒。现在按连接的方言扫：MySQL 系 / ClickHouse / TDengine
+  字符串里 `\` 是转义，
   MySQL 系另认 `#` 注释和 `/*! … */` 可执行注释（内容当 SQL）；PG 系认 `$tag$`（紧跟标识符字符的
   `$` 属于标识符，`foo$tag$` 不是字符串）、`E'…'`、嵌套块注释；SQL Server 认 `[…]`；Oracle / 达梦
   遇到 `q'[…]'` 整条拒绝；未知方言字符串里出现 `\` 就拒绝。没闭合的一律拒绝。
@@ -269,7 +271,10 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   别的库带了点反而找不到。同名重载分不出（后端按名字找、取第一个），`list_*` 也不带 schema——
   桌面端的例程列表是同一个后端查询，同样的局限
 - **MCP 写类工具的边界**（2026-11 定）：`execute_update` = INSERT / UPDATE / DELETE / MERGE / REPLACE
-  （可带 WITH）；`execute_ddl` = CREATE / DROP / ALTER / TRUNCATE / RENAME + 授权 GRANT / REVOKE + 对象
+  （可带 WITH；写语句走 ExecContext 才有影响行数——`api.isDMLStatement` 遇到 WITH 按 CTE 列表的
+  固定形状找主语句，认不出的一律当查询：把 SELECT 当写语句去 Exec 会丢结果集，反过来只是少个影响
+  行数，代价不对称。MySQL 没有 `WITH … INSERT`，带 CTE 的插入得写 `INSERT … WITH … SELECT`）；
+  `execute_ddl` = CREATE / DROP / ALTER / TRUNCATE / RENAME + 授权 GRANT / REVOKE + 对象
   注释 COMMENT ON；`execute_procedure` = CALL / EXEC / EXECUTE（各库写法不同），PG 系另有 DO（匿名块
   在 `$tag$` 里、是一条语句）。`execute_script` 只收只读 / DML / DDL 三类，过程调用不进脚本。
   Oracle / SQL Server 的匿名块（`BEGIN … END;`，体内全是分号）没法可靠切分，哪个工具都不收。
@@ -397,7 +402,8 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   生成列）、结构比较与表结构元数据（`backend/api/compare_real_test.go`，含「同步语句在
   目标库跑一遍再回比」）、MCP 只读门禁在真库上的行为（`backend/mcpserver/gate_real_test.go`：
   放行的只读语句结果正确、拦下的语句直接发过去真的会执行、PG 的 `$tag$` 函数体能建、
-  `timeout_seconds` 真的打断语句；包在 `./backend/mcpserver`，跑法
+  `timeout_seconds` 真的打断语句、过程调用带回多个结果集后连接照常可用、`WITH … DML` 带影响行数、
+  GRANT / REVOKE 真的改了权限；包在 `./backend/mcpserver`，跑法
   `go test ./backend/mcpserver -run RealGate -count=1 -v`）需要
   `IDBLINK_TX_SMOKE_MYSQL=1` / `IDBLINK_TX_SMOKE_PG=1`，库由根目录
   `docker compose -f docker-compose.test.yml up -d` 起（13306 / 15432）：
@@ -413,14 +419,23 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   `pg_schema_real_test.go` 每个用例建两个临时库 `idblink_pg_home` / `idblink_pg_work`（连接的默认库、
   请求里选中的库），两边放同名对象当诱饵，断言既看目标也盯诱饵；清理用
   `DROP DATABASE … WITH (FORCE)`，清理失败会让用例失败（残留要能被发现）。
+  断言「被拦下」不能只看 isError：数据库报错同样是 isError，「门禁放行、语句在库里出错」也会算
+  通过——`gate_real_test.go` 的 `mustReject` 认的是门禁的拒绝文本（2026-11 实锤：MySQL 的
+  ``SELECT `a'; DROP TABLE t; SELECT '` `` 反引号里整段是一个列名，本来就是一条合法的只读 SELECT，
+  此前它靠 Unknown column 报错「被拦下」）。临时对象开头也清一次、名单要全：门禁真坏了的时候留下
+  的对象会让下次的 CREATE 报「已存在」，同样是 isError。样本要能区分规则在不在：写完对每条规则
+  做一次变异，结论不变就是没测到（PG 的嵌套块注释、MySQL 的 `--` 后空白、结尾是反斜杠的字符串
+  都是这么补出来的）
 
   写这类测试注意：两个包是**并行**跑的，testdb 里还有初始化脚本建的 users / orders 等表，
   断言只能看自己建的表；两个库的账号密码不一样（MySQL 用户 `testpass`，PG 用户
   `testpassword`）。结构比较要在同一实例上比两个库：MySQL 的 `testuser` 没有建库权限，
   `idblink_compare_a/b` 由 `backend/testdata/mysql-test.sql` 建好并授权（PG 的由测试自己建删），
   **改了初始化脚本要重建容器**才生效：`docker compose -f docker-compose.test.yml up -d
-  --force-recreate --renew-anon-volumes mysql`。本机 Docker Hub 直连不通，镜像要走
-  `docker.m.daocloud.io/library/<image>` 再 `docker tag` 回原名
+  --force-recreate --renew-anon-volumes mysql`。本机 Docker Hub 直连不通，镜像走
+  `public.ecr.aws/docker/library/<image>` 再 `docker tag` 回原名（Amazon 的 Docker 官方镜像缓存，
+  2026-11 实测约 600 KB/s，PG + MySQL 两个镜像 4 分钟；同一时间 `docker.m.daocloud.io` 只有约
+  120 KB/s、47 分钟没拉下来一个，`mirror.gcr.io` 连不上）
 - jsdom 里 antd 的虚拟列表 / 表格 / 主题 hook 依赖 `ResizeObserver`、`matchMedia`，用到
   Select、Table、主题的组件测试要自己 stub
 

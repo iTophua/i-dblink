@@ -17,11 +17,13 @@ import (
 
 // isDMLStatement 判断 SQL 是否为无结果集的写语句（需用 ExecContext 获取 RowsAffected）。
 // REPLACE 是 MySQL 的 INSERT 变体，同样只有 Ok 包（走 QueryContext 拿不到影响行数）。
+// WITH 开头的主语句在 CTE 之后（PG / MySQL 8 / SQL Server / SQLite 都有 WITH … UPDATE）：
+// 这种写语句走 QueryContext 也会执行，只是拿不到影响行数，所以主语句是写语句时同样走 ExecContext
 func isDMLStatement(sqlStr string) bool {
 	s := strings.TrimSpace(sqlStr)
-	// 去掉前导注释和括号
+	// 去掉前导注释、分号和括号（T-SQL 习惯把 CTE 写成 ;WITH）
 	for {
-		s = strings.TrimLeft(s, " \t\n\r(")
+		s = strings.TrimLeft(s, " \t\n\r(;")
 		if strings.HasPrefix(s, "--") {
 			if idx := strings.IndexByte(s, '\n'); idx >= 0 {
 				s = s[idx+1:]
@@ -38,8 +40,201 @@ func isDMLStatement(sqlStr string) bool {
 	switch strings.ToUpper(fields[0]) {
 	case "INSERT", "REPLACE", "UPDATE", "DELETE", "MERGE":
 		return true
+	case "WITH":
+		return isWriteVerb(withMainVerb(s))
 	}
 	return false
+}
+
+func isWriteVerb(verb string) bool {
+	switch verb {
+	case "INSERT", "REPLACE", "UPDATE", "DELETE", "MERGE":
+		return true
+	}
+	return false
+}
+
+// ---- WITH 子句的主语句 ----
+// 只为 isDMLStatement 服务，不是通用的 SQL 解析器
+
+type sqlToken int
+
+const (
+	tokEOF    sqlToken = iota
+	tokWord            // 裸词（关键字 / 标识符），统一成大写
+	tokQuoted          // '…' / "…" / `…`，内容不看
+	tokLParen          // (
+	tokRParen          // )
+	tokComma           // ,
+	tokOther           // 其余单个字符：运算符、数字……只在括号里出现得合理
+	tokBad             // 认不出的写法：放弃
+)
+
+func isLetterByte(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
+func isDigitByte(c byte) bool  { return c >= '0' && c <= '9' }
+
+func isSpaceByte(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
+}
+
+// scanToken 从 i 起扫出下一个 token。s 按字节看：多字节字符的每个字节都 ≥ 0x80，
+// 不会和引号、括号混淆。各库对转义和注释的规则不一样——反斜杠是不是转义符要看方言和配置，
+// MySQL 的 -- 后面要有空白、PG 的块注释能嵌套——这里一律按最严的来，认不出的给 tokBad：
+//   - 引号里出现反斜杠，或引号没闭合
+//   - $（PG 的 $tag$ 字符串）、#（MySQL 的注释）、MySQL 的可执行注释 /*! … */：
+//     里面都可能夹着不成对的括号或关键字
+//   - -- 后面不是空白；块注释里又出现 /*
+func scanToken(s string, i int) (sqlToken, string, int) {
+	for i < len(s) {
+		c := s[i]
+		switch {
+		case isSpaceByte(c):
+			i++
+		case c == '-' && i+1 < len(s) && s[i+1] == '-':
+			if i+2 >= len(s) || !isSpaceByte(s[i+2]) {
+				return tokBad, "", i
+			}
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+		case c == '/' && i+1 < len(s) && s[i+1] == '*':
+			rest := s[i+2:]
+			end := strings.Index(rest, "*/")
+			if end < 0 || rest[0] == '!' {
+				return tokBad, "", i
+			}
+			if open := strings.Index(rest, "/*"); open >= 0 && open < end {
+				return tokBad, "", i
+			}
+			i += 2 + end + 2
+		case c == '\'' || c == '"' || c == '`':
+			next, ok := skipQuotedToken(s, i)
+			if !ok {
+				return tokBad, "", i
+			}
+			return tokQuoted, "", next
+		case c == '(':
+			return tokLParen, "", i + 1
+		case c == ')':
+			return tokRParen, "", i + 1
+		case c == ',':
+			return tokComma, "", i + 1
+		case c == '$' || c == '#':
+			return tokBad, "", i
+		case isLetterByte(c) || c == '_':
+			j := i + 1
+			for j < len(s) && (isLetterByte(s[j]) || isDigitByte(s[j]) || s[j] == '_') {
+				j++
+			}
+			return tokWord, strings.ToUpper(s[i:j]), j
+		default:
+			return tokOther, "", i + 1
+		}
+	}
+	return tokEOF, "", i
+}
+
+// skipQuotedToken 跳过 i 处引号开头的字面量 / 引用标识符（连写两个同样的引号 = 引号本身）
+func skipQuotedToken(s string, i int) (int, bool) {
+	q := s[i]
+	for j := i + 1; j < len(s); {
+		switch s[j] {
+		case q:
+			if j+1 < len(s) && s[j+1] == q {
+				j += 2
+				continue
+			}
+			return j + 1, true
+		case '\\':
+			return i, false
+		}
+		j++
+	}
+	return i, false
+}
+
+// skipParenthesized 跳过 open 处左括号起配对的一对括号，返回右括号之后的位置
+func skipParenthesized(s string, open int) (int, bool) {
+	i, depth := open, 0
+	for {
+		kind, _, next := scanToken(s, i)
+		switch kind {
+		case tokLParen:
+			depth++
+		case tokRParen:
+			depth--
+			if depth == 0 {
+				return next, true
+			}
+		case tokEOF, tokBad:
+			return i, false
+		}
+		i = next
+	}
+}
+
+// withMainVerb 返回 WITH 子句后面主语句的首词（大写），拿不准时返回空串。
+//
+// CTE 列表只认这一种形状：[RECURSIVE] 名字 [(列)] AS [NOT] [MATERIALIZED] ( 体 )，之后要么是
+// 逗号（后面还有 CTE），要么就是主语句。括号外的 token 必须一个不多不少地对上；括号里只保证
+// 引号和注释不被当成括号。判错的代价不对称：把 SELECT 当成写语句去 Exec 会把结果集丢掉，
+// 当成查询去 Query 只是少一个影响行数——所以认不出就放弃，不猜
+func withMainVerb(s string) string {
+	i := 0
+	next := func() (sqlToken, string) {
+		var kind sqlToken
+		var word string
+		kind, word, i = scanToken(s, i)
+		return kind, word
+	}
+	if kind, word := next(); kind != tokWord || word != "WITH" {
+		return ""
+	}
+	for {
+		// [RECURSIVE] 名字
+		kind, word := next()
+		if kind == tokWord && word == "RECURSIVE" {
+			kind, word = next()
+		}
+		if kind != tokWord && kind != tokQuoted {
+			return ""
+		}
+		// 可选的列名表
+		kind, word = next()
+		if kind == tokLParen {
+			end, ok := skipParenthesized(s, i-1)
+			if !ok {
+				return ""
+			}
+			i = end
+			kind, word = next()
+		}
+		// AS [NOT] [MATERIALIZED] (
+		if kind != tokWord || word != "AS" {
+			return ""
+		}
+		kind, word = next()
+		for kind == tokWord && (word == "NOT" || word == "MATERIALIZED") {
+			kind, word = next()
+		}
+		if kind != tokLParen {
+			return ""
+		}
+		end, ok := skipParenthesized(s, i-1)
+		if !ok {
+			return ""
+		}
+		i = end
+		// 之后：逗号 = 后面还有 CTE，别的词 = 主语句
+		kind, word = next()
+		if kind == tokComma {
+			continue
+		}
+		if kind != tokWord {
+			return ""
+		}
+		return word
+	}
 }
 
 var debugEnabled = os.Getenv("IDBLINK_DEBUG") == "1" || os.Getenv("IDBLINK_DEBUG") == "true"
@@ -120,7 +315,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		// 流式传输模式
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Transfer-Encoding", "chunked")
-		
+
 		// 发送初始响应
 		initialResp := models.QueryResult{
 			Streaming: true,
@@ -147,7 +342,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		executionTimeMs := time.Since(startTime).Milliseconds()
 		// 发送执行时间
 		timeResp := models.QueryResult{
-			Streaming:      true,
+			Streaming:       true,
 			ExecutionTimeMs: executionTimeMs,
 		}
 		json.NewEncoder(w).Encode(timeResp)

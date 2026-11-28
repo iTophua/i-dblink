@@ -162,6 +162,129 @@ func TestExecuteSQL(t *testing.T) {
 	// Additional unit tests for executeSQL helper
 }
 
+// TestIsDMLStatement 写语句走 ExecContext 才拿得到影响行数。WITH 开头的主语句在 CTE 之后：
+// 认得出就按主语句判；认不出的一律当查询——代价不对称，把 SELECT 当成写语句会把结果集丢掉，
+// 当成查询只是少一个影响行数。notDML 的后半段都是「各库规则不一样、不能猜」的写法
+func TestIsDMLStatement(t *testing.T) {
+	dml := []string{
+		"INSERT INTO t VALUES (1)",
+		"REPLACE INTO t VALUES (1)",
+		"update t set a = 1",
+		"DELETE FROM t",
+		"MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = 1",
+		"-- 注释\nDELETE FROM t",
+		"  (UPDATE t SET a = 1)",
+		"WITH c AS (SELECT 1) UPDATE t SET a = 1",
+		"with c as (select 1) delete from t",
+		"WITH c AS (SELECT 1) REPLACE INTO t VALUES (1)",
+		"WITH c AS (SELECT 1) MERGE INTO t USING c ON t.id = c.id WHEN MATCHED THEN UPDATE SET a = 1",
+		"WITH c AS (SELECT 1) UPDATE t SET a = 1;",
+		";WITH c AS (SELECT 1) UPDATE t SET a = 1",
+		// CTE 列表的各种形状
+		"WITH RECURSIVE t(n) AS (VALUES (1) UNION ALL SELECT n + 1 FROM t) INSERT INTO x SELECT n FROM t",
+		`WITH "C" AS (SELECT 1) UPDATE t SET a = 1`,
+		"WITH a AS (SELECT 1), b AS (SELECT 2) DELETE FROM t",
+		"WITH a AS (SELECT 1), b(a) AS NOT MATERIALIZED (SELECT 2) UPDATE t SET a = 1",
+		"WITH a AS MATERIALIZED (SELECT 2) UPDATE t SET a = 1",
+		// 括号里的字符串、注释、E'' 不会打乱配对（字符串里是个不成对的右括号）
+		`WITH c AS (SELECT ')' AS cl, 'it''s' AS q) DELETE FROM t`,
+		`WITH c AS (SELECT E'x' AS e) UPDATE t SET a = 1`,
+		"WITH c AS (SELECT 1 -- note\n) UPDATE t SET a = 1",
+		"WITH c AS (SELECT 1 /* note ( ) */) UPDATE t SET a = 1",
+	}
+	for _, sql := range dml {
+		if !isDMLStatement(sql) {
+			t.Errorf("isDMLStatement(%q) = false, want true", sql)
+		}
+	}
+
+	notDML := []string{
+		"",
+		"   ",
+		"-- only a comment",
+		"SELECT 1",
+		"CREATE TABLE t (id INT)",
+		"WITH c AS (SELECT 1) SELECT * FROM c",
+		"WITH c AS (SELECT 1) TABLE t",
+		// 数据修改 CTE 本身返回行：走 QueryContext 才拿得到 RETURNING 的结果
+		"WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d",
+		"WITH c AS (SELECT 1) SELECT 2; UPDATE t SET a = 1", // 多条语句按第一条判
+		"WITH c AS (SELECT 1) (UPDATE t SET a = 1)",         // 主语句不能加括号
+		// ——以下认不出就放弃
+		`WITH c AS (SELECT '\' AS x) UPDATE t SET a = 1`,               // 字符串里的反斜杠：是不是转义符看方言
+		`WITH c AS (SELECT E'it\'s' AS x) UPDATE t SET a = 1`,          // 同上
+		`WITH c AS (SELECT 'unterminated) UPDATE t SET a = 1`,          // 引号没闭合
+		`WITH c AS (SELECT $tag$)$tag$ AS x) UPDATE t SET a = 1`,       // $ 引用：PG 的字符串定界符
+		`WITH c AS (SELECT a$b FROM t) UPDATE t SET a = 1`,             // 同上
+		"WITH c AS (SELECT 1 # note\n) UPDATE t SET a = 1",             // #：MySQL 的注释
+		"WITH c AS (SELECT 1 --note\n) UPDATE t SET a = 1",             // MySQL 里 -- 后面要有空白才是注释
+		"WITH c AS (SELECT 1 /*! ) UPDATE fake */ ) DELETE FROM t",     // MySQL 的可执行注释，内容是 SQL
+		"WITH c AS (SELECT 1 /* a /* b */ ) UPDATE fake */ ) SELECT 2", // PG 的块注释能嵌套
+		"WITH c AS (SELECT 1",  // 括号没闭合
+		"WITH c AS (SELECT 1)", // CTE 之后没有主语句
+		"WITH c AS (SELECT 1) SEARCH BREADTH FIRST BY id SET seq UPDATE t SET a = 1", // SEARCH 子句：不认
+	}
+	for _, sql := range notDML {
+		if isDMLStatement(sql) {
+			t.Errorf("isDMLStatement(%q) = true, want false", sql)
+		}
+	}
+}
+
+// TestExecuteSQLWithDMLRowsAffected 在 SQLite 上确认两件事：WITH … UPDATE 拿得到影响行数
+// （此前首词是 WITH 就走 QueryContext，写执行了、影响行数是空的）；WITH … SELECT 的结果集
+// 没有被当成写语句丢掉
+func TestExecuteSQLWithDMLRowsAffected(t *testing.T) {
+	handler, _ := setupTestHandler(t)
+
+	connectReq := models.ConnectRequest{ConnectionID: "test-with-dml", DbType: "sqlite", Database: ":memory:"}
+	connectBytes, _ := json.Marshal(connectReq)
+	req := httptest.NewRequest("POST", "/connect", bytes.NewReader(connectBytes))
+	req.Header.Set("Content-Type", "application/json")
+	handler.Connect(httptest.NewRecorder(), req)
+
+	exec := func(t *testing.T, sql string) models.QueryResult {
+		t.Helper()
+		qr := models.QueryRequest{ConnectionID: "test-with-dml", SQL: sql}
+		b, _ := json.Marshal(qr)
+		r := httptest.NewRequest("POST", "/query", bytes.NewReader(b))
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.Query(w, r)
+		var res models.QueryResult
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &res))
+		require.Empty(t, res.Error, "query %q", sql)
+		return res
+	}
+
+	exec(t, "CREATE TABLE t (id INTEGER PRIMARY KEY, a INTEGER)")
+	exec(t, "INSERT INTO t (id, a) VALUES (1, 1), (2, 2), (3, 3)")
+
+	res := exec(t, "WITH c AS (SELECT 1 AS id) UPDATE t SET a = 9 WHERE id IN (SELECT id FROM c)")
+	require.NotNil(t, res.RowsAffected, "WITH … UPDATE must report rows_affected")
+	assert.EqualValues(t, 1, *res.RowsAffected)
+
+	res = exec(t, "WITH c AS (SELECT id FROM t WHERE a = 9) DELETE FROM t WHERE id IN (SELECT id FROM c)")
+	require.NotNil(t, res.RowsAffected, "WITH … DELETE must report rows_affected")
+	assert.EqualValues(t, 1, *res.RowsAffected)
+
+	res = exec(t, "WITH c AS (SELECT 4 AS id, 4 AS a) INSERT INTO t SELECT * FROM c")
+	require.NotNil(t, res.RowsAffected, "WITH … INSERT must report rows_affected")
+	assert.EqualValues(t, 1, *res.RowsAffected)
+
+	res = exec(t, "WITH c AS (SELECT id FROM t) SELECT * FROM c ORDER BY id")
+	assert.Nil(t, res.RowsAffected, "WITH … SELECT is a query")
+	require.Len(t, res.Rows, 3)
+	assert.EqualValues(t, 2, res.Rows[0][0])
+	assert.EqualValues(t, 4, res.Rows[2][0])
+
+	// 认不出的写法退回查询：语句照常执行，只是没有影响行数
+	res = exec(t, `WITH c AS (SELECT '\' AS x, 2 AS id) DELETE FROM t WHERE id = 2`)
+	assert.Nil(t, res.RowsAffected)
+	res = exec(t, "SELECT count(*) AS n FROM t")
+	assert.EqualValues(t, 2, res.Rows[0][0])
+}
+
 func TestConvertValue(t *testing.T) {
 	tests := []struct {
 		name     string

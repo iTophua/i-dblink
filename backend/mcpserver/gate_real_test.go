@@ -108,11 +108,17 @@ func (e *realGateEnv) mustQuery(sql string, want any) {
 	require.Equal(e.t, fmt.Sprint(want), fmt.Sprint(body.Rows[0][0]), "execute_query %q", sql)
 }
 
-// mustReject 门禁必须拦下
+// mustReject 门禁必须拦下——而且得是门禁拦的：数据库报错同样是 isError，只看 isError 的话
+// 「门禁放行、语句在库里出错」（语法错、对象已存在……）也算通过。门禁的拒绝文本都以
+// 「<工具名> only allows …」开头（explain_query 是 accepts a single statement），数据库的报错
+// 是结果体里的 JSON 或 "DDL execution failed: …"
 func (e *realGateEnv) mustReject(toolName, sql string) {
 	e.t.Helper()
 	reply, _ := e.tool(toolName, map[string]any{"sql": sql})
 	require.True(e.t, reply.IsError, "%s %q must be rejected, got: %s", toolName, sql, reply.text())
+	text := reply.text()
+	require.True(e.t, strings.HasPrefix(text, toolName+" only allows") || strings.HasPrefix(text, toolName+" accepts a single statement"),
+		"%s %q must be rejected by the gate, not by the database, got: %s", toolName, sql, text)
 }
 
 // mustRun 经工具执行一条写语句，必须成功
@@ -141,17 +147,24 @@ func TestRealGatePostgreSQL(t *testing.T) {
 		"127.0.0.1:15432", "testuser", "testpassword", "testdb")
 	env := newRealGateEnv(t, target)
 
-	// 临时对象都带 mcp_gate 前缀，结束时删干净
+	// 临时对象都带 mcp_gate 前缀。开头和结束各清一次：上次失败的运行（尤其是门禁真坏了的
+	// 那种）留下的对象会让这次的 CREATE 报「已存在」，数据库报错同样是 isError
 	const tbl, log, schema = "mcp_gate_rows", "mcp_gate_updates_log", "mcp_gate_s"
-	t.Cleanup(func() {
+	cleanup := func() {
 		_ = env.run("DROP SCHEMA IF EXISTS " + schema + " CASCADE")
 		_ = env.run("DROP TABLE IF EXISTS " + tbl + "; DROP TABLE IF EXISTS " + log + "; DROP TABLE IF EXISTS mcp_gate_copy")
-		for _, fn := range []string{"mcp_gate_fn(int,int)", "mcp_gate_fn2(int)", "mcp_gate_fn3()"} {
+		for _, fn := range []string{
+			"mcp_gate_fn(int,int)", "mcp_gate_fn2(int)", "mcp_gate_fn3()",
+			"mcp_gate_fn9()", // mustReject 的那条：门禁真坏了时它会被建出来
+			"public.mcp_gate_dup()",
+		} {
 			_ = env.run("DROP FUNCTION IF EXISTS " + fn)
 		}
 		_ = env.run("DROP PROCEDURE IF EXISTS mcp_gate_p(int); DROP PROCEDURE IF EXISTS mcp_gate_double(int)")
 		_ = env.run("DROP ROLE IF EXISTS mcp_gate_ro")
-	})
+	}
+	cleanup()
+	t.Cleanup(cleanup)
 	const create = "CREATE TABLE " + tbl + " (id int PRIMARY KEY, note text)"
 	const seed = "INSERT INTO " + tbl + " (id, note) VALUES (1, 'a'), (2, 'b')"
 	fingerprint := func() string {
@@ -169,24 +182,37 @@ func TestRealGatePostgreSQL(t *testing.T) {
 	require.NoError(t, env.run(create))
 	require.NoError(t, env.run(seed))
 
+	// 表被删掉后取不了指纹，用 to_regclass 看它还在不在
+	tableExists := func() bool {
+		reply, body := env.tool("execute_query", map[string]any{
+			"sql": "SELECT to_regclass('mcp_gate_rows') IS NOT NULL AS e",
+		})
+		require.False(t, reply.IsError, "to_regclass: %s", reply.text())
+		return fmt.Sprint(body.Rows[0][0]) == "true"
+	}
+
 	// ---- 1. 门禁拦的是真东西：这些文本直接发给 PG，藏在「字符串」里的写会执行 ----
 	// （lib/pq 不带参数时走简单协议，一次执行整段）
 	smuggled := []string{
 		`SELECT '\'; DROP TABLE ` + tbl + `; SELECT ''`,
 		`SELECT $$a'b$$; DROP TABLE ` + tbl + `; SELECT $$c'd$$`,
-		`SELECT E'\'; DROP TABLE ` + tbl + `; SELECT E'x'`,
 	}
 	for _, sql := range smuggled {
 		env.mustReject("execute_query", sql)
+		require.True(t, tableExists(), "precondition: the table exists before %q is sent", sql)
 		require.NoError(t, env.run(sql), "sent directly, %q is expected to run", sql)
-		require.NotEqual(t, "1:a,2:b", fingerprint(), "sent directly, %q must have dropped the table", sql)
+		require.False(t, tableExists(), "sent directly, %q must have dropped the table", sql)
 		require.NoError(t, env.run(create))
 		require.NoError(t, env.run(seed))
 	}
+	// E'…' 里的 \' 是转义引号，字符串只会更长：夹在里面的 DROP 成了字符串内容，PG 不执行。
+	// 这类文本不构成走私通道，词法上要保证的是不误拒
+	env.mustQuery(`SELECT E'it\'s; DROP TABLE `+tbl+`; --' AS s`, "it's; DROP TABLE "+tbl+"; --")
+	require.Equal(t, "1:a,2:b", fingerprint())
 	for _, sql := range []string{
 		"EXPLAIN ANALYZE DELETE FROM " + tbl,
 		"WITH d AS (DELETE FROM " + tbl + " RETURNING *) SELECT * FROM d",
-		"WITH c AS (SELECT 1 AS id) UPDATE " + tbl + " SET note = 'x' WHERE " + tbl + ".id = c.id",
+		"WITH c AS (SELECT 1 AS id) UPDATE " + tbl + " SET note = 'x' FROM c WHERE " + tbl + ".id = c.id",
 	} {
 		env.mustReject("execute_query", sql)
 		require.NoError(t, env.run(sql), "sent directly, %q is expected to run", sql)
@@ -199,17 +225,20 @@ func TestRealGatePostgreSQL(t *testing.T) {
 
 	// ---- 2. 放行的只读语句在真库上跑得通、结果对 ----
 	legit := map[string]any{
-		`SELECT 'C:\temp' AS s`:                          `C:\temp`,
-		`SELECT $$it's;a;b$$ AS s`:                       `it's;a;b`,
-		`SELECT $tag$ a'b $tag$ AS s`:                    ` a'b `,
-		`SELECT E'it\'s' AS s`:                           `it's`,
-		`SELECT 'it''s' AS s`:                            `it's`,
-		`SELECT 1 /* a /* b */ c */ AS n`:                "1",
-		`SELECT 'into the void' AS s`:                    "into the void",
-		`SELECT '$$; DROP TABLE mcp_gate_rows; --' AS s`: `$$; DROP TABLE mcp_gate_rows; --`,
-		`SELECT 'a12b' ~ '^\w+b$' AS m`:                  "true",
-		`SELECT foo$tag$ FROM (SELECT 1 AS foo$tag$) s`:  "1",
-		`SELECT 1; -- done`:                              "1",
+		`SELECT 'C:\temp' AS s`:           `C:\temp`,
+		`SELECT 'C:\temp\' AS s`:          `C:\temp\`,
+		`SELECT $$it's;a;b$$ AS s`:        `it's;a;b`,
+		`SELECT $tag$ a'b $tag$ AS s`:     ` a'b `,
+		`SELECT E'it\'s' AS s`:            `it's`,
+		`SELECT 'it''s' AS s`:             `it's`,
+		`SELECT 1 /* a /* b */ c */ AS n`: "1",
+		// 外层注释把内层的 */ 之后的 ; DROP … 也吞掉了，整条仍是一条 SELECT
+		"SELECT 1 /* a /* b */ ; DROP TABLE " + tbl + " */ AS n":                     "1",
+		`SELECT 'into the void' AS s`:                                                "into the void",
+		`SELECT '$$; DROP TABLE mcp_gate_rows; --' AS s`:                             `$$; DROP TABLE mcp_gate_rows; --`,
+		`SELECT 'a12b' ~ '^\w+b$' AS m`:                                              "true",
+		`SELECT foo$tag$ FROM (SELECT 1 AS foo$tag$) s`:                              "1",
+		`SELECT 1; -- done`:                                                          "1",
 		`WITH d AS (SELECT * FROM mcp_gate_updates_log) SELECT count(*) AS n FROM d`: "0",
 	}
 	for sql, want := range legit {
@@ -228,6 +257,9 @@ func TestRealGatePostgreSQL(t *testing.T) {
 	body = env.mustRun("execute_update", "WITH c AS (SELECT 2 AS id) DELETE FROM "+tbl+" USING c WHERE "+tbl+".id = c.id")
 	require.NotNil(t, body.RowsAffected)
 	require.EqualValues(t, 1, *body.RowsAffected)
+	// 之后 1 号行改成了 u、2 号行删掉了，下面几处拿它当「数据没被动过」的基准
+	const afterDML = "1:u"
+	require.Equal(t, afterDML, fingerprint())
 
 	// ---- 4. $tag$ 函数体是一条语句 ----
 	env.mustRun("execute_ddl", "CREATE FUNCTION mcp_gate_fn(a int, b int) RETURNS int AS $$ BEGIN RETURN a + b; END; $$ LANGUAGE plpgsql")
@@ -237,7 +269,7 @@ func TestRealGatePostgreSQL(t *testing.T) {
 			"CREATE FUNCTION mcp_gate_fn3() RETURNS int AS $$ BEGIN RETURN 7; END; $$ LANGUAGE plpgsql")
 	env.mustQuery("SELECT mcp_gate_fn2(3) + mcp_gate_fn3() AS n", "13")
 	env.mustReject("execute_ddl", "CREATE FUNCTION mcp_gate_fn9() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql; DROP TABLE "+tbl)
-	require.Equal(t, "0:u", fingerprint(), "the rejected DDL must not have dropped the table")
+	require.Equal(t, afterDML, fingerprint(), "the rejected DDL must not have dropped the table")
 
 	// ---- 5. 函数定义按 schema 取 ----
 	env.mustRun("execute_ddl", "CREATE SCHEMA "+schema)
@@ -252,9 +284,6 @@ func TestRealGatePostgreSQL(t *testing.T) {
 	require.Contains(t, reply.text(), "public.mcp_gate_dup")
 	reply, _ = env.tool("get_function_body", map[string]any{"function_name": "mcp_gate_no_such_fn"})
 	require.True(t, reply.IsError, "a missing function must be reported as not found: %s", reply.text())
-	// schema 随 CASCADE 一起清；public 里的同名函数单独删
-	_ = env.run("DROP FUNCTION public.mcp_gate_dup()")
-	_ = env.run("DROP FUNCTION public.mcp_gate_dup()")
 
 	// ---- 6. explain_query ----
 	reply, plan = env.tool("explain_query", map[string]any{"sql": "SELECT * FROM " + tbl})
@@ -262,7 +291,7 @@ func TestRealGatePostgreSQL(t *testing.T) {
 	require.Contains(t, reply.text(), `"explain_sql":"EXPLAIN SELECT * FROM mcp_gate_rows"`)
 	require.NotEmpty(t, plan.Rows)
 	env.mustReject("explain_query", "ANALYZE DELETE FROM "+tbl)
-	require.Equal(t, "0:u", fingerprint())
+	require.Equal(t, afterDML, fingerprint())
 
 	// ---- 6b. 过程调用、授权、对象注释 ----
 	env.mustRun("execute_ddl", "CREATE PROCEDURE mcp_gate_p(n int) LANGUAGE sql AS $$ INSERT INTO "+tbl+" (id, note) VALUES (n, 'p') $$")
@@ -300,9 +329,21 @@ func TestRealGateMySQL(t *testing.T) {
 	env := newRealGateEnv(t, target)
 
 	const tbl = "mcp_gate_rows"
-	t.Cleanup(func() { _ = env.run("DROP TABLE IF EXISTS " + tbl) })
+	// 开头和结束各清一次：上次失败的运行留下的表 / 过程会让这次的 CREATE 报「已存在」，
+	// 数据库报错同样是 isError，mustReject 会因为错误的原因通过
+	cleanup := func() {
+		_ = env.run("DROP TABLE IF EXISTS " + tbl)
+		_ = env.run("DROP TABLE IF EXISTS mcp_gate_ticks")
+		_ = env.run("DROP PROCEDURE IF EXISTS mcp_gate_p")
+		_ = env.run("DROP PROCEDURE IF EXISTS mcp_gate_q")
+	}
+	cleanup()
+	t.Cleanup(cleanup)
 	const create = "CREATE TABLE " + tbl + " (id INT PRIMARY KEY, note VARCHAR(100))"
 	const seed = "INSERT INTO " + tbl + " (id, note) VALUES (1, 'a'), (2, 'b')"
+	// 反引号里的 `a'; DROP TABLE …; SELECT '` 整段是一个列名。真建一张有这一列的表：
+	// SELECT 它就是一条普通的查询，夹在里面的 DROP 不会执行
+	const ticked = "`a'; DROP TABLE " + tbl + "; SELECT '`"
 	fingerprint := func() string {
 		reply, body := env.tool("execute_query", map[string]any{
 			"sql": "SELECT GROUP_CONCAT(CONCAT(id, ':', note) ORDER BY id) AS f FROM " + tbl,
@@ -313,18 +354,24 @@ func TestRealGateMySQL(t *testing.T) {
 	require.NoError(t, env.run("DROP TABLE IF EXISTS "+tbl))
 	require.NoError(t, env.run(create))
 	require.NoError(t, env.run(seed))
+	require.NoError(t, env.run("CREATE TABLE mcp_gate_ticks ("+ticked+" INT)"))
+	require.NoError(t, env.run("INSERT INTO mcp_gate_ticks VALUES (7)"))
 
 	// ---- 1. 放行的只读语句在真库上跑得通、结果对 ----
 	legit := map[string]any{
-		`SELECT 'a\\b' AS s`:                                              `a\b`,
-		`SELECT 'C:\\Users\\x' AS s`:                                      `C:\Users\x`,
-		`SELECT 'it''s' AS s`:                                             `it's`,
-		`SELECT "a;b" AS s`:                                               `a;b`,
-		"SELECT `a;b` FROM (SELECT 1 AS `a;b`) t":                         "1",
-		"SELECT 1 # ; not code\n+ 1 AS n":                                 "2",
-		"SELECT 1 -- ; not code\n+ 1 AS n":                                "2",
-		"SELECT /*!40000 SQL_NO_CACHE */ id FROM " + tbl + " ORDER BY id": "1",
-		`SELECT 'into the void' AS s`:                                     "into the void",
+		`SELECT 'a\\b' AS s`:                      `a\b`,
+		`SELECT 'C:\\Users\\x' AS s`:              `C:\Users\x`,
+		"SELECT 'it\\'s' AS s":                    "it's",
+		`SELECT 'it''s' AS s`:                     `it's`,
+		`SELECT "a;b" AS s`:                       `a;b`,
+		"SELECT `a;b` FROM (SELECT 1 AS `a;b`) t": "1",
+		"SELECT 1 # ; not code\n+ 1 AS n":         "2",
+		"SELECT 1 -- ; not code\n+ 1 AS n":        "2",
+		"SELECT 1 --1 + 2 AS n":                   "4",
+		`SELECT 'into the void' AS s`:             "into the void",
+
+		"SELECT /*!40000 SQL_NO_CACHE */ id FROM " + tbl + " ORDER BY id LIMIT 1": "1",
+		"SELECT " + ticked + " AS v FROM mcp_gate_ticks":                          "7",
 	}
 	for sql, want := range legit {
 		env.mustQuery(sql, want)
@@ -337,7 +384,8 @@ func TestRealGateMySQL(t *testing.T) {
 		"SELECT * INTO OUTFILE '/tmp/mcp_gate_outfile' FROM " + tbl,
 		"SELECT id INTO @v FROM " + tbl + " LIMIT 1",
 		"SELECT 1 /*!50000 ; DROP TABLE " + tbl + " */",
-		"SELECT `a'; DROP TABLE " + tbl + "; SELECT '`",
+		// MySQL 里 --1 是两个减号，不是注释：第二句 DROP 是真的
+		"SELECT 1 --1; DROP TABLE " + tbl,
 		`SELECT 'a\'; DROP TABLE ` + tbl + `; SELECT ''`,
 	} {
 		env.mustReject("execute_query", sql)
@@ -351,13 +399,14 @@ func TestRealGateMySQL(t *testing.T) {
 	require.Equal(t, "1:a,2:b", fingerprint(), "the probe statements above must leave the table intact")
 
 	// ---- 3. WITH … DML 归 execute_update（MySQL 8 的 CTE） ----
+	// MySQL 只允许 WITH 开头的 UPDATE / DELETE；带 CTE 的 INSERT 得写成 INSERT … WITH … SELECT
 	body := env.mustRun("execute_update", "WITH c AS (SELECT 1 AS id) UPDATE "+tbl+", c SET "+tbl+".note = 'u' WHERE "+tbl+".id = c.id")
 	require.NotNil(t, body.RowsAffected)
 	require.EqualValues(t, 1, *body.RowsAffected)
 	body = env.mustRun("execute_update", "WITH c AS (SELECT 2 AS id) DELETE FROM "+tbl+" WHERE id IN (SELECT id FROM c)")
 	require.NotNil(t, body.RowsAffected)
 	require.EqualValues(t, 1, *body.RowsAffected)
-	body = env.mustRun("execute_update", "WITH c AS (SELECT 3 AS id, 'w' AS note) INSERT INTO "+tbl+" SELECT * FROM c")
+	body = env.mustRun("execute_update", "INSERT INTO "+tbl+" (id, note) WITH c AS (SELECT 3 AS id, 'w' AS note) SELECT * FROM c")
 	require.NotNil(t, body.RowsAffected)
 	require.EqualValues(t, 1, *body.RowsAffected)
 
@@ -371,9 +420,7 @@ func TestRealGateMySQL(t *testing.T) {
 	// ---- 4b. 过程调用 ----
 	// 函数体里有分号：MySQL 的过程定义没法可靠切分，execute_ddl 不收，这里直接建。
 	// 过程带回两个结果集，之后连接必须照常可用
-	require.NoError(t, env.run("DROP PROCEDURE IF EXISTS mcp_gate_p"))
 	require.NoError(t, env.run("CREATE PROCEDURE mcp_gate_p(IN n INT) BEGIN INSERT INTO "+tbl+" (id, note) VALUES (n, 'p'); SELECT 1 AS a; SELECT 2 AS b; END"))
-	t.Cleanup(func() { _ = env.run("DROP PROCEDURE IF EXISTS mcp_gate_p") })
 	body = env.mustRun("execute_procedure", "CALL mcp_gate_p(50)")
 	require.Len(t, body.Rows, 1, "the first result set comes back")
 	require.Equal(t, "1", fmt.Sprint(body.Rows[0][0]))
