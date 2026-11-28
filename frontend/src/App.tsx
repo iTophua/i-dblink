@@ -3,10 +3,9 @@ import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import { registerAppModal } from './utils/appModal';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSettingsStore } from './stores/settingsStore';
-import { getThemeConfig, ThemeMode } from './styles/theme';
-import { applyThemeVars } from './styles/applyTheme';
+import { useAppTheme } from './hooks/useAppTheme';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { api } from './api';
@@ -14,8 +13,6 @@ import i18n from './i18n';
 import './style.css';
 import './App.css';
 import { EventsOn } from './api';
-import { SetNativeWindowAppearance } from '../bindings/idblink/backend/app';
-import { Window as WailsWindow } from '@wailsio/runtime';
 
 // NOTE: Modal 过渡动画已通过全局 CSS 禁用（style.css 中覆盖 rc-motion 相关样式）
 
@@ -28,7 +25,6 @@ const isWails =
 
 function App() {
   const { settings, updateSettings } = useSettingsStore();
-  const [isHydrated, setIsHydrated] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
@@ -36,32 +32,18 @@ function App() {
       if (state?.settings?.language) {
         i18n.changeLanguage(state.settings.language);
       }
-      setIsHydrated(true);
     });
     return off;
   }, []);
 
   useEffect(() => {
-    if (isHydrated && settings.language) {
+    if (settings.language) {
       i18n.changeLanguage(settings.language);
     }
-  }, [isHydrated, settings.language]);
+  }, [settings.language]);
 
-  const themeMode = settings.themeMode;
-  const themePreset = settings.themePreset;
-
-  const effectiveMode: ThemeMode =
-    themeMode === 'system'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light'
-      : themeMode;
-
-  // 缓存主题配置，避免每次渲染都重新计算
-  const themeConfig = useMemo(
-    () => getThemeConfig(effectiveMode, themePreset),
-    [effectiveMode, themePreset]
-  );
+  // 主题：CSS 变量在渲染前已经由 main.tsx 写好，这里同步原生窗口，之后跟着设置切换
+  const { effectiveMode, themeConfig } = useAppTheme(settings.themeMode, settings.themePreset);
 
   useEffect(() => {
     if (isWails) {
@@ -121,7 +103,7 @@ function App() {
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
-      if (themeMode === 'system') {
+      if (settings.themeMode === 'system') {
         // 强制重新渲染以应用新的系统主题
         updateSettings({});
       }
@@ -129,38 +111,7 @@ function App() {
 
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [themeMode]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-
-    const applyVars = () => {
-      // CSS 变量 + data-theme 标记统一由 applyThemeVars 注入（主窗口/托盘面板共用）
-      const { config } = applyThemeVars(themeMode, themePreset, { transition: true });
-
-      // 同步原生窗口外观（macOS 标题栏/红绿灯按钮/窗口边框/菜单栏）
-      // 后端通过 CGO+ObjC 调 NSWindow.setAppearance:（仅 darwin 生效，其他平台空实现）
-      // themeMode='system' 时传 'system' 让后端移除覆盖、跟随系统
-      const nativeMode = themeMode === 'system' ? 'system' : effectiveMode;
-      void SetNativeWindowAppearance(nativeMode);
-
-      // 同步窗口背景色：webview 透明（WebviewIsTransparent:true）时，
-      // 窗口 BackgroundColour 作为底色透过透明像素显示。
-      // 跟随主题 background 同步，消除启动白屏和主题切换闪烁。
-      const bg = config.neutralColors.background;
-      const hex = bg.replace('#', '');
-      if (hex.length === 6) {
-        const r = parseInt(hex.slice(0, 2), 16);
-        const g = parseInt(hex.slice(2, 4), 16);
-        const b = parseInt(hex.slice(4, 6), 16);
-        WailsWindow.SetBackgroundColour(r, g, b, 255);
-      }
-    };
-
-    requestAnimationFrame(() => {
-      applyVars();
-    });
-  }, [effectiveMode, themeMode, themePreset, isHydrated]);
+  }, [settings.themeMode, updateSettings]);
 
   // F12 / Cmd+Opt+I 打开 DevTools：走后端 ShowDevTools（macOS 内部用 WebKit
   // 私有 API，比 runtime 直调更可靠）；生产包需带 devtools tag 构建。
@@ -180,13 +131,11 @@ function App() {
   }, []);
 
   // 启动画面是覆盖层：主界面在它下面立即挂载、开始加载连接，不再干等固定时长。
-  // 画面不透明，挂载期的布局抖动被盖住；持久化设置 hydrate 完成后主题变量就应用（同样在画面
-  // 下面），不会先闪一帧默认主题。
+  // 画面不透明，挂载期的布局抖动被盖住。主题令牌在渲染前就已经应用（main.tsx 的
+  // applyThemeBeforeRender），启动画面本身画的就是用户选的主题。
   // useCallback：SplashScreen 的计时器跟着 onFinish 走，主界面挂载引发的重渲染不能把计时重置
   const finishSplash = useCallback(() => {
     setShowSplash(false);
-    // 持久化设置迟迟没有 hydrate 完成时的兜底：主题应用不能一直等下去
-    setIsHydrated(true);
   }, []);
 
   const antdThemeConfig = {

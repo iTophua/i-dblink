@@ -184,6 +184,7 @@ vi.mock('../../bindings/idblink/backend/app', () => ({
   SetCloseGuardState: vi.fn().mockResolvedValue(undefined),
   OpenResultPopup: vi.fn().mockResolvedValue('result-1'),
   SaveSqlFileDialog: vi.fn().mockResolvedValue(''),
+  SaveStartupTheme: vi.fn().mockResolvedValue(undefined),
   WriteSqlFile: vi.fn().mockResolvedValue(undefined),
   ReadImportFile: vi.fn().mockResolvedValue({ name: '', data: '' }),
 }));

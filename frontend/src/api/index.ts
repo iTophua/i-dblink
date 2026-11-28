@@ -67,6 +67,7 @@ import {
   ShowDevTools,
   OpenResultPopup,
   SaveSqlFileDialog,
+  SaveStartupTheme,
   WriteSqlFile,
   ReadImportFile,
   TakePendingOpenFile,
@@ -978,6 +979,18 @@ export const api = {
   /** 打开开发者工具（macOS 走原生 WebKit 私有 API，生产包需 devtools tag 构建） */
   async showDevTools(): Promise<void> {
     await ShowDevTools();
+  },
+
+  /**
+   * 记录当前主题（浅色 / 深色两种外观下的窗口底色 + 原生外观模式）。下次启动时后端赶在窗口
+   * 创建前拿它给原生窗口定底色，深色用户不再先闪一下浅色
+   */
+  async saveStartupTheme(
+    lightBackground: string,
+    darkBackground: string,
+    nativeMode: string
+  ): Promise<void> {
+    await SaveStartupTheme(lightBackground, darkBackground, nativeMode);
   },
 
   /** 取走冷启动待打开的 .sql 文件路径（双击文件启动应用场景，取后即清） */

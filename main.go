@@ -434,9 +434,8 @@ func runGUI() {
 		UseApplicationMenu: true,
 		// 允许拖放文件到窗口（配合前端 data-file-drop-target 区域）
 		EnableFileDrop: true,
-		// 初始窗口背景色（webview 透明时作为底色显示）
-		// 取 Pro 浅色默认背景 #F2F3F8，前端主题加载后由 Window.SetBackgroundColour 同步覆盖。
-		// 选浅色而非深色：深色用户启动闪浅色 → 立即被覆盖，比浅色用户闪黑更可接受。
+		// 初始窗口背景色（webview 透明时作为底色显示）。只是窗口创建前的占位：存储打开后会换成
+		// 上次主题的底色（见下面的 SetStorageReadyCallback），之后前端切主题时再同步
 		BackgroundType:   application.BackgroundTypeTransparent,
 		BackgroundColour: application.NewRGB(242, 243, 248),
 		Mac: application.MacWindow{
@@ -464,6 +463,21 @@ func runGUI() {
 	win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
 		if files := event.Context().DroppedFiles(); len(files) > 0 {
 			wailsApp.Event.Emit("files-dropped", files)
+		}
+	})
+
+	// 窗口一创建、前端还没画出第一帧时露出来的是原生底色，所以底色和原生外观要赶在窗口创建前
+	// 按上次的主题定下来（写死浅色的话，深色用户每次启动都先闪一下浅色）。主题设置存在 webview
+	// 的 localStorage，Go 读不到：前端每次应用主题都会把结果写给后端（SaveStartupTheme），这里
+	// 在存储打开后取出来——服务启动早于窗口创建，这时改窗口选项还来得及
+	app.SetStorageReadyCallback(func(st *backend.Storage) {
+		theme := st.StartupTheme()
+		if r, g, b, ok := theme.BackgroundColor(backend.SystemPrefersDark()); ok {
+			win.SetBackgroundColour(application.NewRGB(r, g, b))
+		}
+		// 显式选了浅色 / 深色才覆盖原生外观；跟随系统的本来就不用管
+		if theme.NativeMode != "system" {
+			backend.SetWindowAppearance(theme.NativeMode)
 		}
 	})
 

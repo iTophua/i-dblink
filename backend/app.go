@@ -143,10 +143,17 @@ type App struct {
 
 	// 连接增删/连接状态变化回调（main 注入：刷新托盘快速连接菜单）
 	connectionsChanged func()
+
+	// 存储打开后的回调（main 注入：赶在窗口创建前给主窗口定原生底色和外观）
+	storageReady func(*Storage)
 }
 
 // SetConnectionsChangedCallback 注册连接变化回调（托盘菜单刷新）。
 func (a *App) SetConnectionsChangedCallback(f func()) { a.connectionsChanged = f }
+
+// SetStorageReadyCallback 注册存储打开后的回调，在 ServiceStartup 里调用。
+// Wails 先启动服务、后创建窗口，这时改窗口选项还来得及；之后存储一直可用，不必再通知。
+func (a *App) SetStorageReadyCallback(f func(*Storage)) { a.storageReady = f }
 
 // fireConnectionsChanged 连接列表或连接状态发生变化后通知（连接 CRUD/连接/断开）。
 func (a *App) fireConnectionsChanged() {
@@ -230,6 +237,9 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 		return err
 	}
 	a.storage = storage
+	if a.storageReady != nil {
+		a.storageReady(storage)
+	}
 
 	// 初始化数据库管理器
 	a.dbManager = db.NewManager()

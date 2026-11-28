@@ -19,6 +19,7 @@ type Storage struct {
 	favoriteRepo   *localdb.FavoriteRepository
 	aiConfigRepo   *localdb.AIConfigRepository
 	aiChatRepo     *localdb.AIChatRepository
+	appConfigRepo  *localdb.AppConfigRepository
 }
 
 // NewStorage 创建存储服务
@@ -47,6 +48,7 @@ func NewStorage(dataDir string) (*Storage, error) {
 		favoriteRepo:   localdb.NewFavoriteRepository(pool.DB()),
 		aiConfigRepo:   localdb.NewAIConfigRepository(pool.DB()),
 		aiChatRepo:     localdb.NewAIChatRepository(pool.DB()),
+		appConfigRepo:  localdb.NewAppConfigRepository(pool.DB()),
 	}, nil
 }
 
@@ -245,6 +247,18 @@ func (s *Storage) SaveFavorite(fav *localdb.Favorite) error {
 // DeleteFavorite 删除收藏
 func (s *Storage) DeleteFavorite(id string) error {
 	return s.favoriteRepo.Delete(id)
+}
+
+// ==================== 应用配置 ====================
+
+// GetAppConfig 取应用配置；没有这一项时 found 为 false
+func (s *Storage) GetAppConfig(key string) (value string, found bool, err error) {
+	return s.appConfigRepo.Get(key)
+}
+
+// SetAppConfig 写应用配置（已有则覆盖）
+func (s *Storage) SetAppConfig(key, value string) error {
+	return s.appConfigRepo.Set(key, value)
 }
 
 // ==================== AI 配置 ====================

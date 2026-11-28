@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { ResultGrid } from './SQLEditor/ResultGrid';
 import { applyThemeVars } from '../styles/applyTheme';
 import { useSettingsStore } from '../stores/settingsStore';
+import { applyWindowBackground } from '../utils/windowBackground';
 import type { DatabaseType } from '../types/api';
 
 /**
@@ -46,12 +47,14 @@ export function ResultPopup() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gotDataRef = useRef(false);
 
-  // 主题：复用主窗口的设置与 applyThemeVars，而不是只看系统偏好
+  // 主题：复用主窗口的设置与 applyThemeVars，而不是只看系统偏好。
+  // 弹窗是独立的原生窗口，底色也要自己写：窗口刚创建、拉伸时前端没画到的地方露出来的是它
   useEffect(() => {
     const apply = () => {
       const { themeMode, themePreset } = useSettingsStore.getState().settings;
-      const { effectiveMode } = applyThemeVars(themeMode, themePreset);
+      const { config, effectiveMode } = applyThemeVars(themeMode, themePreset);
       setIsDark(effectiveMode === 'dark');
+      applyWindowBackground(config.neutralColors.background);
     };
     apply();
     const offHydration = useSettingsStore.persist.onFinishHydration(apply);

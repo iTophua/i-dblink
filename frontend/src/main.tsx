@@ -10,6 +10,7 @@ import './styles/pro-theme.css';
 import './i18n';
 import { installDiagnostics } from './utils/diagnostics';
 import { installAIChatHistory } from './services/aiChatHistory';
+import { applyThemeBeforeRender } from './utils/startupTheme';
 
 // 临时 workaround：抑制 antd 在 React 19 下的 element.ref 废弃警告
 // Wails WebView polyfill
@@ -79,6 +80,10 @@ observer.observe(document.body, { childList: true, subtree: true });
 const hash = window.location.hash;
 const isResultPopup = /^#popup\//.test(hash);
 const isConnPicker = hash.startsWith('#conn-picker');
+
+// 主题令牌要在首帧之前就位：主窗口的启动画面、结果弹窗、托盘面板都从这个入口进来，
+// 放进 effect 会晚一帧（那一帧是默认的浅色）
+applyThemeBeforeRender();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>

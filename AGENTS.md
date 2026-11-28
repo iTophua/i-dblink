@@ -202,6 +202,17 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   空值，表现为删除分组后组内连接整组消失
 - **启动画面是覆盖层**（`App.tsx`）：主界面在它下面立即挂载，不要改回「先渲染画面、结束后
   再挂载主界面」
+- **主题在首帧之前应用**（`main.tsx` 的 `applyThemeBeforeRender` + `hooks/useAppTheme`）：设置存在
+  localStorage，zustand persist 对同步存储是**同步** hydrate 的，store 创建时就读完了——挂载后
+  注册的 `onFinishHydration` 永远不会再触发。此前主题应用挂在 `isHydrated` 后面，实际要等启动
+  画面结束才生效：深色用户每次启动先看到 1.2 秒的浅色启动画面，再渐变成深色。现在渲染前先把
+  令牌写到文档上，挂载后的第一次只同步原生窗口、不带过渡，之后的切换才带过渡。原生窗口那一层
+  （webview 透明，前端画出来之前露的是窗口底色）靠后端记住上次的主题：前端每次应用主题调
+  `SaveStartupTheme`（存 `app_config`），`main.go` 用 `SetStorageReadyCallback` 在 `ServiceStartup`
+  里改主窗口的 `BackgroundColour` 和原生外观——Wails 的 `Run()` 先启动服务、后创建窗口，
+  `SetBackgroundColour` 在窗口还没创建时只改选项。这两个前提变了，深色用户又会闪浅色。
+  各窗口把主题底色写给原生窗口的逻辑在 `utils/windowBackground.ts`（每个窗口是独立的原生窗口，
+  主窗口 / 托盘面板 / 结果弹窗各调各的）；结果弹窗创建时的底色也取存下来的主题（`app_popup.go`）
 - **会话事务绑定在库上，按空闲回收**（`backend/db/manager.go`，2026-11）：
   `BeginTransaction(connectionID, sessionID, database)` 把事务开在该会话语句要落的库的连接池上
   （空 = 连接默认库），之后同会话的语句**必须带同一个库**：`GetExecutorForSession` 对换库的语句
@@ -295,7 +306,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 ## Test quirks
 
-- 前端测试位于 `frontend/src/__tests__/`（58 个文件）
+- 前端测试位于 `frontend/src/__tests__/`（62 个文件）
 - 测试分类：`unit/`、`components/`、`hooks/`、`api/`、`integration/`
 - 所有 Wails 绑定在 `src/__tests__/setupTests.ts` 中 mock，mock 以具名常量导出，直接 import 使用：
   ```ts
@@ -314,7 +325,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
   `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
   桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
-  `pnpm test`（813）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
+  `pnpm test`（827）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
   UI 重写整套用例。另外 e2e 脚本须从仓库根用
   `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
   运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）

@@ -3,6 +3,7 @@ import { Events, Window } from '@wailsio/runtime';
 import { CloseCircleFilled, SearchOutlined } from '@ant-design/icons';
 import { useSettingsStore } from '../stores/settingsStore';
 import { applyThemeVars } from '../styles/applyTheme';
+import { applyWindowBackground } from '../utils/windowBackground';
 
 /**
  * 托盘快速连接面板（左键点托盘图标弹出的紧凑面板，AttachWindow 模式）。
@@ -40,20 +41,12 @@ export function ConnPicker() {
     Events.Emit('conn-picker:request-data').catch(() => {});
   }, []);
 
-  // 面板是独立窗口：主题令牌必须自己注入一遍（主窗口的注入不会跨窗口生效）。
-  // 显示时重放一次，保证主窗口切换主题后托盘面板立即跟随。
+  // 面板是独立窗口：主题令牌必须自己注入一遍（主窗口的注入不会跨窗口生效），
+  // 原生窗口的底色也要自己写。显示时重放一次，保证主窗口切换主题后托盘面板立即跟随。
   const applyCurrentTheme = useCallback(() => {
     const { settings } = useSettingsStore.getState();
     const { config } = applyThemeVars(settings.themeMode, settings.themePreset);
-    const hex = config.neutralColors.background.replace('#', '');
-    if (hex.length === 6) {
-      Window.SetBackgroundColour(
-        parseInt(hex.slice(0, 2), 16),
-        parseInt(hex.slice(2, 4), 16),
-        parseInt(hex.slice(4, 6), 16),
-        255
-      ).catch(() => {});
-    }
+    applyWindowBackground(config.neutralColors.background);
   }, []);
 
   useEffect(() => {

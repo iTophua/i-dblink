@@ -57,6 +57,13 @@ static void setWindowAppearance(const char* mode) {
         [captured release];
     });
 }
+
+// systemPrefersDark 系统当前是否为深色外观：AppleInterfaceStyle 为 Dark 即是，浅色时没有这个键。
+// 只看系统设置，和本应用有没有用 setWindowAppearance 覆盖过外观无关
+static BOOL systemPrefersDark(void) {
+    NSString *style = [[NSUserDefaults standardUserDefaults] stringForKey:@"AppleInterfaceStyle"];
+    return style != nil && [style isEqualToString:@"Dark"];
+}
 */
 import "C"
 
@@ -75,6 +82,12 @@ func SetWindowAppearance(mode string) {
 	cMode := C.CString(mode)
 	defer C.free(unsafe.Pointer(cMode))
 	C.setWindowAppearance(cMode)
+}
+
+// SystemPrefersDark 系统当前是否为深色外观（仅 darwin 能查到，其他平台恒为 false）。
+// 启动早期解析「跟随系统」的主题要用：那时前端还没起来，也没有现成的 effectiveAppearance 可读
+func SystemPrefersDark() bool {
+	return bool(C.systemPrefersDark())
 }
 
 // setDockBadgeDarwin 设置/清除 dock 角标（运行中查询数；空串清除）。
