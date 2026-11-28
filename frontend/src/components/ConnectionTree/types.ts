@@ -1,5 +1,5 @@
 import type { Connection, ConnectionGroup } from '../../stores/appStore';
-import type { TableInfo } from '../../types/api';
+import type { ObjectTypeFilter, TableInfo } from '../../types/api';
 
 export type ConnectionTreeProps = {
   connections: Connection[];
@@ -8,7 +8,7 @@ export type ConnectionTreeProps = {
   selectedTableId: string | null;
   onSelect: (id: string | null) => void;
   onTableSelect: (table: string | null, database?: string) => void;
-  onObjectTypeSelect?: (objectType: 'table' | 'view' | 'all', database?: string, schema?: string) => void;
+  onObjectTypeSelect?: (objectType: ObjectTypeFilter, database?: string, schema?: string) => void;
   onTableOpen: (tableName: string, database?: string) => void;
   onViewOpen?: (viewName: string, database?: string) => void;
   onOpenDesigner?: (tableName: string, database?: string) => void;

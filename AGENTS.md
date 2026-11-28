@@ -76,6 +76,24 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   点击在 jsdom 里能复现，停在原地是预览窗格不出帧时见到的；但「收起后残留子项」不是它造成的，
   见上一条）。要传给 antd 的 `<Tree>` 本身（`EnhancedConnectionTree` 不转发）；传 `null` 不行
   （antd 用 `??` 回退成默认动画），要传 `false`
+- **树上的「存储过程 / 函数 / 触发器 / 序列」目录**（`useTreeHandlers.ts` + `RoutineList.tsx`）：双击
+  目录标题和点箭头一样切换展开（列表没加载就先加载，都走 `loadRoutinesIfNeeded`）；选中目录或
+  其中的项时 `handleSelect` 通过 `onObjectTypeSelect(kind)` 让对象页切到对应的列表（类型是
+  `ObjectTypeFilter`，`tabMgr.selectedObjectType` 传给 `TabPanel`，`isRoutineKind` 分流到
+  `RoutineList`）。2026-11 之前这两条都没接：只有箭头能展开，点了目录对象页没有任何反应。
+  `RoutineList` 的做法：
+  - 详情侧栏**默认关着**（用户要求，和表列表一致；`localStorage` 的 `routinelist-show-detail`
+    只记右上角按钮的操作）。单击一行只是选中，**双击一行**才打开这一项的定义（这次打开不记入偏好）
+  - 换连接 / 库 / 类型靠外层的 `key` 让状态整个重来，列表只在挂载和点刷新时请求；详情侧栏同理，
+    所以 effect 里只有异步回调里 setState（`react-hooks/set-state-in-effect` 不报）
+  - 表头和行放在**同一个滚动容器**里（表头吸顶），列多、窗口窄时横向滚动、表头跟着走；属性列用
+    `minmax(下限, 上限)`，下限之和就是出横向滚动的临界宽度。这个容器不能加 `contain` /
+    `content-visibility`（见上面 WKWebView 那条）。PG bigint 序列的上限是 19 位数，「最大值」列的
+    下限要放得下它
+  - 各库的触发器 / 序列字段名不一样，统一经 `routineMeta.ts` 的 `toRoutineItem` 归一；过程 / 函数
+    的定义按名字另取（`getProcedureBody` / `getFunctionBody`），触发器的定义随列表来，序列只有属性
+  - 图标是组件、其余是函数和常量：分开放在 `RoutineKindIcon.tsx` 和 `routineMeta.ts`，放一个文件
+    会触发 `react-refresh/only-export-components`（新文件要求 0 问题）
 - **`ConnectionInput` 等模型**：v3 绑定生成 interfaces（`-i`），前端直接用对象字面量传参，无模型类
 - **Wails 绑定**（`frontend/bindings/`）已 gitignore，`wails3 task build`/`dev` 时自动生成；跑 `tsc`/`pnpm test` 前若缺失需先 `~/go/bin/wails3 generate bindings -ts -i`（setupTests 已 mock 绑定模块，测试不依赖生成物）
 - **多窗口**：查询结果可弹出到独立窗口（`/#popup/<id>` hash 路由到 ResultPopup，
@@ -270,7 +288,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 ## Test quirks
 
-- 前端测试位于 `frontend/src/__tests__/`（56 个文件）
+- 前端测试位于 `frontend/src/__tests__/`（58 个文件）
 - 测试分类：`unit/`、`components/`、`hooks/`、`api/`、`integration/`
 - 所有 Wails 绑定在 `src/__tests__/setupTests.ts` 中 mock，mock 以具名常量导出，直接 import 使用：
   ```ts
@@ -289,7 +307,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
   `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
   桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
-  `pnpm test`（779）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
+  `pnpm test`（813）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
   UI 重写整套用例。另外 e2e 脚本须从仓库根用
   `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
   运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）

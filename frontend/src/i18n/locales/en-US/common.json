@@ -842,6 +842,22 @@
         "exportWizard": "Export Wizard"
       }
     },
+    "routineList": {
+      "search": "Search by name...",
+      "noMatching": "No matching items",
+      "copyName": "Copy name",
+      "copyDefinition": "Copy definition",
+      "selectHint": "Select an item to see its definition or properties",
+      "noDefinition": "No definition available",
+      "table": "Table",
+      "event": "Event",
+      "timing": "Timing",
+      "increment": "Increment",
+      "startValue": "Start value",
+      "minValue": "Min value",
+      "maxValue": "Max value",
+      "cycle": "Cycle"
+    },
     "tableStructure": {
       "title": "Table Structure",
       "columns": "Columns",

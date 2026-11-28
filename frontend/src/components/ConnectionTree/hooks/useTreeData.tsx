@@ -248,10 +248,29 @@ export function useTreeData({
 
       const sq = searchText.trim().toLowerCase();
 
+      // 过程 / 函数 / 触发器 / 序列的目录：标题占满整行，双击和点箭头一样展开 / 收起
+      // （和表、视图目录一致；此前标题上没挂双击，`handleDoubleClick` 里也没有这几个类型）
+      const withFolderDoubleClick = <T extends { key: string; title: React.ReactNode }>(
+        node: T
+      ) => ({
+        ...node,
+        title: (
+          <div
+            style={{ width: '100%' }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              handlers.handleDoubleClick(node.key);
+            }}
+          >
+            {node.title}
+          </div>
+        ),
+      });
+
       // ── Build procedures / functions / triggers nodes ──
       const proceduresNode = (() => {
         const folderKey = `procedures::${connId}::${db.database}`;
-        return {
+        const node = {
           key: folderKey,
           title: db.routinesLoaded ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
@@ -316,11 +335,12 @@ export function useTreeData({
                   },
                 ],
         };
+        return withFolderDoubleClick(node);
       })();
 
       const functionsNode = (() => {
         const folderKey = `functions::${connId}::${db.database}`;
-        return {
+        const node = {
           key: folderKey,
           title: db.routinesLoaded ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
@@ -385,11 +405,12 @@ export function useTreeData({
                   },
                 ],
         };
+        return withFolderDoubleClick(node);
       })();
 
       const triggersNode = (() => {
         const folderKey = `triggers::${connId}::${db.database}`;
-        return {
+        const node = {
           key: folderKey,
           title: db.routinesLoaded ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
@@ -454,11 +475,12 @@ export function useTreeData({
                   },
                 ],
         };
+        return withFolderDoubleClick(node);
       })();
 
       const sequencesNode = (() => {
         const folderKey = `sequences::${connId}::${db.database}`;
-        return {
+        const node = {
           key: folderKey,
           title: db.routinesLoaded ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
@@ -518,6 +540,7 @@ export function useTreeData({
                   },
                 ],
         };
+        return withFolderDoubleClick(node);
       })();
 
       // ── Unified database title node ──

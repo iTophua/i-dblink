@@ -138,6 +138,12 @@ export interface SequenceInfo {
   cycle_option: string;
 }
 
+/** 树上「存储过程 / 函数 / 触发器 / 序列」四个目录对应的那一类对象 */
+export type RoutineKind = 'procedure' | 'function' | 'trigger' | 'sequence';
+
+/** 对象页当前列的是哪一类：表、视图，或上面四类之一 */
+export type ObjectTypeFilter = 'all' | 'table' | 'view' | RoutineKind;
+
 export interface CheckConstraintInfo {
   constraint_name: string;
   check_clause: string;

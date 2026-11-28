@@ -41,6 +41,7 @@ export const mockGetTransactionStatus = vi.fn().mockResolvedValue(false);
 export const mockGetServerInfo = vi.fn().mockResolvedValue({});
 export const mockGetTableDDL = vi.fn().mockResolvedValue([]);
 export const mockGetTriggers = vi.fn().mockResolvedValue([]);
+export const mockGetSequences = vi.fn().mockResolvedValue([]);
 export const mockGetEvents = vi.fn().mockResolvedValue([]);
 export const mockSaveSnippet = vi.fn().mockResolvedValue('test-id');
 export const mockGetSnippets = vi.fn().mockResolvedValue([]);
@@ -157,6 +158,7 @@ vi.mock('../../bindings/idblink/backend/app', () => ({
   GetServerInfo: mockGetServerInfo,
   GetTableDDL: mockGetTableDDL,
   GetTriggers: mockGetTriggers,
+  GetSequences: mockGetSequences,
   GetEvents: mockGetEvents,
   SaveSnippet: mockSaveSnippet,
   GetSnippets: mockGetSnippets,

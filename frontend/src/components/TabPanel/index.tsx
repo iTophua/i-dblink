@@ -49,13 +49,15 @@ import { UserManagementPanel } from '../UserManagementPanel';
 const ERDiagram = lazy(() =>
   import('../ERDiagram').then((module) => ({ default: module.ERDiagram }))
 );
-import type { TableInfo, DatabaseType, ColumnInfo } from '../../types/api';
+import type { TableInfo, DatabaseType, ColumnInfo, ObjectTypeFilter } from '../../types/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAppStore } from '../../stores/appStore';
 import { api } from '../../api';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import { SplitView } from './SplitView';
 import { KeyboardShortcutsModal } from '../../utils/uxEnhancements';
+import { RoutineList } from '../RoutineList';
+import { isRoutineKind } from '../routineMeta';
 
 interface TabPanelProps {
   selectedConnectionId: string | null;
@@ -63,7 +65,8 @@ interface TabPanelProps {
   selectedTable: string | null;
   selectedDatabase?: string;
   selectedSchema?: string;
-  selectedObjectType?: 'table' | 'view' | 'all';
+  /** 对象页列的是哪一类：表 / 视图，或过程 / 函数 / 触发器 / 序列 */
+  selectedObjectType?: ObjectTypeFilter;
   /** 双击表时设置此值，TabPanel 会打开新的数据浏览 Tab */
   tableToOpen?: { name: string; database?: string; isView?: boolean } | null;
   /** 当有 SQL 查询 Tab 打开时回调，用于控制日志面板显示 */
@@ -2151,6 +2154,13 @@ export const TabPanel = forwardRef<TabPanelRef, TabPanelProps>(function TabPanel
                 connectionId={selectedConnectionId}
                 tableName={selectedTable}
                 database={selectedDatabase}
+              />
+            ) : isRoutineKind(selectedObjectType) ? (
+              // 树上选中「存储过程 / 函数 / 触发器 / 序列」目录 → 对应的列表；双击一项在右侧看定义
+              <RoutineList
+                connectionId={selectedConnectionId}
+                database={selectedDatabase}
+                kind={selectedObjectType}
               />
             ) : (
               // 未选表 → 显示表列表

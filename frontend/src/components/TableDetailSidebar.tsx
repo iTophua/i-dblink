@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { useDatabase } from '../hooks/useApi';
 import { DDLViewer } from './DDLViewer';
+import { DetailSidebarHandle } from './DetailSidebarHandle';
 import { EnhancedEmptyState } from './LoadingStates';
 
 interface TableDetailSidebarProps {
@@ -118,34 +119,6 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
     });
   }, [loadDetail]);
 
-  const isDraggingRef = useRef(false);
-
-  const handleDragStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      isDraggingRef.current = true;
-      const startX = e.clientX;
-      const startWidth = width;
-      const onMouseMove = (ev: MouseEvent) => {
-        if (!isDraggingRef.current) return;
-        const newWidth = Math.max(200, Math.min(600, startWidth + startX - ev.clientX));
-        onWidthChange(newWidth);
-      };
-      const onMouseUp = () => {
-        isDraggingRef.current = false;
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      };
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    },
-    [width, onWidthChange]
-  );
-
   const handleCopy = useCallback(
     (text: string) => {
       navigator.clipboard.writeText(text).then(() => {
@@ -191,25 +164,7 @@ export const TableDetailSidebar: React.FC<TableDetailSidebarProps> = ({
 
   return (
     <>
-      <div
-        onMouseDown={handleDragStart}
-        style={{
-          width: 4,
-          cursor: 'col-resize',
-          background: 'var(--border)',
-          transition: 'background 0.2s',
-          flexShrink: 0,
-          alignSelf: 'stretch',
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLDivElement).style.background = 'var(--color-primary)';
-        }}
-        onMouseLeave={(e) => {
-          if (!isDraggingRef.current) {
-            (e.currentTarget as HTMLDivElement).style.background = 'var(--border)';
-          }
-        }}
-      />
+      <DetailSidebarHandle width={width} onWidthChange={onWidthChange} />
       <div
         style={{
           width,

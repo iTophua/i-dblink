@@ -1,8 +1,29 @@
 import { useCallback, useRef } from 'react';
 import type { Connection } from '../../../stores/appStore';
+import type { ObjectTypeFilter, RoutineKind } from '../../../types/api';
 import { parseTreeKey } from '../utils/treeKeyParser';
-import type { ParsedTreeKey } from '../utils/treeKeyParser';
+import type { ParsedTreeKey, TreeKeyType } from '../utils/treeKeyParser';
 import { qualifiedTableName } from '../../../utils/qualifiedName';
+
+/** 过程 / 函数 / 触发器 / 序列的目录（和其中的项）：对象页里各有一张对应的列表 */
+const ROUTINE_KIND: Partial<Record<TreeKeyType, RoutineKind>> = {
+  'procedures-folder': 'procedure',
+  procedure: 'procedure',
+  'functions-folder': 'function',
+  function: 'function',
+  'triggers-folder': 'trigger',
+  trigger: 'trigger',
+  'sequences-folder': 'sequence',
+  sequence: 'sequence',
+};
+
+const ROUTINE_FOLDER_TYPES: TreeKeyType[] = [
+  'procedures-folder',
+  'functions-folder',
+  'triggers-folder',
+  'sequences-folder',
+];
+const isRoutineFolder = (type: TreeKeyType) => ROUTINE_FOLDER_TYPES.includes(type);
 
 interface TreeHandlerCallbacks {
   onExpandKeys: (keys: string[]) => void;
@@ -17,7 +38,7 @@ interface TreeHandlerCallbacks {
   onViewOpen?: (viewName: string, database?: string) => void;
   onSelect: (id: string | null) => void;
   onTableSelect: (table: string | null, database?: string) => void;
-  onObjectTypeSelect?: (objectType: 'table' | 'view' | 'all', database?: string, schema?: string) => void;
+  onObjectTypeSelect?: (objectType: ObjectTypeFilter, database?: string, schema?: string) => void;
 }
 
 interface TreeHandlerRefs {
@@ -42,6 +63,31 @@ export function useTreeHandlers(
         connections.find((c) => c.id === parsed.connectionId)?.db_type
       ),
     [connections]
+  );
+
+  /** 只动展开状态：展开了就收起，没收起就展开 */
+  const toggleKey = useCallback(
+    (key: string) => {
+      if (refs.expandedKeysRef.current.includes(key)) {
+        callbacks.onExpandKeys(refs.expandedKeysRef.current.filter((k) => k !== key));
+      } else {
+        callbacks.onExpandKeys([...refs.expandedKeysRef.current, key]);
+      }
+    },
+    [callbacks, refs]
+  );
+
+  /** 过程 / 函数 / 触发器 / 序列的目录展开时调用：列表还没加载就触发加载（点箭头和双击标题共用） */
+  const loadRoutinesIfNeeded = useCallback(
+    (connectionId: string, database: string) => {
+      const dbList = refs.connectionDatabasesRef.current[connectionId] || [];
+      const db = dbList.find((d: any) => d.database === database);
+      if (db?.loadFailed) return;
+      if (!db || !db.loaded || !db.routinesLoaded) {
+        callbacks.onDatabaseExpand(connectionId, database);
+      }
+    },
+    [callbacks, refs]
   );
 
   const handleTableClick = useCallback(
@@ -92,12 +138,11 @@ export function useTreeHandlers(
           callbacks.onExpandKeys([...refs.expandedKeysRef.current, dbKey]);
         }
       } else if (parsed.type === 'schema' || parsed.type === 'tables-folder' || parsed.type === 'views-folder' || parsed.type === 'group') {
-        const isExpanded = refs.expandedKeysRef.current.includes(key);
-        if (isExpanded) {
-          callbacks.onExpandKeys(refs.expandedKeysRef.current.filter((k) => k !== key));
-        } else {
-          callbacks.onExpandKeys([...refs.expandedKeysRef.current, key]);
-        }
+        toggleKey(key);
+      } else if (isRoutineFolder(parsed.type) && parsed.connectionId && parsed.database) {
+        // 双击目录标题和点箭头是一回事：切换展开，展开时列表还没加载就先加载
+        loadRoutinesIfNeeded(parsed.connectionId, parsed.database);
+        toggleKey(key);
       } else if (parsed.type === 'connection' && parsed.connectionId) {
         const conn = connections.find((c) => c.id === parsed.connectionId);
         if (!conn) return;
@@ -122,7 +167,7 @@ export function useTreeHandlers(
         }
       }
     },
-    [connections, callbacks, refs, objectName]
+    [connections, callbacks, refs, objectName, toggleKey, loadRoutinesIfNeeded]
   );
 
   const handleExpand = useCallback(
@@ -167,18 +212,8 @@ export function useTreeHandlers(
       }
 
       // Handle procedures/functions/triggers/sequences folder expand
-      if (
-        (parsed.type === 'procedures-folder' || parsed.type === 'functions-folder' || parsed.type === 'triggers-folder' || parsed.type === 'sequences-folder') &&
-        info.expanded &&
-        parsed.connectionId &&
-        parsed.database
-      ) {
-        const dbList = refs.connectionDatabasesRef.current[parsed.connectionId] || [];
-        const db = dbList.find((d: any) => d.database === parsed.database);
-        if (db?.loadFailed) return;
-        if (!db || !db.loaded || !db.routinesLoaded) {
-          callbacks.onDatabaseExpand(parsed.connectionId, parsed.database);
-        }
+      if (isRoutineFolder(parsed.type) && info.expanded && parsed.connectionId && parsed.database) {
+        loadRoutinesIfNeeded(parsed.connectionId, parsed.database);
       }
 
       // Handle tables/views folder expand
@@ -201,7 +236,7 @@ export function useTreeHandlers(
         callbacks.onTableExpand(parsed.connectionId, parsed.database, parsed.name!);
       }
     },
-    [connections, callbacks, refs]
+    [connections, callbacks, refs, loadRoutinesIfNeeded]
   );
 
   const handleSelect = useCallback(
@@ -210,6 +245,7 @@ export function useTreeHandlers(
       if (!key) return;
 
       const parsed = parseTreeKey(key);
+      const routineKind = ROUTINE_KIND[parsed.type];
 
       if (parsed.type === 'table' && parsed.connectionId && parsed.database) {
         callbacks.onSelect(parsed.connectionId);
@@ -233,6 +269,11 @@ export function useTreeHandlers(
         callbacks.onSelect(parsed.connectionId);
         callbacks.onTableSelect(null, parsed.database);
         callbacks.onObjectTypeSelect?.('view', parsed.database, parsed.schema);
+      } else if (routineKind && parsed.connectionId && parsed.database) {
+        // 选中目录或其中的项：对象页切到对应的列表（和选中表目录列出表一样）
+        callbacks.onSelect(parsed.connectionId);
+        callbacks.onTableSelect(null, parsed.database);
+        callbacks.onObjectTypeSelect?.(routineKind, parsed.database);
       } else if (parsed.type === 'group') {
         // no-op for group selection
       } else if (parsed.type === 'connection' && parsed.connectionId) {

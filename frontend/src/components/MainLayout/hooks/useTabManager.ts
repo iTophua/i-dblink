@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../../../api';
 import type { ActiveTabInfo } from '../../TabPanel';
 import type { Connection } from '../../../stores/appStore';
+import type { ObjectTypeFilter } from '../../../types/api';
 
 interface UseTabManagerParams {
   selectedConnectionId: string | null;
@@ -27,7 +28,7 @@ export function useTabManager({ selectedConnectionId, connections }: UseTabManag
   const [currentResultRows, setCurrentResultRows] = useState<number>(0);
   const [currentExecutionTime, setCurrentExecutionTime] = useState<number>(0);
   const [isQuerying, setIsQuerying] = useState(false);
-  const [selectedObjectType, setSelectedObjectType] = useState<'table' | 'view' | 'all'>('all');
+  const [selectedObjectType, setSelectedObjectType] = useState<ObjectTypeFilter>('all');
 
   // 关闭非活跃 Tab 时 activeTabInfo 内容不变，避免用新对象触发 MainLayout 整体重渲染
   const updateActiveTabInfo = useCallback((info: ActiveTabInfo) => {

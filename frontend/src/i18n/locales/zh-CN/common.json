@@ -858,6 +858,22 @@
         "exportWizard": "导出向导"
       }
     },
+    "routineList": {
+      "search": "搜索名称...",
+      "noMatching": "没有找到匹配的项",
+      "copyName": "复制名称",
+      "copyDefinition": "复制定义",
+      "selectHint": "在列表里选一项，这里显示它的定义或属性",
+      "noDefinition": "没有取到定义",
+      "table": "所在的表",
+      "event": "事件",
+      "timing": "时机",
+      "increment": "递增",
+      "startValue": "起始值",
+      "minValue": "最小值",
+      "maxValue": "最大值",
+      "cycle": "循环"
+    },
     "tableStructure": {
       "title": "表结构",
       "columns": "列",
