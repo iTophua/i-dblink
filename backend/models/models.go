@@ -128,8 +128,9 @@ type QueryRequest struct {
 	Database       string `json:"database,omitempty"`
 	SQL            string `json:"sql"`
 	StreamResults  bool   `json:"stream_results,omitempty"`
-	// UseTransaction 显式 false = 绕过活跃事务走自动提交（nil/true = 默认：
-	// 该会话有活跃事务则进事务）。防止自动提交模式的语句被别处的手动事务捕获。
+	// UseTransaction 显式 false = 绕过活跃事务走自动提交。防止自动提交模式的语句被
+	// 别处的手动事务捕获。nil = 该会话有活跃事务则进事务，没有则自动提交；
+	// 显式 true = 必须在该会话的事务里执行，事务不在了直接报错（不落到自动提交）。
 	UseTransaction *bool `json:"use_transaction,omitempty"`
 	// SessionID 事务会话标识（查询 Tab 的 tabKey / MCP 的固定会话名）。
 	// 为空 = 不参与任何事务（自动提交）；非空 = 该会话有活跃事务时加入之。

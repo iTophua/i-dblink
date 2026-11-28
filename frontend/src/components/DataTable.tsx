@@ -51,6 +51,9 @@ import {
   RANGE_OPERATORS,
   DEFAULT_MARKER,
   isSameEditValue,
+  diffRowSetters,
+  primaryKeyLiteral,
+  runEditStatement,
 } from './DataTable/utils';
 import { useEditHistory } from '../hooks/useEditHistory';
 import { getDialect } from '../utils/sqlDialects';
@@ -82,6 +85,8 @@ interface PendingSqlItem {
   sql: string;
   type: 'update' | 'insert' | 'delete';
   source: string;
+  /** update 的行定位条件：提交时回头确认这一行还在不在（见 runEditStatement） */
+  where?: string;
 }
 
 interface SortCondition {
@@ -946,28 +951,15 @@ export const DataTable = memo(function DataTable({
     const tableRef = dialect.buildTableRef(tableName, database);
     const visibleCols = queryColumns;
 
-    // BIGINT 等大整数以字符串形式到达（后端 convertValue 对超出 JS 安全整数
-    // 范围的整数按字符串传，否则 JSON 数字被前端取整、雪花 ID 主键的 WHERE
-    // 静默失配）。整数列的 WHERE 必须写裸数字：字符串字面量与数值列比较在
-    // 部分数据库走浮点转换，19 位雪花 ID 会再次取整失配。
-    const numericPkLiteral = (col: { data_type?: string }, value: unknown): string => {
-      if (
-        typeof value === 'string' &&
-        /^-?\d+$/.test(value) &&
-        /int|decimal|numeric|number|serial|identity/i.test(col.data_type || '')
-      ) {
-        return value;
-      }
-      return dialect.escapeValue(value);
-    };
-
     // 行定位 WHERE：复合主键全列 AND；必须用修改前的主键值——主键列本身被改时，
     // 用当前（新）值会一行都匹配不到，UPDATE/DELETE 静默变成 0 行生效
     const rowWhere = (row: RowData): string | null => {
       const conds: string[] = [];
       for (const pk of pkCols) {
         const origPk = row.__original_data__?.[pk.column_name] ?? row[pk.column_name];
-        conds.push(`${dialect.escapeIdentifier(pk.column_name)} = ${numericPkLiteral(pk, origPk)}`);
+        conds.push(
+          `${dialect.escapeIdentifier(pk.column_name)} = ${primaryKeyLiteral(dialect, pk, origPk)}`
+        );
       }
       return conds.length ? conds.join(' AND ') : null;
     };
@@ -988,14 +980,12 @@ export const DataTable = memo(function DataTable({
 
     for (const row of modifiedRows) {
       if (pkCols.length === 0) continue;
-      const setters: Record<string, unknown> = {};
-      for (const c of visibleCols) {
-        const orig = row.__original_data__?.[c];
-        const cur = row[c];
-        const isSame =
-          (orig == null && cur == null) || (orig != null && String(orig) === String(cur ?? ''));
-        if (!isSame) setters[c] = cur;
-      }
+      // 按值比较改动（null → ''、'' → null 都算改动）
+      const setters = diffRowSetters(
+        visibleCols.map((c) => row.__original_data__?.[c]),
+        visibleCols.map((c) => row[c]),
+        visibleCols
+      );
       if (Object.keys(setters).length === 0) continue;
       const where = rowWhere(row);
       if (!where) continue;
@@ -1004,6 +994,7 @@ export const DataTable = memo(function DataTable({
         sql: dialect.buildUpdate(tableRef, setters, where) + ';',
         type: 'update',
         source: row.__row_id__ || '',
+        where,
       });
     }
 
@@ -1107,14 +1098,24 @@ export const DataTable = memo(function DataTable({
     let errMsg = '';
     const succeededSources = new Set<string>();
     try {
+      // useTransaction:false —— 表数据编辑提交走自动提交，不加入任何活跃事务
+      const run = (connId: string, sql: string, db?: string) =>
+        executeQuery(connId, sql, db, undefined, { useTransaction: false });
+      const tableRef = getDialect(dbType).buildTableRef(tableName, database);
       for (const item of pendingSqls) {
         setCurrentSql(item.sql);
-        // useTransaction:false —— 表数据编辑提交走自动提交，不加入任何活跃事务
-        const res = await executeQuery(connectionId, item.sql, database || '', undefined, {
-          useTransaction: false,
-        });
-        if (res.error) {
-          errMsg = `${item.sql}\n→ ${res.error}`;
+        // 没报错但一行都没碰到同样算失败（主键值失真 / 数据已被改掉），见 runEditStatement
+        const failure = await runEditStatement(
+          run,
+          connectionId,
+          database || '',
+          item.type,
+          item.sql,
+          { tableRef, where: item.where ?? '' },
+          t('common.dataGrid.noRowMatched')
+        );
+        if (failure) {
+          errMsg = `${item.sql}\n→ ${failure}`;
           break;
         }
         if (item.source) succeededSources.add(item.source);
@@ -1153,6 +1154,8 @@ export const DataTable = memo(function DataTable({
     columns,
     connectionId,
     database,
+    tableName,
+    dbType,
     executeQuery,
     loadData,
     loadCount,

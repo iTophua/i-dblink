@@ -10,7 +10,10 @@ import (
 // TransactionRequest 事务请求
 type TransactionRequest struct {
 	ConnectionID string `json:"connection_id"`
-	SessionID    string `json:"session_id,omitempty"`
+	// Database 事务要开的库（空 = 连接默认库）：必须与该会话语句使用的库一致，
+	// 事务固定开在这个库的连接池上
+	Database  string `json:"database,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // BeginTransaction 开启事务
@@ -21,7 +24,7 @@ func (h *Handler) BeginTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.mgr.BeginTransaction(req.ConnectionID, req.SessionID)
+	err := h.mgr.BeginTransaction(req.ConnectionID, req.SessionID, req.Database)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		json.NewEncoder(w).Encode(models.GenericResponse{Error: err.Error()})

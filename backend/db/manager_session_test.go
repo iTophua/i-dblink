@@ -27,13 +27,13 @@ func TestSessionScopedTransactionIsolation(t *testing.T) {
 	require.NoError(t, err)
 
 	// 会话 a 开启事务
-	require.NoError(t, manager.BeginTransaction(connID, "a"))
+	require.NoError(t, manager.BeginTransaction(connID, "a", ""))
 	assert.True(t, manager.HasTransaction(connID, "a"))
 	assert.False(t, manager.HasTransaction(connID, "b"), "同连接不同会话应互不影响")
 	assert.False(t, manager.HasTransaction("other", "a"), "不同连接不应受影响")
 
 	// 会话 a 的事务执行器写入
-	txExec, err := manager.GetExecutorForSession(connID, "", "a")
+	txExec, err := manager.GetExecutorForSession(connID, "", "a", false)
 	require.NoError(t, err)
 	_, err = txExec.ExecContext(context.Background(), "INSERT INTO s (v) VALUES ('a')")
 	require.NoError(t, err)
@@ -46,7 +46,7 @@ func TestSessionScopedTransactionIsolation(t *testing.T) {
 	assert.False(t, manager.HasTransaction(connID, "b"))
 
 	// 会话 b 独立开启并回滚
-	require.NoError(t, manager.BeginTransaction(connID, "b"))
+	require.NoError(t, manager.BeginTransaction(connID, "b", ""))
 	assert.True(t, manager.HasTransaction(connID, "b"))
 	assert.False(t, manager.HasTransaction(connID, "a"))
 	active, err = manager.RollbackTransaction(connID, "b")
@@ -55,6 +55,6 @@ func TestSessionScopedTransactionIsolation(t *testing.T) {
 	assert.False(t, manager.HasTransaction(connID, "b"))
 
 	// 空 session 拒绝开启事务
-	err = manager.BeginTransaction(connID, "")
+	err = manager.BeginTransaction(connID, "", "")
 	require.Error(t, err)
 }

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
+
+	"idblink/backend/models"
 )
 
 // ==================== 批量执行（execute_script） ====================
@@ -198,40 +200,10 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 
 	switch cat {
 	case scriptDML:
-		// 已有手工事务时拒绝：脚本的 commit/rollback 会波及用户自己的事务
-		if active, err := s.app.GetTransactionStatus(connID, mcpTxSession); err == nil && active {
-			return mcp.NewToolResultError(
-				"connection has an active manual transaction; commit or roll it back before running a script"), nil
-		}
-		if err := s.app.BeginTransaction(connID, mcpTxSession); err != nil {
-			return mcp.NewToolResultErrorFromErr("failed to begin transaction", err), nil
-		}
 		result.TransactionUsed = true
-		for i, stmt := range stmts {
-			res, err := s.app.ExecuteQuery(connID, stmt, database, nil, mcpTxSession)
-			if err != nil {
-				_, _ = s.app.RollbackTransaction(connID, mcpTxSession)
-				result.Transaction = "rolled_back"
-				result.Results = append(result.Results, scriptStmtResult{
-					Index: i, SQL: stmt, Error: err.Error(),
-				})
-				return mcp.NewToolResultError(fmt.Sprintf(
-					"statement %d/%d failed: %v — transaction rolled back (%d statements had succeeded)",
-					i+1, len(stmts), err, i)), nil
-			}
-			var affected uint64
-			if res.RowsAffected != nil {
-				affected = *res.RowsAffected
-			}
-			result.Executed = i + 1
-			result.Results = append(result.Results, scriptStmtResult{
-				Index: i, SQL: stmt, RowsAffected: affected,
-			})
+		if failed := runDMLScript(s.app, connID, stmts, database, &result); failed != nil {
+			return failed, nil
 		}
-		if _, err := s.app.CommitTransaction(connID, mcpTxSession); err != nil {
-			return mcp.NewToolResultErrorFromErr("failed to commit transaction", err), nil
-		}
-		result.Transaction = "committed"
 
 	case scriptDDL:
 		for i, stmt := range stmts {
@@ -254,13 +226,18 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 	case scriptReadOnly:
 		for i, stmt := range stmts {
 			res, err := s.app.ExecuteQuery(connID, stmt, database, nil, mcpTxSession)
-			if err != nil {
+			// SQL 报错在 res.Error 里，只看 err 会把失败的查询当成「0 行」报成功
+			stmtErr := res.Error
+			if stmtErr == "" && err != nil {
+				stmtErr = err.Error()
+			}
+			if stmtErr != "" {
 				if stopOnError {
 					return mcp.NewToolResultError(fmt.Sprintf(
-						"statement %d/%d failed: %v (%d statements succeeded)", i+1, len(stmts), err, i)), nil
+						"statement %d/%d failed: %s (%d statements succeeded)", i+1, len(stmts), stmtErr, i)), nil
 				}
 				result.Results = append(result.Results, scriptStmtResult{
-					Index: i, SQL: stmt, Error: err.Error(),
+					Index: i, SQL: stmt, Error: stmtErr,
 				})
 				continue
 			}
@@ -283,4 +260,77 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 	}
 
 	return mcp.NewToolResultJSON(result)
+}
+
+// dmlScriptRunner DML 脚本执行需要的后端能力。*backend.App 满足它；
+// 抽成接口是为了不启动整个应用就能验证「任一语句失败整体回滚」。
+type dmlScriptRunner interface {
+	GetTransactionStatus(connectionID string, sessionID string) (bool, error)
+	BeginTransaction(connectionID string, sessionID string, database string) error
+	RollbackTransaction(connectionID string, sessionID string) (bool, error)
+	CommitTransaction(connectionID string, sessionID string) (bool, error)
+	ExecuteQuery(connectionID string, sql string, database *string, useTransaction *bool, sessionID string) (models.QueryResult, error)
+}
+
+// runDMLScript 在一笔事务里顺序执行 DML 脚本：任一语句失败即回滚并返回错误结果，
+// 全部成功才提交。提交时事务已经不在（被看门狗回收）同样按失败返回。
+// 返回 nil 表示已提交，逐语句明细写回 result。
+func runDMLScript(runner dmlScriptRunner, connID string, stmts []string, database *string, result *scriptResult) *mcp.CallToolResult {
+	// 已有手工事务时拒绝：脚本的 commit/rollback 会波及用户自己的事务
+	if active, err := runner.GetTransactionStatus(connID, mcpTxSession); err == nil && active {
+		return mcp.NewToolResultError(
+			"connection has an active manual transaction; commit or roll it back before running a script")
+	}
+	// 事务开在脚本指定的库上（空 = 连接默认库）：语句带着 database 执行，
+	// 事务开在别的库上会写到另一个库去
+	scriptDB := ""
+	if database != nil {
+		scriptDB = *database
+	}
+	if err := runner.BeginTransaction(connID, mcpTxSession, scriptDB); err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to begin transaction", err)
+	}
+
+	// 语句必须在脚本自己的事务里执行：事务被看门狗回收后不能悄悄改成自动提交
+	requireTx := true
+	for i, stmt := range stmts {
+		res, err := runner.ExecuteQuery(connID, stmt, database, &requireTx, mcpTxSession)
+		// SQL 报错在 res.Error 里（ExecuteQuery 的 err 只表示没执行到数据库那一层）。
+		// 此前只看 err：失败的语句被当成成功，脚本继续往下跑并提交了前面的语句
+		stmtErr := res.Error
+		if stmtErr == "" && err != nil {
+			stmtErr = err.Error()
+		}
+		if stmtErr != "" {
+			_, _ = runner.RollbackTransaction(connID, mcpTxSession)
+			result.Transaction = "rolled_back"
+			result.Results = append(result.Results, scriptStmtResult{
+				Index: i, SQL: stmt, Error: stmtErr,
+			})
+			return mcp.NewToolResultError(fmt.Sprintf(
+				"statement %d/%d failed: %s — transaction rolled back (%d statements had succeeded)",
+				i+1, len(stmts), stmtErr, i))
+		}
+		var affected uint64
+		if res.RowsAffected != nil {
+			affected = *res.RowsAffected
+		}
+		result.Executed = i + 1
+		result.Results = append(result.Results, scriptStmtResult{
+			Index: i, SQL: stmt, RowsAffected: affected,
+		})
+	}
+
+	committed, err := runner.CommitTransaction(connID, mcpTxSession)
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to commit transaction", err)
+	}
+	if !committed {
+		// 没有等待提交的事务：事务在脚本结束前就没了，不能报「已提交」
+		return mcp.NewToolResultError(
+			"the script's transaction was no longer active at commit time (rolled back by the inactivity timeout); " +
+				"no statements from this script were committed. Re-run the script.")
+	}
+	result.Transaction = "committed"
+	return nil
 }

@@ -60,17 +60,18 @@ describe('useTransaction', () => {
     expect(mockApi.rollbackTransaction).toHaveBeenCalledWith('conn-1', '');
   });
 
-  it('开启事务按钮：成功后进入活跃状态', async () => {
-    const { result } = renderHook(() => useTransaction('conn-1'));
+  it('开启事务按钮：成功后进入活跃状态，事务开在选中的库上', async () => {
+    const { result } = renderHook(() => useTransaction('conn-1', 'tab-1', 'sales'));
     await act(async () => {
       await result.current.handleBeginTransaction();
     });
-    expect(mockApi.beginTransaction).toHaveBeenCalledWith('conn-1', '');
+    expect(mockApi.beginTransaction).toHaveBeenCalledWith('conn-1', 'tab-1', 'sales');
     expect(result.current.transactionActive).toBe(true);
   });
 
-  it('手动模式执行前钩子：懒开启事务；已有活跃事务则跳过', async () => {
-    const { result, rerender } = renderHook(() => useTransaction('conn-1'));
+  it('手动模式执行前钩子：懒开启事务；后端确认事务还在则不重复开启', async () => {
+    mockApi.getTransactionStatus.mockResolvedValue(true);
+    const { result, rerender } = renderHook(() => useTransaction('conn-1', 'tab-1', 'sales'));
 
     act(() => {
       result.current.handleTxModeChange('manual');
@@ -80,12 +81,99 @@ describe('useTransaction', () => {
       await result.current.ensureTransactionForExecution();
     });
     expect(mockApi.beginTransaction).toHaveBeenCalledTimes(1);
+    expect(mockApi.beginTransaction).toHaveBeenCalledWith('conn-1', 'tab-1', 'sales');
 
-    // 事务已活跃：再次执行不重复开启
+    // 事务已活跃：先向后端核对，还在就不重复开启
     await act(async () => {
       await result.current.ensureTransactionForExecution();
     });
+    expect(mockApi.getTransactionStatus).toHaveBeenCalledWith('conn-1', 'tab-1');
     expect(mockApi.beginTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  // 看门狗按空闲回收事务，界面上却还亮着事务按钮：照常执行的话语句会落到自动提交
+  it('本地显示事务进行中、后端已没有事务：不执行并复位状态', async () => {
+    mockApi.getTransactionStatus.mockResolvedValue(true);
+    const { result, rerender } = renderHook(() => useTransaction('conn-1', 'tab-1', 'sales'));
+
+    act(() => {
+      result.current.handleTxModeChange('manual');
+    });
+    rerender();
+    await act(async () => {
+      await result.current.ensureTransactionForExecution();
+    });
+    expect(result.current.transactionActive).toBe(true);
+
+    // 后端把事务回收了
+    mockApi.getTransactionStatus.mockResolvedValue(false);
+    await act(async () => {
+      await expect(result.current.ensureTransactionForExecution()).rejects.toThrow(
+        'common.txEndedBeforeExecution'
+      );
+    });
+    expect(result.current.transactionActive).toBe(false);
+    expect(mockApi.beginTransaction).toHaveBeenCalledTimes(1);
+
+    // 复位后再执行：重新开一笔事务（后端的「超时被回滚」状态也随重新开启解除）
+    mockApi.getTransactionStatus.mockResolvedValue(true);
+    await act(async () => {
+      await result.current.ensureTransactionForExecution();
+    });
+    expect(mockApi.beginTransaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('事务开在另一个库上：换了库的语句不执行，提示先提交或回滚', async () => {
+    mockApi.getTransactionStatus.mockResolvedValue(true);
+    const { result, rerender } = renderHook(
+      ({ db }: { db: string }) => useTransaction('conn-1', 'tab-1', db),
+      { initialProps: { db: 'sales' } }
+    );
+    act(() => {
+      result.current.handleTxModeChange('manual');
+    });
+    await act(async () => {
+      await result.current.ensureTransactionForExecution();
+    });
+    expect(mockApi.beginTransaction).toHaveBeenCalledWith('conn-1', 'tab-1', 'sales');
+
+    rerender({ db: 'hr' });
+    await act(async () => {
+      await expect(result.current.ensureTransactionForExecution()).rejects.toThrow(
+        'common.txOpenOnOtherDatabase'
+      );
+    });
+    // 事务本身不动：用户可以切回去继续，或者直接提交 / 回滚
+    expect(result.current.transactionActive).toBe(true);
+    expect(mockApi.rollbackTransaction).not.toHaveBeenCalled();
+    mockApi.getTransactionStatus.mockClear();
+    mockApi.beginTransaction.mockClear();
+
+    // 切回原来的库：照常执行
+    rerender({ db: 'sales' });
+    await act(async () => {
+      await result.current.ensureTransactionForExecution();
+    });
+    expect(mockApi.beginTransaction).not.toHaveBeenCalled();
+  });
+
+  it('从后端认领的事务不知道开在哪个库上：换库后不拦，交给后端判断', async () => {
+    mockApi.getTransactionStatus.mockResolvedValue(true);
+    const { result, rerender } = renderHook(
+      ({ db }: { db: string }) => useTransaction('conn-1', 'tab-1', db),
+      { initialProps: { db: 'sales' } }
+    );
+    await act(async () => {});
+    expect(result.current.transactionActive).toBe(true);
+
+    act(() => {
+      result.current.handleTxModeChange('manual');
+    });
+    rerender({ db: 'hr' });
+    await act(async () => {
+      await result.current.ensureTransactionForExecution();
+    });
+    // 不抛错；是否放行由后端按事务实际所在的库决定
   });
 
   it('提交返回 false（事务已被看门狗回滚）时仍复位状态，不抛错', async () => {

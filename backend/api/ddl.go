@@ -83,7 +83,7 @@ func (h *Handler) ExecuteDDL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, req.Database, req.SessionID)
+	exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, req.Database, req.SessionID, false)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return

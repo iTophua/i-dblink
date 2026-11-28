@@ -57,7 +57,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 	// 对于 replace 模式，先 TRUNCATE
 	if req.Mode == "replace" {
 		truncateSQL := fmt.Sprintf("TRUNCATE TABLE %s", tableName)
-		exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
+		exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
 		if err != nil {
 			writeJSONError(w, err.Error())
 			return
@@ -73,7 +73,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 	// 开始导入事务（私有会话，与其他会话隔离）；
 	// ClickHouse/TDengine 无交互式事务，跳过包装直接逐句执行（各自原子提交）
 	if db.SupportsTx(dbType) {
-		if err := h.mgr.BeginTransaction(req.ConnectionID, importTxSession); err != nil {
+		if err := h.mgr.BeginTransaction(req.ConnectionID, importTxSession, ""); err != nil {
 			writeJSONError(w, fmt.Sprintf("begin transaction failed: %v", err))
 			return
 		}
@@ -105,7 +105,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 					escapeIdentifier(req.PrimaryKey),
 					formatValue(pkValue))
 
-				exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
+				exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
 				if err != nil {
 					failedCount++
 					lastError = err.Error()
@@ -163,7 +163,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 				strings.Join(cols, ", "),
 				strings.Join(valueGroups, ", "))
 
-			exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
+			exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
 			if err != nil {
 				// 批量失败，回退到逐行执行
 				for _, row := range batch {
@@ -180,7 +180,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 						strings.Join(cols, ", "),
 						strings.Join(vals, ", "))
 
-					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
+					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
 					if err != nil {
 						failedCount++
 						lastError = err.Error()
@@ -218,7 +218,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 						strings.Join(cols, ", "),
 						strings.Join(vals, ", "))
 
-					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession)
+					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
 					if err != nil {
 						failedCount++
 						lastError = err.Error()
@@ -240,11 +240,20 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := h.mgr.CommitTransaction(req.ConnectionID, importTxSession); err != nil && db.SupportsTx(dbType) {
-		// 提交失败，尝试回滚
-		_, _ = h.mgr.RollbackTransaction(req.ConnectionID, importTxSession)
-		writeJSONError(w, fmt.Sprintf("commit failed: %v", err))
-		return
+	committed, err := h.mgr.CommitTransaction(req.ConnectionID, importTxSession)
+	if db.SupportsTx(dbType) {
+		if err != nil {
+			// 提交失败，尝试回滚
+			_, _ = h.mgr.RollbackTransaction(req.ConnectionID, importTxSession)
+			writeJSONError(w, fmt.Sprintf("commit failed: %v", err))
+			return
+		}
+		if !committed {
+			// 没有等待提交的事务：它已被看门狗回收，前面的行随事务回滚、后面的语句被拒绝，
+			// 一行都没导进去，不能按 successCount / failedCount 报成功
+			writeJSONError(w, "the import transaction was rolled back by the inactivity timeout before it could be committed; no rows were imported")
+			return
+		}
 	}
 
 	resp := models.BatchImportResponse{

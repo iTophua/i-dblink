@@ -469,7 +469,8 @@ export function TableImportWizard({
       // 私有事务会话：与任何查询 Tab / MCP 事务隔离
       const importSession = 'import-wizard';
       try {
-        await api.beginTransaction(connectionId, importSession);
+        // 事务开在选中的库上：下面的语句带着这个库执行，开在别的库上会被后端拒绝
+        await api.beginTransaction(connectionId, importSession, database || '');
         for (let i = 0; i < stmts.length; i++) {
           if (cancelledRef.current) break;
           try {

@@ -205,26 +205,43 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// qualifier 非空时按「限定部分.表名」定位：MySQL 是库名，PG 系 / SQL Server 是 schema
+	getColumns := func(name string, qualifier string) ([]models.ColumnInfo, error) {
+		switch dbType {
+		case "mysql":
+			database := req.Database
+			if qualifier != "" {
+				database = &qualifier
+			}
+			return mysqlGetColumns(ctx, exec, name, database)
+		case "postgresql", "kingbase", "highgo", "vastbase":
+			return postgresGetColumns(ctx, exec, name, req.Database, strPtr(qualifier))
+		case "sqlite":
+			return sqliteGetColumns(ctx, exec, name, req.Database)
+		case "dameng":
+			return damengGetColumns(ctx, exec, name, req.Database)
+		case "sqlserver":
+			return sqlserverGetColumns(ctx, exec, name, req.Database, strPtr(qualifier))
+		case "clickhouse":
+			return clickhouseGetColumns(ctx, exec, name, req.Database)
+		case "tdengine":
+			return tdengineGetColumns(ctx, exec, name, req.Database)
+		case "oracle":
+			return oracleGetColumns(ctx, exec, name, req.Database)
+		default:
+			return nil, fmt.Errorf("unsupported db type: %s", dbType)
+		}
+	}
+
 	var columns []models.ColumnInfo
-	switch dbType {
-	case "mysql":
-		columns, err = mysqlGetColumns(ctx, exec, *req.TableName, req.Database)
-	case "postgresql", "kingbase", "highgo", "vastbase":
-		columns, err = postgresGetColumns(ctx, exec, *req.TableName, req.Database, nil)
-	case "sqlite":
-		columns, err = sqliteGetColumns(ctx, exec, *req.TableName, req.Database)
-	case "dameng":
-		columns, err = damengGetColumns(ctx, exec, *req.TableName, req.Database)
-	case "sqlserver":
-		columns, err = sqlserverGetColumns(ctx, exec, *req.TableName, req.Database, nil)
-	case "clickhouse":
-		columns, err = clickhouseGetColumns(ctx, exec, *req.TableName, req.Database)
-	case "tdengine":
-		columns, err = tdengineGetColumns(ctx, exec, *req.TableName, req.Database)
-	case "oracle":
-		columns, err = oracleGetColumns(ctx, exec, *req.TableName, req.Database)
-	default:
-		err = fmt.Errorf("unsupported db type: %s", dbType)
+	columns, err = getColumns(*req.TableName, "")
+	// 按原名没查到、名字又是「限定部分.表名」：再按限定名找一次。结果集编辑靠它取主键——
+	// `SELECT * FROM b.t` 只拿表名去查，MySQL 会在当前库里找同名表，PG 会把各个
+	// schema 里的同名表混在一起，主键张冠李戴后 UPDATE / DELETE 就写到别的表上去了
+	if err == nil && len(columns) == 0 && supportsTableQualifier(dbType) {
+		if qualifier, bare := splitQualifiedTableName(*req.TableName); qualifier != "" {
+			columns, err = getColumns(bare, qualifier)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

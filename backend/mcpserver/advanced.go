@@ -330,7 +330,9 @@ func (s *Server) handleBeginTransaction(ctx context.Context, req mcp.CallToolReq
 	if connID == "" {
 		return mcp.NewToolResultError("connection_id is required"), nil
 	}
-	if err := s.app.BeginTransaction(connID, mcpTxSession); err != nil {
+	// 事务开在 database 指定的库上：之后的语句必须带同一个 database，
+	// 带别的库（或不带）会被拒绝，而不是写到别的库去
+	if err := s.app.BeginTransaction(connID, mcpTxSession, argStr(req.GetArguments(), "database")); err != nil {
 		return mcp.NewToolResultErrorFromErr("begin transaction failed", err), nil
 	}
 	return mcp.NewToolResultText("Transaction started"), nil

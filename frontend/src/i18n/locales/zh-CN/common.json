@@ -399,6 +399,7 @@
       "affectedRowsSummary": "{{count}} 行受影响",
       "truncatedBadge": "结果已截断",
       "unsavedCount": "{{count}} 处未提交",
+      "noRowMatched": "没有匹配到任何行：数据可能已被修改或删除，或主键值无法还原（如二进制列）",
       "pageNumber": "页码",
       "clearShort": "清除",
       "totalSize": "总大小",
@@ -775,6 +776,9 @@
       "groupNameRequired": "分组名称不能为空"
     },
     "copyTable": {
+      "dataCopyFailed": "表结构已复制，但数据复制失败（目标表已建好，数据不完整或为空）",
+      "binaryCrossDatabase": "源表里有二进制列，跨库逐行复制会损坏这些数据。请在同一个库内复制，或改用导出 / 导入",
+      "rowsCopied": "已复制 {{copied}} / {{total}} 行后失败",
       "title": "复制表",
       "sourceTable": "源表",
       "targetTable": "目标表",
@@ -2348,6 +2352,9 @@
     "filterConditionEnable": "启用/停用该条件（停用后保留配置，可再次勾选启用）",
     "txBeginTip": "立即开启事务（也可直接执行 SQL，执行时会自动开启）",
     "txAlreadyEnded": "事务已结束（可能已被超时自动回滚），本次未提交/回滚任何数据",
+    "txDefaultDatabase": "连接默认库",
+    "txOpenOnOtherDatabase": "当前事务开在库「{{database}}」上，不能执行指向库「{{target}}」的语句。请先提交或回滚该事务",
+    "txEndedBeforeExecution": "事务已不在（空闲超时被自动回滚，或连接已重连），之前的改动没有提交。本次未执行，重新执行会开启新事务",
     "commands": "操作",
     "history": "历史",
     "tablesLabel": "表",

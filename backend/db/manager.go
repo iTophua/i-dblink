@@ -32,11 +32,61 @@ type connInfo struct {
 
 // txInfo 保存活跃事务
 type txInfo struct {
-	conn    *sql.Conn
-	tx      *sql.Tx
-	started time.Time
+	conn *sql.Conn
+	tx   *sql.Tx
+	// database 事务开在哪个库的连接池上（空 = 连接默认库）。事务创建后不再变：
+	// 同一会话的语句只有带着同一个库来才能进这个事务
+	database string
+	started  time.Time
 	// done 在 Commit/Rollback/超时回收后 close，用于停止看门狗 goroutine
 	done chan struct{}
+	// 以下两个字段由 m.mu 保护，看门狗据此判断事务是否还在使用
+	lastActive time.Time // 最近一条语句开始 / 结束的时刻
+	inflight   int       // 正在执行的语句数
+}
+
+// trackedTx 会话事务的执行器：语句开始 / 结束时更新事务的活跃状态，
+// 看门狗按「最近一条语句」计时，而不是按「事务开启」计时
+type trackedTx struct {
+	m    *Manager
+	key  string
+	info *txInfo
+}
+
+func (t *trackedTx) statementDone(delta int) {
+	t.m.mu.Lock()
+	// 槽位里已经换了别的事务（提交 / 回滚之后）就不再碰它
+	if cur, ok := t.m.txs[t.key]; ok && cur == t.info {
+		cur.inflight += delta
+		cur.lastActive = time.Now()
+	}
+	t.m.mu.Unlock()
+}
+
+func (t *trackedTx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	t.statementDone(1)
+	defer t.statementDone(-1)
+	return t.info.tx.ExecContext(ctx, query, args...)
+}
+
+func (t *trackedTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	t.statementDone(1)
+	defer t.statementDone(-1)
+	return t.info.tx.QueryContext(ctx, query, args...)
+}
+
+func (t *trackedTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	t.statementDone(1)
+	defer t.statementDone(-1)
+	return t.info.tx.QueryRowContext(ctx, query, args...)
+}
+
+// txDatabaseLabel 库名在报错里的写法（空库说成「连接默认库」而不是一对空引号）
+func txDatabaseLabel(database string) string {
+	if database == "" {
+		return "the connection's default database"
+	}
+	return fmt.Sprintf("database %q", database)
 }
 
 // connectCancelEntry 包装取消函数：Go 的函数值不可用 == 比较，用指针做身份判断
@@ -47,6 +97,7 @@ type Manager struct {
 	mu             sync.RWMutex
 	pools          map[string]*connInfo
 	txs            map[string]*txInfo
+	txTimedOut     map[string]struct{}            // 上一笔事务被看门狗超时回滚的会话
 	connectCancels map[string]*connectCancelEntry // 进行中的连接，可被 CancelConnect 取消
 }
 
@@ -55,6 +106,7 @@ func NewManager() *Manager {
 	return &Manager{
 		pools:          make(map[string]*connInfo),
 		txs:            make(map[string]*txInfo),
+		txTimedOut:     make(map[string]struct{}),
 		connectCancels: make(map[string]*connectCancelEntry),
 	}
 }
@@ -242,6 +294,12 @@ func (m *Manager) Disconnect(connectionID string) error {
 			_ = txInfo.conn.Close()
 		}
 	}
+	// 重连之后是全新的连接，旧事务的「超时被回滚」不再有意义
+	for key := range m.txTimedOut {
+		if strings.HasPrefix(key, prefix) {
+			delete(m.txTimedOut, key)
+		}
+	}
 	m.mu.Unlock()
 
 	closePools(databaseDbs)
@@ -339,6 +397,11 @@ func (m *Manager) GetConnectArgs(connectionID string) (ConnectArgs, error) {
 	return info.args, nil
 }
 
+// databasePoolKey 「连接 ID:库名」形式的按库连接池键
+func databasePoolKey(connectionID, database string) string {
+	return connectionID + ":" + database
+}
+
 // ConnectWithDatabase 建立指定数据库的连接
 func (m *Manager) ConnectWithDatabase(connectionID string, database string) error {
 	m.mu.RLock()
@@ -349,7 +412,7 @@ func (m *Manager) ConnectWithDatabase(connectionID string, database string) erro
 		return fmt.Errorf("connection %s not found", connectionID)
 	}
 
-	key := connectionID + ":" + database
+	key := databasePoolKey(connectionID, database)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -383,7 +446,7 @@ func (m *Manager) ConnectWithDatabase(connectionID string, database string) erro
 
 // GetWithDatabase 获取指定数据库的连接，如果不存在则创建
 func (m *Manager) GetWithDatabase(connectionID string, database string) (*sql.DB, error) {
-	key := connectionID + ":" + database
+	key := databasePoolKey(connectionID, database)
 
 	m.mu.RLock()
 	info, ok := m.pools[key]
@@ -413,8 +476,8 @@ func (m *Manager) GetWithDatabase(connectionID string, database string) (*sql.DB
 // 保证「连接 A 会话 1」与「连接 A\x00B 会话 1」不会碰撞。
 const txKeySep = "\x00"
 
-// txWatchdogTimeout 事务最长存活时间（看门狗自动回滚的阈值）。
-// 包级变量仅为让真实数据库上的冒烟测试缩短等待，生产路径保持 5 分钟。
+// txWatchdogTimeout 事务空闲多久被看门狗自动回滚（从最近一条语句结束算起）。
+// 包级变量仅为让测试缩短等待，生产路径保持 5 分钟。
 var txWatchdogTimeout = 5 * time.Minute
 
 // txKey 构造事务槽位键。会话级隔离：同一连接的不同查询 Tab、MCP 各自拥有独立事务。
@@ -423,33 +486,72 @@ func txKey(connectionID, sessionID string) string {
 }
 
 // BeginTransaction 开启会话级事务（sessionID 为空表示调用方未提供会话，拒绝开启）。
-func (m *Manager) BeginTransaction(connectionID, sessionID string) error {
+//
+// database 是这个会话的语句要落的库（空 = 连接默认库）。事务固定开在该库的连接池上：
+// PG 不能在连接上切库，默认库上开的事务对别的库不可见；MySQL 不带库名的语句会落到
+// 默认库。不开在同一个池上，同一条语句在自动提交和手动事务下会写到不同的库。
+func (m *Manager) BeginTransaction(connectionID, sessionID, database string) error {
 	if sessionID == "" {
 		return fmt.Errorf("session_id is required to begin a transaction")
 	}
+
+	key := txKey(connectionID, sessionID)
+	// 已有事务且是同一个库：幂等成功，避免前端状态错位后再也进不了事务
+	reopenErr := func(cur *txInfo) error {
+		if cur.database == database {
+			return nil
+		}
+		// 换了库：一笔事务跨不了两个连接池
+		return fmt.Errorf("this session already has a transaction open on %s; commit or roll back it before opening one on %s",
+			txDatabaseLabel(cur.database), txDatabaseLabel(database))
+	}
+	m.mu.RLock()
+	cur, exists := m.txs[key]
+	m.mu.RUnlock()
+	if exists {
+		return reopenErr(cur)
+	}
+
+	// ClickHouse/TDengine 无交互式事务：明确报错而非静默成功，前端事务按钮据此提示
+	// （语句各自原子提交，无需事务也够用）。先判再取池，免得白建一个按库的连接池
+	dbType, err := m.GetDBType(connectionID)
+	if err != nil {
+		return err
+	}
+	if !SupportsTx(dbType) {
+		return fmt.Errorf("%s does not support interactive transactions", dbType)
+	}
+
+	// 按库的池要在锁外拿：ConnectWithDatabase 自己会加锁
+	var pool *connInfo
+	if database != "" {
+		if _, err := m.GetWithDatabase(connectionID, database); err != nil {
+			return err
+		}
+		m.mu.RLock()
+		pool = m.pools[databasePoolKey(connectionID, database)]
+		m.mu.RUnlock()
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := txKey(connectionID, sessionID)
-	if _, exists := m.txs[key]; exists {
-		// 幂等：已在事务中视为成功，避免前端状态错位后再也无法进入事务
-		return nil
+	// 并发开启：后到的那次直接返回
+	if cur, exists := m.txs[key]; exists {
+		return reopenErr(cur)
 	}
 
-	info, ok := m.pools[connectionID]
-	if !ok {
-		return fmt.Errorf("connection %s not found", connectionID)
+	if pool == nil {
+		info, ok := m.pools[connectionID]
+		if !ok {
+			return fmt.Errorf("connection %s not found", connectionID)
+		}
+		pool = info
 	}
-	// ClickHouse/TDengine 无交互式事务：明确报错而非静默成功，
-	// 前端事务按钮据此提示（语句各自原子提交，无需事务也够用）
-	if !SupportsTx(info.dbType) {
-		return fmt.Errorf("%s does not support interactive transactions", info.dbType)
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := info.db.Conn(ctx)
+	conn, err := pool.db.Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to reserve connection: %w", err)
 	}
@@ -457,7 +559,7 @@ func (m *Manager) BeginTransaction(connectionID, sessionID string) error {
 	// 传给 BeginTx 的 ctx 会绑定整个事务生命周期：ctx 一取消 database/sql
 	// 就自动回滚事务。因此这里绝不能用函数级 ctx + defer cancel——那样
 	// Begin 返回的瞬间事务即被回滚，事务内所有语句都会报 ErrTxDone。
-	// 事务生命周期由 Commit/Rollback 和 5 分钟看门狗管理，不走 ctx。
+	// 事务生命周期由 Commit/Rollback 和看门狗管理，不走 ctx。
 	tx, err := conn.BeginTx(context.Background(), nil)
 	if err != nil {
 		_ = conn.Close()
@@ -465,32 +567,57 @@ func (m *Manager) BeginTransaction(connectionID, sessionID string) error {
 	}
 
 	done := make(chan struct{})
+	now := time.Now()
 	txEntry := &txInfo{
-		conn:    conn,
-		tx:      tx,
-		started: time.Now(),
-		done:    done,
+		conn:       conn,
+		tx:         tx,
+		database:   database,
+		started:    now,
+		lastActive: now,
+		done:       done,
 	}
 	m.txs[key] = txEntry
+	// 调用方得知上一笔事务的结局（提交 / 回滚 / 重新开启）之后，才解除「不许悄悄
+	// 回到自动提交」的限制
+	delete(m.txTimedOut, key)
 
-	// 看门狗：事务超过 5 分钟未提交/回滚则自动回滚，避免连接被永久占用
-	// （用户关闭查询 Tab 或前端崩溃时的事务兜底）
+	// 看门狗：事务空闲超过阈值（没有语句在执行、且距上一条语句结束已满阈值）则
+	// 自动回滚，避免连接被永久占用（用户关闭查询 Tab 或前端崩溃时的事务兜底）。
+	// 从 BEGIN 起算总时长的话，一直在用的事务也会在 5 分钟整被回滚。
 	go func() {
 		timer := time.NewTimer(txWatchdogTimeout)
 		defer timer.Stop()
-		select {
-		case <-done:
-			return // 已正常结束
-		case <-timer.C:
-			m.mu.Lock()
-			// 确认仍是同一个事务（避免 commit 后又被新事务占用槽位导致误回滚）
-			if cur, ok := m.txs[key]; ok && cur == txEntry {
+		for {
+			select {
+			case <-done:
+				return // 已正常结束
+			case <-timer.C:
+				m.mu.Lock()
+				// 确认仍是同一个事务（避免 commit 后又被新事务占用槽位导致误回滚）
+				cur, ok := m.txs[key]
+				if !ok || cur != txEntry {
+					m.mu.Unlock()
+					return
+				}
+				wait := txWatchdogTimeout - time.Since(cur.lastActive)
+				if cur.inflight > 0 {
+					// 正在执行的语句算作活动（单条语句自有 30 分钟上限兜底）
+					wait = txWatchdogTimeout
+				}
+				if wait > 0 {
+					m.mu.Unlock()
+					timer.Reset(wait)
+					continue
+				}
 				delete(m.txs, key)
+				m.txTimedOut[key] = struct{}{}
+				m.mu.Unlock()
+
 				_ = cur.tx.Rollback()
 				_ = cur.conn.Close()
 				close(cur.done)
+				return
 			}
-			m.mu.Unlock()
 		}
 	}()
 
@@ -505,11 +632,12 @@ func (m *Manager) CommitTransaction(connectionID, sessionID string) (bool, error
 	m.mu.Lock()
 	txInfo, exists := m.txs[key]
 	delete(m.txs, key)
+	delete(m.txTimedOut, key)
 	m.mu.Unlock()
 
 	if !exists {
 		// 幂等：没有活跃事务 = 已处于自动提交模式，直接成功。
-		// 事务可能已被 5 分钟看门狗超时回滚，此前这里报错会导致前端
+		// 事务可能已被看门狗超时回滚，此前这里报错会导致前端
 		// 事务状态永久卡死、无法退出事务模式
 		return false, nil
 	}
@@ -531,6 +659,7 @@ func (m *Manager) RollbackTransaction(connectionID, sessionID string) (bool, err
 	m.mu.Lock()
 	txInfo, exists := m.txs[key]
 	delete(m.txs, key)
+	delete(m.txTimedOut, key)
 	m.mu.Unlock()
 
 	if !exists {
@@ -573,18 +702,40 @@ func (m *Manager) hasAnyTransaction(connectionID string) bool {
 // GetExecutor 获取自动提交执行器（不加入任何会话事务）。
 // 结构操作、元数据读写等无会话上下文的调用走这里。
 func (m *Manager) GetExecutor(connectionID string, database string) (Executor, error) {
-	return m.GetExecutorForSession(connectionID, database, "")
+	return m.GetExecutorForSession(connectionID, database, "", false)
 }
 
 // GetExecutorForSession 获取执行器：指定会话存在活跃事务时返回该事务，否则返回连接池。
-func (m *Manager) GetExecutorForSession(connectionID string, database string, sessionID string) (Executor, error) {
+//
+//   - 会话的事务开在别的库上：报错。既不能把语句塞进那个库的事务，也不能悄悄改成
+//     自动提交——调用方以为还能回滚，其实已经生效
+//   - 会话没有事务，但上一笔是被看门狗超时回滚的：报错。调用方多半还以为在事务里，
+//     放行的话语句会逐条自动提交，等它去提交时才发现「事务已结束」
+//   - requireTx（调用方明确要求在事务里执行，如编辑器的手动模式）：没有事务同样报错
+//
+// 没有事务时的两种原因里，被看门狗回收的报错优先（更具体）。
+// 后两种情况要等调用方显式 begin / commit / rollback 之后才恢复自动提交。
+func (m *Manager) GetExecutorForSession(connectionID string, database string, sessionID string, requireTx bool) (Executor, error) {
 	if sessionID != "" {
+		key := txKey(connectionID, sessionID)
 		m.mu.RLock()
-		if txInfo, exists := m.txs[txKey(connectionID, sessionID)]; exists {
-			m.mu.RUnlock()
-			return txInfo.tx, nil
-		}
+		info, exists := m.txs[key]
+		_, timedOut := m.txTimedOut[key]
 		m.mu.RUnlock()
+		if exists {
+			if info.database != database {
+				return nil, fmt.Errorf("this session's transaction is open on %s but the statement targets %s; commit or roll back the transaction first",
+					txDatabaseLabel(info.database), txDatabaseLabel(database))
+			}
+			return &trackedTx{m: m, key: key, info: info}, nil
+		}
+		// 两种原因同时成立时报更具体的那个
+		if timedOut {
+			return nil, fmt.Errorf("this session's transaction was rolled back by the %s inactivity timeout and its changes were discarded; the statement was NOT executed. Call begin_transaction to start a new transaction, or commit/rollback_transaction to return to autocommit", txWatchdogTimeout)
+		}
+		if requireTx {
+			return nil, fmt.Errorf("this session has no active transaction (it may have been rolled back or ended); the statement was NOT executed")
+		}
 	}
 
 	if database != "" {

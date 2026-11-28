@@ -807,9 +807,16 @@ func (s *Server) registerAdvancedTools() {
 		mcp.NewTool("begin_transaction",
 			mcp.WithDescription("Begin a transaction on the connection. "+
 				"NOTE: MCP and the desktop app share the same connection, so this also puts the desktop tab into a transaction. "+
-				"Wrap multi-step writes with begin/commit/rollback for atomicity; the server watchdog auto-rolls-back idle transactions."),
+				"Wrap multi-step writes with begin/commit/rollback for atomicity; the server watchdog auto-rolls-back transactions "+
+				"that have been idle for a few minutes. Statements inside the transaction must pass the same `database` value "+
+				"(or omit it if the transaction was begun without one): a transaction cannot span databases. "+
+				"If the watchdog rolled the transaction back, further statements are refused until you call "+
+				"begin_transaction again or commit/rollback_transaction."),
 			mcp.WithString("connection_id", mcp.Required(),
 				mcp.Description("Connection ID, or a unique host/name fragment like '11.114'")),
+			mcp.WithString("database",
+				mcp.Description("Database the transaction applies to. Omit to use the connection's default database. "+
+					"Pass the same value to the execute_* tools you want inside this transaction.")),
 		),
 		s.handleBeginTransaction,
 	)

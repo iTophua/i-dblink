@@ -137,7 +137,7 @@ describe('Integration Tests', () => {
     it('should begin, execute, and commit transaction', async () => {
       mockExecuteQuery.mockResolvedValue({ columns: [], rows: [] });
       await api.beginTransaction('conn-1', 'test');
-      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1', 'test');
+      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1', 'test', '');
 
       await api.executeQuery('conn-1', 'UPDATE users SET name = "test"');
 

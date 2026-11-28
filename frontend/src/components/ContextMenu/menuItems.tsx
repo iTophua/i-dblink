@@ -1,6 +1,8 @@
 import { CopyOutlined, FilterOutlined } from '@ant-design/icons';
 import type { MenuItemConfig, MenuGroupConfig, MenuContext } from './types';
+import type { ColumnInfo } from '../../types/api';
 import { getDialect } from '../../utils/sqlDialects';
+import { primaryKeyLiteral } from '../DataTable/utils';
 
 // Helper: copy to clipboard
 function copyToClipboard(text: string) {
@@ -12,6 +14,35 @@ function getVisibleColumns(ctx: MenuContext): string[] {
   const all = ctx.queryColumns || [];
   const hidden = ctx.hiddenColumns || new Set<string>();
   return all.filter((c) => !hidden.has(c));
+}
+
+// Helper: 生成 SQL 用的表引用（调用方给了现成的就用，如结果集里带限定符的表）
+function getTableRef(ctx: MenuContext): string {
+  if (ctx.tableRef) return ctx.tableRef;
+  return getDialect(ctx.dbType).buildTableRef(ctx.tableName ?? '', ctx.database);
+}
+
+/** 全部主键列：行定位 WHERE 必须全列 AND——只取第一列时复合主键会命中多行 */
+function getPrimaryKeyColumns(ctx: MenuContext): ColumnInfo[] {
+  return (ctx.columns ?? []).filter((c) => c.column_key === 'PRI');
+}
+
+/** 行定位 WHERE（主键全列 AND）。任一主键值为空就定位不了，返回 null */
+function buildPrimaryKeyWhere(
+  ctx: MenuContext,
+  row: Record<string, unknown>,
+  primaryKeys: ColumnInfo[]
+): string | null {
+  const dialect = getDialect(ctx.dbType);
+  const conditions: string[] = [];
+  for (const pk of primaryKeys) {
+    const value = row[pk.column_name];
+    if (value == null) return null;
+    conditions.push(
+      `${dialect.escapeIdentifier(pk.column_name)} = ${primaryKeyLiteral(dialect, pk, value)}`
+    );
+  }
+  return conditions.length > 0 ? conditions.join(' AND ') : null;
 }
 
 // 1. Copy Cell Value
@@ -174,7 +205,7 @@ export function createCopyAsInsertItem(
     onClick: () => {
       if (!ctx.tableName || !ctx.selectedRows?.length) return;
       const dialect = getDialect(ctx.dbType);
-      const tableRef = dialect.buildTableRef(ctx.tableName, ctx.database);
+      const tableRef = getTableRef(ctx);
       const cols = getVisibleColumns(ctx);
       const values = ctx.selectedRows.map((r) => cols.map((c) => r[c]));
       const sqls = dialect.buildInsert(tableRef, cols, values);
@@ -201,7 +232,7 @@ export function createCopyAsSingleInsertItem(
     onClick: () => {
       if (!ctx.tableName || targetRows.length === 0) return;
       const dialect = getDialect(ctx.dbType);
-      const tableRef = dialect.buildTableRef(ctx.tableName, ctx.database);
+      const tableRef = getTableRef(ctx);
       const cols = getVisibleColumns(ctx);
       const sqls = targetRows.map((r) => {
         const vals = [cols.map((c) => r[c])];
@@ -220,25 +251,29 @@ export function createCopyAsUpdateItem(
   onClose: () => void
 ): MenuItemConfig {
   const hasRows = (ctx.selectedRows?.length ?? 0) > 0;
-  const pkCol = ctx.columns?.find((c) => c.column_key === 'PRI');
+  const primaryKeys = getPrimaryKeyColumns(ctx);
   return {
     key: 'copy-as-update',
     icon: <CopyOutlined />,
     label: t('common.contextMenu.copyAsUpdate'),
-    disabled: !hasRows || !ctx.tableName || !pkCol,
+    disabled: !hasRows || !ctx.tableName || primaryKeys.length === 0,
     onClick: () => {
-      if (!ctx.tableName || !ctx.selectedRows?.length || !pkCol) return;
+      if (!ctx.tableName || !ctx.selectedRows?.length || primaryKeys.length === 0) return;
       const dialect = getDialect(ctx.dbType);
-      const tableRef = dialect.buildTableRef(ctx.tableName, ctx.database);
-      const sqls = ctx.selectedRows.map((r) => {
+      const tableRef = getTableRef(ctx);
+      const pkNames = new Set(primaryKeys.map((pk) => pk.column_name));
+      const sqls: string[] = [];
+      for (const r of ctx.selectedRows) {
+        const where = buildPrimaryKeyWhere(ctx, r, primaryKeys);
+        if (!where) continue; // 主键值缺失，定位不了这一行
         const setters: Record<string, unknown> = {};
         for (const c of getVisibleColumns(ctx)) {
-          if (c !== pkCol.column_name) setters[c] = r[c];
+          if (!pkNames.has(c)) setters[c] = r[c];
         }
-        const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(r[pkCol.column_name])}`;
-        return dialect.buildUpdate(tableRef, setters, where);
-      });
-      copyToClipboard(sqls.join(';\n') + ';');
+        if (Object.keys(setters).length === 0) continue;
+        sqls.push(dialect.buildUpdate(tableRef, setters, where));
+      }
+      if (sqls.length > 0) copyToClipboard(sqls.join(';\n') + ';');
       onClose();
     },
   };
@@ -251,21 +286,23 @@ export function createCopyAsDeleteItem(
   onClose: () => void
 ): MenuItemConfig {
   const hasRows = (ctx.selectedRows?.length ?? 0) > 0;
-  const pkCol = ctx.columns?.find((c) => c.column_key === 'PRI');
+  const primaryKeys = getPrimaryKeyColumns(ctx);
   return {
     key: 'copy-as-delete',
     icon: <CopyOutlined />,
     label: t('common.contextMenu.copyAsDelete'),
-    disabled: !hasRows || !ctx.tableName || !pkCol,
+    disabled: !hasRows || !ctx.tableName || primaryKeys.length === 0,
     onClick: () => {
-      if (!ctx.tableName || !ctx.selectedRows?.length || !pkCol) return;
+      if (!ctx.tableName || !ctx.selectedRows?.length || primaryKeys.length === 0) return;
       const dialect = getDialect(ctx.dbType);
-      const tableRef = dialect.buildTableRef(ctx.tableName, ctx.database);
-      const sqls = ctx.selectedRows.map((r) => {
-        const where = `${dialect.escapeIdentifier(pkCol.column_name)} = ${dialect.escapeValue(r[pkCol.column_name])}`;
-        return dialect.buildDelete(tableRef, where);
-      });
-      copyToClipboard(sqls.join(';\n') + ';');
+      const tableRef = getTableRef(ctx);
+      const sqls: string[] = [];
+      for (const r of ctx.selectedRows) {
+        const where = buildPrimaryKeyWhere(ctx, r, primaryKeys);
+        if (!where) continue;
+        sqls.push(dialect.buildDelete(tableRef, where));
+      }
+      if (sqls.length > 0) copyToClipboard(sqls.join(';\n') + ';');
       onClose();
     },
   };

@@ -92,6 +92,9 @@ export function useQueryExecution({
   const abortControllerRef = useRef<AbortController | null>(null);
   // 当前脚本批量执行的取消令牌：stop 时通知后端在语句间停止剩余语句
   const scriptTokenRef = useRef<string | null>(null);
+  // 执行序号：执行中再次触发（或卸载）时加一，旧的一轮据此知道「已经不归自己管」，
+  // 收尾时不再去动 loading、计时器、取消令牌这些共享状态
+  const runSeqRef = useRef(0);
   const requestStartTimeRef = useRef(0);
   const returnedRowsRef = useRef(0);
 
@@ -146,6 +149,16 @@ export function useQueryExecution({
         setPendingSql('');
       }
 
+      // 上一轮还在跑：先把它停干净（界面等待 + 后端批次）。只中止界面等待的话，
+      // 旧批次的后端取消令牌会被下面新一轮的覆盖，「停止」就停不了还在跑的旧查询；
+      // 旧一轮的收尾还会把新一轮的 loading 和计时器一并清掉
+      if (scriptTokenRef.current) {
+        api.cancelScriptBatch(scriptTokenRef.current);
+        scriptTokenRef.current = null;
+      }
+      abortControllerRef.current?.abort();
+      const runId = ++runSeqRef.current;
+
       requestStartTimeRef.current = Date.now();
       returnedRowsRef.current = 0;
       setExecElapsed(0);
@@ -162,11 +175,9 @@ export function useQueryExecution({
         setExplainPlan([]);
         clearErrorMarkersRef.current();
 
-        // 取消之前的请求
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-        }
-        abortControllerRef.current = new AbortController();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        const signal = controller.signal;
 
         onQueryStatusChange?.(true);
 
@@ -198,10 +209,12 @@ export function useQueryExecution({
             connectionId,
             statements,
             database,
-            abortControllerRef.current?.signal,
+            signal,
             { useTransaction: useTx, maxRows, cancelToken, sessionId: sessionId ?? '' }
           );
-          scriptTokenRef.current = null;
+          // 绑定调用没法中断：被取代的那一轮晚返回时结果丢弃，也不能清掉新一轮的取消令牌
+          if (runId !== runSeqRef.current) return;
+          if (scriptTokenRef.current === cancelToken) scriptTokenRef.current = null;
 
           scriptResult.results.forEach((queryResult, i) => {
             const stmt = statements[i];
@@ -317,9 +330,13 @@ export function useQueryExecution({
               connectionId,
               [sqlToExecute],
               database,
-              abortControllerRef.current?.signal,
+              signal,
               { useTransaction: useTx, maxRows, cancelToken, sessionId: sessionId ?? '' }
             );
+            if (runId !== runSeqRef.current) {
+              // 已被新一轮执行取代：按取消处理（走下面同一条路径，不动共享状态）
+              throw new DOMException('Aborted', 'AbortError');
+            }
             // 后端确认被取消：与 UI 侧 abort 走同一条"已停止"路径
             if (sr.cancelled) {
               throw new DOMException('Aborted', 'AbortError');
@@ -336,9 +353,11 @@ export function useQueryExecution({
               })
             );
             await new Promise((resolve) => setTimeout(resolve, 1000));
+            // 等待的这一秒里又被重新执行（或标签页已关闭）：不再重试，免得白跑一次
+            if (runId !== runSeqRef.current) return;
             queryResult = await runSingle();
           }
-          scriptTokenRef.current = null;
+          if (scriptTokenRef.current === cancelToken) scriptTokenRef.current = null;
 
           const executionTime = queryResult.execution_time_ms ?? 0;
           const totalTime = Date.now() - requestStartTimeRef.current;
@@ -404,6 +423,8 @@ export function useQueryExecution({
           }
         }
       } catch (error: unknown) {
+        // 已被新一轮执行取代：结果丢弃，共享状态归新一轮管
+        if (runId !== runSeqRef.current) return;
         // 检查是否是取消操作
         if (error instanceof DOMException && error.name === 'AbortError') {
           setMessages((prev) => [...prev, '⚠ ' + t('common.queryStopped')]);
@@ -416,15 +437,18 @@ export function useQueryExecution({
         message.error(`${t('common.sqlExecutionFailed')}: ${getErrorMessage(error)}`);
         highlightErrorRef.current(getErrorMessage(error));
       } finally {
-        setLoading(false);
-        abortControllerRef.current = null;
-        onQueryStatusChange?.(false);
-        // 停止执行计时器
-        if (execTimerRef.current) {
-          clearInterval(execTimerRef.current);
-          execTimerRef.current = null;
+        // 已被新一轮执行取代：共享状态归新一轮管，这里什么都不动
+        if (runId === runSeqRef.current) {
+          setLoading(false);
+          abortControllerRef.current = null;
+          onQueryStatusChange?.(false);
+          // 停止执行计时器
+          if (execTimerRef.current) {
+            clearInterval(execTimerRef.current);
+            execTimerRef.current = null;
+          }
+          setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
         }
-        setExecElapsed((Date.now() - requestStartTimeRef.current) / 1000);
       }
     },
     [sql, connectionId, database, executeQueryApi, pendingSql]
@@ -504,17 +528,25 @@ export function useQueryExecution({
     }
   }, [sql, connectionId, database, dbType, executeQueryApi]);
 
-  // Cleanup on unmount
+  // 卸载（查询 Tab 被关闭）：停掉计时器和界面等待，并取消后端还在跑的批次。
+  // 绑定调用本身没法中断，不取消的话一条长查询会在标签页关掉之后继续占着连接跑到结束
   const cleanup = useCallback(() => {
     if (execTimerRef.current) {
       clearInterval(execTimerRef.current);
       execTimerRef.current = null;
+    }
+    runSeqRef.current += 1; // 还在跑的那一轮收尾时不再动状态
+    if (scriptTokenRef.current) {
+      api.cancelScriptBatch(scriptTokenRef.current);
+      scriptTokenRef.current = null;
     }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
   }, []);
+
+  useEffect(() => cleanup, [cleanup]);
 
   return {
     loading,

@@ -254,7 +254,7 @@ export function SQLEditor({
     ensureTransactionForExecution,
     handleCommitTransaction,
     handleRollbackTransaction,
-  } = useTransaction(connectionId, tabKey);
+  } = useTransaction(connectionId, tabKey, database);
 
   // Query execution
   const {

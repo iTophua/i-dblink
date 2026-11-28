@@ -383,6 +383,7 @@
       "affectedRowsSummary": "{{count}} rows affected",
       "truncatedBadge": "Result truncated",
       "unsavedCount": "{{count}} unsaved",
+      "noRowMatched": "No row matched: the data may have been changed or deleted since the query ran, or the key value cannot be reproduced (e.g. binary columns)",
       "pageNumber": "Page",
       "clearShort": "Clear",
       "totalSize": "Total size",
@@ -759,6 +760,9 @@
       "groupNameRequired": "Group name cannot be empty"
     },
     "copyTable": {
+      "dataCopyFailed": "The table structure was copied, but copying the data failed (the target table exists with missing or partial data)",
+      "binaryCrossDatabase": "The source table has binary columns; copying rows across databases would corrupt them. Copy within the same database or use export/import instead",
+      "rowsCopied": "Failed after copying {{copied}} of {{total}} rows",
       "title": "Copy Table",
       "sourceTable": "Source table",
       "targetTable": "Target table",
@@ -2336,6 +2340,9 @@
     "filterConditionEnable": "Enable/disable this condition (kept for later reuse)",
     "txBeginTip": "Begin the transaction now (executing SQL also begins it automatically)",
     "txAlreadyEnded": "Transaction already ended (possibly auto-rolled back on timeout); nothing was committed or rolled back",
+    "txDefaultDatabase": "the connection's default database",
+    "txOpenOnOtherDatabase": "The current transaction was opened on database \"{{database}}\"; statements targeting \"{{target}}\" cannot run inside it. Commit or roll back the transaction first",
+    "txEndedBeforeExecution": "The transaction is gone (auto-rolled back after being idle, or the connection was reset) and its changes were not committed. Nothing was executed this time; running again starts a new transaction",
     "commands": "Commands",
     "history": "History",
     "tablesLabel": "Tables",

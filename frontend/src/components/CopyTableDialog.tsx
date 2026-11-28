@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { getErrorMessage } from '../utils/getErrorMessage';
 import { getDialect } from '../utils/sqlDialects';
+import { rewriteDDLForCopy } from '../utils/ddlCopy';
 
 interface CopyTableDialogProps {
   open: boolean;
@@ -16,26 +17,8 @@ interface CopyTableDialogProps {
   onSuccess: () => void;
 }
 
-function replaceTableNameInDDL(ddl: string, sourceTable: string, targetTable: string): string {
-  // 使用字符串分割替换，避免正则特殊字符问题
-  return ddl.split(sourceTable).join(targetTable);
-}
-
-function getIdentifierQuotes(dbType?: string): { open: string; close: string } {
-  switch (dbType) {
-    case 'postgresql':
-    case 'kingbase':
-    case 'highgo':
-    case 'vastbase':
-    case 'oracle':
-    case 'dameng':
-      return { open: '"', close: '"' };
-    case 'sqlserver':
-      return { open: '[', close: ']' };
-    default:
-      return { open: '`', close: '`' };
-  }
-}
+/** 查询结果里的二进制列只剩这个占位文本，照着写过去等于把数据改坏 */
+const BLOB_PLACEHOLDER = /^\[BLOB: \d+ bytes\]$/;
 
 const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
   open,
@@ -57,46 +40,72 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
       const values = await form.validateFields();
       setLoading(true);
 
-      const targetTable = values.targetTable;
+      const targetTable: string = values.targetTable;
       const targetDatabase = values.targetDatabase || sourceDatabase;
+      // 目标库留空 = 跟源表在同一个库
+      const sameDatabase = !values.targetDatabase || values.targetDatabase === sourceDatabase;
       const copyType = values.copyType;
+      const dialect = getDialect(dbType);
+      const q = (name: string) => dialect.escapeIdentifier(name);
 
-      const { open: openQuote, close: closeQuote } = getIdentifierQuotes(dbType);
-      const escapeId = (name: string) => openQuote + name + closeQuote;
-
-      // 1. 复制结构
+      // 1. 复制结构：只改表名和约束 / 索引名，列名、注释原样保留
       const ddlStatements = await api.getTableDDL(connectionId, sourceTable, sourceDatabase);
-      const newDdl = ddlStatements.map((s: string) =>
-        replaceTableNameInDDL(s, sourceTable, targetTable)
-      );
-
-      for (const stmt of newDdl) {
+      for (const stmt of ddlStatements) {
         if (stmt.trim()) {
-          await api.executeDDL(connectionId, stmt.trim(), targetDatabase);
+          await api.executeDDL(
+            connectionId,
+            rewriteDDLForCopy(stmt, sourceTable, targetTable).trim(),
+            targetDatabase
+          );
         }
       }
 
       // 2. 复制数据（如果选择了结构和数据）
       if (copyType === 'structure_data') {
-        if (targetDatabase === sourceDatabase) {
-          // 同数据库：使用 INSERT INTO ... SELECT
-          const insertSql = `INSERT INTO ${escapeId(targetTable)} SELECT * FROM ${escapeId(sourceTable)}`;
-          await api.executeQuery(connectionId, insertSql, targetDatabase);
-        } else {
-          // 跨数据库：先查询源表数据，再插入目标表
-          const selectSql = `SELECT * FROM ${escapeId(sourceTable)}`;
-          const result = await api.executeQuery(connectionId, selectSql, sourceDatabase);
+        // 表已经建好：数据这一步失败时要说清楚，目标表里没有（或只有一部分）数据。
+        // executeQuery 不抛错、把报错放在结果里，每一步都得看
+        try {
+          if (sameDatabase) {
+            // 同数据库：使用 INSERT INTO ... SELECT
+            const insertSql = `INSERT INTO ${q(targetTable)} SELECT * FROM ${q(sourceTable)}`;
+            const res = await api.executeQuery(connectionId, insertSql, targetDatabase);
+            if (res.error) throw new Error(res.error);
+          } else if (dialect.dbType === 'mysql' && sourceDatabase && targetDatabase) {
+            // 同一台服务器上的两个库：交给服务器搬，二进制列也原样过去
+            const insertSql = `INSERT INTO ${q(targetDatabase)}.${q(targetTable)} SELECT * FROM ${q(sourceDatabase)}.${q(sourceTable)}`;
+            const res = await api.executeQuery(connectionId, insertSql, targetDatabase);
+            if (res.error) throw new Error(res.error);
+          } else {
+            // 跨数据库（PG 系等不能跨库查询）：先查询源表数据，再逐行插入目标表
+            const result = await api.executeQuery(
+              connectionId,
+              `SELECT * FROM ${q(sourceTable)}`,
+              sourceDatabase
+            );
+            if (result.error) throw new Error(result.error);
 
-          if (result.rows && result.rows.length > 0) {
-            const colNames = result.columns || [];
-            const dialect = getDialect(dbType);
-            for (const row of result.rows) {
-              const values = row.map((v: unknown) => dialect.escapeValue(v));
-
-              const insertSql = `INSERT INTO ${escapeId(targetTable)} (${colNames.map((c: string) => escapeId(c)).join(', ')}) VALUES (${values.join(', ')})`;
-              await api.executeQuery(connectionId, insertSql, targetDatabase);
+            const rows = result.rows ?? [];
+            const colNames = result.columns ?? [];
+            if (
+              rows.some((row) => row.some((v) => typeof v === 'string' && BLOB_PLACEHOLDER.test(v)))
+            ) {
+              throw new Error(t('common.copyTable.binaryCrossDatabase'));
+            }
+            for (let i = 0; i < rows.length; i++) {
+              const valuesSql = rows[i].map((v: unknown) => dialect.escapeValue(v)).join(', ');
+              const insertSql = `INSERT INTO ${q(targetTable)} (${colNames.map((c) => q(c)).join(', ')}) VALUES (${valuesSql})`;
+              const res = await api.executeQuery(connectionId, insertSql, targetDatabase);
+              if (res.error) {
+                throw new Error(
+                  `${t('common.copyTable.rowsCopied', { copied: i, total: rows.length })} ${res.error}`
+                );
+              }
             }
           }
+        } catch (err: unknown) {
+          throw new Error(`${t('common.copyTable.dataCopyFailed')}: ${getErrorMessage(err)}`, {
+            cause: err,
+          });
         }
       }
 

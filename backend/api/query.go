@@ -57,11 +57,14 @@ const LongOpTimeout = 30 * time.Minute
 
 // getQueryExecutor 按 use_transaction + session 路由执行器：
 // 显式 false 或空 session = 自动提交；否则加入该会话的活跃事务（若有）。
+// 显式 true 表示调用方要求在会话事务里执行（编辑器的手动模式）：事务不在了就报错，
+// 不能落到自动提交——用户以为还能回滚，语句却已经生效
 func (h *Handler) getQueryExecutor(req *models.QueryRequest) (db.Executor, error) {
 	if (req.UseTransaction != nil && !*req.UseTransaction) || req.SessionID == "" {
 		return h.mgr.GetExecutorNoTx(req.ConnectionID, req.Database)
 	}
-	return h.mgr.GetExecutorForSession(req.ConnectionID, req.Database, req.SessionID)
+	requireTx := req.UseTransaction != nil && *req.UseTransaction
+	return h.mgr.GetExecutorForSession(req.ConnectionID, req.Database, req.SessionID, requireTx)
 }
 
 // ExecuteQueryDirect 查询直通入口（Wails 绑定路径）：复用与 HTTP handler

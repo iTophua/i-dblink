@@ -167,6 +167,47 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   空值，表现为删除分组后组内连接整组消失
 - **启动画面是覆盖层**（`App.tsx`）：主界面在它下面立即挂载，不要改回「先渲染画面、结束后
   再挂载主界面」
+- **会话事务绑定在库上，按空闲回收**（`backend/db/manager.go`，2026-11）：
+  `BeginTransaction(connectionID, sessionID, database)` 把事务开在该会话语句要落的库的连接池上
+  （空 = 连接默认库），之后同会话的语句**必须带同一个库**：`GetExecutorForSession` 对换库的语句
+  报错，既不进事务也不落到自动提交（此前事务固定开在默认库，选了别的库的查询 Tab 在手动模式下
+  会写到默认库去）。看门狗从**最近一条语句结束**起算空闲（不是从 BEGIN 起算总时长），正在执行的
+  语句算活动；被它回收的会话记在 `txTimedOut` 里，之后的语句一律拒绝，直到调用方显式
+  begin / commit / rollback——以前事务被回收后界面还亮着事务按钮，后续语句逐条自动提交，等去
+  提交时才发现「事务已结束」。`use_transaction`：`false` = 绕过事务，不传 = 有事务就进（MCP / DDL /
+  导入），显式 `true` = 必须在会话事务里（编辑器手动模式），事务不在了直接报错。前端
+  `useTransaction(connectionId, tabKey, database)` 执行前会先向后端核对事务还在不在。给会话开事务的
+  新入口都要带上会话用的那个库（SQL 导入向导、MCP `begin_transaction` 的 `database` 参数同理）
+- **MCP `execute_script` 的 DML 分支看的是 `res.Error`**：`App.ExecuteQuery` 的 Go `err` 只表示没
+  执行到数据库那一层，SQL 报错在 `QueryResult.Error` 里。此前只看 `err`：脚本里一条失败后继续往下
+  跑并**提交**了前面的语句，还报「已提交」。逻辑在 `mcpserver.runDMLScript`（抽成接口，可用假实现测）
+- **网格编辑：没动过 = 取消**（`DataTable/utils.editorCommitValue`、`GlideDataTable` 的
+  `InlineCellEditor`）：Glide 关闭编辑器时不比较新旧值、一律回调，而 NULL 格子的编辑框本来就是空的
+  ——必须靠「用户有没有输入过」判断，不能靠上层比对新旧值。NULL 与空串是两个值：NULL 在网格里是
+  `data=''` + `displayData='NULL'`（斜体显示，判断用 `isNullCell`），空串显示为空白；清空数值格上报
+  `'NULL'`（数值列写不了空串）；`'NULL'` 字符串由上层解析成空值（所以文本列存不了字面量 "NULL"，
+  已知限制）。范围编辑只在直接键入（Glide 传 `initialValue`）时铺满选区，双击 / F2 进入时不铺
+- **结果集编辑要认对表**（`SQLEditor/resultTable.ts` + `ResultGrid`）：从 SQL 里取出 `FROM` 后的表
+  引用（含 `库.表` / `schema.表`），写回的 UPDATE / DELETE 带上限定部分；取列信息也按限定名查——
+  后端 `Handler.GetColumns` 按原名没查到时把 `限定部分.表名` 拆开（MySQL 当库名，PG 系 / SQL Server
+  当 schema，其余库不拆）。只拿表名去查的话，`SELECT * FROM b.t` 的编辑会落到当前库的同名表上。
+  定位不到唯一的表（JOIN / 子查询 / 列信息有重名）一律只读；列信息连同它对应的表一起存，换了
+  结果集不沿用上一张表的主键；重名列的网格列 id 按出现次序编号（`id`、`id#2`）。表数据页（PG 不带
+  schema）还没接上，在 PG 系支持那一批里做
+- **编辑提交：没碰到行也算失败**（`DataTable/utils.runEditStatement`）：`rows_affected === 0` 说明
+  WHERE 一行都没匹配上（主键值在界面上失真，如 BINARY(16) 显示成 `[BLOB: n bytes]`；或数据已被改
+  掉），以前照样报成功并清掉编辑标记。MySQL 的 UPDATE 只数「值真的变了」的行，所以 UPDATE 报 0 行时
+  回头 `SELECT COUNT(*)` 确认行还在不在；影响行数未知时不判。结果集提交是逐条执行的，已落库的编辑
+  立刻从待提交状态里移除，中途失败后再提交不会把已落库的 INSERT 再执行一遍
+- **复制表的 DDL 改写按标识符来**（`utils/ddlCopy.rewriteDDLForCopy`）：只改「表」和 `CONSTRAINT /
+  KEY / INDEX` 后面的对象名（名字里按 `_` 分段后等于表名的那一段），列名、注释、默认值不动。此前是
+  整段子串替换：把 `user` 复制成 `user_copy`，列 `user_name` 也被改成 `user_copy_name`。数据复制的
+  每一步都要看 `result.error`（`api.executeQuery` 不抛错）；跨库逐行复制遇到二进制列（值只剩
+  `[BLOB: n bytes]` 占位文本）直接报错，而不是把占位文本写进去；MySQL 同服务器的两个库交给
+  `INSERT INTO db2.t SELECT * FROM db1.t`
+- **查询执行分轮次**（`useQueryExecution`）：每次执行有一个序号。执行中再次触发会先取消上一轮的
+  后端批次，被取代的那一轮晚返回时丢弃结果、不动共享状态、不清新一轮的取消令牌；卸载（关闭查询
+  Tab）时取消后端还在跑的批次。只中止界面等待的话，旧批次继续占着连接，「停止」也停不掉新一轮
 - **antd 6 的几处改名/改结构**：Alert 的 `message` → `title`；Select 的 `data-testid` 落在
   `.ant-select` 根节点，没有 `.ant-select-selector`，展开要点 `input[role="combobox"]`，
   测试里同一选项会渲染两份（可见列表 + 无障碍列表）
@@ -177,7 +218,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 ## Test quirks
 
-- 前端测试位于 `frontend/src/__tests__/`（41 个文件）
+- 前端测试位于 `frontend/src/__tests__/`（49 个文件）
 - 测试分类：`unit/`、`components/`、`hooks/`、`api/`、`integration/`
 - 所有 Wails 绑定在 `src/__tests__/setupTests.ts` 中 mock，mock 以具名常量导出，直接 import 使用：
   ```ts
@@ -196,7 +237,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
   `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
   桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
-  `pnpm test`（625）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
+  `pnpm test`（729）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
   UI 重写整套用例。另外 e2e 脚本须从仓库根用
   `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
   运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）
@@ -204,7 +245,9 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   大文件在 HEAD 上就有几十个存量 error/warning（`no-explicit-any`、`exhaustive-deps`、
   react-hooks 编译器规则）。判断自己有没有引入问题，要和 HEAD 逐文件对比数量，
   新增文件则必须 0 问题。prettier 同理：这 6 个文件在 HEAD 上就没格式化，不要整文件重排
-- **真实库上的门控测试**（默认跳过）：会话级事务并发（`backend/db/manager_tx_real_test.go`）、
+- **真实库上的门控测试**（默认跳过）：会话级事务并发与「事务开在所选库上」（
+  `backend/db/manager_tx_real_test.go`；空闲回收、超时后不退回自动提交、事务绑定库在 SQLite 上就能
+  跑，见 `manager_tx_binding_test.go`）、限定表名取列（`backend/api/qualified_table_real_test.go`）、
   ER 图的 MySQL/PG 批量查询（`backend/api/er_diagram_test.go`）、数据对比（
   `backend/api/data_compare_real_test.go`，含 MySQL → PG 跨库、PG 的 schema 定位、MySQL
   生成列）、结构比较与表结构元数据（`backend/api/compare_real_test.go`，含「同步语句在

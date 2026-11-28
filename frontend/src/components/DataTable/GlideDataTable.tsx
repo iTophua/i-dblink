@@ -30,6 +30,7 @@ import '@glideapps/glide-data-grid/dist/index.css';
 import { Tooltip } from 'antd';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { buildGlideTheme } from './glide-theme';
+import { editorCommitValue } from './utils';
 import { FindReplaceBar, type FindMatch, type FindOptions } from './FindReplaceBar';
 import type { FormatRule } from './ConditionalFormattingPanel';
 
@@ -190,6 +191,14 @@ export function buildGridColumns(columns: GlideColumn[], hiddenColumns: Set<stri
     }));
 }
 
+/**
+ * 网格里 NULL 的编码：valueToGridCell 把空值写成 data='' / displayData='NULL'，
+ * 空串则是 data='' / displayData=''。真实字符串 "NULL" 的 data 是 'NULL'，不会被认成空值。
+ */
+function isNullCell(cell: { displayData?: string; data?: unknown }): boolean {
+  return (cell.data ?? '') === '' && cell.displayData === 'NULL';
+}
+
 export function valueToGridCell(value: unknown, editable: boolean): GridCell {
   if (typeof value === 'symbol') {
     return {
@@ -227,7 +236,8 @@ export function valueToGridCell(value: unknown, editable: boolean): GridCell {
   };
 }
 
-const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
+/** 网格的内联编辑器。导出只为能在测试里直接渲染（画布上的双击编辑在 jsdom 里驱动不了） */
+export const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
   const ref = useRef<HTMLInputElement>(null);
   const cancelledRef = useRef(false);
   const committedRef = useRef(false);
@@ -240,12 +250,16 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
   const [val, setVal] = useState(p.initialValue ?? String(cellData ?? ''));
   const valRef = useRef(val);
   valRef.current = val;
+  // 编辑框里是否有过输入。Glide 只在用户直接键入时传 initialValue（那时没有 onChange），
+  // 其余情况都算没动过，直到 onChange 触发
+  const touchedRef = useRef(p.initialValue != null);
 
   if (prevKey !== targetKey) {
     setPrevKey(targetKey);
     committedRef.current = false;
     cancelledRef.current = false;
     hasFocusedRef.current = false;
+    touchedRef.current = p.initialValue != null;
     const newCellData = (p.value as any).data;
     const synced = p.initialValue ?? String(newCellData ?? '');
     valRef.current = synced;
@@ -262,12 +276,14 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
     return () => clearTimeout(timer);
   }, []);
 
-  // 进入编辑器时，如果是范围编辑，先把初始值铺满整个范围。
+  // 直接键入开启范围编辑时，把首键铺满整个范围（之后的键入由 onChange 实时铺）。
   // 只在 mounted 且未提交/未取消时执行一次（用 valRef 避免闭包捕获旧值）。
+  // 双击 / F2 进入编辑时没有任何输入，不能铺——那会把活动单元格的原值写进整个选区。
   const didInitialFillRef = useRef(false);
   useEffect(() => {
     if (didInitialFillRef.current) return;
     didInitialFillRef.current = true;
+    if (!touchedRef.current) return;
     const liveFn = rangeEditRef?.current.liveRangeEditFn;
     if (liveFn) liveFn(valRef.current);
   }, [rangeEditRef]);
@@ -275,18 +291,14 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
   const commit = useCallback(
     (v: string) => {
       if (committedRef.current || cancelledRef.current) return;
-      committedRef.current = true;
-      const kind = p.value.kind;
-      let data: any;
-      let displayData: string;
-      if (kind === GridCellKind.Number) {
-        data = v === '' ? undefined : Number(v);
-        displayData = data == null ? 'NULL' : String(data);
-      } else {
-        data = v;
-        displayData = v == null || v === '' ? 'NULL' : String(v);
+      const data = editorCommitValue(p.value.kind === GridCellKind.Number, v, touchedRef.current);
+      if (data === undefined) {
+        cancelledRef.current = true;
+        p.onFinishedEditing();
+        return;
       }
-      p.onFinishedEditing({ ...(p.value as any), data, displayData } as any);
+      committedRef.current = true;
+      p.onFinishedEditing({ ...(p.value as any), data } as any);
     },
     [p, targetKey]
   );
@@ -319,6 +331,7 @@ const InlineCellEditor: ProvideEditorComponent<GridCell> = (p) => {
       ref={ref}
       value={val}
       onChange={(e) => {
+        touchedRef.current = true;
         setVal(e.target.value);
         rangeEditRef?.current.liveRangeEditFn?.(e.target.value);
       }}
@@ -900,7 +913,7 @@ export function GlideDataTable({
       let formatFg: string | undefined;
       if (rulesByColumn && gridCol.id) {
         const colId = gridCol.id;
-        const cellValue = dataVal ?? (display === 'NULL' ? null : display);
+        const cellValue = isNullCell(raw) ? null : (dataVal ?? display);
         // Check '*' (all columns) rules first, then column-specific rules
         const wildcardRules = rulesByColumn.get('*');
         const columnRules = rulesByColumn.get(colId);
@@ -929,7 +942,7 @@ export function GlideDataTable({
       if (status === 'deleted') {
         ctx.font = '13px sans-serif';
         ctx.fillStyle = formatFg ?? t.textLight;
-        const deletedText = fitCellText(ctx, display || 'NULL', rect.width - 20);
+        const deletedText = fitCellText(ctx, isNullCell(raw) ? 'NULL' : display, rect.width - 20);
         ctx.fillText(deletedText, rect.x + 10, centerY);
         ctx.strokeStyle = formatFg ?? t.textLight;
         ctx.beginPath();
@@ -947,8 +960,8 @@ export function GlideDataTable({
         ctx.textAlign = 'start';
         return;
       }
-      // NULL：弱化的斜体，区别于真实字符串 "NULL"
-      if (display === 'NULL' || display === '') {
+      // NULL：弱化的斜体，区别于真实字符串 "NULL"；空串显示为空白
+      if (isNullCell(raw)) {
         ctx.fillStyle = formatFg ?? t.textLight;
         ctx.font = 'italic 12.5px sans-serif';
         ctx.fillText('NULL', rect.x + 10, centerY);

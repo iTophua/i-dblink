@@ -44,6 +44,8 @@ export interface MenuContext {
   dbType?: DatabaseType;
   tableName?: string;
   database?: string;
+  /** 生成 INSERT / UPDATE / DELETE 时用的表引用。不传则按 tableName + database 拼 */
+  tableRef?: string;
   row?: number;
   col?: number;
   colName?: string;

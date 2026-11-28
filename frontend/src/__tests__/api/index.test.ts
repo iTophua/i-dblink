@@ -190,7 +190,13 @@ describe('API Layer', () => {
   describe('transaction APIs', () => {
     it('beginTransaction should call BeginTransaction', async () => {
       await api.beginTransaction('conn-1', 'test');
-      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1', 'test');
+      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1', 'test', '');
+    });
+
+    // 事务固定开在这个库的连接池上：手动模式下语句才会落到选中的库，而不是连接默认库
+    it('beginTransaction should pass the database the session targets', async () => {
+      await api.beginTransaction('conn-1', 'test', 'sales');
+      expect(mockBeginTransaction).toHaveBeenCalledWith('conn-1', 'test', 'sales');
     });
 
     it('commitTransaction should call CommitTransaction', async () => {

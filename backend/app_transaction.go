@@ -8,9 +8,10 @@ import (
 
 // ==================== 事务控制 ====================
 
-// BeginTransaction 开启事务
-func (a *App) BeginTransaction(connectionID string, sessionID string) error {
-	req := api.TransactionRequest{ConnectionID: connectionID, SessionID: sessionID}
+// BeginTransaction 开启事务。database 是这个会话语句要落的库（空 = 连接默认库），
+// 事务固定开在该库的连接池上，之后同会话的语句必须带着同一个库来。
+func (a *App) BeginTransaction(connectionID string, sessionID string, database string) error {
+	req := api.TransactionRequest{ConnectionID: connectionID, Database: database, SessionID: sessionID}
 	_, err := callHandler(a.handler.BeginTransaction, req)
 	return err
 }

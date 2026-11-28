@@ -27,7 +27,14 @@ import { createResultCellModified } from '../DataTable/adapters/resultAdapter';
 import { useContextMenu } from '../ContextMenu';
 import { ResultGridContextMenu } from './ResultGridContextMenu';
 import { useEditHistory } from '../../hooks/useEditHistory';
-import { isSameEditValue } from '../DataTable/utils';
+import {
+  diffRowSetters,
+  isSameEditValue,
+  primaryKeyLiteral,
+  runEditStatement,
+  uniqueColumnIds,
+} from '../DataTable/utils';
+import { buildResultSetTableRef, extractTableRefParts, tableLookupName } from './resultTable';
 import { appModal } from '../../utils/appModal';
 import {
   ConditionalFormattingPanel,
@@ -50,20 +57,6 @@ interface ResultGridProps {
   dirtyScope?: number;
 }
 
-// ── SQL 解析 ──
-function extractTable(sql: string): string | null {
-  const clean = sql
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/--.*$/gm, '')
-    .replace(/;\s*$/, '')
-    .trim();
-  if (/\bJOIN\b|\bUNION\b|\bINTO\b|(?:\()\s*SELECT\b/i.test(clean)) return null;
-  const match = clean.match(
-    /\bFROM\s+(?:[`"']?(\w+)[`"']?\.)?[`"']?(\w+)[`"']?(?:\s+(?:AS\s+)?\w+)?(?:\s*$|\s+(?:WHERE|ORDER|GROUP|HAVING|LIMIT|OFFSET)\b)/i
-  );
-  return match ? match[2] || match[1] || null : null;
-}
-
 // ── Component ──
 export const ResultGrid = memo(function ResultGrid({
   queryResult,
@@ -80,21 +73,44 @@ export const ResultGrid = memo(function ResultGrid({
   const { getColumns, executeQuery } = useDatabase();
 
   const sqlForExtract = queryResult.executedSql || originalSql || '';
-  const tableName = useMemo(
-    () => (sqlForExtract ? extractTable(sqlForExtract) : null),
+  // 被查询的那张表（含 SQL 里的限定部分）。定位不到唯一的一张表 → null，结果集只读
+  const tableParts = useMemo(
+    () => (sqlForExtract ? extractTableRefParts(sqlForExtract) : null),
     [sqlForExtract]
   );
-  const [tableColumns, setTableColumns] = useState<ColumnInfo[]>([]);
+  const tableName = tableParts ? tableParts[tableParts.length - 1].name : null;
+  // 取列信息时按 SQL 里的写法带上限定部分（`库.表` / `schema.表`）。只拿表名去查的话，
+  // MySQL 会在当前库里找同名表，PG 会把各个 schema 里的同名表混在一起
+  const tableLookup = useMemo(
+    () => (tableParts ? tableLookupName(tableParts, dbType) : ''),
+    [tableParts, dbType]
+  );
+  // 列信息连同它对应的表一起存：换了结果集、新的列信息还没回来（或晚到的旧响应）时，
+  // 不能拿上一张表的主键去定位这一张表的行
+  const columnsKey = `${connectionId ?? ''}\u0000${tableLookup}\u0000${database ?? ''}`;
+  const [columnsState, setColumnsState] = useState<{ key: string; cols: ColumnInfo[] }>({
+    key: '',
+    cols: [],
+  });
+  const tableColumns = useMemo(
+    () => (columnsState.key === columnsKey ? columnsState.cols : []),
+    [columnsState, columnsKey]
+  );
   // 全部主键列：行定位 WHERE 必须全列 AND——只取第一列时复合主键值组合重复
   // 的行会命中多行（UPDATE/DELETE 扩散，数据风险）
   const primaryKeyCols = useMemo(
     () => tableColumns.filter((c) => c.column_key === 'PRI'),
     [tableColumns]
   );
+  // 列信息里出现重名列，说明这张表没定位到唯一的一张（PG 不带 schema 时各 schema 的
+  // 同名表会合并在一起）：主键可能是另一张表的，不能拿它去定位行
+  const tableColumnsAmbiguous =
+    new Set(tableColumns.map((c) => c.column_name)).size !== tableColumns.length;
   // 可编辑条件收紧：所有主键列都必须出现在查询结果列中（缺一列行就不可定位）
   const isEditable = !!(
     tableName &&
     primaryKeyCols.length > 0 &&
+    !tableColumnsAmbiguous &&
     connectionId &&
     primaryKeyCols.every((c) => queryResult.columns.includes(c.column_name))
   );
@@ -102,17 +118,17 @@ export const ResultGrid = memo(function ResultGrid({
 
   useEffect(() => {
     if (!connectionId || !tableName) {
-      setTableColumns([]);
+      setColumnsState({ key: columnsKey, cols: [] });
       return;
     }
-    getColumns(connectionId, tableName, database)
+    getColumns(connectionId, tableLookup || tableName, database)
       .then((cols) => {
-        setTableColumns(cols);
+        setColumnsState({ key: columnsKey, cols });
       })
       .catch(() => {
-        setTableColumns([]);
+        setColumnsState({ key: columnsKey, cols: [] });
       });
-  }, [connectionId, tableName, database, getColumns]);
+  }, [connectionId, tableName, tableLookup, columnsKey, database, getColumns]);
 
   // 编辑状态
   const [modifiedRows, setModifiedRows] = useState<Map<number, unknown[]>>(new Map());
@@ -132,6 +148,9 @@ export const ResultGrid = memo(function ResultGrid({
   const [formatRules, setFormatRules] = useState<FormatRule[]>([]);
   const [formatPanelVisible, setFormatPanelVisible] = useState(false);
 
+  // 网格列 id（重名列按出现次序编号）：行对象以它为键、按下标取值，重名列各是各的
+  const columnIds = useMemo(() => uniqueColumnIds(queryResult.columns), [queryResult.columns]);
+
   // 行数据
   const allRows = useMemo(() => {
     const existing = queryResult.rows
@@ -139,21 +158,21 @@ export const ResultGrid = memo(function ResultGrid({
         if (deletedIndices.has(i)) return null;
         const r = modifiedRows.has(i) ? modifiedRows.get(i)! : row;
         const obj: Record<string, unknown> = { __id: i, __isNew: false };
-        queryResult.columns.forEach((col, j) => {
-          obj[col] = r[j];
+        columnIds.forEach((id, j) => {
+          obj[id] = r[j];
         });
         return obj;
       })
       .filter(Boolean) as Record<string, unknown>[];
     const newOnes = newRows.map((row, i) => {
       const obj: Record<string, unknown> = { __id: `new-${i}`, __isNew: true };
-      queryResult.columns.forEach((col, j) => {
-        obj[col] = row[j];
+      columnIds.forEach((id, j) => {
+        obj[id] = row[j];
       });
       return obj;
     });
     return [...existing, ...newOnes];
-  }, [queryResult.rows, queryResult.columns, modifiedRows, deletedIndices, newRows]);
+  }, [queryResult.rows, columnIds, modifiedRows, deletedIndices, newRows]);
 
   // 行状态回调
   const rowStatus = useCallback(
@@ -167,8 +186,8 @@ export const ResultGrid = memo(function ResultGrid({
   );
 
   const isCellModified = useMemo(
-    () => createResultCellModified(modifiedRows, queryResult.columns, queryResult.rows),
-    [modifiedRows, queryResult.columns, queryResult.rows]
+    () => createResultCellModified(modifiedRows, columnIds, queryResult.rows),
+    [modifiedRows, columnIds, queryResult.rows]
   );
 
   // 列头编码 name|type|isPK|comment（与表数据浏览一致）：
@@ -194,11 +213,11 @@ export const ResultGrid = memo(function ResultGrid({
       return Math.max(90, Math.min(320, Math.ceil(Math.min(maxLen, 36) * 8 + 26)));
     };
     return queryResult.columns.map((name, idx) => ({
-      id: name,
+      id: columnIds[idx],
       title: `${name}|${typeMap.get(name) || ''}|${pkSet.has(name) ? '1' : '0'}|${commentMap.get(name) || ''}`,
       width: estimateWidth(name, idx),
     }));
-  }, [queryResult.columns, queryResult.rows, tableColumns]);
+  }, [queryResult.columns, columnIds, queryResult.rows, tableColumns]);
   const glideRows = useMemo(() => allRows as GlideRow[], [allRows]);
 
   // 选中（存储 allRows 中的索引；已有行 __id=数字=原始索引，新增行 = qLen + k）
@@ -225,6 +244,7 @@ export const ResultGrid = memo(function ResultGrid({
     record: recordEdit,
     undo: handleUndoStep,
     clear: clearEditHistory,
+    removeByRowId: removeEditHistoryByRowId,
     hasHistory: hasEditHistory,
   } = useEditHistory({
     onRestore: useCallback(
@@ -358,8 +378,7 @@ export const ResultGrid = memo(function ResultGrid({
     [handleCellEdited]
   );
 
-  // 行定位 WHERE（全主键列 AND）。BIGINT 等大整数以后端字符串形式到达时写裸
-  // 数字字面量——字符串与数值列比较在部分库走浮点转换，19 位 ID 会取整失配
+  // 行定位 WHERE（全主键列 AND）。大整数主键写裸数字，见 primaryKeyLiteral
   const buildRowWhere = useCallback(
     (rowId: number): string | null => {
       const dialect = getDialect(dbType);
@@ -368,12 +387,8 @@ export const ResultGrid = memo(function ResultGrid({
         const idx = queryResult.columns.indexOf(pk.column_name);
         if (idx < 0) return null;
         const value = queryResult.rows[rowId]?.[idx];
-        const numeric =
-          typeof value === 'string' &&
-          /^-?\d+$/.test(value) &&
-          /int|decimal|numeric|number|serial|identity/i.test(pk.data_type || '');
         conds.push(
-          `${dialect.escapeIdentifier(pk.column_name)} = ${numeric ? value : dialect.escapeValue(value)}`
+          `${dialect.escapeIdentifier(pk.column_name)} = ${primaryKeyLiteral(dialect, pk, value)}`
         );
       }
       return conds.length ? conds.join(' AND ') : null;
@@ -388,7 +403,7 @@ export const ResultGrid = memo(function ResultGrid({
       return;
     }
     const dialect = getDialect(dbType);
-    const tableRef = dialect.buildTableRef(tableName, database);
+    const tableRef = buildResultSetTableRef(tableParts!, database, dbType);
     const lines: string[] = [];
     for (const row of newRows) {
       const cols: string[] = [];
@@ -404,15 +419,7 @@ export const ResultGrid = memo(function ResultGrid({
     }
     for (const [rowId, row] of modifiedRows) {
       if (deletedIndices.has(rowId)) continue;
-      const setters: Record<string, unknown> = {};
-      const original = queryResult.rows[rowId];
-      queryResult.columns.forEach((c, i) => {
-        const cur = row[i];
-        const orig = original?.[i];
-        if ((cur == null && orig == null) || (cur != null && String(cur) === String(orig ?? '')))
-          return;
-        setters[c] = cur;
-      });
+      const setters = diffRowSetters(queryResult.rows[rowId], row, queryResult.columns);
       if (Object.keys(setters).length === 0) continue;
       const where = buildRowWhere(rowId);
       if (!where) continue;
@@ -433,89 +440,109 @@ export const ResultGrid = memo(function ResultGrid({
     queryResult,
     dbType,
     database,
+    tableParts,
     buildRowWhere,
   ]);
 
   // 提交
   const handleCommit = useCallback(async () => {
-    if (!connectionId || !tableName || primaryKeyCols.length === 0) return;
+    if (!connectionId || !isEditable || !tableParts) return;
     const dialect = getDialect(dbType);
-    const tableRef = dialect.buildTableRef(tableName, database);
+    const tableRef = buildResultSetTableRef(tableParts, database, dbType);
+    const run = (kind: 'insert' | 'update' | 'delete', sql: string, where: string) =>
+      runEditStatement(
+        executeQuery,
+        connectionId,
+        database,
+        kind,
+        sql,
+        { tableRef, where },
+        t('common.dataGrid.noRowMatched')
+      );
+
+    // 已经落库的编辑立刻从待提交状态里去掉：中途失败时留下的只有没执行的，
+    // 用户处理后再次提交不会把已落库的 INSERT 再执行一遍（重试插出重复行）
+    const appliedModified: number[] = [];
+    const appliedDeleted: number[] = [];
+    const doneNew = new Set<number>(); // 已插入的新行；全成功时连一行都没填的新行一起算做完
+    let success = 0;
+    let errMsg = '';
     try {
-      let success = 0,
-        errMsg = '';
-      for (const row of newRows) {
+      for (let i = 0; i < newRows.length && !errMsg; i++) {
         const cols: string[] = [];
         const vals: unknown[] = [];
-        row.forEach((v, i) => {
+        newRows[i].forEach((v, j) => {
           if (v !== null) {
-            cols.push(queryResult.columns[i]);
+            cols.push(queryResult.columns[j]);
             vals.push(v);
           }
         });
         if (cols.length === 0) continue;
         const sql = dialect.buildInsert(tableRef, cols, [vals])[0];
-        const res = await executeQuery(connectionId, sql, database);
-        if (res.error) {
-          errMsg = res.error;
-          break;
-        }
-        success++;
-      }
-      if (!errMsg) {
-        for (const [rowId, row] of modifiedRows) {
-          if (deletedIndices.has(rowId)) continue;
-          const setters: Record<string, unknown> = {};
-          const original = queryResult.rows[rowId];
-          queryResult.columns.forEach((c, i) => {
-            const cur = row[i];
-            const orig = original?.[i];
-            if (
-              (cur == null && orig == null) ||
-              (cur != null && String(cur) === String(orig ?? ''))
-            )
-              return;
-            setters[c] = cur;
-          });
-          if (Object.keys(setters).length === 0) continue;
-          const where = buildRowWhere(rowId);
-          if (!where) continue;
-          const sql = dialect.buildUpdate(tableRef, setters, where);
-          const res = await executeQuery(connectionId, sql, database);
-          if (res.error) {
-            errMsg = res.error;
-            break;
-          }
+        errMsg = (await run('insert', sql, '')) ?? '';
+        if (!errMsg) {
           success++;
+          doneNew.add(i);
         }
       }
-      if (!errMsg) {
-        for (const rowId of deletedIndices) {
-          const where = buildRowWhere(rowId);
-          if (!where) continue;
-          const sql = dialect.buildDelete(tableRef, where);
-          const res = await executeQuery(connectionId, sql, database);
-          if (res.error) {
-            errMsg = res.error;
-            break;
-          }
+      for (const [rowId, row] of modifiedRows) {
+        if (errMsg) break;
+        if (deletedIndices.has(rowId)) continue;
+        const setters = diffRowSetters(queryResult.rows[rowId], row, queryResult.columns);
+        if (Object.keys(setters).length === 0) continue;
+        const where = buildRowWhere(rowId);
+        if (!where) continue;
+        errMsg = (await run('update', dialect.buildUpdate(tableRef, setters, where), where)) ?? '';
+        if (!errMsg) {
           success++;
+          appliedModified.push(rowId);
         }
       }
-      if (errMsg) message.error(`${t('common.submitFailed')}: ${errMsg}`);
-      else {
-        message.success(`${t('common.submittedSuccessfully')} ${success}`);
-        setModifiedRows(new Map());
-        setDeletedIndices(new Set());
-        setNewRows([]);
-        clearEditHistory();
+      for (const rowId of deletedIndices) {
+        if (errMsg) break;
+        const where = buildRowWhere(rowId);
+        if (!where) continue;
+        errMsg = (await run('delete', dialect.buildDelete(tableRef, where), where)) ?? '';
+        if (!errMsg) {
+          success++;
+          appliedDeleted.push(rowId);
+        }
       }
     } catch (err: unknown) {
-      message.error(`${t('common.submitFailed')}: ${getErrorMessage(err)}`);
+      errMsg = getErrorMessage(err);
+    }
+
+    if (errMsg) message.error(`${t('common.submitFailed')}: ${errMsg}`);
+    else message.success(`${t('common.submittedSuccessfully')} ${success}`);
+
+    // 没执行的编辑留在网格里（连同撤销历史），落库的不能再撤销
+    if (errMsg) {
+      if (doneNew.size > 0) setNewRows((prev) => prev.filter((_, i) => !doneNew.has(i)));
+      if (appliedModified.length > 0) {
+        setModifiedRows((prev) => {
+          const next = new Map(prev);
+          for (const rowId of appliedModified) next.delete(rowId);
+          return next;
+        });
+        for (const rowId of appliedModified) removeEditHistoryByRowId(String(rowId));
+      }
+      if (appliedDeleted.length > 0) {
+        setDeletedIndices((prev) => {
+          const next = new Set(prev);
+          for (const rowId of appliedDeleted) next.delete(rowId);
+          return next;
+        });
+      }
+    } else {
+      setModifiedRows(new Map());
+      setDeletedIndices(new Set());
+      setNewRows([]);
+      clearEditHistory();
     }
   }, [
+    isEditable,
+    tableParts,
     connectionId,
-    tableName,
     primaryKeyCols,
     modifiedRows,
     deletedIndices,
@@ -527,6 +554,8 @@ export const ResultGrid = memo(function ResultGrid({
     message,
     t,
     buildRowWhere,
+    removeEditHistoryByRowId,
+    clearEditHistory,
   ]);
 
   // 撤销
@@ -614,8 +643,8 @@ export const ResultGrid = memo(function ResultGrid({
     () =>
       Array.from(selectedIndices)
         .filter((i) => i < allRows.length)
-        .map((i) => queryResult.columns.map((c) => allRows[i][c])),
-    [selectedIndices, allRows, queryResult.columns]
+        .map((i) => columnIds.map((id) => allRows[i][id])),
+    [selectedIndices, allRows, columnIds]
   );
   const openExportDialog = useCallback((format: string) => {
     setExportDialog({ open: true, format: format as ExportFormat });
@@ -781,6 +810,8 @@ export const ResultGrid = memo(function ResultGrid({
         context={{
           dbType,
           tableName: tableName ?? undefined,
+          // 复制出的 INSERT / UPDATE / DELETE 要写回 SQL 里指定的那张表，不是当前库里的同名表
+          tableRef: tableParts ? buildResultSetTableRef(tableParts, database, dbType) : undefined,
           database,
           columns: tableColumns,
           queryColumns: queryResult.columns,

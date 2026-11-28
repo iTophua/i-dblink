@@ -1,5 +1,6 @@
-import type { ColumnInfo } from '../../types/api';
+import type { ColumnInfo, QueryResult } from '../../types/api';
 import { getDialect } from '../../utils/sqlDialects';
+import type { SqlDialect } from '../../utils/sqlDialects';
 
 export const DEFAULT_MARKER = Symbol('DEFAULT');
 
@@ -18,6 +19,55 @@ export function isSameEditValue(a: unknown, b: unknown): boolean {
   if (aNull && bNull) return true;
   if (aNull || bNull) return false;
   return String(a) === String(b);
+}
+
+/**
+ * 主键列在 WHERE 里的字面量。BIGINT 等大整数以后端字符串形式到达（超出 JS 安全整数范围的
+ * 数字会被取整），整数列要写裸数字：字符串与数值列比较在部分库走浮点转换，19 位 ID 会失配。
+ */
+export function primaryKeyLiteral(
+  dialect: SqlDialect,
+  col: { data_type?: string },
+  value: unknown
+): string {
+  if (
+    typeof value === 'string' &&
+    /^-?\d+$/.test(value) &&
+    /int|decimal|numeric|number|serial|identity/i.test(col.data_type || '')
+  ) {
+    return value;
+  }
+  return dialect.escapeValue(value);
+}
+
+/** 网格列 id：重名列按出现次序编号（id、id#2 …）。行对象以列 id 为键，重名会互相覆盖 */
+export function uniqueColumnIds(names: string[]): string[] {
+  const seen = new Map<string, number>();
+  return names.map((name) => {
+    const count = (seen.get(name) ?? 0) + 1;
+    seen.set(name, count);
+    return count === 1 ? name : `${name}#${count}`;
+  });
+}
+
+/**
+ * 一行里真正改动的列。按值比较而不是按引用：数字 5 与编辑框回传的 "5" 视为未改动；
+ * null → '' 是改动（空串与 NULL 是两个值，不能因为字符串化后「看起来一样」就丢掉）。
+ */
+export function diffRowSetters(
+  original: unknown[] | undefined,
+  current: unknown[],
+  columns: string[]
+): Record<string, unknown> {
+  const setters: Record<string, unknown> = {};
+  columns.forEach((column, i) => {
+    const cur = current[i];
+    const orig = original?.[i];
+    const bothNull = cur == null && orig == null;
+    const sameText = cur != null && orig != null && String(cur) === String(orig);
+    if (!bothNull && !sameText) setters[column] = cur;
+  });
+  return setters;
 }
 
 export interface FilterCondition {
@@ -246,4 +296,65 @@ export function buildCountQuery(
   const tableRef = dialect.buildTableRef(tableName, database);
   const whereToUse = overrideWhere !== undefined ? overrideWhere : whereClause;
   return dialect.buildCountQuery(tableRef, whereToUse || undefined);
+}
+
+/**
+ * 网格编辑器关闭时上报的值；返回 undefined 表示取消（用户没动过编辑框）。
+ *
+ * Glide 关闭编辑器时不比较新旧值、一律回调：NULL 格子的编辑框本来就是空的，
+ * 点进去再点走会上报成「改成了空串」。所以「没动过」必须按取消处理，不能靠上层比对新旧值。
+ */
+export function editorCommitValue(
+  isNumberCell: boolean,
+  text: string,
+  touched: boolean
+): string | number | undefined {
+  if (!touched) return undefined;
+  if (isNumberCell) {
+    // 清空数值格 = 置 NULL（数值列写不了空串）；不是数字的原文透传，
+    // 由数据库报错，而不是变成 NaN 写进去
+    return text.trim() === '' ? 'NULL' : Number.isFinite(Number(text)) ? Number(text) : text;
+  }
+  // 文本格原样上报：'' 是用户清空的空串，'NULL' 由上层解析为空值
+  return text;
+}
+
+export type EditQueryRunner = (
+  connectionId: string,
+  sql: string,
+  database?: string
+) => Promise<QueryResult>;
+
+/**
+ * 执行一条结果集 / 表数据的编辑语句。返回 null 表示成功，否则是失败原因。
+ *
+ * 没报错但一行都没碰到（rows_affected === 0）同样算失败：主键值在界面上失真（BINARY(16)
+ * 显示成 [BLOB: n bytes]、浮点被取整）、或数据已被别的会话改掉时，WHERE 一行都匹配不上，
+ * 以前照样报成功，编辑标记还被清掉，用户以为已经保存。
+ *
+ * UPDATE 的 0 行有歧义：MySQL 默认只数「值真的变了」的行，新值与原值相同也是 0。
+ * 所以回头查一下这一行还在不在——在就说明只是没变化。
+ */
+export async function runEditStatement(
+  exec: EditQueryRunner,
+  connectionId: string,
+  database: string | undefined,
+  kind: 'insert' | 'update' | 'delete',
+  sql: string,
+  locate: { tableRef: string; where: string },
+  noRowMatched: string
+): Promise<string | null> {
+  const res = await exec(connectionId, sql, database);
+  if (res.error) return res.error;
+  // 没有影响行数信息（驱动不回报）时不判，只认明确的 0
+  if (kind === 'insert' || res.rows_affected !== 0) return null;
+  if (kind === 'delete') return noRowMatched;
+  // 用 COUNT 而不是 LIMIT 1：SQL Server / Oracle / 达梦不支持 LIMIT
+  const check = await exec(
+    connectionId,
+    `SELECT COUNT(*) FROM ${locate.tableRef} WHERE ${locate.where}`,
+    database
+  );
+  if (check.error) return noRowMatched;
+  return Number(check.rows?.[0]?.[0] ?? 0) > 0 ? null : noRowMatched;
 }

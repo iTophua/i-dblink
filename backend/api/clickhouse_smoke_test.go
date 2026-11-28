@@ -45,7 +45,7 @@ func TestClickHouseSmoke(t *testing.T) {
 	defer cancel()
 
 	// 1. 事务守卫：CH 必须明确拒绝交互式事务
-	err = mgr.BeginTransaction(connID, "smoke")
+	err = mgr.BeginTransaction(connID, "smoke", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not support interactive transactions")
 

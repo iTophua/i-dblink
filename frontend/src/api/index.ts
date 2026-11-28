@@ -606,8 +606,12 @@ export const api = {
     await MaintainTable(connectionId, tableName, operation, database ?? null);
   },
 
-  async beginTransaction(connectionId: string, sessionId: string): Promise<void> {
-    await BeginTransaction(connectionId, sessionId);
+  /**
+   * database：事务开在这个库的连接池上（空 = 连接默认库）。事务创建后不再变，
+   * 之后同会话的语句必须带同一个库，带别的库会被后端拒绝
+   */
+  async beginTransaction(connectionId: string, sessionId: string, database = ''): Promise<void> {
+    await BeginTransaction(connectionId, sessionId, database);
   },
 
   /** 返回是否确有事务被提交/回滚（false = 没有等待中的事务，可能已被超时回滚） */

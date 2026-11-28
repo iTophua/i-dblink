@@ -168,7 +168,7 @@ func (f *smokeFixture) count(t *testing.T, exec Executor) int {
 
 func (f *smokeFixture) sessionExec(t *testing.T, session string) Executor {
 	t.Helper()
-	exec, err := f.manager.GetExecutorForSession(f.connID, "", session)
+	exec, err := f.manager.GetExecutorForSession(f.connID, "", session, false)
 	require.NoError(t, err)
 	return exec
 }
@@ -176,8 +176,8 @@ func (f *smokeFixture) sessionExec(t *testing.T, session string) Executor {
 // runSessionIsolation 两个会话同时开着事务、交叉读写：各自的提交 / 回滚只影响自己
 func runSessionIsolation(t *testing.T, target smokeDB) {
 	f := newSmokeFixture(t, target)
-	require.NoError(t, f.manager.BeginTransaction(f.connID, "tab-a"))
-	require.NoError(t, f.manager.BeginTransaction(f.connID, "tab-b"))
+	require.NoError(t, f.manager.BeginTransaction(f.connID, "tab-a", ""))
+	require.NoError(t, f.manager.BeginTransaction(f.connID, "tab-b", ""))
 	a, b := f.sessionExec(t, "tab-a"), f.sessionExec(t, "tab-b")
 
 	f.exec(t, a, 1, "from-a")
@@ -227,7 +227,7 @@ func runNamedSessionIsolation(t *testing.T, target smokeDB) {
 	f := newSmokeFixture(t, target)
 	sessions := []string{"sql-1730000000000-ab12cd", "mcp", "__import__"}
 	for _, s := range sessions {
-		require.NoError(t, f.manager.BeginTransaction(f.connID, s))
+		require.NoError(t, f.manager.BeginTransaction(f.connID, s, ""))
 		f.exec(t, f.sessionExec(t, s), len(s), "session-"+s)
 	}
 	// 事务进行中别的连接（连接 ID）不受影响
@@ -254,11 +254,11 @@ func runConcurrentSessions(t *testing.T, target smokeDB) {
 		go func(i int) {
 			defer wg.Done()
 			session := fmt.Sprintf("tab-%d", i)
-			if err := f.manager.BeginTransaction(f.connID, session); err != nil {
+			if err := f.manager.BeginTransaction(f.connID, session, ""); err != nil {
 				errs <- err
 				return
 			}
-			exec, err := f.manager.GetExecutorForSession(f.connID, "", session)
+			exec, err := f.manager.GetExecutorForSession(f.connID, "", session, false)
 			if err != nil {
 				errs <- err
 				return
@@ -305,7 +305,7 @@ func runWatchdogRollback(t *testing.T, target smokeDB) {
 	txWatchdogTimeout = 400 * time.Millisecond
 	t.Cleanup(func() { txWatchdogTimeout = prev })
 
-	require.NoError(t, f.manager.BeginTransaction(f.connID, "watched"))
+	require.NoError(t, f.manager.BeginTransaction(f.connID, "watched", ""))
 	f.exec(t, f.sessionExec(t, "watched"), 1, "should-vanish")
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -315,13 +315,18 @@ func runWatchdogRollback(t *testing.T, target smokeDB) {
 	assert.False(t, f.manager.HasTransaction(f.connID, "watched"), "watchdog must release the timed-out tx")
 	assert.Equal(t, 0, f.outsideRows(t), "timed-out tx must have been rolled back")
 
+	// 回收之后，同会话的语句不能悄悄变成自动提交（调用方多半还以为在事务里）
+	_, execErr := f.manager.GetExecutorForSession(f.connID, "", "watched", false)
+	require.Error(t, execErr, "a session that lost its tx must not fall back to autocommit")
+	assert.Equal(t, 0, f.outsideRows(t))
+
 	// 被回滚后再提交：如实返回「没有待提交的事务」，不报错
 	active, err := f.manager.CommitTransaction(f.connID, "watched")
 	require.NoError(t, err)
 	assert.False(t, active)
 
 	// 同一会话马上开新事务：槽位已被看门狗释放，开得了、写得进、提交后生效
-	require.NoError(t, f.manager.BeginTransaction(f.connID, "watched"))
+	require.NoError(t, f.manager.BeginTransaction(f.connID, "watched", ""))
 	f.exec(t, f.sessionExec(t, "watched"), 2, "fresh")
 	assert.True(t, f.manager.HasTransaction(f.connID, "watched"), "new tx on the same session must be alive")
 	active, err = f.manager.CommitTransaction(f.connID, "watched")
@@ -330,9 +335,9 @@ func runWatchdogRollback(t *testing.T, target smokeDB) {
 	assert.Equal(t, 1, f.outsideRows(t))
 
 	// 换一个会话也开一个：各自有各自的看门狗，互不影响
-	require.NoError(t, f.manager.BeginTransaction(f.connID, "watched"), "same session reused after watchdog")
+	require.NoError(t, f.manager.BeginTransaction(f.connID, "watched", ""), "same session reused after watchdog")
 	f.exec(t, f.sessionExec(t, "watched"), 3, "again")
-	require.NoError(t, f.manager.BeginTransaction(f.connID, "other"))
+	require.NoError(t, f.manager.BeginTransaction(f.connID, "other", ""))
 	f.exec(t, f.sessionExec(t, "other"), 4, "other")
 	for _, session := range []string{"watched", "other"} {
 		active, err := f.manager.CommitTransaction(f.connID, session)
@@ -342,7 +347,7 @@ func runWatchdogRollback(t *testing.T, target smokeDB) {
 	assert.Equal(t, 3, f.outsideRows(t))
 
 	// 事务里没提交的写入，在看门狗回滚后对自动提交的连接完全不可见
-	require.NoError(t, f.manager.BeginTransaction(f.connID, "watched"))
+	require.NoError(t, f.manager.BeginTransaction(f.connID, "watched", ""))
 	f.exec(t, f.sessionExec(t, "watched"), 5, "ghost")
 	for f.manager.HasTransaction(f.connID, "watched") {
 		time.Sleep(20 * time.Millisecond)
@@ -356,6 +361,7 @@ func TestRealMySQLSessionTransactions(t *testing.T) {
 	runNamedSessionIsolation(t, target)
 	runConcurrentSessions(t, target)
 	runWatchdogRollback(t, target)
+	runTxBoundToDatabase(t, target, "idblink_compare_a")
 }
 
 func TestRealPostgresSessionTransactions(t *testing.T) {
@@ -364,6 +370,73 @@ func TestRealPostgresSessionTransactions(t *testing.T) {
 	runNamedSessionIsolation(t, target)
 	runConcurrentSessions(t, target)
 	runWatchdogRollback(t, target)
+	// PG 的第二个库由测试自己建删（MySQL 那边 testuser 没有建库权限，用初始化脚本建好的库）
+	otherDB := fmt.Sprintf("idblink_tx_other_%d", time.Now().UnixNano())
+	createPGSmokeDatabase(t, target, otherDB)
+	runTxBoundToDatabase(t, target, otherDB)
+}
+
+// createPGSmokeDatabase 建一个临时库，用例结束后删掉。要在 newSmokeFixture 之前调用：
+// 清理按注册的逆序执行，删库必须排在连接池全部关闭之后
+func createPGSmokeDatabase(t *testing.T, target smokeDB, name string) {
+	t.Helper()
+	run := func(sqlText string) {
+		manager := NewManager()
+		connID := "tx-smoke-pg-admin"
+		require.NoError(t, manager.Connect(connID, target.args))
+		defer manager.Disconnect(connID)
+		pool, err := manager.GetExecutor(connID, "")
+		require.NoError(t, err)
+		_, err = pool.ExecContext(context.Background(), sqlText)
+		require.NoError(t, err)
+	}
+	run("CREATE DATABASE " + name)
+	t.Cleanup(func() { run("DROP DATABASE IF EXISTS " + name) })
+}
+
+// runTxBoundToDatabase 手动事务开在会话选中的库上，而不是连接的默认库。
+// 此前事务固定开在默认库的连接池上，选了别的库的查询 Tab 在手动模式下会把
+// 不带库名的语句写到默认库去。两个库里各建一张同名表：行只能出现在选中的那个库里。
+func runTxBoundToDatabase(t *testing.T, target smokeDB, otherDB string) {
+	f := newSmokeFixture(t, target)
+	ctx := context.Background()
+
+	otherPool, err := f.manager.GetExecutor(f.connID, otherDB)
+	require.NoError(t, err)
+	_, err = otherPool.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (id INT PRIMARY KEY, v VARCHAR(32))", f.table))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = otherPool.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", f.table))
+	})
+	countOther := func() int {
+		rows, err := otherPool.QueryContext(ctx, "SELECT id FROM "+f.table)
+		require.NoError(t, err)
+		defer rows.Close()
+		n := 0
+		for rows.Next() {
+			n++
+		}
+		require.NoError(t, rows.Err())
+		return n
+	}
+
+	require.NoError(t, f.manager.BeginTransaction(f.connID, "tab", otherDB))
+	tx, err := f.manager.GetExecutorForSession(f.connID, otherDB, "tab", true)
+	require.NoError(t, err)
+	f.exec(t, tx, 1, "selected-db")
+
+	assert.Equal(t, 0, countOther(), "uncommitted row must be invisible")
+	assert.Equal(t, 0, f.outsideRows(t))
+
+	// 带默认库（或不带库）来的同会话语句：不能进这个事务
+	_, err = f.manager.GetExecutorForSession(f.connID, "", "tab", false)
+	require.Error(t, err)
+
+	active, err := f.manager.CommitTransaction(f.connID, "tab")
+	require.NoError(t, err)
+	assert.True(t, active)
+	assert.Equal(t, 1, countOther(), "the row must land in the database the session selected")
+	assert.Equal(t, 0, f.outsideRows(t), "the connection's default database must stay untouched")
 }
 
 // 真实库没开开关时，用例代码在 SQLite 上至少要能跑起来（否则长期没人开开关，
@@ -378,7 +451,7 @@ func TestRealNamedSessionFallbackOnSQLite(t *testing.T) {
 	})
 	sessions := []string{"tab-1", "mcp", "__import__"}
 	for _, s := range sessions {
-		require.NoError(t, f.manager.BeginTransaction(f.connID, s))
+		require.NoError(t, f.manager.BeginTransaction(f.connID, s, ""))
 		for _, other := range sessions {
 			assert.Equal(t, other == s, f.manager.HasTransaction(f.connID, other), "session %q vs %q", s, other)
 		}
