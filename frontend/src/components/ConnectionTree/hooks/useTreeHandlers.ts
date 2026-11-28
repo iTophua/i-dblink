@@ -1,6 +1,8 @@
 import { useCallback, useRef } from 'react';
 import type { Connection } from '../../../stores/appStore';
 import { parseTreeKey } from '../utils/treeKeyParser';
+import type { ParsedTreeKey } from '../utils/treeKeyParser';
+import { qualifiedTableName } from '../../../utils/qualifiedName';
 
 interface TreeHandlerCallbacks {
   onExpandKeys: (keys: string[]) => void;
@@ -30,6 +32,18 @@ export function useTreeHandlers(
 ) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 节点 key 里带着 schema：打开、选中表时拼成带 schema 的名字（PG 系、SQL Server 认）。
+  // 不带的话数据页按 search_path 找同名表，可能落到别的 schema 的表上
+  const objectName = useCallback(
+    (parsed: ParsedTreeKey): string =>
+      qualifiedTableName(
+        parsed.name ?? '',
+        parsed.schema,
+        connections.find((c) => c.id === parsed.connectionId)?.db_type
+      ),
+    [connections]
+  );
+
   const handleTableClick = useCallback(
     (tableName: string, database?: string, schema?: string) => {
       if (clickTimerRef.current) {
@@ -52,12 +66,12 @@ export function useTreeHandlers(
       const parsed = parseTreeKey(key);
 
       if (parsed.type === 'table' && parsed.connectionId && parsed.database) {
-        callbacks.onTableOpen(parsed.name!, parsed.database);
+        callbacks.onTableOpen(objectName(parsed), parsed.database);
       } else if (parsed.type === 'view' && parsed.connectionId && parsed.database) {
         if (callbacks.onViewOpen) {
-          callbacks.onViewOpen(parsed.name!, parsed.database);
+          callbacks.onViewOpen(objectName(parsed), parsed.database);
         } else {
-          callbacks.onTableOpen(parsed.name!, parsed.database);
+          callbacks.onTableOpen(objectName(parsed), parsed.database);
         }
       } else if (parsed.type === 'database' && parsed.connectionId && parsed.database) {
         const dbKey = `db::${parsed.connectionId}::${parsed.database}`;
@@ -108,7 +122,7 @@ export function useTreeHandlers(
         }
       }
     },
-    [connections, callbacks, refs]
+    [connections, callbacks, refs, objectName]
   );
 
   const handleExpand = useCallback(
@@ -199,11 +213,11 @@ export function useTreeHandlers(
 
       if (parsed.type === 'table' && parsed.connectionId && parsed.database) {
         callbacks.onSelect(parsed.connectionId);
-        callbacks.onTableSelect(parsed.name!, parsed.database);
+        callbacks.onTableSelect(objectName(parsed), parsed.database);
         callbacks.onObjectTypeSelect?.('table', parsed.database, parsed.schema);
       } else if (parsed.type === 'view' && parsed.connectionId && parsed.database) {
         callbacks.onSelect(parsed.connectionId);
-        callbacks.onTableSelect(parsed.name!, parsed.database);
+        callbacks.onTableSelect(objectName(parsed), parsed.database);
         callbacks.onObjectTypeSelect?.('view', parsed.database, parsed.schema);
       } else if (parsed.type === 'schema' && parsed.connectionId && parsed.database && parsed.schema) {
         callbacks.onSelect(parsed.connectionId);
@@ -230,7 +244,7 @@ export function useTreeHandlers(
         }
       }
     },
-    [connections, callbacks]
+    [connections, callbacks, objectName]
   );
 
   return {

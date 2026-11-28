@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { TableOutlined, PlayCircleOutlined, SwapOutlined } from '@ant-design/icons';
 import type { TableInfo } from '../../../types/api';
 import { TABLE_NODE_STYLE, formatRowCount } from '../utils/tableTypeHelpers';
+import { qualifiedTableName } from '../../../utils/qualifiedName';
 import { QuickActionButton } from './QuickActionButton';
 import { HighlightText } from './HighlightText';
 
@@ -13,6 +14,8 @@ interface TableNodeProps {
   database: string;
   table: TableInfo;
   schema?: string;
+  /** 连接的库类型：决定表名要不要带 schema（PG 系、SQL Server 要） */
+  dbType?: string;
   selectedTableId: string | null;
   searchQuery?: string;
   onTableClick: (tableName: string, database: string, schema?: string) => void;
@@ -27,6 +30,7 @@ export const TableNode = React.memo<TableNodeProps>(
     database,
     table,
     schema,
+    dbType,
     selectedTableId,
     searchQuery,
     onTableClick,
@@ -36,7 +40,10 @@ export const TableNode = React.memo<TableNodeProps>(
   }) => {
     const { t } = useTranslation();
     const [hovered, setHovered] = useState(false);
-    const isSelected = selectedTableId === table.table_name;
+    // 打开数据页、右键菜单都用带 schema 的名字：不带的话 PG 按 search_path 找同名表，
+    // 打开（和改）的可能是别的 schema 里的表
+    const fullName = qualifiedTableName(table.table_name, schema, dbType);
+    const isSelected = selectedTableId === table.table_name || selectedTableId === fullName;
     const backgroundColor = isSelected
       ? 'var(--row-selected-bg)'
       : hovered
@@ -44,7 +51,7 @@ export const TableNode = React.memo<TableNodeProps>(
         : 'transparent';
 
     return (
-      <Dropdown menu={onContextMenu(connId, table.table_name, database)} trigger={['contextMenu']}>
+      <Dropdown menu={onContextMenu(connId, fullName, database)} trigger={['contextMenu']}>
         <span
           style={{
             ...TABLE_NODE_STYLE,
@@ -56,11 +63,11 @@ export const TableNode = React.memo<TableNodeProps>(
           onMouseLeave={() => setHovered(false)}
           onClick={(e) => {
             e.stopPropagation();
-            onTableClick(table.table_name, database, schema);
+            onTableClick(fullName, database, schema);
           }}
           onDoubleClick={(e) => {
             e.stopPropagation();
-            onTableOpen(table.table_name, database);
+            onTableOpen(fullName, database);
           }}
           data-testid={`table-node-${table.table_name}`}
         >
@@ -108,7 +115,7 @@ export const TableNode = React.memo<TableNodeProps>(
                 visible={hovered}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onTableOpen(table.table_name, database);
+                  onTableOpen(fullName, database);
                 }}
               />
             </>

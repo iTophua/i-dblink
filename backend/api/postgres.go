@@ -443,24 +443,47 @@ func postgresGetRoutines(ctx context.Context, dbConn db.Executor, database *stri
 	return result, rows.Err()
 }
 
-func postgresGetRoutineBody(ctx context.Context, dbConn db.Executor, database, routineName, routineType string) (string, error) {
+// postgresGetRoutineBody 取过程 / 函数的完整定义：pg_get_functiondef 给出可直接执行的
+// CREATE OR REPLACE 语句（information_schema.routines.routine_definition 只是函数体，对过程
+// 还是 NULL）。名字可以带 schema（schema.name）；不带时优先当前 schema，再按名字在其余
+// schema 里找——此前把库名当 schema 传进来，PG 上一律查不到
+func postgresGetRoutineBody(ctx context.Context, dbConn db.Executor, routineName, routineType string) (string, error) {
+	schema, name := "", routineName
+	if qualifier, bare := splitQualifiedTableName(routineName); qualifier != "" {
+		schema, name = qualifier, bare
+	}
+
+	// 聚合函数不能 pg_get_functiondef；过程没有返回值类型（pg_get_function_result 为 NULL）。
+	// 不查 prokind / proisagg：前者 PG 11 以前没有，后者 PG 11 起删掉了
 	var def sql.NullString
-	query := `SELECT routine_definition FROM information_schema.routines WHERE routine_schema = $1 AND routine_name = $2 AND routine_type = $3`
-	err := dbConn.QueryRowContext(ctx, query, database, routineName, routineType).Scan(&def)
+	err := dbConn.QueryRowContext(ctx, `
+		SELECT pg_catalog.pg_get_functiondef(p.oid)
+		FROM pg_catalog.pg_proc p
+		JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+		WHERE p.proname = $1
+			AND ($2 = '' OR n.nspname = $2)
+			AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			AND n.nspname NOT LIKE 'pg_toast%'
+			AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_aggregate a WHERE a.aggfnoid = p.oid)
+			AND (($3 = 'PROCEDURE') = (pg_catalog.pg_get_function_result(p.oid) IS NULL))
+		ORDER BY (n.nspname = current_schema()) DESC, n.nspname
+		LIMIT 1`, name, schema, routineType).Scan(&def)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
 	if err != nil {
 		return "", err
-	}
-	if !def.Valid {
-		return "", nil
 	}
 	return def.String, nil
 }
 
 func postgresGetSequences(ctx context.Context, dbConn db.Executor, database *string) ([]models.SequenceInfo, error) {
-	query := `SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
+	// 序列在哪个 schema 里都要列出来（此前只看 public）；名字带上 schema，重置时才找得到
+	query := `SELECT sequence_schema || '.' || sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
 		FROM information_schema.sequences
-		WHERE sequence_schema = 'public'
-		ORDER BY sequence_name`
+		WHERE sequence_schema NOT IN ('pg_catalog', 'information_schema')
+			AND sequence_schema NOT LIKE 'pg_toast%'
+		ORDER BY sequence_schema, sequence_name`
 	rows, err := dbConn.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("postgresGetSequences query failed: %w", err)
@@ -485,9 +508,8 @@ func postgresGetSequences(ctx context.Context, dbConn db.Executor, database *str
 }
 
 func postgresResetSequence(ctx context.Context, dbConn db.Executor, sequenceName string, value int64) error {
-	// Validate sequence name to prevent SQL injection
-	sanitized := strings.ReplaceAll(sequenceName, "'", "''")
-	query := fmt.Sprintf("ALTER SEQUENCE %s RESTART WITH %d", sanitized, value)
+	// 名字按标识符转义（列表给的是 schema.序列）：只替换单引号挡不住带引号的名字
+	query := fmt.Sprintf("ALTER SEQUENCE %s RESTART WITH %d", buildTableRef(sequenceName, "", "postgresql"), value)
 	_, err := dbConn.ExecContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("postgresResetSequence failed: %w", err)

@@ -43,6 +43,7 @@ import { useAppStore } from '../stores/appStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { api, EventsOn } from '../api';
 import { getErrorMessage } from '../utils/getErrorMessage';
+import { qualifiedTableName } from '../utils/qualifiedName';
 import { injectSqlToEditor, readSqlFromEditor } from '../utils/activeSqlRegistry';
 import type { SqlInjectMode } from '../utils/activeSqlRegistry';
 import { useConnectionManager } from './MainLayout/hooks/useConnectionManager';
@@ -392,7 +393,8 @@ function MainLayoutComponent() {
     }
 
     for (const [connId, dbs] of Object.entries(connMgr.connectionDatabases || {})) {
-      const connName = connMgr.connections.find((c) => c.id === connId)?.name;
+      const conn = connMgr.connections.find((c) => c.id === connId);
+      const connName = conn?.name;
       for (const db of dbs) {
         for (const tb of db.tables || []) {
           const isView = (tb.table_type || '').toUpperCase() === 'VIEW';
@@ -405,7 +407,12 @@ function MainLayoutComponent() {
             action: () => {
               connMgr.setSelectedConnectionId(connId);
               connMgr.setSelectedDatabase(db.database);
-              tabMgr.setTableToOpen({ name: tb.table_name, database: db.database });
+              // 打开表要带 schema（PG 系、SQL Server）：不带的话数据页按 search_path
+              // 找同名表，可能落到别的 schema 的表上
+              tabMgr.setTableToOpen({
+                name: qualifiedTableName(tb.table_name, tb.schema, conn?.db_type),
+                database: db.database,
+              });
             },
           });
         }

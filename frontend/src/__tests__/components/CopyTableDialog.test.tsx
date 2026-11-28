@@ -219,6 +219,87 @@ describe('CopyTableDialog', () => {
       'common.copyTable.copyFailed: common.copyTable.dataCopyFailed: common.copyTable.binaryCrossDatabase'
     );
   });
+
+  // 从树上打开 PG 表时源表名带 schema（app.users）。DDL 里是 "app"."users" 两段：拿整串去改写
+  // 对不上，建出来的还是源表自己；表引用也得按段加引号
+  it('PG 源表带 schema：DDL 只改表名那一段，目标表落在同一个 schema', async () => {
+    mockGetTableDDL.mockResolvedValue([
+      'CREATE TABLE "app"."users" (\n  "id" integer NOT NULL,\n  CONSTRAINT "users_pkey" PRIMARY KEY ("id")\n);',
+    ]);
+    await openDialog({
+      dbType: 'postgresql',
+      sourceTable: 'app.users',
+      sourceDatabase: 'appdb',
+      databases: ['appdb'],
+    });
+
+    await copyWithData();
+
+    expect(mockExecuteDDL).toHaveBeenCalledWith(
+      'c1',
+      'CREATE TABLE "app"."users_copy" (\n  "id" integer NOT NULL,\n  CONSTRAINT "users_copy_pkey" PRIMARY KEY ("id")\n);',
+      'appdb',
+      ''
+    );
+    expect(mockExecuteQuery).toHaveBeenCalledWith(
+      'c1',
+      'INSERT INTO "app"."users_copy" SELECT * FROM "app"."users"',
+      'appdb',
+      ...BINDING_TAIL
+    );
+    expect(message.success).toHaveBeenCalledTimes(1);
+  });
+
+  it('PG 跨库复制带 schema 的表：读取和插入都按段加引号', async () => {
+    await openDialog({
+      dbType: 'postgresql',
+      sourceTable: 'app.users',
+      sourceDatabase: 'appdb',
+      databases: ['appdb', 'otherdb'],
+    });
+    await pickDatabase('otherdb');
+    mockExecuteQuery.mockResolvedValueOnce({ columns: ['id'], rows: [[1]] });
+    mockExecuteQuery.mockResolvedValueOnce({ columns: [], rows: [], rows_affected: 1 });
+
+    await copyWithData();
+
+    expect(mockExecuteQuery).toHaveBeenNthCalledWith(
+      1,
+      'c1',
+      'SELECT * FROM "app"."users"',
+      'appdb',
+      ...BINDING_TAIL
+    );
+    expect(mockExecuteQuery).toHaveBeenNthCalledWith(
+      2,
+      'c1',
+      'INSERT INTO "app"."users_copy" ("id") VALUES (1)',
+      'otherdb',
+      ...BINDING_TAIL
+    );
+  });
+
+  // 只把 schema 改掉、表名不变（app.users → public.users）时 DDL 改写不出差别，
+  // 结果会是结构落错地方、数据那步再报错。同一个库里目标是源表自己时直接拦住
+  it('目标表和源表是同一张表：一条语句都不发', async () => {
+    await openDialog({
+      dbType: 'postgresql',
+      sourceTable: 'app.users',
+      sourceDatabase: 'appdb',
+      databases: ['appdb'],
+    });
+    fireEvent.change(screen.getByDisplayValue('app.users_copy'), {
+      target: { value: 'app.users' },
+    });
+
+    await copyWithData();
+
+    expect(mockExecuteDDL).not.toHaveBeenCalled();
+    expect(mockExecuteQuery).not.toHaveBeenCalled();
+    expect(message.error).toHaveBeenCalledWith(
+      'common.copyTable.copyFailed: common.copyTable.sameTable'
+    );
+  });
 });
 
 /** 在目标库下拉里选一项（antd 6：展开要点 input[role="combobox"]） */

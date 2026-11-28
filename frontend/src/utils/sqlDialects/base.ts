@@ -60,10 +60,42 @@ export abstract class BaseDialect implements SqlDialect {
     return `'${this.escapeStringValue(str)}'`;
   }
 
-  buildTableRef(tableName: string, schema?: string): string {
+  /**
+   * 把「限定部分.表名」拆成两段：恰好一个点、且两段都非空才算，其余返回 null
+   * （名字里本来带点的表不能被拆开）
+   */
+  protected splitQualifiedName(name: string): [qualifier: string, table: string] | null {
+    const dot = name.indexOf('.');
+    if (dot <= 0 || dot === name.length - 1 || name.indexOf('.', dot + 1) >= 0) {
+      return null;
+    }
+    return [name.slice(0, dot), name.slice(dot + 1)];
+  }
+
+  /**
+   * 表名里能不能带「schema.表」。只有 PG 系和 SQL Server 认：它们的限定部分是 schema，
+   * 和表名分属两层，不带 schema 时按 search_path 找同名表，可能落到别的 schema 的表上
+   */
+  protected acceptsQualifiedTableName(): boolean {
+    return false;
+  }
+
+  /**
+   * 表引用。「schema.表」按段加引号；库名能不能当限定部分由方言决定
+   * @param tableName 表名，认 schema 的库可以写成 schema.表
+   * @param database 调用方所在的库：MySQL 系当限定部分，PG 系 / SQL Server 忽略（库名不是 schema）
+   */
+  buildTableRef(tableName: string, database?: string): string {
+    if (this.acceptsQualifiedTableName()) {
+      const qualified = this.splitQualifiedName(tableName);
+      if (qualified) {
+        return `${this.escapeIdentifier(qualified[0])}.${this.escapeIdentifier(qualified[1])}`;
+      }
+      return this.escapeIdentifier(tableName);
+    }
     const table = this.escapeIdentifier(tableName);
-    if (schema) {
-      return `${this.escapeIdentifier(schema)}.${table}`;
+    if (database) {
+      return `${this.escapeIdentifier(database)}.${table}`;
     }
     return table;
   }

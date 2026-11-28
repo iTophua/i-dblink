@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { Tag, Spin, Button, Space, Tooltip, App, Dropdown } from 'antd';
 import { appModal } from '../utils/appModal';
+import { qualifiedTableName } from '../utils/qualifiedName';
 import { GlobalInput } from './GlobalInput';
 import { TableDetailSidebar } from './TableDetailSidebar';
 import { EnhancedEmptyState } from './LoadingStates';
@@ -109,10 +110,13 @@ export interface TableListProps {
 const TableGridCard = React.memo(
   function TableGridCard({
     table,
+    name,
     selected,
     onClick,
   }: {
     table: TableData;
+    /** 这张表对外用的名字：认 schema 的库带 schema（schema.表），其余库就是表名 */
+    name: string;
     selected: boolean;
     onClick: () => void;
   }) {
@@ -130,7 +134,7 @@ const TableGridCard = React.memo(
 
     return (
       <div
-        data-table-name={table.table_name}
+        data-table-name={name}
         onClick={onClick}
         className={`hoverable${selected ? ' is-selected' : ''}`}
         style={{
@@ -190,11 +194,14 @@ const TableGridCard = React.memo(
 const TableRow = React.memo(
   function TableRow({
     table,
+    name,
     selected,
     onClick,
     columns,
   }: {
     table: TableData;
+    /** 这张表对外用的名字：认 schema 的库带 schema（schema.表），其余库就是表名 */
+    name: string;
     selected: boolean;
     onClick: () => void;
     columns: ColumnDef[];
@@ -328,7 +335,7 @@ const TableRow = React.memo(
 
     return (
       <div
-        data-table-name={table.table_name}
+        data-table-name={name}
         onClick={onClick}
         className={`hoverable${selected ? ' is-selected' : ''}`}
         style={{
@@ -879,9 +886,18 @@ function TableListComponent({
     }, 300);
   };
 
+  // 表对外用的名字：PG 系、SQL Server 带 schema。选中、右键菜单里的打开 / 设计 / 复制 /
+  // 清空 / 删除 / 导出都拿它——不带 schema 的话后端按 search_path 找同名表，
+  // 操作的可能是一张别的表
+  const tableKey = useCallback(
+    (table: { table_name: string; schema?: string }) =>
+      qualifiedTableName(table.table_name, table.schema, dbType),
+    [dbType]
+  );
+
   const selectedTable = useMemo(
-    () => tables.find((t) => t.table_name === selectedRow),
-    [tables, selectedRow]
+    () => tables.find((t) => tableKey(t) === selectedRow),
+    [tables, selectedRow, tableKey]
   );
 
   const { filteredTables, tableCount, viewCount } = useMemo(() => {
@@ -917,29 +933,37 @@ function TableListComponent({
 
   const tableRowItems = useMemo(
     () =>
-      filteredTables.map((table) => (
-        <TableRow
-          key={table.schema ? `${table.schema}.${table.table_name}` : table.table_name}
-          table={table}
-          selected={selectedRow === table.table_name}
-          onClick={() => handleTableClickRef.current(table.table_name)}
-          columns={effectiveColumns}
-        />
-      )),
-    [filteredTables, selectedRow, effectiveColumns]
+      filteredTables.map((table) => {
+        const name = tableKey(table);
+        return (
+          <TableRow
+            key={table.schema ? `${table.schema}.${table.table_name}` : table.table_name}
+            table={table}
+            name={name}
+            selected={selectedRow === name}
+            onClick={() => handleTableClickRef.current(name)}
+            columns={effectiveColumns}
+          />
+        );
+      }),
+    [filteredTables, selectedRow, effectiveColumns, tableKey]
   );
 
   const tableGridItems = useMemo(
     () =>
-      filteredTables.map((table) => (
-        <TableGridCard
-          key={table.schema ? `${table.schema}.${table.table_name}` : table.table_name}
-          table={table}
-          selected={selectedRow === table.table_name}
-          onClick={() => handleTableClickRef.current(table.table_name)}
-        />
-      )),
-    [filteredTables, selectedRow]
+      filteredTables.map((table) => {
+        const name = tableKey(table);
+        return (
+          <TableGridCard
+            key={table.schema ? `${table.schema}.${table.table_name}` : table.table_name}
+            table={table}
+            name={name}
+            selected={selectedRow === name}
+            onClick={() => handleTableClickRef.current(name)}
+          />
+        );
+      }),
+    [filteredTables, selectedRow, tableKey]
   );
 
   // 表头在滚动容器外，须让出与行滚动条等宽的右侧空间保持列对齐（antd Table 同款实测方案）

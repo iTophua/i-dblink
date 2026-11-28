@@ -60,6 +60,51 @@ func supportsTableQualifier(dbType string) bool {
 	return false
 }
 
+// schemaQualifiedType 限定部分是 schema 的库（PG 系、SQL Server）。库名不能当限定符拼进
+// 表引用：PG 里没有「库.表」这种写法，拼上去只会报 schema 不存在；配上 IF EXISTS 就是
+// 什么都没删却提示成功
+func schemaQualifiedType(dbType string) bool {
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase", "sqlserver":
+		return true
+	}
+	return false
+}
+
+// tableQualifier 把请求里的表名定成「表名 + 限定部分」：
+//   - MySQL 系 / PG 系 / SQL Server：名字里带「限定部分.表名」就以它为准（MySQL 是库，
+//     其余是 schema）；PG 系 / SQL Server 没带时用请求里的 schema
+//   - 其余库：不拆，限定部分为空（名字里带点多半是表名本身）
+func tableQualifier(dbType, tableName string, reqSchema *string) (table, qualifier string) {
+	if !supportsTableQualifier(dbType) {
+		return tableName, ""
+	}
+	if qualifier, table = splitQualifiedTableName(tableName); qualifier != "" {
+		return table, qualifier
+	}
+	if schemaQualifiedType(dbType) && reqSchema != nil {
+		return tableName, *reqSchema
+	}
+	return tableName, ""
+}
+
+// databaseAsQualifier 拿库名当表引用的限定部分：PG 系 / SQL Server 不行（它们只认 schema），
+// 其余库照旧
+func databaseAsQualifier(dbType, database string) string {
+	if schemaQualifiedType(dbType) {
+		return ""
+	}
+	return database
+}
+
+// mysqlDatabaseArg MySQL 的元数据查询按库过滤：表名带「库.表」时用那个库，否则用请求里的库
+func mysqlDatabaseArg(reqDatabase *string, qualifier string) *string {
+	if qualifier != "" {
+		return &qualifier
+	}
+	return reqDatabase
+}
+
 // formatBytes 将字节数格式化为人类可读字符串
 func formatBytes(bytes sql.NullInt64) *string {
 	if !bytes.Valid {

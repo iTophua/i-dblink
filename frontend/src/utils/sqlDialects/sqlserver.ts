@@ -29,6 +29,12 @@ class SQLServerDialect extends BaseDialect implements SqlDialect {
     return 'GETDATE()';
   }
 
+  // SQL Server 的限定部分是 schema，只能来自表名里的「schema.表」。库名不能当限定符：
+  // 两段的 [库].[表] 会被当成 schema.表，报 schema 不存在
+  protected acceptsQualifiedTableName(): boolean {
+    return true;
+  }
+
   // ── 分页 ──────────────────────────────────────────────────────────────
 
   buildPaginationQuery(sql: string, options: PaginationOptions): string {
@@ -69,7 +75,7 @@ class SQLServerDialect extends BaseDialect implements SqlDialect {
     }
 
     const statements: string[] = [
-      `CREATE TABLE ${this.escapeIdentifier(tableName)} (\n${parts.join(',\n')}\n);`,
+      `CREATE TABLE ${this.buildTableRef(tableName)} (\n${parts.join(',\n')}\n);`,
     ];
 
     // 普通索引需要单独的 CREATE INDEX 语句
@@ -77,7 +83,7 @@ class SQLServerDialect extends BaseDialect implements SqlDialect {
       if (idx.type === 'INDEX') {
         const cols = idx.columns.map((c) => this.escapeIdentifier(c)).join(', ');
         statements.push(
-          `CREATE INDEX ${this.escapeIdentifier(idx.name)} ON ${this.escapeIdentifier(tableName)} (${cols});`
+          `CREATE INDEX ${this.escapeIdentifier(idx.name)} ON ${this.buildTableRef(tableName)} (${cols});`
         );
       }
     }
@@ -87,7 +93,7 @@ class SQLServerDialect extends BaseDialect implements SqlDialect {
 
   buildAlterTable(options: AlterTableOptions): string[] {
     const { tableName, columns, indexes, foreignKeys } = options;
-    const tableRef = this.escapeIdentifier(tableName);
+    const tableRef = this.buildTableRef(tableName);
     const statements: string[] = [];
 
     // 列变更

@@ -174,6 +174,7 @@ export function useTreeData({
                 database={database}
                 table={item}
                 schema={item.schema || folderSchema}
+                dbType={connections.find((c) => c.id === cId)?.db_type}
                 selectedTableId={selectedTableId}
                 searchQuery={searchText}
                 onTableClick={handlers.handleTableClick}
@@ -187,6 +188,7 @@ export function useTreeData({
                 database={database}
                 view={item}
                 schema={item.schema || folderSchema}
+                dbType={connections.find((c) => c.id === cId)?.db_type}
                 selectedTableId={selectedTableId}
                 searchQuery={searchText}
                 onTableClick={handlers.handleTableClick}
@@ -738,6 +740,8 @@ export function useTreeData({
                     connId={connId}
                     database={db.database}
                     table={table}
+                    schema={table.schema}
+                    dbType={connections.find((c) => c.id === connId)?.db_type}
                     selectedTableId={selectedTableId}
                     searchQuery={searchText}
                     onTableClick={handlers.handleTableClick}
@@ -809,6 +813,8 @@ export function useTreeData({
                     connId={connId}
                     database={db.database}
                     view={view}
+                    schema={view.schema}
+                    dbType={connections.find((c) => c.id === connId)?.db_type}
                     selectedTableId={selectedTableId}
                     searchQuery={searchText}
                     onTableClick={handlers.handleTableClick}

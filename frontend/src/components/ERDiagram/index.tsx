@@ -29,6 +29,8 @@ import type { ERDiagram as ERDiagramData } from '../../types/api';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import { startNewAIChat } from '../../services/aiChatHistory';
 import { useAIChatStore } from '../../stores/aiChatStore';
+import { useAppStore } from '../../stores/appStore';
+import { supportsSchemaQualifier } from '../../utils/qualifiedName';
 import { TableNode } from './TableNode';
 import { SelfLoopEdge } from './SelfLoopEdge';
 import {
@@ -161,6 +163,12 @@ function ERDiagramCanvas({ connectionId, database, onOpenTable }: ERDiagramProps
   const reactFlow = useReactFlow<TableFlowNode, Edge>();
   const instanceRef = useRef<ERFlowInstance | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const dbType = useAppStore(
+    (state) => state.connections.find((c) => c.id === connectionId)?.db_type
+  );
+  // 打开数据页用的名字：认 schema 的库（PG 系、SQL Server）保留 id 里的 schema——不带的话
+  // 数据页按 search_path 找同名表，可能落到别的 schema 的表上；其余库照旧只用表名
+  const openTableName = (id: string) => (supportsSchemaQualifier(dbType) ? id : bareTableName(id));
 
   /** 最近一次加载的结果；key 记录它对应哪次请求（连接 + 库 + 刷新序号） */
   const [loaded, setLoaded] = useState<{
@@ -449,7 +457,7 @@ function ERDiagramCanvas({ connectionId, database, onOpenTable }: ERDiagramProps
           <span className="er-selection" data-testid="er-selection">
             <span className="er-selection-name">{selectedTable.name}</span>
             {onOpenTable && (
-              <Button size="small" onClick={() => onOpenTable(bareTableName(selectedTable.id))}>
+              <Button size="small" onClick={() => onOpenTable(openTableName(selectedTable.id))}>
                 {t('common.erDiagram.openTable')}
               </Button>
             )}
@@ -527,7 +535,7 @@ function ERDiagramCanvas({ connectionId, database, onOpenTable }: ERDiagramProps
                 instanceRef.current = instance;
               }}
               onNodeClick={(_, node) => setSelectedId(node.id)}
-              onNodeDoubleClick={(_, node) => onOpenTable?.(bareTableName(node.id))}
+              onNodeDoubleClick={(_, node) => onOpenTable?.(openTableName(node.id))}
               onPaneClick={() => setSelectedId(null)}
               onEdgeClick={(_, edge) => setSelectedId(String(edge.source))}
               nodesConnectable={false}

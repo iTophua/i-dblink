@@ -5,6 +5,7 @@ import { api } from '../api';
 import { getErrorMessage } from '../utils/getErrorMessage';
 import { getDialect } from '../utils/sqlDialects';
 import { rewriteDDLForCopy } from '../utils/ddlCopy';
+import { splitSchemaQualifiedTable } from '../utils/qualifiedName';
 
 interface CopyTableDialogProps {
   open: boolean;
@@ -47,6 +48,17 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
       const copyType = values.copyType;
       const dialect = getDialect(dbType);
       const q = (name: string) => dialect.escapeIdentifier(name);
+      // 表引用：PG 系、SQL Server 的名字可以带 schema（schema.表），按段加引号
+      const ref = (name: string) => dialect.buildTableRef(name);
+      const sourceRef = ref(sourceTable);
+      const targetRef = ref(targetTable);
+      if (sameDatabase && targetRef === sourceRef) {
+        throw new Error(t('common.copyTable.sameTable'));
+      }
+      // DDL 改写按去掉 schema 的表名来：DDL 里是 "schema"."表" 两段，拿整串 schema.表 对不上。
+      // 目标表默认是 schema.表_copy，也就是落在源表所在的 schema 里
+      const sourceName = splitSchemaQualifiedTable(sourceTable, dbType)?.table ?? sourceTable;
+      const targetName = splitSchemaQualifiedTable(targetTable, dbType)?.table ?? targetTable;
 
       // 1. 复制结构：只改表名和约束 / 索引名，列名、注释原样保留
       const ddlStatements = await api.getTableDDL(connectionId, sourceTable, sourceDatabase);
@@ -54,7 +66,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
         if (stmt.trim()) {
           await api.executeDDL(
             connectionId,
-            rewriteDDLForCopy(stmt, sourceTable, targetTable).trim(),
+            rewriteDDLForCopy(stmt, sourceName, targetName).trim(),
             targetDatabase
           );
         }
@@ -67,7 +79,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
         try {
           if (sameDatabase) {
             // 同数据库：使用 INSERT INTO ... SELECT
-            const insertSql = `INSERT INTO ${q(targetTable)} SELECT * FROM ${q(sourceTable)}`;
+            const insertSql = `INSERT INTO ${targetRef} SELECT * FROM ${sourceRef}`;
             const res = await api.executeQuery(connectionId, insertSql, targetDatabase);
             if (res.error) throw new Error(res.error);
           } else if (dialect.dbType === 'mysql' && sourceDatabase && targetDatabase) {
@@ -79,7 +91,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
             // 跨数据库（PG 系等不能跨库查询）：先查询源表数据，再逐行插入目标表
             const result = await api.executeQuery(
               connectionId,
-              `SELECT * FROM ${q(sourceTable)}`,
+              `SELECT * FROM ${sourceRef}`,
               sourceDatabase
             );
             if (result.error) throw new Error(result.error);
@@ -93,7 +105,7 @@ const CopyTableDialog: React.FC<CopyTableDialogProps> = ({
             }
             for (let i = 0; i < rows.length; i++) {
               const valuesSql = rows[i].map((v: unknown) => dialect.escapeValue(v)).join(', ');
-              const insertSql = `INSERT INTO ${q(targetTable)} (${colNames.map((c) => q(c)).join(', ')}) VALUES (${valuesSql})`;
+              const insertSql = `INSERT INTO ${targetRef} (${colNames.map((c) => q(c)).join(', ')}) VALUES (${valuesSql})`;
               const res = await api.executeQuery(connectionId, insertSql, targetDatabase);
               if (res.error) {
                 throw new Error(

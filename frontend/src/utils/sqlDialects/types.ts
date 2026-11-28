@@ -94,8 +94,11 @@ export interface SqlDialect {
   /** 转义值 */
   escapeValue(value: unknown): string;
 
-  /** 构建表引用（支持 schema.table） */
-  buildTableRef(tableName: string, schema?: string): string;
+  /**
+   * 构建表引用。认 schema 的库（PG 系、SQL Server）表名可以写成 schema.表，按段加引号；
+   * 第二个参数是调用方所在的库，MySQL 系拿它当限定部分，PG 系 / SQL Server 不用（库名不是 schema）
+   */
+  buildTableRef(tableName: string, database?: string): string;
 
   /** 构建分页查询 */
   buildPaginationQuery(sql: string, options: PaginationOptions): string;

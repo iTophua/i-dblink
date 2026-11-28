@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"idblink/backend/db"
 )
@@ -22,13 +24,16 @@ func (h *Handler) GetTriggers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool, err := h.mgr.GetPool(req.ConnectionID)
+	exec, dbType, err := h.getExecAndType(req.ConnectionID, req.Database)
 	if err != nil {
 		writeJSONError(w, fmt.Sprintf("connection not found: %v", err))
 		return
 	}
 
-	triggers, err := getTriggers(pool, req.Database)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	triggers, err := getTriggers(ctx, exec, dbType, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -41,13 +46,13 @@ func (h *Handler) GetTriggers(w http.ResponseWriter, r *http.Request) {
 }
 
 // getTriggers 根据数据库类型获取触发器列表
-func getTriggers(pool *db.DBPool, database string) ([]map[string]interface{}, error) {
+func getTriggers(ctx context.Context, exec db.Executor, dbType, database string) ([]map[string]interface{}, error) {
 	var triggers []map[string]interface{}
-	db := pool.DB()
+	db := exec
 
-	switch pool.DbType {
+	switch dbType {
 	case "mysql", "mariadb":
-		rows, err := db.Query(
+		rows, err := db.QueryContext(ctx,
 			"SELECT TRIGGER_NAME, EVENT_MANIPULATION, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE, "+
 				"ACTION_TIMING, CREATED, ACTION_STATEMENT FROM information_schema.TRIGGERS"+
 				" WHERE TRIGGER_SCHEMA = ?",
@@ -72,23 +77,30 @@ func getTriggers(pool *db.DBPool, database string) ([]map[string]interface{}, er
 			}
 		}
 
-	case "postgresql", "highgo", "vastbase":
-		rows, err := db.Query(
-			"SELECT tgname, pg_get_triggerdef(oid), relname"+
-				" FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid"+
-				" WHERE NOT tgisinternal AND c.relnamespace = $1::regnamespace",
-			database,
-		)
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		// 触发器属于库，不按 schema 过滤，只排除系统 schema。此前把库名当 schema 传给
+		// $1::regnamespace，一律报「schema 不存在」；前端拿触发器和过程、函数一起
+		// Promise.all，它一失败，过程和函数的列表也跟着没了
+		rows, err := db.QueryContext(ctx, `
+			SELECT n.nspname, t.tgname, pg_get_triggerdef(t.oid), c.relname
+			FROM pg_catalog.pg_trigger t
+			JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+			JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+			WHERE NOT t.tgisinternal
+				AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+				AND n.nspname NOT LIKE 'pg_toast%'
+			ORDER BY n.nspname, c.relname, t.tgname`)
 		if err != nil {
 			return nil, fmt.Errorf("get triggers failed: %v", err)
 		}
 		defer rows.Close()
 
 		for rows.Next() {
-			var name, def, relname string
-			if err := rows.Scan(&name, &def, &relname); err == nil {
+			var schema, name, def, relname string
+			if err := rows.Scan(&schema, &name, &def, &relname); err == nil {
 				triggers = append(triggers, map[string]interface{}{
 					"name":       name,
+					"schema":     schema,
 					"definition": def,
 					"table_name": relname,
 				})
@@ -97,7 +109,7 @@ func getTriggers(pool *db.DBPool, database string) ([]map[string]interface{}, er
 
 	case "sqlite":
 		// SQLite 从 sqlite_master 获取触发器
-		rows, err := db.Query(
+		rows, err := db.QueryContext(ctx,
 			"SELECT name, sql FROM sqlite_master WHERE type='trigger'",
 		)
 		if err != nil {
@@ -115,9 +127,8 @@ func getTriggers(pool *db.DBPool, database string) ([]map[string]interface{}, er
 			}
 		}
 
-	case "dameng", "kingbase":
-		// 达梦/金仓
-		rows, err := db.Query(
+	case "dameng":
+		rows, err := db.QueryContext(ctx,
 			"SELECT object_name, text FROM user_objects WHERE object_type = 'TRIGGER'",
 		)
 		if err != nil {
@@ -136,7 +147,7 @@ func getTriggers(pool *db.DBPool, database string) ([]map[string]interface{}, er
 		}
 
 	case "sqlserver":
-		rows, err := db.Query(`
+		rows, err := db.QueryContext(ctx, `
 			SELECT t.name AS trigger_name,
 				OBJECT_NAME(t.parent_id) AS table_name,
 				m.definition
@@ -161,7 +172,7 @@ func getTriggers(pool *db.DBPool, database string) ([]map[string]interface{}, er
 		}
 
 	case "oracle":
-		rows, err := db.Query(`
+		rows, err := db.QueryContext(ctx, `
 			SELECT trigger_name, table_name, trigger_body
 			FROM user_triggers
 			ORDER BY trigger_name

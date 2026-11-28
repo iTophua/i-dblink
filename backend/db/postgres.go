@@ -6,7 +6,20 @@ import (
 	"net/url"
 )
 
+// postgresStatementTimeout 服务端语句超时（毫秒）。与上层的 30 分钟长操作上限、MySQL 的
+// readTimeout 对齐，改一处要一起改。此前是 30 秒：跑得久一点的查询、大 ALTER、导入批次
+// 都被服务端杀掉，界面上也改不了。
+//
+// 不设 lock_timeout（沿用服务器默认）：等锁是正常现象，由用户点「停止」取消。此前是
+// 10 秒——手动事务里另一处改同一行、DDL 排在长查询后面，都会莫名失败。
+const postgresStatementTimeoutMs = "1800000"
+
 func openPostgres(args ConnectArgs) (*sql.DB, error) {
+	return sql.Open("postgres", postgresDSN(args))
+}
+
+// postgresDSN 拼 PG 连接串
+func postgresDSN(args ConnectArgs) string {
 	sslMode := "disable"
 
 	dbName := args.Database
@@ -23,9 +36,8 @@ func openPostgres(args ConnectArgs) (*sql.DB, error) {
 		RawQuery: url.Values{
 			"sslmode":           {sslMode},
 			"application_name":  {"iDBLink"},
-			"connect_timeout":   {"10"},  // 拨号兜底超时，网络不通时避免长时间挂起
-			"statement_timeout": {"30000"}, // 30s,防止慢查询把 PG 拖死
-			"lock_timeout":      {"10000"}, // 10s,防止锁等待堆积
+			"connect_timeout":   {"10"}, // 拨号兜底超时，网络不通时避免长时间挂起
+			"statement_timeout": {postgresStatementTimeoutMs},
 		}.Encode(),
 	}
 
@@ -49,5 +61,5 @@ func openPostgres(args ConnectArgs) (*sql.DB, error) {
 		dsn.RawQuery = query.Encode()
 	}
 
-	return sql.Open("postgres", dsn.String())
+	return dsn.String()
 }

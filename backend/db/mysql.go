@@ -11,17 +11,17 @@ import (
 )
 
 func openMySQL(args ConnectArgs) (*sql.DB, error) {
-	password := args.Password
-	atIdx := -1
-	for i := 0; i < len(password); i++ {
-		if password[i] == '@' {
-			atIdx = i
-		}
+	dsn, err := mysqlDSN(args)
+	if err != nil {
+		return nil, err
 	}
-	if atIdx >= 0 {
-		password = password[:atIdx] + "%40" + password[atIdx+1:]
-	}
+	return sql.Open("mysql", dsn)
+}
 
+// mysqlDSN 拼连接串。密码原样写进去：驱动按最后一个 @ 分隔账号和地址，密码里带
+// @ / : / ? / / 都不用转义，驱动也不做 %XX 解码——此前把 @ 换成 %40，带这种密码
+// 的库一律 Access denied
+func mysqlDSN(args ConnectArgs) (string, error) {
 	// 超时语义：
 	//   timeout=10s    拨号与握手兜底（网络不通时不等 OS 级重试，可达数分钟）
 	//   readTimeout=30m 每次网络读的截止。查询执行期间服务器不回包，大查询/
@@ -32,7 +32,7 @@ func openMySQL(args ConnectArgs) (*sql.DB, error) {
 	// 免去驱动逐值 字符串→time.Time(含时区换算)→再 Format 回字符串 的双转换
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&timeout=10s&readTimeout=30m&writeTimeout=10m",
 		args.Username,
-		password,
+		args.Password,
 		args.Host,
 		args.Port,
 		args.Database,
@@ -42,7 +42,7 @@ func openMySQL(args ConnectArgs) (*sql.DB, error) {
 	if args.SSL.Enabled {
 		cfg, err := mysql.ParseDSN(dsn)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse DSN: %w", err)
+			return "", fmt.Errorf("failed to parse DSN: %w", err)
 		}
 
 		tlsConfig := &tls.Config{
@@ -52,11 +52,11 @@ func openMySQL(args ConnectArgs) (*sql.DB, error) {
 		if args.SSL.CAPath != "" {
 			caCert, err := os.ReadFile(args.SSL.CAPath)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+				return "", fmt.Errorf("failed to read CA certificate: %w", err)
 			}
 			caCertPool := x509.NewCertPool()
 			if !caCertPool.AppendCertsFromPEM(caCert) {
-				return nil, fmt.Errorf("failed to parse CA certificate")
+				return "", fmt.Errorf("failed to parse CA certificate")
 			}
 			tlsConfig.RootCAs = caCertPool
 		}
@@ -64,7 +64,7 @@ func openMySQL(args ConnectArgs) (*sql.DB, error) {
 		if args.SSL.CertPath != "" && args.SSL.KeyPath != "" {
 			cert, err := tls.LoadX509KeyPair(args.SSL.CertPath, args.SSL.KeyPath)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load client certificate: %w", err)
+				return "", fmt.Errorf("failed to load client certificate: %w", err)
 			}
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
@@ -73,11 +73,11 @@ func openMySQL(args ConnectArgs) (*sql.DB, error) {
 		// 用固定名称 "custom" 互相覆盖（RegisterTLSConfig 是全局注册表）。
 		tlsName := fmt.Sprintf("idblink-%s-%d", args.Host, args.Port)
 		if err := mysql.RegisterTLSConfig(tlsName, tlsConfig); err != nil {
-			return nil, fmt.Errorf("failed to register TLS config: %w", err)
+			return "", fmt.Errorf("failed to register TLS config: %w", err)
 		}
 		cfg.TLSConfig = tlsName
 		dsn = cfg.FormatDSN()
 	}
 
-	return sql.Open("mysql", dsn)
+	return dsn, nil
 }

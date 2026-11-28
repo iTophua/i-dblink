@@ -159,6 +159,22 @@ func (h *Handler) getConnAndType(connectionID string) (db.Executor, string, erro
 	return exec, dbType, nil
 }
 
+// getExecAndType 取连接在指定库上的执行器和库类型。PG 不能在连接上切库，带 database 时
+// 换成按库开的连接池——删表 / 清空 / 导出这类带库的表操作若还拿默认库的执行器，语句会
+// 落到默认库去：删中的可能是另一个库里的同名表，或者 IF EXISTS 什么都没删却报成功。
+// 其余库照旧用连接自己的连接池（MySQL 靠表引用里的库名定位，不值得按库再开连接）
+func (h *Handler) getExecAndType(connectionID, database string) (db.Executor, string, error) {
+	exec, dbType, err := h.getConnAndType(connectionID)
+	if err != nil {
+		return nil, "", err
+	}
+	exec, err = h.resolvePGExec(exec, connectionID, dbType, strPtr(database))
+	if err != nil {
+		return nil, "", err
+	}
+	return exec, dbType, nil
+}
+
 func writeJSONError(w http.ResponseWriter, err string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

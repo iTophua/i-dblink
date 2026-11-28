@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import { App } from 'antd';
 
 vi.mock('react-i18next', async (importOriginal) => {
@@ -11,6 +11,8 @@ vi.mock('react-i18next', async (importOriginal) => {
 import { mockGetERDiagram } from '../setupTests';
 import { ERDiagram } from '../../components/ERDiagram';
 import { useAIChatStore } from '../../stores/aiChatStore';
+import { useAppStore } from '../../stores/appStore';
+import type { Connection } from '../../stores/appStore';
 import type { ERDiagram as ERDiagramData } from '../../types/api';
 
 const sample: ERDiagramData = {
@@ -83,6 +85,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockGetERDiagram.mockReset();
+  useAppStore.setState({ connections: [] });
   useAIChatStore.setState({
     panelVisible: false,
     connectionId: null,
@@ -178,5 +181,53 @@ describe('ERDiagram', () => {
     mockGetERDiagram.mockResolvedValue({ ...sample, slow_path: true, warnings: ['t1: boom'] });
     renderDiagram();
     expect(await screen.findByText('common.erDiagram.slowPath')).toBeInTheDocument();
+  });
+
+  // ER 图里 PG 的表 id 是 schema.表：打开数据页要原样传出去，不带 schema 的话数据页按
+  // search_path 找同名表。其余库、以及不知道库类型时照旧只用表名——Oracle / 达梦的
+  // owner.表 拼进表引用会变成一张不存在的表
+  it('打开表：PG 连接保留 id 里的 schema，其余库只用表名', async () => {
+    const qualified: ERDiagramData = {
+      tables: sample.tables.map((t) => ({ ...t, id: `public.${t.id}` })),
+      edges: sample.edges.map((e) => ({
+        ...e,
+        from_table: `public.${e.from_table}`,
+        to_table: `public.${e.to_table}`,
+      })),
+    };
+    mockGetERDiagram.mockResolvedValue(qualified);
+
+    for (const [dbType, expected] of [
+      ['postgresql', 'public.org'],
+      ['mysql', 'org'],
+      [undefined, 'org'],
+    ] as const) {
+      cleanup();
+      useAppStore.setState({
+        connections: dbType
+          ? [
+              {
+                id: 'c1',
+                name: 'c1',
+                db_type: dbType,
+                host: 'h',
+                port: 1,
+                username: 'u',
+                status: 'connected',
+                ssh_enabled: false,
+                ssl_enabled: false,
+                ssl_skip_verify: false,
+              } as unknown as Connection,
+            ]
+          : [],
+      });
+      const onOpenTable = vi.fn();
+      renderDiagram({ onOpenTable });
+
+      fireEvent.click(await screen.findByTestId('er-table-public.org'));
+      fireEvent.click(await screen.findByText('common.erDiagram.openTable'));
+
+      expect(onOpenTable, String(dbType)).toHaveBeenCalledWith(expected);
+    }
   });
 });

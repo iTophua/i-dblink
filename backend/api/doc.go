@@ -366,7 +366,7 @@ func getRoutineBodyForDoc(ctx context.Context, exec db.Executor, dbType string, 
 	case "mysql", "mariadb":
 		return mysqlGetRoutineBody(ctx, exec, database, name, routineType)
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		return postgresGetRoutineBody(ctx, exec, database, name, routineType)
+		return postgresGetRoutineBody(ctx, exec, name, routineType)
 	case "dameng":
 		return damengGetRoutineBody(ctx, exec, database, name, routineType)
 	case "sqlserver":
@@ -380,7 +380,7 @@ func getRoutineBodyForDoc(ctx context.Context, exec db.Executor, dbType string, 
 
 // getTriggersForDoc 获取触发器
 func getTriggersForDoc(pool *db.DBPool, database string) ([]map[string]interface{}, error) {
-	return getTriggers(pool, database)
+	return getTriggers(context.Background(), pool.DB(), pool.DbType, database)
 }
 
 // getTableDDLForDoc 从列信息生成简单的 CREATE TABLE DDL

@@ -3,10 +3,13 @@ import { Modal, Input, Tag, Empty } from 'antd';
 import { SearchOutlined, TableOutlined, EyeOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { TableInfo } from '../types/api';
+import { useAppStore } from '../stores/appStore';
+import { qualifiedTableName } from '../utils/qualifiedName';
 
 interface GlobalSearchProps {
   open: boolean;
   onClose: () => void;
+  /** tableName 是表的完整名字：PG 系、SQL Server 带 schema（schema.表） */
   onSelectTable: (connectionId: string, database: string, tableName: string) => void;
   connectionDatabases?: Record<string, { database: string; tables: TableInfo[] }[]>;
 }
@@ -20,6 +23,7 @@ export function GlobalSearch({
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const connections = useAppStore((state) => state.connections);
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
@@ -27,18 +31,24 @@ export function GlobalSearch({
     const q = query.toLowerCase();
     const items: Array<{
       type: 'table' | 'view';
+      /** 界面上显示的表名 */
       name: string;
+      /** 打开时用的名字：PG 系、SQL Server 带 schema（schema.表） */
+      openName: string;
       connectionId: string;
       database: string;
     }> = [];
 
     for (const [connId, dbs] of Object.entries(connectionDatabases)) {
+      // 打开表要带 schema：不带的话数据页按 search_path 找同名表，可能落到别的 schema 的表上
+      const dbType = connections.find((c) => c.id === connId)?.db_type;
       for (const db of dbs) {
         for (const table of db.tables) {
           if (table.table_name.toLowerCase().includes(q)) {
             items.push({
               type: table.table_type.toUpperCase() === 'VIEW' ? 'view' : 'table',
               name: table.table_name,
+              openName: qualifiedTableName(table.table_name, table.schema, dbType),
               connectionId: connId,
               database: db.database,
             });
@@ -48,7 +58,7 @@ export function GlobalSearch({
     }
 
     return items.slice(0, 50);
-  }, [query, connectionDatabases]);
+  }, [query, connectionDatabases, connections]);
 
   useEffect(() => {
     if (open) {
@@ -70,7 +80,7 @@ export function GlobalSearch({
     } else if (e.key === 'Enter') {
       const item = results[currentIndex];
       if (item) {
-        onSelectTable(item.connectionId, item.database, item.name);
+        onSelectTable(item.connectionId, item.database, item.openName);
         onClose();
       }
     }
@@ -129,7 +139,7 @@ export function GlobalSearch({
               }}
               onMouseEnter={() => setSelectedIndex(index)}
               onClick={() => {
-                onSelectTable(item.connectionId, item.database, item.name);
+                onSelectTable(item.connectionId, item.database, item.openName);
                 onClose();
               }}
             >

@@ -23,13 +23,17 @@ func quoteIdent(name string, dbType string) string {
 	}
 }
 
+// buildTableRef 拼表引用。限定部分：PG 系 / SQL Server 是 schema（取自「schema.表」），
+// MySQL 系及其余库是库名
 func buildTableRef(tableName, database, dbType string) string {
-	if database != "" {
-		db := quoteIdent(database, dbType)
-		tbl := quoteIdent(tableName, dbType)
-		return fmt.Sprintf("%s.%s", db, tbl)
+	table, qualifier := tableQualifier(dbType, tableName, nil)
+	if qualifier == "" {
+		qualifier = databaseAsQualifier(dbType, database)
 	}
-	return quoteIdent(tableName, dbType)
+	if qualifier != "" {
+		return fmt.Sprintf("%s.%s", quoteIdent(qualifier, dbType), quoteIdent(table, dbType))
+	}
+	return quoteIdent(table, dbType)
 }
 
 // escapeStringLiteral 把字符串转义为 SQL 字符串字面量（含首尾单引号）。
@@ -111,7 +115,7 @@ func (h *Handler) TruncateTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getExecAndType(req.ConnectionID, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -148,7 +152,7 @@ func (h *Handler) DropTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getExecAndType(req.ConnectionID, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -179,7 +183,7 @@ func (h *Handler) DropView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getExecAndType(req.ConnectionID, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -210,7 +214,7 @@ func (h *Handler) RenameTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getExecAndType(req.ConnectionID, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return
@@ -249,7 +253,7 @@ func (h *Handler) MaintainTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exec, dbType, err := h.getConnAndType(req.ConnectionID)
+	exec, dbType, err := h.getExecAndType(req.ConnectionID, req.Database)
 	if err != nil {
 		writeJSONError(w, err.Error())
 		return

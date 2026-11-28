@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { EyeOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import type { TableInfo } from '../../../types/api';
 import { TABLE_NODE_STYLE, formatRowCount } from '../utils/tableTypeHelpers';
+import { qualifiedTableName } from '../../../utils/qualifiedName';
 import { QuickActionButton } from './QuickActionButton';
 import { HighlightText } from './HighlightText';
 
@@ -13,6 +14,8 @@ interface ViewNodeProps {
   database: string;
   view: TableInfo;
   schema?: string;
+  /** 连接的库类型：决定视图名要不要带 schema（PG 系、SQL Server 要） */
+  dbType?: string;
   selectedTableId: string | null;
   searchQuery?: string;
   onTableClick: (tableName: string, database: string, schema?: string) => void;
@@ -28,6 +31,7 @@ export const ViewNode = React.memo<ViewNodeProps>(
     database,
     view,
     schema,
+    dbType,
     selectedTableId,
     searchQuery,
     onTableClick,
@@ -38,7 +42,9 @@ export const ViewNode = React.memo<ViewNodeProps>(
   }) => {
     const { t } = useTranslation();
     const [hovered, setHovered] = useState(false);
-    const isSelected = selectedTableId === view.table_name;
+    // 打开、右键菜单都用带 schema 的名字（同表节点）
+    const fullName = qualifiedTableName(view.table_name, schema, dbType);
+    const isSelected = selectedTableId === view.table_name || selectedTableId === fullName;
     const backgroundColor = isSelected
       ? 'var(--row-selected-bg)'
       : hovered
@@ -46,7 +52,7 @@ export const ViewNode = React.memo<ViewNodeProps>(
         : 'transparent';
 
     return (
-      <Dropdown menu={onContextMenu(connId, view.table_name, database)} trigger={['contextMenu']}>
+      <Dropdown menu={onContextMenu(connId, fullName, database)} trigger={['contextMenu']}>
         <span
           style={{
             ...TABLE_NODE_STYLE,
@@ -58,14 +64,14 @@ export const ViewNode = React.memo<ViewNodeProps>(
           onMouseLeave={() => setHovered(false)}
           onClick={(e) => {
             e.stopPropagation();
-            onTableClick(view.table_name, database, schema);
+            onTableClick(fullName, database, schema);
           }}
           onDoubleClick={(e) => {
             e.stopPropagation();
             if (onViewOpen) {
-              onViewOpen(view.table_name, database);
+              onViewOpen(fullName, database);
             } else {
-              onTableOpen(view.table_name, database);
+              onTableOpen(fullName, database);
             }
           }}
           data-testid={`view-node-${view.table_name}`}

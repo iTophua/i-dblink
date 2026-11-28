@@ -12,7 +12,9 @@ import {
   Row,
   Col,
   ColorPicker,
+  Segmented,
 } from 'antd';
+import type { Rule } from 'antd/es/form';
 import {
   UploadOutlined,
   ThunderboltOutlined,
@@ -151,10 +153,57 @@ interface FullFormValues {
   ssl_client_key?: string;
 }
 
+interface FilePickerFieldProps {
+  label: string;
+  name: string;
+  placeholder: string;
+  accept: string;
+  required?: boolean;
+  rules?: Rule[];
+  /** 直接显示在输入框下面的错误文字（字段在没打开的页签上时校验触不到，由外面告诉它该显示什么） */
+  error?: string;
+  onBrowse: (fieldName: string, accept: string) => void;
+}
+
+// 文件路径输入框 + 选择按钮。带 name 的 Form.Item 必须包在 Space.Compact 里面：Compact
+// 不往下传 value / onChange，包在外面的话输入框绑不到表单值——选了文件、编辑已有连接时
+// 输入框都是空的
+function FilePickerField({
+  label,
+  name,
+  placeholder,
+  accept,
+  required,
+  rules,
+  error,
+  onBrowse,
+}: FilePickerFieldProps) {
+  return (
+    <Form.Item
+      label={label}
+      required={required}
+      validateStatus={error ? 'error' : undefined}
+      help={error}
+      style={{ marginBottom: 16 }}
+    >
+      <Space.Compact style={{ width: '100%' }}>
+        <Form.Item name={name} rules={rules} noStyle>
+          <GlobalInput placeholder={placeholder} readOnly />
+        </Form.Item>
+        <AntButton icon={<UploadOutlined />} size="small" onClick={() => onBrowse(name, accept)} />
+      </Space.Compact>
+    </Form.Item>
+  );
+}
+
 export function ConnectionDialog({ open, editingData, onCancel, onSave }: ConnectionDialogProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const [form] = Form.useForm();
+  // SSH 隧道的认证方式决定下面显示密码还是私钥；没设过按密码算
+  const sshAuthMethod = Form.useWatch('ssh_auth_method', form) || 'password';
+  // 选了私钥文件，上面的红字就该消失
+  const sshKeyPath = Form.useWatch('ssh_key_path', form);
 
   // 选择本地文件（SSL 证书 / SSH 私钥 / SQLite 文件），回填到表单字段
   const browseFile = useCallback(
@@ -192,6 +241,9 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   // 本次会话是否为编辑已有连接（编辑关闭时清空表单，避免数据泄漏到下次新建）
   const sessionWasEditRef = useRef(false);
   const [activeTab, setActiveTab] = useState('general');
+  // 私钥认证但没选私钥文件时，私钥文件下面那行红字。不从处理函数里去触发表单校验：字段在刚切过来
+  // 的页签上，校验不保证作用得到它（实测紧接着调、隔一个宏任务调都静默通过），这里直接把文字显示出来
+  const [keyFileError, setKeyFileError] = useState(false);
   const [dbType, setDbType] = useState<
     | 'mysql'
     | 'postgresql'
@@ -350,6 +402,14 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
         message.warning(t('common.incompleteConnectionInfo'));
         return;
       }
+      // 私钥认证必须选了私钥文件：SSH 页没打开时这个必填规则不会执行，不拦的话会存下一个
+      // 「私钥认证却没有私钥」的连接，等连接时才报认证失败
+      if (merged.use_ssh && merged.ssh_auth_method === 'key' && !merged.ssh_key_path?.trim()) {
+        setKeyFileError(true);
+        setActiveTab('ssh');
+        message.warning(t('common.privateKeyFileRequired'));
+        return;
+      }
       setSaving(true);
 
       await onSave({
@@ -380,6 +440,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
       // 保存成功：草稿已消费，清空表单；测试结果随会话结束失效
       hasDraftRef.current = false;
       setTestResult(null);
+      setKeyFileError(false);
       form.resetFields();
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'errorFields' in error) return;
@@ -392,6 +453,7 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
   const handleCancel = useCallback(() => {
     // 编辑会话关闭即清空；新建会话保留草稿（误关不丢已填内容，重开恢复）
     setTestResult(null);
+    setKeyFileError(false);
     if (sessionWasEditRef.current) {
       form.resetFields();
       hasDraftRef.current = false;
@@ -840,53 +902,32 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                     <Switch size="small" />
                   </Form.Item>
 
-                  <Form.Item
-                    name="ssl_ca_cert"
+                  <FilePickerField
                     label={t('common.caCertificate')}
-                    style={{ marginBottom: 16 }}
-                  >
-                    <Space.Compact style={{ width: '100%' }}>
-                      <GlobalInput placeholder={t('common.selectCaCertificateFile')} readOnly />
-                      <AntButton
-                        icon={<UploadOutlined />}
-                        size="small"
-                        onClick={() => browseFile('ssl_ca_cert', '.crt,.pem,.ca')}
-                      />
-                    </Space.Compact>
-                  </Form.Item>
+                    name="ssl_ca_cert"
+                    placeholder={t('common.selectCaCertificateFile')}
+                    accept=".crt,.pem,.ca"
+                    onBrowse={browseFile}
+                  />
 
                   <Row gutter={16}>
                     <Col span={12}>
-                      <Form.Item
-                        name="ssl_client_cert"
+                      <FilePickerField
                         label={t('common.clientCertificate')}
-                        style={{ marginBottom: 16 }}
-                      >
-                        <Space.Compact style={{ width: '100%' }}>
-                          <GlobalInput placeholder={t('common.selectCertificate')} readOnly />
-                          <AntButton
-                            icon={<UploadOutlined />}
-                            size="small"
-                            onClick={() => browseFile('ssl_client_cert', '.crt,.pem,.cert')}
-                          />
-                        </Space.Compact>
-                      </Form.Item>
+                        name="ssl_client_cert"
+                        placeholder={t('common.selectCertificate')}
+                        accept=".crt,.pem,.cert"
+                        onBrowse={browseFile}
+                      />
                     </Col>
                     <Col span={12}>
-                      <Form.Item
-                        name="ssl_client_key"
+                      <FilePickerField
                         label={t('common.clientPrivateKey')}
-                        style={{ marginBottom: 16 }}
-                      >
-                        <Space.Compact style={{ width: '100%' }}>
-                          <GlobalInput placeholder={t('common.selectPrivateKey')} readOnly />
-                          <AntButton
-                            icon={<UploadOutlined />}
-                            size="small"
-                            onClick={() => browseFile('ssl_client_key', '.key,.pem')}
-                          />
-                        </Space.Compact>
-                      </Form.Item>
+                        name="ssl_client_key"
+                        placeholder={t('common.selectPrivateKey')}
+                        accept=".key,.pem"
+                        onBrowse={browseFile}
+                      />
                     </Col>
                   </Row>
 
@@ -939,34 +980,63 @@ export function ConnectionDialog({ open, editingData, onCancel, onSave }: Connec
                         <GlobalInput placeholder={t('common.exampleRoot')} />
                       </Form.Item>
                     </Col>
-                    <Col span={12}>
+                  </Row>
+
+                  {/* 认证方式决定隧道走密码还是私钥（后端按 ssh_auth_method 选）。
+                      此前只有私钥文件的输入框、没有开关：存下来的方法始终是 password，
+                      选了私钥也照样用密码去认证 */}
+                  <Form.Item
+                    name="ssh_auth_method"
+                    label={t('common.sshAuthMethod')}
+                    style={{ marginBottom: 16 }}
+                  >
+                    <Segmented
+                      options={[
+                        { value: 'password', label: t('common.sshAuthPassword') },
+                        { value: 'key', label: t('common.sshAuthPrivateKey') },
+                      ]}
+                    />
+                  </Form.Item>
+
+                  {sshAuthMethod === 'key' ? (
+                    <>
+                      <FilePickerField
+                        label={t('common.privateKeyFile')}
+                        name="ssh_key_path"
+                        placeholder={t('common.selectPrivateKeyFilePath')}
+                        accept=".pem,.key,.ppk"
+                        required
+                        rules={[{ required: true, message: t('common.privateKeyFileRequired') }]}
+                        error={
+                          keyFileError && !sshKeyPath?.trim()
+                            ? t('common.privateKeyFileRequired')
+                            : undefined
+                        }
+                        onBrowse={browseFile}
+                      />
                       <Form.Item
-                        name="ssh_password"
-                        label={t('common.mainLayout.password')}
+                        name="ssh_passphrase"
+                        label={t('common.sshPassphrase')}
                         style={{ marginBottom: 16 }}
                       >
                         <GlobalInputPassword
-                          placeholder={t('common.sshPassword')}
+                          placeholder={t('common.sshPassphrasePlaceholder')}
                           autoComplete="new-password"
                         />
                       </Form.Item>
-                    </Col>
-                  </Row>
-
-                  <Form.Item
-                    name="ssh_key_path"
-                    label={t('common.privateKeyFile')}
-                    style={{ marginBottom: 16 }}
-                  >
-                    <Space.Compact style={{ width: '100%' }}>
-                      <GlobalInput placeholder={t('common.selectPrivateKeyFilePath')} readOnly />
-                      <AntButton
-                        icon={<UploadOutlined />}
-                        size="small"
-                        onClick={() => browseFile('ssh_key_path', '.pem,.key,.ppk')}
+                    </>
+                  ) : (
+                    <Form.Item
+                      name="ssh_password"
+                      label={t('common.mainLayout.password')}
+                      style={{ marginBottom: 16 }}
+                    >
+                      <GlobalInputPassword
+                        placeholder={t('common.sshPassword')}
+                        autoComplete="new-password"
                       />
-                    </Space.Compact>
-                  </Form.Item>
+                    </Form.Item>
+                  )}
 
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
                     {t('common.sshTunnelDescription')}

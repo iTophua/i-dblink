@@ -189,11 +189,46 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   已知限制）。范围编辑只在直接键入（Glide 传 `initialValue`）时铺满选区，双击 / F2 进入时不铺
 - **结果集编辑要认对表**（`SQLEditor/resultTable.ts` + `ResultGrid`）：从 SQL 里取出 `FROM` 后的表
   引用（含 `库.表` / `schema.表`），写回的 UPDATE / DELETE 带上限定部分；取列信息也按限定名查——
-  后端 `Handler.GetColumns` 按原名没查到时把 `限定部分.表名` 拆开（MySQL 当库名，PG 系 / SQL Server
-  当 schema，其余库不拆）。只拿表名去查的话，`SELECT * FROM b.t` 的编辑会落到当前库的同名表上。
+  后端 `tableQualifier` 把 `限定部分.表名` 拆开（MySQL 当库名，PG 系 / SQL Server 当 schema，其余库
+  不拆）。只拿表名去查的话，`SELECT * FROM b.t` 的编辑会落到当前库的同名表上。
   定位不到唯一的表（JOIN / 子查询 / 列信息有重名）一律只读；列信息连同它对应的表一起存，换了
-  结果集不沿用上一张表的主键；重名列的网格列 id 按出现次序编号（`id`、`id#2`）。表数据页（PG 不带
-  schema）还没接上，在 PG 系支持那一批里做
+  结果集不沿用上一张表的主键；重名列的网格列 id 按出现次序编号（`id`、`id#2`）
+- **PG 系 / SQL Server 的表名带 schema**（`utils/qualifiedName`，2026-11）：这两种库的表按 schema 分层，
+  定位一张表要用「schema.表」——不带的话 PG 按 search_path 找同名表，数据页读的、改的、右键删的
+  可能是别的 schema 里的表（删表还因为 `IF EXISTS` 不报错）。界面上所有打开表、对表操作的出口
+  （连接树节点、树的节点 key、对象页的表列表、ER 图、⌘K 命令面板、全局搜索）都经
+  `qualifiedTableName(table, schema, dbType)` 拿完整名字；其余库原样返回表名（MySQL 的库是单独一个
+  `database` 参数；Oracle 的 owner 不能拼进去，带了会被当成名字本身加引号）。拼表引用一律走方言的
+  `buildTableRef`：PG 系 / SQL Server 认「schema.表」并按段加引号，库名不当限定符；其余库照旧拿库名
+  当限定部分、名字里的点不拆。后端对应的入口是 `tableQualifier`（列 / 索引 / 外键 / 结构 / CHECK /
+  建表语句 / 表引用都用它）。复制表改写 DDL 时要用**去掉 schema 的表名**：DDL 里是 `"schema"."表"`
+  两段，拿整串去对不上；目标表默认是 `schema.表_copy`，落在源表所在的 schema。已知限制：schema 或
+  表名本身带点的表不支持；收藏里存的表名不带 schema；SQL Server 这一路没有真库验证过
+- **带 `database` 的表操作走 `getExecAndType`，不是 `getConnAndType`**（`backend/api/router.go`）：
+  后者固定返回连接默认库上的执行器。PG 不能在连接上切库，删表 / 清空 / 重命名 / 表维护 / 导出 /
+  导入 / 触发器列表若拿默认库的执行器，语句会落到默认库去——删中的可能是另一个库里的同名表。
+  `getExecAndType` 对 PG 系换成按库开的连接池，其余库不变。表引用由 `buildTableRef` 拼：PG 系 / SQL
+  Server 的限定部分只能是 schema，库名拼成 `"库"."表"` 在 PG 上只会报 schema 不存在。新增带库的表
+  操作时照这个来；给会话开事务、取执行器时带的库要和语句一致（导入向导的 `txDatabase` 同理）
+- **PG 的建表语句从系统目录拼**（`postgresBuildTableDDL`）：列（NOT NULL / 默认值 / 自增 / 生成列 /
+  排序规则）、主键 / 唯一 / 外键 / CHECK / 排他约束、不挂在约束上的索引、表和列注释；视图取
+  `pg_get_viewdef`。此前只输出「列名 类型」，表结构页的 DDL、导出 SQL、复制表拿到的都是没有约束的
+  空壳。CHECK 写成表级约束（多列 CHECK 也适用，和 pg_dump 一致）；不在 `pg_catalog` 里的排序规则带
+  schema。`attidentity`（PG 10 起）/ `attgenerated`（PG 12 起）老版本没有，用 `pgAttributeHas` 先探；
+  过程 / 函数定义走 `pg_get_functiondef`，判断聚合用 `pg_aggregate`——`prokind` PG 11 以前没有，
+  `proisagg` PG 11 起删掉了，都不能用。完整性靠「拿生成的语句在另一个 schema 重建、按系统目录比对」
+  的测试保证。没做的：分区表的子分区按普通表输出
+- **连接串**（`backend/db/mysql.go` 的 `mysqlDSN`、`postgres.go` 的 `postgresDSN`）：MySQL 密码原样写进
+  连接串，驱动按最后一个 `@` 分隔账号和地址、也不做 `%XX` 解码（此前把 `@` 换成 `%40`，带这种密码的库
+  一律 Access denied）。PG 连接带 `statement_timeout`，对齐上层的 30 分钟长操作上限和 MySQL 的
+  `readTimeout`（改一处要一起改）；不设 `lock_timeout`，等锁由用户点「停止」取消
+- **连接弹窗的 SSH 认证方式**（`ConnectionDialog.tsx`）：后端只在 `ssh_auth_method == "key"` 时用私钥，
+  界面上有「密码 / 私钥」开关，存下来的才是选中的那种。文件路径输入框是 `FilePickerField`：带 `name`
+  的 `Form.Item` 必须包在 `Space.Compact` **里面**（Compact 不往下传 value / onChange，包在外面输入框
+  绑不到表单值，选了文件、编辑已有连接时都是空的）。**别在处理函数里切页签后紧接着 `validateFields`**：
+  字段在刚切过来的页签上时校验不保证作用得到它（实测紧接着调、隔一个宏任务调都静默通过，原因在
+  表单库内部），要显示错误就把文字当属性传给字段（私钥文件那行红字这么做）；原有的「名称 / 主机」
+  那段用的是 `setTimeout(60)`，同样不可靠，没动
 - **编辑提交：没碰到行也算失败**（`DataTable/utils.runEditStatement`）：`rows_affected === 0` 说明
   WHERE 一行都没匹配上（主键值在界面上失真，如 BINARY(16) 显示成 `[BLOB: n bytes]`；或数据已被改
   掉），以前照样报成功并清掉编辑标记。MySQL 的 UPDATE 只数「值真的变了」的行，所以 UPDATE 报 0 行时
@@ -218,7 +253,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 
 ## Test quirks
 
-- 前端测试位于 `frontend/src/__tests__/`（49 个文件）
+- 前端测试位于 `frontend/src/__tests__/`（55 个文件）
 - 测试分类：`unit/`、`components/`、`hooks/`、`api/`、`integration/`
 - 所有 Wails 绑定在 `src/__tests__/setupTests.ts` 中 mock，mock 以具名常量导出，直接 import 使用：
   ```ts
@@ -237,7 +272,7 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   **套件已腐烂（2026-10 核实）**：testid 与实际 UI 不符（如 `conn-name` vs 实际
   `conn-name-input`）、断言早已不存在的交互（toast 已改内联提示）、未 mock Wails
   桥接——从未跑绿过，全量跑约 55 分钟且 ~100% 失败。**不要试图跑它**，验证以
-  `pnpm test`（729）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
+  `pnpm test`（771）+ `go test ./...` + `wails3 task dev` 人工冒烟为准；修复需按当前
   UI 重写整套用例。另外 e2e 脚本须从仓库根用
   `cd frontend && PATH="$HOME/go/bin:$PATH" pnpm exec playwright test --config ../playwright.config.ts`
   运行（`wails` 不在 PATH；直接 `pnpm test:e2e` 找不到测试）
@@ -248,8 +283,10 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 - **真实库上的门控测试**（默认跳过）：会话级事务并发与「事务开在所选库上」（
   `backend/db/manager_tx_real_test.go`；空闲回收、超时后不退回自动提交、事务绑定库在 SQLite 上就能
   跑，见 `manager_tx_binding_test.go`）、限定表名取列（`backend/api/qualified_table_real_test.go`）、
-  ER 图的 MySQL/PG 批量查询（`backend/api/er_diagram_test.go`）、数据对比（
-  `backend/api/data_compare_real_test.go`，含 MySQL → PG 跨库、PG 的 schema 定位、MySQL
+  PG 的 schema 贯通（`backend/api/pg_schema_real_test.go`：限定名的列 / 索引 / 外键 / CHECK、删表 /
+  清空 / 重命名落在选中的库和 schema 上、触发器与过程函数列表、过程定义、建表语句重建后比对系统
+  目录、序列、导入导出、服务端超时）、ER 图的 MySQL/PG 批量查询（`backend/api/er_diagram_test.go`）、
+  数据对比（`backend/api/data_compare_real_test.go`，含 MySQL → PG 跨库、PG 的 schema 定位、MySQL
   生成列）、结构比较与表结构元数据（`backend/api/compare_real_test.go`，含「同步语句在
   目标库跑一遍再回比」）需要
   `IDBLINK_TX_SMOKE_MYSQL=1` / `IDBLINK_TX_SMOKE_PG=1`，库由根目录
@@ -261,6 +298,11 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
     go test ./backend/db ./backend/api -run 'Real|SessionScoped' -count=1 -v
   docker compose -f docker-compose.test.yml down -v
   ```
+
+  `TestRealPGStatementTimeout` 真跑一条 32 秒的语句（约 33 秒），赶时间加 `-short` 跳过。
+  `pg_schema_real_test.go` 每个用例建两个临时库 `idblink_pg_home` / `idblink_pg_work`（连接的默认库、
+  请求里选中的库），两边放同名对象当诱饵，断言既看目标也盯诱饵；清理用
+  `DROP DATABASE … WITH (FORCE)`，清理失败会让用例失败（残留要能被发现）。
 
   写这类测试注意：两个包是**并行**跑的，testdb 里还有初始化脚本建的 users / orders 等表，
   断言只能看自己建的表；两个库的账号密码不一样（MySQL 用户 `testpass`，PG 用户
@@ -279,6 +321,11 @@ pnpm lint → pnpm exec -- tsc --noEmit → pnpm test → go test ./...
 ```
 
 修改前后端代码后按此顺序验证，任一步骤失败应立即修复。
+
+**`go build` 通过不代表没问题**：改 `router.go` / `manager.go` / `helpers.go` 这类所有处理器都要走的
+入口，改完当场编译加跑测试，不要攒着一组文件改完再验——两个函数互相调用这种错误编译器发现不了，
+只有测试会撞上（2026-11 实锤：`getConnAndType` 和新加的 `getExecAndType` 互相转调，每个请求一进来
+就无限递归）。同理，新写的用例一次就过时，把被测的源文件临时退回去确认它会变红，再恢复。
 
 **提交前 review（强制，用户要求）**：每次 `git commit` 前必须完成两步——
 1. `git diff` 逐行自查：逻辑边界、回归风险、遗漏的关联改动（i18n 双语 key、类型定义、清理无用 import 等）

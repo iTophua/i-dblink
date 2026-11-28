@@ -205,15 +205,12 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// qualifier 非空时按「限定部分.表名」定位：MySQL 是库名，PG 系 / SQL Server 是 schema
+	// 限定部分：MySQL 是库名，PG 系 / SQL Server 是 schema（取自「schema.表」或请求的 schema）
+	table, qualifier := tableQualifier(dbType, *req.TableName, req.Schema)
 	getColumns := func(name string, qualifier string) ([]models.ColumnInfo, error) {
 		switch dbType {
 		case "mysql":
-			database := req.Database
-			if qualifier != "" {
-				database = &qualifier
-			}
-			return mysqlGetColumns(ctx, exec, name, database)
+			return mysqlGetColumns(ctx, exec, name, mysqlDatabaseArg(req.Database, qualifier))
 		case "postgresql", "kingbase", "highgo", "vastbase":
 			return postgresGetColumns(ctx, exec, name, req.Database, strPtr(qualifier))
 		case "sqlite":
@@ -233,16 +230,9 @@ func (h *Handler) GetColumns(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var columns []models.ColumnInfo
-	columns, err = getColumns(*req.TableName, "")
-	// 按原名没查到、名字又是「限定部分.表名」：再按限定名找一次。结果集编辑靠它取主键——
-	// `SELECT * FROM b.t` 只拿表名去查，MySQL 会在当前库里找同名表，PG 会把各个
-	// schema 里的同名表混在一起，主键张冠李戴后 UPDATE / DELETE 就写到别的表上去了
-	if err == nil && len(columns) == 0 && supportsTableQualifier(dbType) {
-		if qualifier, bare := splitQualifiedTableName(*req.TableName); qualifier != "" {
-			columns, err = getColumns(bare, qualifier)
-		}
-	}
+	// 只拿表名去查会张冠李戴：MySQL 在当前库里找同名表，PG 把各个 schema 里的同名表
+	// 混在一起，主键错了之后 UPDATE / DELETE 就写到别的表上去了
+	columns, err := getColumns(table, qualifier)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
@@ -337,18 +327,20 @@ func (h *Handler) GetIndexes(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	table, qualifier := tableQualifier(dbType, *req.TableName, req.Schema)
+
 	var indexes []models.IndexInfo
 	switch dbType {
 	case "mysql":
-		indexes, err = mysqlGetIndexes(ctx, exec, *req.TableName, req.Database)
+		indexes, err = mysqlGetIndexes(ctx, exec, table, mysqlDatabaseArg(req.Database, qualifier))
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		indexes, err = postgresGetIndexes(ctx, exec, *req.TableName, req.Database, nil)
+		indexes, err = postgresGetIndexes(ctx, exec, table, req.Database, strPtr(qualifier))
 	case "sqlite":
-		indexes, err = sqliteGetIndexes(ctx, exec, *req.TableName, req.Database)
+		indexes, err = sqliteGetIndexes(ctx, exec, table, req.Database)
 	case "dameng":
-		indexes, err = damengGetIndexes(ctx, exec, *req.TableName, req.Database)
+		indexes, err = damengGetIndexes(ctx, exec, table, req.Database)
 	case "sqlserver":
-		indexes, err = sqlserverGetIndexes(ctx, exec, *req.TableName, req.Database, nil)
+		indexes, err = sqlserverGetIndexes(ctx, exec, table, req.Database, strPtr(qualifier))
 	case "clickhouse", "tdengine":
 		indexes = []models.IndexInfo{} // 无传统二级索引
 	case "oracle":
@@ -392,18 +384,20 @@ func (h *Handler) GetForeignKeys(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	table, qualifier := tableQualifier(dbType, *req.TableName, req.Schema)
+
 	var fks []models.ForeignKeyInfo
 	switch dbType {
 	case "mysql":
-		fks, err = mysqlGetForeignKeys(ctx, exec, *req.TableName, req.Database)
+		fks, err = mysqlGetForeignKeys(ctx, exec, table, mysqlDatabaseArg(req.Database, qualifier))
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		fks, err = postgresGetForeignKeys(ctx, exec, *req.TableName, req.Database, nil)
+		fks, err = postgresGetForeignKeys(ctx, exec, table, req.Database, strPtr(qualifier))
 	case "sqlite":
-		fks, err = sqliteGetForeignKeys(ctx, exec, *req.TableName, req.Database)
+		fks, err = sqliteGetForeignKeys(ctx, exec, table, req.Database)
 	case "dameng":
-		fks, err = damengGetForeignKeys(ctx, exec, *req.TableName, req.Database)
+		fks, err = damengGetForeignKeys(ctx, exec, table, req.Database)
 	case "sqlserver":
-		fks, err = sqlserverGetForeignKeys(ctx, exec, *req.TableName, req.Database, nil)
+		fks, err = sqlserverGetForeignKeys(ctx, exec, table, req.Database, strPtr(qualifier))
 	case "clickhouse", "tdengine":
 		fks = []models.ForeignKeyInfo{} // 无外键
 	case "oracle":
@@ -447,18 +441,20 @@ func (h *Handler) GetTableStructure(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	table, qualifier := tableQualifier(dbType, *req.TableName, req.Schema)
+
 	var structure models.TableStructure
 	switch dbType {
 	case "mysql":
-		structure, err = mysqlGetTableStructure(ctx, exec, *req.TableName, req.Database)
+		structure, err = mysqlGetTableStructure(ctx, exec, table, mysqlDatabaseArg(req.Database, qualifier))
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		structure, err = postgresGetTableStructure(ctx, exec, *req.TableName, req.Database, req.Schema)
+		structure, err = postgresGetTableStructure(ctx, exec, table, req.Database, strPtr(qualifier))
 	case "sqlite":
-		structure, err = sqliteGetTableStructure(ctx, exec, *req.TableName, req.Database)
+		structure, err = sqliteGetTableStructure(ctx, exec, table, req.Database)
 	case "dameng":
-		structure, err = damengGetTableStructure(ctx, exec, *req.TableName, req.Database)
+		structure, err = damengGetTableStructure(ctx, exec, table, req.Database)
 	case "sqlserver":
-		structure, err = sqlserverGetTableStructure(ctx, exec, *req.TableName, req.Database, req.Schema)
+		structure, err = sqlserverGetTableStructure(ctx, exec, table, req.Database, strPtr(qualifier))
 	case "clickhouse":
 		structure, err = clickhouseGetTableStructure(ctx, exec, *req.TableName, req.Database)
 	case "tdengine":
@@ -514,12 +510,14 @@ func (h *Handler) GetRoutines(w http.ResponseWriter, r *http.Request) {
 	switch dbType {
 	case "mysql":
 		result, err = mysqlGetRoutines(ctx, exec, req.Database)
-	case "postgresql":
+	case "postgresql", "kingbase", "highgo", "vastbase":
 		result, err = postgresGetRoutines(ctx, exec, req.Database)
 	case "sqlite":
 		result = models.RoutinesResult{Procedures: []models.RoutineInfo{}, Functions: []models.RoutineInfo{}}
 	case "dameng":
 		result, err = damengGetRoutines(ctx, exec, req.Database)
+	case "sqlserver":
+		result, err = sqlserverGetRoutines(ctx, exec, req.Database)
 	default:
 		err = fmt.Errorf("unsupported db type: %s", dbType)
 	}
@@ -668,7 +666,7 @@ func (h *Handler) GetProcedureBody(w http.ResponseWriter, r *http.Request) {
 	case "mysql":
 		body, err = mysqlGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		body, err = postgresGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
+		body, err = postgresGetRoutineBody(ctx, exec, req.ProcedureName, "PROCEDURE")
 	case "dameng":
 		body, err = damengGetRoutineBody(ctx, exec, req.Database, req.ProcedureName, "PROCEDURE")
 	case "sqlserver":
@@ -723,7 +721,7 @@ func (h *Handler) GetFunctionBody(w http.ResponseWriter, r *http.Request) {
 	case "mysql":
 		body, err = mysqlGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		body, err = postgresGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
+		body, err = postgresGetRoutineBody(ctx, exec, req.FunctionName, "FUNCTION")
 	case "dameng":
 		body, err = damengGetRoutineBody(ctx, exec, req.Database, req.FunctionName, "FUNCTION")
 	case "sqlserver":
@@ -995,12 +993,14 @@ func (h *Handler) GetCheckConstraints(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	table, qualifier := tableQualifier(dbType, *req.TableName, req.Schema)
+
 	var constraints []models.CheckConstraintInfo
 	switch dbType {
 	case "mysql", "mariadb":
-		constraints, err = mysqlGetCheckConstraints(ctx, exec, *req.TableName, req.Database)
+		constraints, err = mysqlGetCheckConstraints(ctx, exec, table, mysqlDatabaseArg(req.Database, qualifier))
 	case "postgresql", "kingbase", "highgo", "vastbase":
-		constraints, err = postgresGetCheckConstraints(ctx, exec, *req.TableName, req.Database, req.Schema)
+		constraints, err = postgresGetCheckConstraints(ctx, exec, table, req.Database, strPtr(qualifier))
 	default:
 		constraints = []models.CheckConstraintInfo{}
 	}

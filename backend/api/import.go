@@ -46,18 +46,25 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 		return quoteChar + strings.ReplaceAll(name, quoteChar, quoteChar+quoteChar) + quoteChar
 	}
 
-	tableName := escapeIdentifier(req.TableName)
-	if req.Database != "" {
-		switch dbType {
-		case "mysql", "mariadb", "postgresql", "kingbase", "highgo", "vastbase":
-			tableName = escapeIdentifier(req.Database) + "." + tableName
-		}
+	// 表引用：PG 系的限定部分是 schema（取自「schema.表」）。此前把库名拼成 "库"."表"，
+	// PG 上导入一律报 schema 不存在，等于只有 MySQL 能导入
+	tableName := quoteIdent(req.TableName, dbType)
+	switch dbType {
+	case "mysql", "mariadb", "postgresql", "kingbase", "highgo", "vastbase":
+		tableName = buildTableRef(req.TableName, req.Database, dbType)
+	}
+
+	// 事务和语句落在哪个库的连接池上：PG 不能在连接上切库，必须按库；其余库用连接自己的池
+	txDatabase := ""
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		txDatabase = req.Database
 	}
 
 	// 对于 replace 模式，先 TRUNCATE
 	if req.Mode == "replace" {
 		truncateSQL := fmt.Sprintf("TRUNCATE TABLE %s", tableName)
-		exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
+		exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, txDatabase, importTxSession, false)
 		if err != nil {
 			writeJSONError(w, err.Error())
 			return
@@ -73,7 +80,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 	// 开始导入事务（私有会话，与其他会话隔离）；
 	// ClickHouse/TDengine 无交互式事务，跳过包装直接逐句执行（各自原子提交）
 	if db.SupportsTx(dbType) {
-		if err := h.mgr.BeginTransaction(req.ConnectionID, importTxSession, ""); err != nil {
+		if err := h.mgr.BeginTransaction(req.ConnectionID, importTxSession, txDatabase); err != nil {
 			writeJSONError(w, fmt.Sprintf("begin transaction failed: %v", err))
 			return
 		}
@@ -105,7 +112,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 					escapeIdentifier(req.PrimaryKey),
 					formatValue(pkValue))
 
-				exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
+				exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, txDatabase, importTxSession, false)
 				if err != nil {
 					failedCount++
 					lastError = err.Error()
@@ -163,7 +170,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 				strings.Join(cols, ", "),
 				strings.Join(valueGroups, ", "))
 
-			exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
+			exec, err := h.mgr.GetExecutorForSession(req.ConnectionID, txDatabase, importTxSession, false)
 			if err != nil {
 				// 批量失败，回退到逐行执行
 				for _, row := range batch {
@@ -180,7 +187,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 						strings.Join(cols, ", "),
 						strings.Join(vals, ", "))
 
-					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
+					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, txDatabase, importTxSession, false)
 					if err != nil {
 						failedCount++
 						lastError = err.Error()
@@ -218,7 +225,7 @@ func (h *Handler) BatchImport(w http.ResponseWriter, r *http.Request) {
 						strings.Join(cols, ", "),
 						strings.Join(vals, ", "))
 
-					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, "", importTxSession, false)
+					exec2, err := h.mgr.GetExecutorForSession(req.ConnectionID, txDatabase, importTxSession, false)
 					if err != nil {
 						failedCount++
 						lastError = err.Error()
