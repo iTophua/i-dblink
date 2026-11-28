@@ -228,7 +228,8 @@ func (s *Server) handleGetTableInfo(ctx context.Context, req mcp.CallToolRequest
 
 // ==================== EXPLAIN ====================
 
-// buildExplainSQL 生成方言对应的执行计划 SQL。
+// handleExplainQuery 返回一条语句的执行计划。EXPLAIN 本身只出计划，但 ANALYZE 会真的执行语句——
+// 这个工具标了 readOnlyHint，被解释的语句要过和 execute_query 一样严的校验（explainTarget）
 func (s *Server) handleExplainQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := req.GetArguments()
 	connID := argStr(args, "connection_id")
@@ -242,14 +243,14 @@ func (s *Server) handleExplainQuery(ctx context.Context, req mcp.CallToolRequest
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	trimmed := strings.TrimSpace(sqlText)
-	trimmed = strings.TrimSuffix(trimmed, ";")
-	trimmed = strings.TrimSpace(trimmed)
-	if countUnquotedSemicolons(trimmed) > 0 {
-		return mcp.NewToolResultError("explain_query accepts a single SQL statement"), nil
+	stmt, ok := explainTarget(conn.DbType, sqlText)
+	if !ok {
+		return mcp.NewToolResultError(
+			"explain_query accepts a single statement that has an execution plan (SELECT, WITH, INSERT, UPDATE, DELETE, MERGE) " +
+				"and rejects ANALYZE: EXPLAIN ANALYZE runs the statement instead of only planning it."), nil
 	}
 
-	explainSQL, err := api.BuildExplainSQL(conn.DbType, trimmed)
+	explainSQL, err := api.BuildExplainSQL(conn.DbType, stmt)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -259,22 +260,30 @@ func (s *Server) handleExplainQuery(ctx context.Context, req mcp.CallToolRequest
 		database = &d
 	}
 
-	result, qerr := s.app.ExecuteQuery(connID, explainSQL, database, nil, "")
+	ctx, cancel := callContext(ctx, args)
+	defer cancel()
+	result, qerr := s.app.ExecuteQueryCtx(ctx, connID, explainSQL, database, nil, "")
 	if qerr == nil {
 		truncateCellStrings(result.Rows, mcpCellMaxChars)
 	}
-	errMsg := result.Error
-	if qerr != nil {
-		errMsg = qerr.Error()
-	}
-	return mcp.NewToolResultJSON(map[string]any{
+	out := map[string]any{
 		"db_type":     conn.DbType,
 		"explain_sql": explainSQL,
 		"columns":     result.Columns,
 		"rows":        result.Rows,
 		"truncated":   result.Truncated,
-		"error":       errMsg,
-	})
+	}
+	if result.Error != "" {
+		out["error"] = result.Error
+	}
+	res, resErr := jsonResult(out, qerr, "explain failed")
+	if resErr != nil {
+		return nil, resErr
+	}
+	if qerr == nil && result.Error != "" {
+		res.IsError = true
+	}
+	return res, nil
 }
 
 // ==================== 用户 / 服务器信息 ====================

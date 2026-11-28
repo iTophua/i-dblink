@@ -2,13 +2,12 @@ package mcpserver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 
 	"idblink/backend"
 	"idblink/backend/api"
@@ -102,6 +101,37 @@ func jsonResult(data any, err error, errMsg string) (*mcp.CallToolResult, error)
 		return mcp.NewToolResultErrorFromErr(errMsg, err), nil
 	}
 	return mcp.NewToolResultJSON(data)
+}
+
+// queryResultJSON 把查询结果作为工具结果返回。SQL 报错在 result.Error 里（err 只表示没执行到
+// 数据库那一层），对调用方来说同样是失败：必须标成 isError，否则客户端按成功结果处理，
+// 模型会把「主键冲突」读成「更新成功、影响 0 行」。结果体照常返回（里面有执行耗时等）
+func queryResultJSON(result models.QueryResult, err error, errMsg string) (*mcp.CallToolResult, error) {
+	res, resErr := jsonResult(result, err, errMsg)
+	if resErr != nil {
+		return nil, resErr
+	}
+	if err == nil && result.Error != "" {
+		res.IsError = true
+	}
+	return res, nil
+}
+
+// timeoutCapSeconds 与后端的长操作上限一致：timeout_seconds 最多调到这么多，再长也由后端兜底
+const timeoutCapSeconds = int(api.LongOpTimeout / time.Second)
+
+// callContext 给本次调用的数据库操作定截止时间：不传 timeout_seconds 就沿用后端的长操作上限，
+// 传了就按它提前取消（在执行的语句会被打断）。ctx 随客户端的取消通知一起取消，
+// 用户在客户端点停止，数据库上的查询也跟着停
+func callContext(ctx context.Context, args map[string]any) (context.Context, context.CancelFunc) {
+	seconds := argInt(args, "timeout_seconds", 0)
+	if seconds <= 0 {
+		return context.WithCancel(ctx)
+	}
+	if seconds > timeoutCapSeconds {
+		seconds = timeoutCapSeconds
+	}
+	return context.WithTimeout(ctx, time.Duration(seconds)*time.Second)
 }
 
 // jsonListResult 构造列表结果：数组包裹为 {"<key>": [...]}。
@@ -505,8 +535,15 @@ func (s *Server) handleCreateConnection(ctx context.Context, req mcp.CallToolReq
 	}
 
 	if hit := findReusableConnection(existing, dbType, host, port, username, database); hit != nil {
-		// 命中：传了新密码则更新（用专用方法，避免覆盖现有 SSL/SSH/Name 等字段）
+		// 命中：传了新密码，先确认它连得上再换（用专用方法，避免覆盖现有 SSL/SSH/Name 等字段）。
+		// 复用是悄悄发生的：模型把密码抄错一位，不能把桌面端能用的连接改坏
 		if password != "" {
+			if err := s.verifyPassword(hit.ID, password); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"a connection to this server already exists (%s, id=%s) and the supplied password could not be verified: %v. "+
+						"The saved password was kept. Omit password to reuse the connection as it is.",
+					hit.Name, hit.ID, err)), nil
+			}
 			if err := s.app.UpdateConnectionPassword(hit.ID, password); err != nil {
 				return mcp.NewToolResultErrorFromErr("failed to update connection password", err), nil
 			}
@@ -867,11 +904,12 @@ func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest
 		return mcp.NewToolResultError("connection_id and sql are required"), nil
 	}
 
-	// 安全检查：强制只读
-	if !IsReadOnlyQuery(sqlText) {
+	// 安全检查：强制只读。按连接的方言判（字符串怎么转义、认不认 $tag$ 各库不同）
+	if !IsReadOnlyQuery(s.dbTypeOf(connID), sqlText) {
 		return mcp.NewToolResultError(
-			"execute_query only allows read-only statements (SELECT, WITH, EXPLAIN, SHOW, DESCRIBE). " +
-				"For INSERT/UPDATE/DELETE/REPLACE, use execute_update."), nil
+			"execute_query only allows a single read-only statement (SELECT, WITH ... SELECT, SHOW, DESCRIBE, TABLE, " +
+				"EXPLAIN without ANALYZE). SELECT ... INTO, data-modifying CTEs, ANALYZE and USE are rejected. " +
+				"For INSERT/UPDATE/DELETE/REPLACE, use execute_update; to switch database pass the database parameter."), nil
 	}
 
 	var database *string
@@ -889,11 +927,13 @@ func (s *Server) handleExecuteQuery(ctx context.Context, req mcp.CallToolRequest
 		maxRows = mcpHardMaxRows
 	}
 
-	result, err := s.app.ExecuteQueryLimited(connID, sqlText, database, nil, maxRows, mcpTxSession)
+	ctx, cancel := callContext(ctx, args)
+	defer cancel()
+	result, err := s.app.ExecuteQueryLimitedCtx(ctx, connID, sqlText, database, nil, maxRows, mcpTxSession)
 	if err == nil {
 		truncateCellStrings(result.Rows, mcpCellMaxChars)
 	}
-	return jsonResult(result, err, "query failed")
+	return queryResultJSON(result, err, "query failed")
 }
 
 // ==================== 写操作 handlers ====================
@@ -907,9 +947,10 @@ func (s *Server) handleExecuteUpdate(ctx context.Context, req mcp.CallToolReques
 	}
 
 	// 安全检查：仅允许 DML
-	if !IsDMLStatement(sqlText) {
+	if !IsDMLStatement(s.dbTypeOf(connID), sqlText) {
 		return mcp.NewToolResultError(
-			"execute_update only allows INSERT, UPDATE, DELETE, REPLACE, or MERGE statements. " +
+			"execute_update only allows a single INSERT, UPDATE, DELETE, REPLACE, or MERGE statement " +
+				"(optionally starting with a WITH clause). " +
 				"DDL (CREATE, DROP, ALTER, TRUNCATE) is not allowed."), nil
 	}
 
@@ -918,8 +959,10 @@ func (s *Server) handleExecuteUpdate(ctx context.Context, req mcp.CallToolReques
 		database = &d
 	}
 
-	result, err := s.app.ExecuteQuery(connID, sqlText, database, nil, mcpTxSession)
-	return jsonResult(result, err, "update failed")
+	ctx, cancel := callContext(ctx, args)
+	defer cancel()
+	result, err := s.app.ExecuteQueryCtx(ctx, connID, sqlText, database, nil, mcpTxSession)
+	return queryResultJSON(result, err, "update failed")
 }
 
 // ==================== 元数据/DDL handlers ====================
@@ -933,10 +976,10 @@ func (s *Server) handleExecuteDDL(ctx context.Context, req mcp.CallToolRequest) 
 	}
 
 	// 安全检查：仅允许 DDL
-	if !IsDDLStatement(sqlText) {
+	if !IsDDLStatement(s.dbTypeOf(connID), sqlText) {
 		return mcp.NewToolResultError(
-			"execute_ddl only allows DDL statements (CREATE, DROP, ALTER, TRUNCATE, RENAME). " +
-				"For INSERT/UPDATE/DELETE/REPLACE, use execute_update."), nil
+			"execute_ddl only allows a single schema statement (CREATE, DROP, ALTER, TRUNCATE, RENAME, GRANT, REVOKE, COMMENT). " +
+				"For INSERT/UPDATE/DELETE/REPLACE, use execute_update; to call a stored procedure, use execute_procedure."), nil
 	}
 
 	var database *string
@@ -944,10 +987,46 @@ func (s *Server) handleExecuteDDL(ctx context.Context, req mcp.CallToolRequest) 
 		database = &d
 	}
 
-	if err := s.app.ExecuteDDL(connID, sqlText, database, mcpTxSession); err != nil {
+	ctx, cancel := callContext(ctx, args)
+	defer cancel()
+	if err := s.app.ExecuteDDLCtx(ctx, connID, sqlText, database, mcpTxSession); err != nil {
 		return mcp.NewToolResultErrorFromErr("DDL execution failed", err), nil
 	}
 	return mcp.NewToolResultJSON(map[string]any{"success": true, "message": "DDL executed successfully"})
+}
+
+// handleExecuteProcedure 调用存储过程。过程能返回结果集（PG 的 INOUT 参数、MySQL 的 SELECT），
+// 所以走查询路径并限制行数；过程体里做了什么由数据库决定，这个工具只保证发出去的是一条
+// CALL / EXEC / DO
+func (s *Server) handleExecuteProcedure(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	connID := argStr(args, "connection_id")
+	sqlText := argStr(args, "sql")
+	if connID == "" || sqlText == "" {
+		return mcp.NewToolResultError("connection_id and sql are required"), nil
+	}
+
+	// 安全检查：只收过程调用
+	if !IsProcedureCall(s.dbTypeOf(connID), sqlText) {
+		return mcp.NewToolResultError(
+			"execute_procedure only allows a single stored-procedure call: CALL name(args) (MySQL, PostgreSQL, Dameng, " +
+				"Kingbase, Oracle), EXEC / EXECUTE name args (SQL Server), or DO $$ ... $$ (PostgreSQL anonymous block). " +
+				"Anonymous blocks with semicolons in the body (BEGIN ... END;) and multiple statements are rejected — " +
+				"run those from the SQL editor. For DML use execute_update, for DDL use execute_ddl."), nil
+	}
+
+	var database *string
+	if d := argStr(args, "database"); d != "" {
+		database = &d
+	}
+
+	ctx, cancel := callContext(ctx, args)
+	defer cancel()
+	result, err := s.app.ExecuteQueryLimitedCtx(ctx, connID, sqlText, database, nil, mcpHardMaxRows, mcpTxSession)
+	if err == nil {
+		truncateCellStrings(result.Rows, mcpCellMaxChars)
+	}
+	return queryResultJSON(result, err, "procedure call failed")
 }
 
 func (s *Server) handleListViews(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -967,7 +1046,14 @@ func (s *Server) handleListViews(ctx context.Context, req mcp.CallToolRequest) (
 	if err != nil {
 		return mcp.NewToolResultErrorFromErr("failed to list views", err), nil
 	}
-	return mcp.NewToolResultJSON(map[string]any{"views": filterTablesBySchema(result.Views, argStr(args, "schema"))})
+	return mcp.NewToolResultJSON(viewsPayload(result.Views, argStr(args, "schema")))
+}
+
+// viewsPayload list_views 的返回体。和 list_tables 一样用瘦身投影：
+// 引擎、尺寸、时间戳对调用方是 token 噪音，要看就 get_table_info
+func viewsPayload(views []models.TableInfo, schema string) map[string]any {
+	list := tableSummaries(filterTablesBySchema(views, schema))
+	return map[string]any{"views": list, "count": len(list)}
 }
 
 func (s *Server) handleListProcedures(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -999,8 +1085,9 @@ func (s *Server) handleGetProcedureBody(ctx context.Context, req mcp.CallToolReq
 		database = &d
 	}
 
-	body, err := s.app.GetProcedureBody(connID, procName, database)
-	return jsonResult(map[string]any{"body": body}, err, "failed to get procedure body")
+	dbType := s.dbTypeOf(connID)
+	body, err := s.app.GetProcedureBody(connID, qualifiedRoutineName(dbType, argStr(args, "schema"), procName), database)
+	return routineBodyResult("procedure", procName, dbType, body, err)
 }
 
 func (s *Server) handleListFunctions(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -1032,8 +1119,43 @@ func (s *Server) handleGetFunctionBody(ctx context.Context, req mcp.CallToolRequ
 		database = &d
 	}
 
-	body, err := s.app.GetFunctionBody(connID, funcName, database)
-	return jsonResult(map[string]any{"body": body}, err, "failed to get function body")
+	dbType := s.dbTypeOf(connID)
+	body, err := s.app.GetFunctionBody(connID, qualifiedRoutineName(dbType, argStr(args, "schema"), funcName), database)
+	return routineBodyResult("function", funcName, dbType, body, err)
+}
+
+// pgFamily PG 系的几种库：词法、限定名这些规则都一样
+func pgFamily(dbType string) bool {
+	switch dbType {
+	case "postgresql", "kingbase", "highgo", "vastbase":
+		return true
+	}
+	return false
+}
+
+// qualifiedRoutineName 把 schema 参数并进例程名字（schema.name）。只有 PG 系的例程定义查询认
+// 带 schema 的名字；别的库照旧只按名字找，带了点反而找不到
+func qualifiedRoutineName(dbType, schema, name string) string {
+	if schema == "" || !pgFamily(dbType) || strings.Contains(name, ".") {
+		return name
+	}
+	return schema + "." + name
+}
+
+// routineBodyResult 例程定义的结果。后端找不到时返回空串而不报错——对调用方来说这和
+// 「这个例程没有定义」分不清，所以空串按找不到处理，并告诉它下一步怎么找
+func routineBodyResult(kind, name, dbType, body string, err error) (*mcp.CallToolResult, error) {
+	if err != nil {
+		return mcp.NewToolResultErrorFromErr("failed to get "+kind+" body", err), nil
+	}
+	if body == "" {
+		hint := fmt.Sprintf(" Call list_%ss to see the available names.", kind+"s")
+		if pgFamily(dbType) {
+			hint += " On PostgreSQL the name can be given as schema.name (or pass the schema parameter)."
+		}
+		return mcp.NewToolResultError(fmt.Sprintf("no %s named %q was found.%s", kind, name, hint)), nil
+	}
+	return mcp.NewToolResultJSON(map[string]any{"body": body})
 }
 
 func (s *Server) handleListTriggers(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -1155,7 +1277,7 @@ func (s *Server) handleKillProcess(ctx context.Context, req mcp.CallToolRequest)
 	}
 
 	// 自杀保护：不允许 kill 掉本 sidecar 用来执行操作的连接本身
-	if own := s.ownConnectionID(connID, database); own != "" && own == processID {
+	if own := s.ownConnectionID(ctx, connID, database); own != "" && own == processID {
 		return mcp.NewToolResultError(
 			"refusing to kill process " + processID + ": it is the connection this tool is using"), nil
 	}
@@ -1190,13 +1312,7 @@ func (s *Server) handleKillProcess(ctx context.Context, req mcp.CallToolRequest)
 			},
 		})
 		if err != nil {
-			if errors.Is(err, server.ErrElicitationNotSupported) || errors.Is(err, server.ErrNoActiveSession) {
-				return mcp.NewToolResultError(
-					"this MCP client does not support elicitation (human confirmation). " +
-						"Ask the user to kill it via the iDBLink GUI process list, or get the user's explicit " +
-						"approval in the conversation first and retry with force=true."), nil
-			}
-			return mcp.NewToolResultErrorFromErr("human confirmation failed", err), nil
+			return killConfirmationFailed(err), nil
 		}
 		switch result.Action {
 		case mcp.ElicitationResponseActionDecline, mcp.ElicitationResponseActionCancel:
@@ -1219,9 +1335,19 @@ func (s *Server) handleKillProcess(ctx context.Context, req mcp.CallToolRequest)
 	return mcp.NewToolResultJSON(map[string]any{"killed": true, "process_id": processID, "detail": killSummary})
 }
 
+// killConfirmationFailed 拿不到人工确认时的结果：发不出去和对端不应答都按同一种失败处理，
+// 并给出同样的出路。不支持 elicitation 的客户端是以 JSON-RPC 错误回应的——stdio 会话永远实现了
+// SessionWithElicitation，ErrElicitationNotSupported 在这里走不到，不能只靠那个分支给指引
+func killConfirmationFailed(cause error) *mcp.CallToolResult {
+	return mcp.NewToolResultError(fmt.Sprintf(
+		"could not get human confirmation for killing the process: %v. "+
+			"Either ask the user to kill it via the iDBLink GUI process list, or — only after the user has "+
+			"explicitly approved in the conversation — retry with force=true.", cause))
+}
+
 // ownConnectionID 返回本 sidecar 当前连接自身的进程/会话 ID（用于自杀保护）。
 // 查询失败或方言不支持时返回空串（跳过保护，保持可用性优先）。
-func (s *Server) ownConnectionID(connID string, database *string) string {
+func (s *Server) ownConnectionID(ctx context.Context, connID string, database *string) string {
 	dbType := s.dbTypeOf(connID)
 	var q string
 	switch dbType {
@@ -1235,7 +1361,7 @@ func (s *Server) ownConnectionID(connID string, database *string) string {
 		// Oracle/DM 需查 v$session（权限复杂）、SQLite 无进程概念：跳过
 		return ""
 	}
-	res, err := s.app.ExecuteQueryLimited(connID, q, database, nil, 1, mcpTxSession)
+	res, err := s.app.ExecuteQueryLimitedCtx(ctx, connID, q, database, nil, 1, mcpTxSession)
 	if err != nil || res.Error != "" || len(res.Rows) == 0 || len(res.Rows[0]) == 0 {
 		return ""
 	}

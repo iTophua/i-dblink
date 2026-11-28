@@ -16,9 +16,15 @@ import (
 // 走自动提交（nil/true 保持默认：该会话有活跃事务则进事务）。
 // sessionID 标识事务会话（查询 Tab 的 tabKey / MCP 的固定会话名），为空则自动提交。
 func (a *App) ExecuteQuery(connectionID string, sql string, database *string, useTransaction *bool, sessionID string) (models.QueryResult, error) {
+	return a.ExecuteQueryCtx(context.Background(), connectionID, sql, database, useTransaction, sessionID)
+}
+
+// ExecuteQueryCtx 同 ExecuteQuery，ctx 控制这条语句的取消与超时：
+// MCP 把客户端的取消通知传进来，用户在客户端点停止，数据库上的查询跟着停
+func (a *App) ExecuteQueryCtx(ctx context.Context, connectionID string, sql string, database *string, useTransaction *bool, sessionID string) (models.QueryResult, error) {
 	a.queryStarted()
 	defer a.queryFinished()
-	return a.executeQuery(connectionID, sql, database, useTransaction, sessionID, nil)
+	return a.executeQuery(ctx, connectionID, sql, database, useTransaction, sessionID, nil)
 }
 
 // ExecuteQueryLimited 执行 SQL 查询并限制返回行数（编辑器传设置里的最大行数，
@@ -26,13 +32,19 @@ func (a *App) ExecuteQuery(connectionID string, sql string, database *string, us
 // maxRows <= 0 表示不限制；达到上限时结果携带 truncated=true 且不再继续扫描。
 // useTransaction 语义与 ExecuteQuery 相同（显式 false 绕过活跃事务）。
 func (a *App) ExecuteQueryLimited(connectionID string, sql string, database *string, useTransaction *bool, maxRows int, sessionID string) (models.QueryResult, error) {
-	a.queryStarted()
-	defer a.queryFinished()
-	return a.executeQuery(connectionID, sql, database, useTransaction, sessionID, &maxRows)
+	return a.ExecuteQueryLimitedCtx(context.Background(), connectionID, sql, database, useTransaction, maxRows, sessionID)
 }
 
-func (a *App) executeQuery(connectionID string, sql string, database *string, useTransaction *bool, sessionID string, maxRows *int) (models.QueryResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), api.LongOpTimeout)
+// ExecuteQueryLimitedCtx 同 ExecuteQueryLimited，ctx 控制取消与超时（MCP 等自动化调用方使用）
+func (a *App) ExecuteQueryLimitedCtx(ctx context.Context, connectionID string, sql string, database *string, useTransaction *bool, maxRows int, sessionID string) (models.QueryResult, error) {
+	a.queryStarted()
+	defer a.queryFinished()
+	return a.executeQuery(ctx, connectionID, sql, database, useTransaction, sessionID, &maxRows)
+}
+
+func (a *App) executeQuery(ctx context.Context, connectionID string, sql string, database *string, useTransaction *bool, sessionID string, maxRows *int) (models.QueryResult, error) {
+	// 调用方的 ctx 先到期就按它的（MCP 的 timeout_seconds），再长也由 LongOpTimeout 兜底
+	ctx, cancel := context.WithTimeout(ctx, api.LongOpTimeout)
 	defer cancel()
 	result, err := a.executeQueryCore(ctx, connectionID, sql, database, useTransaction, sessionID, maxRows)
 	if err != nil {
@@ -172,6 +184,11 @@ func (a *App) CancelScriptBatch(cancelToken string) {
 
 // ExecuteDDL 执行 DDL 语句
 func (a *App) ExecuteDDL(connectionID string, sql string, database *string, sessionID string) error {
+	return a.ExecuteDDLCtx(context.Background(), connectionID, sql, database, sessionID)
+}
+
+// ExecuteDDLCtx 同 ExecuteDDL，ctx 控制取消与超时（MCP 用）
+func (a *App) ExecuteDDLCtx(ctx context.Context, connectionID string, sql string, database *string, sessionID string) error {
 	a.queryStarted()
 	defer a.queryFinished()
 	if err := a.ensureConnected(connectionID); err != nil {
@@ -187,7 +204,7 @@ func (a *App) ExecuteDDL(connectionID string, sql string, database *string, sess
 		req.Database = *database
 	}
 
-	_, err := callHandler(a.handler.ExecuteDDL, req)
+	_, err := callHandlerCtx(ctx, a.handler.ExecuteDDL, req)
 	return err
 }
 

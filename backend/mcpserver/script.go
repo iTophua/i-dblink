@@ -42,66 +42,34 @@ func (c scriptCategory) String() string {
 	}
 }
 
-// splitSQLStatements 把多语句脚本拆分为单语句列表。
-// 先剥离注释（stripSQLComments，引号内的注释符原样保留），
-// 再在引号外按分号切分——字符串字面量中的分号不会切断语句。
-func splitSQLStatements(sql string) []string {
-	s := stripSQLComments(sql)
-	var stmts []string
-	var b strings.Builder
-	r := []rune(s)
-	n := len(r)
-	flush := func() {
-		if stmt := strings.TrimSpace(b.String()); stmt != "" {
+// splitSQLStatements 把多语句脚本拆分为单语句列表：只在词法视图里的分号处切（字符串里的分号、
+// PG 系 $tag$ 函数体里的分号不算），每条语句取去掉注释后的原文。
+// ok=false 表示脚本里有没闭合的字符串 / 注释、或认不出的引号写法，切分结果不可信，调用方必须拒绝
+func splitSQLStatements(dbType, sql string) (stmts []string, ok bool) {
+	v := lexSQL(dbType, sql)
+	if !v.ok {
+		return nil, false
+	}
+	start := 0
+	for i, c := range v.code {
+		if c != ';' {
+			continue
+		}
+		if stmt := strings.TrimSpace(v.noComments[start:i]); stmt != "" {
 			stmts = append(stmts, stmt)
 		}
-		b.Reset()
+		start = i + 1
 	}
-	for i := 0; i < n; {
-		c := r[i]
-		if c == '\'' || c == '"' || c == '`' {
-			// 字符串/标识符字面量：整段复制到闭合引号（处理 '' 转义与 \ 转义）
-			quote := c
-			b.WriteRune(c)
-			i++
-			for i < n {
-				if r[i] == quote {
-					b.WriteRune(quote)
-					i++
-					if i < n && r[i] == quote {
-						b.WriteRune(quote)
-						i++
-						continue
-					}
-					break
-				}
-				if quote != '`' && r[i] == '\\' && i+1 < n {
-					b.WriteRune(r[i])
-					b.WriteRune(r[i+1])
-					i += 2
-					continue
-				}
-				b.WriteRune(r[i])
-				i++
-			}
-			continue
-		}
-		if c == ';' {
-			flush()
-			i++
-			continue
-		}
-		b.WriteRune(c)
-		i++
+	if stmt := strings.TrimSpace(v.noComments[start:]); stmt != "" {
+		stmts = append(stmts, stmt)
 	}
-	flush()
-	return stmts
+	return stmts, true
 }
 
 // classifyScript 判定脚本类别：每条语句都必须通过三类白名单之一，
 // 且全部语句属于同一类。任一语句不在白名单内、或类别混合，均拒绝。
 // 这是批量执行的权限边界：与单语句工具共用同一套校验，不放开任何权限。
-func classifyScript(stmts []string) scriptCategory {
+func classifyScript(dbType string, stmts []string) scriptCategory {
 	if len(stmts) == 0 {
 		return scriptRejected
 	}
@@ -109,11 +77,11 @@ func classifyScript(stmts []string) scriptCategory {
 	for _, s := range stmts {
 		var c scriptCategory
 		switch {
-		case IsReadOnlyQuery(s):
+		case IsReadOnlyQuery(dbType, s):
 			c = scriptReadOnly
-		case IsDMLStatement(s):
+		case IsDMLStatement(dbType, s):
 			c = scriptDML
-		case IsDDLStatement(s):
+		case IsDDLStatement(dbType, s):
 			c = scriptDDL
 		default:
 			return scriptRejected
@@ -142,7 +110,8 @@ type scriptStmtResult struct {
 type scriptResult struct {
 	Category        string             `json:"category"`
 	StatementCount  int                `json:"statement_count"`
-	Executed        int                `json:"executed"`
+	Executed        int                `json:"executed"` // 成功的条数
+	Failed          int                `json:"failed,omitempty"`
 	TransactionUsed bool               `json:"transaction_used"`
 	Transaction     string             `json:"transaction,omitempty"` // committed / rolled_back
 	Results         []scriptStmtResult `json:"results"`
@@ -151,15 +120,21 @@ type scriptResult struct {
 // handleExecuteScript 批量执行多语句脚本。
 // 权限模型与单语句工具完全一致：每条语句独立过白名单，且要求整脚本同类。
 // DML 脚本默认单事务执行（任一失败整体回滚）；DDL 顺序执行、默认遇错停止。
-func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleExecuteScript(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := req.GetArguments()
 	connID := argStr(args, "connection_id")
 	sqlText := argStr(args, "sql")
 	if connID == "" || sqlText == "" {
 		return mcp.NewToolResultError("connection_id and sql are required"), nil
 	}
+	dbType := s.dbTypeOf(connID)
 
-	stmts := splitSQLStatements(sqlText)
+	stmts, lexed := splitSQLStatements(dbType, sqlText)
+	if !lexed {
+		return mcp.NewToolResultError(
+			"the script has an unterminated string or comment, or uses a quoting style that cannot be parsed safely " +
+				"(no statement was executed). Fix the quoting, or execute the statements one by one."), nil
+	}
 	if len(stmts) == 0 {
 		return mcp.NewToolResultError("script contains no executable statements"), nil
 	}
@@ -168,7 +143,7 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 			"script has %d statements, exceeding the limit of %d; split it into smaller batches", len(stmts), maxScriptStatements)), nil
 	}
 
-	cat := classifyScript(stmts)
+	cat := classifyScript(dbType, stmts)
 	if cat == scriptRejected {
 		return mcp.NewToolResultError(
 			"every statement must pass the same whitelist and all statements must be the same category " +
@@ -180,12 +155,10 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 	if d := argStr(args, "database"); d != "" {
 		database = &d
 	}
-	stopOnError := true
-	if raw, ok := args["stop_on_error"]; ok {
-		if b, ok2 := raw.(bool); ok2 {
-			stopOnError = b
-		}
-	}
+	stopOnError := argBool(args, "stop_on_error", true)
+
+	ctx, cancel := callContext(ctx, args)
+	defer cancel()
 
 	// 确保连接已建立（事务需要连接池就绪；幂等）
 	if err := s.app.ConnectDatabase(connID); err != nil {
@@ -201,31 +174,32 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 	switch cat {
 	case scriptDML:
 		result.TransactionUsed = true
-		if failed := runDMLScript(s.app, connID, stmts, database, &result); failed != nil {
+		if failed := runDMLScript(ctx, s.app, connID, stmts, database, &result); failed != nil {
 			return failed, nil
 		}
 
 	case scriptDDL:
 		for i, stmt := range stmts {
-			if err := s.app.ExecuteDDL(connID, stmt, database, mcpTxSession); err != nil {
+			if err := s.app.ExecuteDDLCtx(ctx, connID, stmt, database, mcpTxSession); err != nil {
 				if stopOnError {
 					return mcp.NewToolResultError(fmt.Sprintf(
 						"statement %d/%d failed: %v — execution stopped (%d statements succeeded). "+
 							"Note: DDL is not transactional on most databases; succeeded statements are NOT rolled back",
-						i+1, len(stmts), err, i)), nil
+						i+1, len(stmts), err, result.Executed)), nil
 				}
+				result.Failed++
 				result.Results = append(result.Results, scriptStmtResult{
 					Index: i, SQL: stmt, Error: err.Error(),
 				})
 				continue
 			}
-			result.Executed = i + 1
+			result.Executed++
 			result.Results = append(result.Results, scriptStmtResult{Index: i, SQL: stmt})
 		}
 
 	case scriptReadOnly:
 		for i, stmt := range stmts {
-			res, err := s.app.ExecuteQuery(connID, stmt, database, nil, mcpTxSession)
+			res, err := s.app.ExecuteQueryCtx(ctx, connID, stmt, database, nil, mcpTxSession)
 			// SQL 报错在 res.Error 里，只看 err 会把失败的查询当成「0 行」报成功
 			stmtErr := res.Error
 			if stmtErr == "" && err != nil {
@@ -234,32 +208,38 @@ func (s *Server) handleExecuteScript(_ context.Context, req mcp.CallToolRequest)
 			if stmtErr != "" {
 				if stopOnError {
 					return mcp.NewToolResultError(fmt.Sprintf(
-						"statement %d/%d failed: %s (%d statements succeeded)", i+1, len(stmts), stmtErr, i)), nil
+						"statement %d/%d failed: %s (%d statements succeeded)", i+1, len(stmts), stmtErr, result.Executed)), nil
 				}
+				result.Failed++
 				result.Results = append(result.Results, scriptStmtResult{
 					Index: i, SQL: stmt, Error: stmtErr,
 				})
 				continue
 			}
-			result.Executed = i + 1
+			result.Executed++
 			sr := scriptStmtResult{Index: i, SQL: stmt, Columns: res.Columns}
 			if res.RowsAffected != nil {
 				sr.RowsAffected = *res.RowsAffected
 			}
-			if len(res.Rows) > scriptMaxRows {
+			sr.RowCount = len(res.Rows)
+			sr.Truncated = len(res.Rows) > scriptMaxRows
+			if sr.Truncated {
 				sr.Rows = res.Rows[:scriptMaxRows]
-				sr.RowCount = len(res.Rows)
-				sr.Truncated = true
 			} else {
 				sr.Rows = res.Rows
-				sr.RowCount = len(res.Rows)
 			}
 			truncateCellStrings(sr.Rows, mcpCellMaxChars)
 			result.Results = append(result.Results, sr)
 		}
 	}
 
-	return mcp.NewToolResultJSON(result)
+	out, err := mcp.NewToolResultJSON(result)
+	if err != nil {
+		return nil, err
+	}
+	// stop_on_error=false 时明细里带着失败的语句，但对调用方来说这次调用没有全部成功
+	out.IsError = result.Failed > 0
+	return out, nil
 }
 
 // dmlScriptRunner DML 脚本执行需要的后端能力。*backend.App 满足它；
@@ -269,13 +249,13 @@ type dmlScriptRunner interface {
 	BeginTransaction(connectionID string, sessionID string, database string) error
 	RollbackTransaction(connectionID string, sessionID string) (bool, error)
 	CommitTransaction(connectionID string, sessionID string) (bool, error)
-	ExecuteQuery(connectionID string, sql string, database *string, useTransaction *bool, sessionID string) (models.QueryResult, error)
+	ExecuteQueryCtx(ctx context.Context, connectionID string, sql string, database *string, useTransaction *bool, sessionID string) (models.QueryResult, error)
 }
 
 // runDMLScript 在一笔事务里顺序执行 DML 脚本：任一语句失败即回滚并返回错误结果，
 // 全部成功才提交。提交时事务已经不在（被看门狗回收）同样按失败返回。
 // 返回 nil 表示已提交，逐语句明细写回 result。
-func runDMLScript(runner dmlScriptRunner, connID string, stmts []string, database *string, result *scriptResult) *mcp.CallToolResult {
+func runDMLScript(ctx context.Context, runner dmlScriptRunner, connID string, stmts []string, database *string, result *scriptResult) *mcp.CallToolResult {
 	// 已有手工事务时拒绝：脚本的 commit/rollback 会波及用户自己的事务
 	if active, err := runner.GetTransactionStatus(connID, mcpTxSession); err == nil && active {
 		return mcp.NewToolResultError(
@@ -294,7 +274,7 @@ func runDMLScript(runner dmlScriptRunner, connID string, stmts []string, databas
 	// 语句必须在脚本自己的事务里执行：事务被看门狗回收后不能悄悄改成自动提交
 	requireTx := true
 	for i, stmt := range stmts {
-		res, err := runner.ExecuteQuery(connID, stmt, database, &requireTx, mcpTxSession)
+		res, err := runner.ExecuteQueryCtx(ctx, connID, stmt, database, &requireTx, mcpTxSession)
 		// SQL 报错在 res.Error 里（ExecuteQuery 的 err 只表示没执行到数据库那一层）。
 		// 此前只看 err：失败的语句被当成成功，脚本继续往下跑并提交了前面的语句
 		stmtErr := res.Error

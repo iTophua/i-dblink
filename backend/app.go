@@ -146,7 +146,14 @@ type App struct {
 
 	// 存储打开后的回调（main 注入：赶在窗口创建前给主窗口定原生底色和外观）
 	storageReady func(*Storage)
+
+	// MCP 工具名单的来源（main 注入 mcpserver.ToolNames：工具定义在那个包里，它引用 backend，
+	// backend 反向引用不了）。设置页的「可用工具」靠它，不再手抄一份
+	mcpToolNames func() []string
 }
+
+// SetMCPToolNamesFunc 注册 MCP 工具名单的来源，GetMCPConfig 用它生成设置页的工具清单。
+func (a *App) SetMCPToolNamesFunc(f func() []string) { a.mcpToolNames = f }
 
 // SetConnectionsChangedCallback 注册连接变化回调（托盘菜单刷新）。
 func (a *App) SetConnectionsChangedCallback(f func()) { a.connectionsChanged = f }
@@ -393,21 +400,29 @@ func strVal(s *string) string {
 
 // callHandler 通过 httptest 调用 api.Handler 方法
 func callHandler(handlerFunc func(http.ResponseWriter, *http.Request), reqBody interface{}) ([]byte, error) {
+	return callHandlerCtx(context.Background(), handlerFunc, reqBody)
+}
+
+// callHandlerCtx 同 callHandler，ctx 挂在请求上：读 r.Context() 的 handler 会跟着它取消、超时
+// （MCP 用它把客户端的取消通知传到正在执行的语句上）
+func callHandlerCtx(ctx context.Context, handlerFunc func(http.ResponseWriter, *http.Request), reqBody interface{}) ([]byte, error) {
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request failed: %w", err)
 	}
 
+	// 开发模式的调用痕迹走 stderr：MCP sidecar 的协议流就是 stdout（--mcp --stdio 在开发
+	// 构建上同样算开发模式），往 stdout 打一行 [API] 就是一条非法的 JSON-RPC 消息
 	if isDevMode() {
 		name := trimHandlerName(goruntime.FuncForPC(reflect.ValueOf(handlerFunc).Pointer()).Name())
 		bodyStr := string(body)
 		if len(bodyStr) > 500 {
 			bodyStr = bodyStr[:500] + "..."
 		}
-		fmt.Printf("[API] %s → %s\n", name, bodyStr)
+		fmt.Fprintf(os.Stderr, "[API] %s → %s\n", name, bodyStr)
 	}
 
-	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body)).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 
 	name := trimHandlerName(goruntime.FuncForPC(reflect.ValueOf(handlerFunc).Pointer()).Name())
@@ -425,7 +440,7 @@ func callHandler(handlerFunc func(http.ResponseWriter, *http.Request), reqBody i
 		if len(respStr) > 500 {
 			respStr = respStr[:500] + "..."
 		}
-		fmt.Printf("[API] %s ← %s\n", name, respStr)
+		fmt.Fprintf(os.Stderr, "[API] %s ← %s\n", name, respStr)
 	}
 
 	// 检查响应中是否包含 error 字段

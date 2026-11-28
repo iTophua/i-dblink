@@ -213,6 +213,8 @@ func runMCP() {
 // runGUI 以 Wails GUI 模式启动（默认）。
 func runGUI() {
 	app := backend.NewApp()
+	// 设置页「可用工具」的清单：跟着 MCP server 的注册走，不在 backend 里另抄一份
+	app.SetMCPToolNamesFunc(mcpserver.ToolNames)
 
 	// 诊断日志要抢在 Wails 创建之前接管：框架内部的告警/错误也一并落盘
 	appLogger := backend.InitAppLogging(app.DataDir())

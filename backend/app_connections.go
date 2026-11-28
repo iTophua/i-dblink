@@ -75,6 +75,91 @@ func (a *App) TestConnection(input ConnectionInput) error {
 	return nil
 }
 
+// connectArgsOf 把已存连接拼成直连参数（库密码由调用方解密后传入，nil = 不带密码）
+func connectArgsOf(conn *localdb.DbConnection, password *string) db.ConnectArgs {
+	connectArgs := db.ConnectArgs{
+		DbType:   conn.DbType,
+		Host:     conn.Host,
+		Port:     conn.Port,
+		Username: conn.Username,
+		SSL: db.SSLArgs{
+			Enabled:    conn.SSLEnabled != nil && *conn.SSLEnabled == "true",
+			CAPath:     strVal(conn.SSLCAPath),
+			CertPath:   strVal(conn.SSLCertPath),
+			KeyPath:    strVal(conn.SSLKeyPath),
+			SkipVerify: conn.SSLSkipVerify != nil && *conn.SSLSkipVerify == "true",
+		},
+	}
+	if password != nil {
+		connectArgs.Password = *password
+	}
+	if conn.Database != nil {
+		connectArgs.Database = *conn.Database
+	}
+	return connectArgs
+}
+
+// viaSSHTunnel 连接启用了 SSH 隧道时，以 key 开一条隧道并把参数改写成走本地端口；
+// 返回的 stop 用来关隧道（没启用隧道时为 nil，参数原样返回）
+func (a *App) viaSSHTunnel(key string, conn *localdb.DbConnection, connectArgs db.ConnectArgs) (db.ConnectArgs, func(), error) {
+	if conn.SSHHost == nil || *conn.SSHHost == "" {
+		return connectArgs, nil, nil
+	}
+	sshPort := 22
+	if conn.SSHPort != nil {
+		if p, err := strconv.Atoi(*conn.SSHPort); err == nil {
+			sshPort = p
+		}
+	}
+	// SSH 凭据：从 connection_ssh_credentials 表获取（与 DB 密码分开加密存储）
+	sshPassword, sshPassphrase, sshErr := a.storage.GetSSHCredentials(conn.ID)
+	if sshErr != nil {
+		slog.Warn(fmt.Sprintf("failed to load ssh credentials for %s: %v", conn.ID, sshErr))
+	}
+	tunnel, err := a.tunnel.StartTunnel(
+		key,
+		*conn.SSHHost,
+		sshPort,
+		strVal(conn.SSHUsername),
+		strVal(conn.SSHAuthMethod),
+		sshPassword,
+		strVal(conn.SSHPrivateKeyPath),
+		sshPassphrase,
+		conn.Host,
+		conn.Port,
+	)
+	if err != nil {
+		return connectArgs, nil, err
+	}
+	connectArgs.Host = "127.0.0.1"
+	connectArgs.Port = tunnel.LocalPort()
+	return connectArgs, func() { _ = a.tunnel.StopTunnel(key) }, nil
+}
+
+// CheckSavedConnectionPassword 把 password 当库密码、其余沿用已存连接的配置（SSL、SSH 凭据）
+// 试连一次：不保存，也不碰这个连接现有的连接池。MCP 的 create_connection 复用已有连接时，
+// 先用它确认新密码能连上再替换——模型把密码抄错一位，不该把桌面端能用的连接改坏
+func (a *App) CheckSavedConnectionPassword(connectionID string, password string) error {
+	conn, _, err := a.storage.GetConnectionWithPassword(connectionID)
+	if err != nil {
+		return fmt.Errorf("failed to get connection: %w", err)
+	}
+	if conn == nil {
+		return fmt.Errorf("connection not found")
+	}
+	key := "test-password-" + connectionID
+	connectArgs, stopTunnel, err := a.viaSSHTunnel(key, conn, connectArgsOf(conn, &password))
+	if err != nil {
+		return fmt.Errorf("SSH tunnel failed: %w", err)
+	}
+	if stopTunnel != nil {
+		defer stopTunnel()
+	}
+	tmpMgr := db.NewManager()
+	defer tmpMgr.Disconnect(key)
+	return tmpMgr.Connect(key, connectArgs)
+}
+
 // ConnectDatabase 连接到数据库（建立并保持连接）。
 // 单飞（single-flight）：树展开/双击、查询 Tab 自动连接等可能并发触发同一连接，
 // 后续调用等待首次尝试的结果复用，避免撞上 Manager.Connect 的 already exists 报错
@@ -124,69 +209,21 @@ func (a *App) doConnectDatabase(connectionID string) error {
 	// 诊断日志用：不含用户名/密码
 	logConn := []any{"connection_id", connectionID, "db_type", conn.DbType, "host", conn.Host, "port", conn.Port}
 
-	connectArgs := db.ConnectArgs{
-		DbType:   conn.DbType,
-		Host:     conn.Host,
-		Port:     conn.Port,
-		Username: conn.Username,
-		Password: "",
-		Database: "",
-		SSL: db.SSLArgs{
-			Enabled:    conn.SSLEnabled != nil && *conn.SSLEnabled == "true",
-			CAPath:     strVal(conn.SSLCAPath),
-			CertPath:   strVal(conn.SSLCertPath),
-			KeyPath:    strVal(conn.SSLKeyPath),
-			SkipVerify: conn.SSLSkipVerify != nil && *conn.SSLSkipVerify == "true",
-		},
-	}
-
-	if password != nil {
-		connectArgs.Password = *password
-	}
-	if conn.Database != nil {
-		connectArgs.Database = *conn.Database
-	}
+	connectArgs := connectArgsOf(conn, password)
 
 	// SSH 隧道
-	sshTunnelStarted := false
-	if conn.SSHHost != nil && *conn.SSHHost != "" {
-		sshPort := 22
-		if conn.SSHPort != nil {
-			if p, err := strconv.Atoi(*conn.SSHPort); err == nil {
-				sshPort = p
-			}
-		}
-		// SSH 凭据：从 connection_ssh_credentials 表获取（与 DB 密码分开加密存储）
-		sshPassword, sshPassphrase, sshErr := a.storage.GetSSHCredentials(connectionID)
-		if sshErr != nil {
-			slog.Warn(fmt.Sprintf("failed to load ssh credentials for %s: %v", connectionID, sshErr))
-		}
-		tunnel, err := a.tunnel.StartTunnel(
-			connectionID,
-			*conn.SSHHost,
-			sshPort,
-			strVal(conn.SSHUsername),
-			strVal(conn.SSHAuthMethod),
-			sshPassword,
-			strVal(conn.SSHPrivateKeyPath),
-			sshPassphrase,
-			conn.Host,
-			conn.Port,
-		)
-		if err != nil {
-			slog.Warn("ssh tunnel failed", append(logConn, "ssh_host", *conn.SSHHost, "error", err)...)
-			return fmt.Errorf("SSH tunnel failed: %w", err)
-		}
-		sshTunnelStarted = true
-		connectArgs.Host = "127.0.0.1"
-		connectArgs.Port = tunnel.LocalPort()
+	connectArgs, stopTunnel, err := a.viaSSHTunnel(connectionID, conn, connectArgs)
+	sshTunnelStarted := stopTunnel != nil
+	if err != nil {
+		slog.Warn("ssh tunnel failed", append(logConn, "ssh_host", *conn.SSHHost, "error", err)...)
+		return fmt.Errorf("SSH tunnel failed: %w", err)
 	}
 
 	err = a.dbManager.Connect(connectionID, connectArgs)
 	if err != nil {
 		// DB 连接失败后清理已建立的 SSH 隧道，避免泄漏
-		if sshTunnelStarted {
-			_ = a.tunnel.StopTunnel(connectionID)
+		if stopTunnel != nil {
+			stopTunnel()
 		}
 		slog.Warn("database connect failed", append(logConn, "ssh", sshTunnelStarted,
 			"duration_ms", time.Since(start).Milliseconds(), "error", err)...)

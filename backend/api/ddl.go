@@ -93,8 +93,9 @@ func (h *Handler) ExecuteDDL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// DDL（大 ALTER 等）可能远超 1 分钟，与查询共用 30 分钟上限
-	ctx, cancel := context.WithTimeout(context.Background(), LongOpTimeout)
+	// DDL（大 ALTER 等）可能远超 1 分钟，与查询共用 30 分钟上限。
+	// 从请求的 ctx 派生：调用方挂在请求上的取消 / 超时（MCP 的 timeout_seconds）同样生效
+	ctx, cancel := context.WithTimeout(r.Context(), LongOpTimeout)
 	defer cancel()
 
 	_, err = exec.ExecContext(ctx, req.SQL)

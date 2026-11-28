@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -20,6 +21,8 @@ type fakeDMLRunner struct {
 	stmtGoError   error
 	commitActive  bool
 	commitErr     error
+	cancelAt      int // 第几条语句执行时调用方的 ctx 被取消（cancel 为 nil 时不取消）
+	cancel        context.CancelFunc
 	begins        []string
 	rollbacks     int
 	commits       int
@@ -46,9 +49,14 @@ func (f *fakeDMLRunner) CommitTransaction(connectionID string, sessionID string)
 	return f.commitActive, f.commitErr
 }
 
-func (f *fakeDMLRunner) ExecuteQuery(connectionID string, sql string, database *string, useTransaction *bool, sessionID string) (models.QueryResult, error) {
+func (f *fakeDMLRunner) ExecuteQueryCtx(ctx context.Context, connectionID string, sql string, database *string, useTransaction *bool, sessionID string) (models.QueryResult, error) {
 	f.execUseTx = append(f.execUseTx, useTransaction != nil && *useTransaction)
 	f.execDatabases = append(f.execDatabases, database)
+	if f.cancel != nil && f.cancelAt == len(f.execUseTx)-1 {
+		// 模拟调用方的 ctx 到期：语句被打断，驱动报 context canceled
+		f.cancel()
+		return models.QueryResult{}, ctx.Err()
+	}
 	if f.stmtGoError != nil {
 		return models.QueryResult{}, f.stmtGoError
 	}
@@ -72,7 +80,7 @@ func TestRunDMLScriptRollsBackOnSQLError(t *testing.T) {
 	runner := &fakeDMLRunner{stmtErrors: map[int]string{1: "UNIQUE constraint failed: users.username"}}
 	result := scriptResult{StatementCount: 3}
 
-	failed := runDMLScript(runner, "conn", []string{
+	failed := runDMLScript(context.Background(), runner, "conn", []string{
 		"INSERT INTO users (username) VALUES ('a')",
 		"INSERT INTO users (username) VALUES ('dup')",
 		"INSERT INTO users (username) VALUES ('c')",
@@ -95,7 +103,7 @@ func TestRunDMLScriptRollsBackOnGoError(t *testing.T) {
 	runner := &fakeDMLRunner{stmtGoError: errors.New("connection not found")}
 	result := scriptResult{StatementCount: 2}
 
-	failed := runDMLScript(runner, "conn", []string{"UPDATE t SET a = 1", "UPDATE t SET b = 2"}, nil, &result)
+	failed := runDMLScript(context.Background(), runner, "conn", []string{"UPDATE t SET a = 1", "UPDATE t SET b = 2"}, nil, &result)
 
 	require.NotNil(t, failed)
 	assert.Contains(t, resultText(failed), "connection not found")
@@ -108,7 +116,7 @@ func TestRunDMLScriptReportsMissingTxAtCommit(t *testing.T) {
 	runner := &fakeDMLRunner{commitActive: false}
 	result := scriptResult{StatementCount: 1}
 
-	failed := runDMLScript(runner, "conn", []string{"DELETE FROM t"}, nil, &result)
+	failed := runDMLScript(context.Background(), runner, "conn", []string{"DELETE FROM t"}, nil, &result)
 
 	require.NotNil(t, failed)
 	assert.Contains(t, resultText(failed), "no longer active at commit time")
@@ -120,7 +128,7 @@ func TestRunDMLScriptCommitsWhenAllSucceed(t *testing.T) {
 	runner := &fakeDMLRunner{commitActive: true}
 	result := scriptResult{StatementCount: 2}
 
-	failed := runDMLScript(runner, "conn", []string{"INSERT INTO t (a) VALUES (1)", "UPDATE t SET a = 2"}, nil, &result)
+	failed := runDMLScript(context.Background(), runner, "conn", []string{"INSERT INTO t (a) VALUES (1)", "UPDATE t SET a = 2"}, nil, &result)
 
 	assert.Nil(t, failed)
 	assert.Equal(t, "committed", result.Transaction)
@@ -130,11 +138,27 @@ func TestRunDMLScriptCommitsWhenAllSucceed(t *testing.T) {
 	assert.Zero(t, runner.rollbacks)
 }
 
+// 调用方的 ctx 在脚本跑到一半时到期（timeout_seconds / 客户端取消）：
+// 被打断的语句按失败处理，前面已执行的语句一起回滚，不留半截脚本
+func TestRunDMLScriptRollsBackWhenContextIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := &fakeDMLRunner{cancelAt: 1, cancel: cancel}
+	result := scriptResult{StatementCount: 2}
+
+	failed := runDMLScript(ctx, runner, "conn", []string{"INSERT INTO t (a) VALUES (1)", "UPDATE t SET a = 2"}, nil, &result)
+
+	require.NotNil(t, failed)
+	assert.Contains(t, resultText(failed), "context canceled")
+	assert.Equal(t, 1, runner.rollbacks)
+	assert.Zero(t, runner.commits)
+}
+
 func TestRunDMLScriptRefusesWhenManualTxIsActive(t *testing.T) {
 	runner := &fakeDMLRunner{activeBefore: true}
 	result := scriptResult{StatementCount: 1}
 
-	failed := runDMLScript(runner, "conn", []string{"INSERT INTO t (a) VALUES (1)"}, nil, &result)
+	failed := runDMLScript(context.Background(), runner, "conn", []string{"INSERT INTO t (a) VALUES (1)"}, nil, &result)
 
 	require.NotNil(t, failed)
 	assert.Contains(t, resultText(failed), "active manual transaction")

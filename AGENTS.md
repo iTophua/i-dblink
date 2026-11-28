@@ -227,6 +227,56 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 - **MCP `execute_script` 的 DML 分支看的是 `res.Error`**：`App.ExecuteQuery` 的 Go `err` 只表示没
   执行到数据库那一层，SQL 报错在 `QueryResult.Error` 里。此前只看 `err`：脚本里一条失败后继续往下
   跑并**提交**了前面的语句，还报「已提交」。逻辑在 `mcpserver.runDMLScript`（抽成接口，可用假实现测）
+- **MCP 的只读门禁建立在方言词法上**（`backend/mcpserver/security.go`）：三个分类器（只读 / DML /
+  DDL）先做词法视图 `lexSQL`——注释、字符串、引用标识符抹成空格，分号和第一个关键字都从视图里读。
+  边界画错有两个方向：把字面量当代码只会误拒；把代码当字面量，藏在「字符串」里的第二条语句就跟着
+  发给数据库了（lib/pq 不带参数时走简单协议，一次执行整段）。旧扫描器一律把 `\` 当转义符、不认
+  `$tag$` / `[]` / `q'[…]'`，2026-11 实锤 PG 上 `SELECT '\'; DROP TABLE t; SELECT ''`、
+  `SELECT $$a'b$$; DROP …`、`E'\'; …` 以及 SQL Server 的 `[x']; …`、Oracle 的 `q'[a'b]'; …`
+  全部被判成只读。现在按连接的方言扫：MySQL 系 / ClickHouse / TDengine 字符串里 `\` 是转义，
+  MySQL 系另认 `#` 注释和 `/*! … */` 可执行注释（内容当 SQL）；PG 系认 `$tag$`（紧跟标识符字符的
+  `$` 属于标识符，`foo$tag$` 不是字符串）、`E'…'`、嵌套块注释；SQL Server 认 `[…]`；Oracle / 达梦
+  遇到 `q'[…]'` 整条拒绝；未知方言字符串里出现 `\` 就拒绝。没闭合的一律拒绝。
+  只读工具里还拒绝：`EXPLAIN ANALYZE / ANALYSE`（会真的执行语句）、数据修改 CTE 和 `WITH … DML`
+  （视图里出现 INSERT / UPDATE / DELETE / MERGE / REPLACE 即拒）、`SELECT … INTO`（按词判，字符串里的
+  "into" 不再误伤）、赋值形式的 `PRAGMA`（只读形式：裸的 `PRAGMA 名字`，或参数在括号里且名字在
+  `sqliteQueryPragmas` 里）、`USE`（语句落在连接池的任意一条连接上，后面不带 `database` 的调用不一定
+  在它上面——改用 `database` 参数）。`explain_query` 标了 readOnlyHint，被解释的语句过 `explainTarget`
+  （同样拒 ANALYZE，只收有执行计划的语句）。`WITH … INSERT / UPDATE / DELETE / MERGE` 归
+  `execute_update`（`withMainWord` 找主语句）；PG 系的 `$tag$` 函数体算一条语句，`execute_ddl` 和
+  `execute_script` 能建函数，其余方言的函数体没法可靠切分、仍然拒绝。改分类器先看
+  `security_test.go` 的样本表。拦不住的：带副作用的函数（`SELECT pg_terminate_backend(...)`）；
+  词法按各库的默认配置扫，PG 开着 `standard_conforming_strings = off`、MySQL 开着 `ANSI_QUOTES` /
+  `NO_BACKSLASH_ESCAPES` 时转义规则不一样；硬保证要靠只读事务 + 扩展协议，没做
+- **MCP 的协议流是进程的 stdout**：`iDBLink --mcp --stdio` 下任何写到 stdout 的东西都是非法的
+  JSON-RPC 消息。开发构建的 sidecar 同样算 `isDevMode()`，`callHandler` 的 `[API]` 调试输出此前打到
+  stdout——开发版挂 MCP 时每次查元数据都往协议流里掺一行。现在走 stderr；`stdio_test.go` 用管道
+  代替进程 stdio 跑真实的 StdioServer，并盯着真的 `os.Stdout`（强制 `WAILS_DEV=1`）
+- **MCP 结果的几条约定**（`mcpserver/`）：SQL 报错在 `QueryResult.Error` 里，工具结果必须标
+  `isError`（`queryResultJSON`），否则客户端按成功处理、模型把主键冲突读成「影响 0 行」；
+  `execute_script` 的 `executed` 只数成功的，`stop_on_error=false` 时有失败即 isError。取消和超时靠
+  ctx 贯通：`ExecuteQueryCtx` / `ExecuteQueryLimitedCtx` / `ExecuteDDLCtx` + `callHandlerCtx`，handler
+  里要从 `r.Context()` 派生超时（`api/ddl.go`），写回 `context.Background()` 就断了；工具有可选的
+  `timeout_seconds`（上限同 30 分钟的长操作上限）。工具清单不手抄：`mcpserver.ToolNames()` 走注册，
+  `main` 用 `SetMCPToolNamesFunc` 注入（backend 引用不了 mcpserver），设置页「可用工具」从它来。
+  不支持 elicitation 的客户端是以 JSON-RPC 错误回应的，`kill_process` 的失败分支一律给出
+  `force=true` 的出路（`killConfirmationFailed`），不能只靠 `ErrElicitationNotSupported`。
+  `create_connection` 命中同服务器同账号的已有连接时会复用它：带了密码要先
+  `CheckSavedConnectionPassword`（按已存连接的 SSL / SSH 配置用新密码试连一次，不落库、不碰现有
+  连接池）验证通过才替换，验证不过报错并保留原密码——模型抄错一位不能把桌面端能用的连接改坏。
+  例程定义找不到时后端返回空串而不是报错，`routineBodyResult` 把空串按「没找到」处理；PG 系的
+  `get_procedure_body` / `get_function_body` 认 `schema` 参数（`qualifiedRoutineName`），只有 PG 系拼，
+  别的库带了点反而找不到。同名重载分不出（后端按名字找、取第一个），`list_*` 也不带 schema——
+  桌面端的例程列表是同一个后端查询，同样的局限
+- **MCP 写类工具的边界**（2026-11 定）：`execute_update` = INSERT / UPDATE / DELETE / MERGE / REPLACE
+  （可带 WITH）；`execute_ddl` = CREATE / DROP / ALTER / TRUNCATE / RENAME + 授权 GRANT / REVOKE + 对象
+  注释 COMMENT ON；`execute_procedure` = CALL / EXEC / EXECUTE（各库写法不同），PG 系另有 DO（匿名块
+  在 `$tag$` 里、是一条语句）。`execute_script` 只收只读 / DML / DDL 三类，过程调用不进脚本。
+  Oracle / SQL Server 的匿名块（`BEGIN … END;`，体内全是分号）没法可靠切分，哪个工具都不收。
+  每个写类工具都带 destructiveHint、靠客户端确认，分类器保证的只是「发出去的确实只有这一类的一条
+  语句」；过程调用带回的结果集走查询路径（上限 1000 行），MySQL 驱动关结果集时会丢掉剩余的结果集，
+  连接不会坏。`CALL …; DROP …` 这种多语句同样被拦。要再放宽类别时同步改 `IsDDLStatement` /
+  `IsProcedureCall`、工具描述和 `security_test.go` 的样本表
 - **网格编辑：没动过 = 取消**（`DataTable/utils.editorCommitValue`、`GlideDataTable` 的
   `InlineCellEditor`）：Glide 关闭编辑器时不比较新旧值、一律回调，而 NULL 格子的编辑框本来就是空的
   ——必须靠「用户有没有输入过」判断，不能靠上层比对新旧值。NULL 与空串是两个值：NULL 在网格里是
@@ -332,7 +382,10 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 - **lint 基线不是干净的**：`TabPanel/index.tsx`、`TableList.tsx`、`api/index.ts` 等 6 个
   大文件在 HEAD 上就有几十个存量 error/warning（`no-explicit-any`、`exhaustive-deps`、
   react-hooks 编译器规则）。判断自己有没有引入问题，要和 HEAD 逐文件对比数量，
-  新增文件则必须 0 问题。prettier 同理：这 6 个文件在 HEAD 上就没格式化，不要整文件重排
+  新增文件则必须 0 问题。prettier 同理：这 6 个文件在 HEAD 上就没格式化，不要整文件重排。
+  gofmt 也一样：`backend/navicat.go`、`backend/app_query_test.go` 在 HEAD 上就没格式化，
+  只对自己改的文件**按路径**跑 `gofmt -w`，别用目录通配（2026-11 一次 `gofmt -w backend/*.go`
+  把这两个文件整篇重排了）
 - **真实库上的门控测试**（默认跳过）：会话级事务并发与「事务开在所选库上」（
   `backend/db/manager_tx_real_test.go`；空闲回收、超时后不退回自动提交、事务绑定库在 SQLite 上就能
   跑，见 `manager_tx_binding_test.go`）、限定表名取列（`backend/api/qualified_table_real_test.go`）、
@@ -342,7 +395,10 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
   目录、序列、导入导出、服务端超时）、ER 图的 MySQL/PG 批量查询（`backend/api/er_diagram_test.go`）、
   数据对比（`backend/api/data_compare_real_test.go`，含 MySQL → PG 跨库、PG 的 schema 定位、MySQL
   生成列）、结构比较与表结构元数据（`backend/api/compare_real_test.go`，含「同步语句在
-  目标库跑一遍再回比」）需要
+  目标库跑一遍再回比」）、MCP 只读门禁在真库上的行为（`backend/mcpserver/gate_real_test.go`：
+  放行的只读语句结果正确、拦下的语句直接发过去真的会执行、PG 的 `$tag$` 函数体能建、
+  `timeout_seconds` 真的打断语句；包在 `./backend/mcpserver`，跑法
+  `go test ./backend/mcpserver -run RealGate -count=1 -v`）需要
   `IDBLINK_TX_SMOKE_MYSQL=1` / `IDBLINK_TX_SMOKE_PG=1`，库由根目录
   `docker compose -f docker-compose.test.yml up -d` 起（13306 / 15432）：
 
@@ -380,6 +436,9 @@ pnpm lint → pnpm exec -- tsc --noEmit → pnpm test → go test ./...
 入口，改完当场编译加跑测试，不要攒着一组文件改完再验——两个函数互相调用这种错误编译器发现不了，
 只有测试会撞上（2026-11 实锤：`getConnAndType` 和新加的 `getExecAndType` 互相转调，每个请求一进来
 就无限递归）。同理，新写的用例一次就过时，把被测的源文件临时退回去确认它会变红，再恢复。
+做这种反向确认时注意两点：变异要改成一个**能编译**的等价表达式（编译失败也会让测试变红，
+那不算被抓住）；动手前先确认基线是绿的，并且看一眼变红的是不是预期的那条断言——2026-11 有个
+用例因为断言自己写错一直是红的，它「抓住」了一个其实没测到的变异
 
 **提交前 review（强制，用户要求）**：每次 `git commit` 前必须完成两步——
 1. `git diff` 逐行自查：逻辑边界、回归风险、遗漏的关联改动（i18n 双语 key、类型定义、清理无用 import 等）

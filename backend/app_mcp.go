@@ -21,15 +21,9 @@ type MCPConfigInfo struct {
 func (a *App) GetMCPConfig() (MCPConfigInfo, error) {
 	exePath, _ := os.Executable()
 
-	// 开发模式下用 wails dev 编译的临时可执行文件路径
+	// 开发模式下 os.Executable() 指向 wails dev 编译的临时可执行文件，提示用户路径会变
 	isDev := a.isDevMode()
-
-	// macOS 生产模式，路径标准化为 .app 内的可执行文件
 	displayPath := exePath
-	if runtime.GOOS == "darwin" && !isDev {
-		// os.Executable() 可能返回 .app/Contents/MacOS/iDBLink，已经是正确路径
-		displayPath = exePath
-	}
 
 	// 生成预填好的 Claude Desktop 配置
 	config := map[string]any{
@@ -56,25 +50,12 @@ func (a *App) GetMCPConfig() (MCPConfigInfo, error) {
 		configFilePath = home + "/.config/claude/claude_desktop_config.json"
 	}
 
-	tools := strings.Join([]string{
-		// 连接管理
-		"list_connections", "create_connection", "update_connection",
-		"delete_connection", "test_connection",
-		// 查询
-		"list_databases", "list_tables", "describe_table", "get_table_ddl",
-		"execute_query", "explain_query",
-		// 写操作
-		"execute_update", "execute_ddl", "execute_script",
-		// 元数据
-		"list_schemas", "list_views", "list_procedures", "get_procedure_body",
-		"list_functions", "get_function_body",
-		"list_triggers", "list_sequences", "get_database_ddl",
-		"search_columns", "get_table_info",
-		// 事务
-		"begin_transaction", "commit_transaction", "rollback_transaction", "get_transaction_status",
-		// 用户 / 服务器
-		"list_users", "list_privileges", "get_server_info",
-	}, ", ")
+	// 工具清单跟着注册走（main 注入 mcpserver.ToolNames）。此前是在这里手抄一份，
+	// 加了 list_processes / kill_process 之后清单没跟上，设置页少显示两个工具
+	var tools string
+	if a.mcpToolNames != nil {
+		tools = strings.Join(a.mcpToolNames(), ", ")
+	}
 
 	return MCPConfigInfo{
 		ExecutablePath: displayPath,

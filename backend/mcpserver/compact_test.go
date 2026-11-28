@@ -87,6 +87,35 @@ func TestTableSummaries(t *testing.T) {
 	}
 }
 
+// list_views 走和 list_tables 同一个瘦身投影：引擎、尺寸、时间戳不进返回体，按 schema 过滤照常生效
+func TestViewsPayloadIsSlim(t *testing.T) {
+	engine := "InnoDB"
+	size := "12 MB"
+	views := []models.TableInfo{
+		{TableName: "v_orders", TableType: "VIEW", Schema: "sales", Engine: &engine, DataSize: &size},
+		{TableName: "v_users", TableType: "VIEW", Schema: "hr", Engine: &engine},
+	}
+	b, err := jsonMarshal(viewsPayload(views, "SALES"))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got struct {
+		Count int              `json:"count"`
+		Views []map[string]any `json:"views"`
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Count != 1 || len(got.Views) != 1 {
+		t.Fatalf("schema filter must keep one view: %s", b)
+	}
+	keys := got.Views[0]
+	// 只留定位视图用的三个字段：引擎、尺寸一个都不进返回体
+	if len(keys) != 3 || keys["table_name"] != "v_orders" || keys["table_type"] != "VIEW" || keys["schema"] != "sales" {
+		t.Errorf("viewsPayload must use the slim projection, got %s", b)
+	}
+}
+
 func jsonMarshal(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
