@@ -820,6 +820,15 @@
     0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 
+/* 带 prefix / suffix / allowClear 的输入框是两层：外壳 .ant-input-affix-wrapper 里面还有一个
+   input.ant-input，上面的规则两层都命中，半透明底色叠了两遍——文字区域比四周亮一圈（antd 给内层
+   的透明底被 !important 盖掉了）。底色只由外壳出，内层三种状态都保持透明 */
+[data-theme='dark'] .ant-input-affix-wrapper > .ant-input,
+[data-theme='dark'] .ant-input-affix-wrapper > .ant-input:hover,
+[data-theme='dark'] .ant-input-affix-wrapper > .ant-input:focus {
+  background: transparent !important;
+}
+
 /* ==================== 下拉菜单增强效果 ==================== */
 /* 注：不覆盖 .ant-dropdown 的动画，Antd 自带的 slide-up 动画负责显示/隐藏；
    此前 .ant-dropdown 上自定义的 dropdownFadeIn 动画已移除，避免与默认动画叠加导致闪烁 */

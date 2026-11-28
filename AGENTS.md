@@ -281,6 +281,13 @@ Wails v3 架构：Go 后端 → Wails TS 绑定 → React 19 前端。无 Rust�
 - **antd 6 的几处改名/改结构**：Alert 的 `message` → `title`；Select 的 `data-testid` 落在
   `.ant-select` 根节点，没有 `.ant-select-selector`，展开要点 `input[role="combobox"]`，
   测试里同一选项会渲染两份（可见列表 + 无障碍列表）
+- **给 `.ant-input` 写主题样式时注意它有两层**（`theme-enhancements.css`）：带 prefix / suffix /
+  allowClear 的输入框、密码框、搜索框是 `.ant-input-affix-wrapper` 外壳套一个 `input.ant-input`，
+  两层都带 `.ant-input`。暗黑的底色是半透明的，外壳和内层各刷一遍就叠出两种深浅——文字区域比
+  四周亮一圈（2026-11 用户在对象页的搜索框上发现）。antd 给内层的透明底不带 `!important`，挡不住
+  带 `!important` 的规则，所以内层的底色靠
+  `[data-theme='dark'] .ant-input-affix-wrapper > .ant-input` 那条重置成透明；新增暗黑下输入框的
+  底色规则时别把它盖掉。这类问题 jsdom 测不出来（样式表不加载），要在预览里读计算样式
 - **要被假计时器控制的定时器用全局 `setTimeout`**，别用 `window.setTimeout`（vitest 的
   `vi.useFakeTimers()` 只替换全局的）
 - **README / doc 已过期**（仍写 Wails v2、AG Grid）；LICENSE 文件已存在（旧的「无 LICENSE」说法不成立）
